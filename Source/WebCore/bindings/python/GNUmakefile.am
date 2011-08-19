@@ -1,0 +1,33 @@
+# extensions to webcore to include python bindings
+
+# this is something of a hack, thanks to the decision by the webkit
+# developers to force-close the WebCore API.  the alternative situation -
+# to pass in pointers to standard python structures and functions via
+# the python-webkit initialisation function (as higher-order callbacks)
+# isn't going to cut it.
+libwebkitgtk_@WEBKITGTK_API_MAJOR_VERSION@_@WEBKITGTK_API_MINOR_VERSION@_la_LDFLAGS += \
+	$(shell $(PYTHON_CONFIG) --libs)
+
+webcore_cppflags += \
+	$(shell $(PYTHON_CONFIG) --includes) \
+	-I$(srcdir)/Source/WebCore/bindings/python 
+
+#webcore_built_sources += \
+#	$(srcdir)WebCore/bindings/python/PyWebkit.cpp \
+#	$(srcdir)WebCore/bindings/python/PythonHTMLElementWrapperFactory.cpp \
+#	$(srcdir)WebCore/bindings/python/PythonHTMLElementWrapperFactory.h
+
+
+webcore_sources += \
+	Source/WebCore/bindings/python/PythonBinding.cpp \
+	Source/WebCore/bindings/python/PyWebkit.cpp \
+	Source/WebCore/bindings/python/PythonHTMLElementWrapperFactory.cpp \
+	Source/WebCore/bindings/python/WebkitCSSValueCustom.cpp \
+	Source/WebCore/bindings/python/WebkitDocumentCustom.cpp \
+	Source/WebCore/bindings/python/WebkitElementCustom.cpp \
+	Source/WebCore/bindings/python/WebkitEventCustom.cpp \
+	Source/WebCore/bindings/python/WebkitEventTargetCustom.cpp \
+	Source/WebCore/bindings/python/WebkitHTMLCollectionCustom.cpp \
+	Source/WebCore/bindings/python/WebkitStyleSheetCustom.cpp \
+	Source/WebCore/bindings/python/WebkitTextCustom.cpp
+

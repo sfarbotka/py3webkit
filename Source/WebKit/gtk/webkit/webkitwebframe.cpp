@@ -476,6 +476,43 @@ WebKitWebView* webkit_web_frame_get_web_view(WebKitWebFrame* frame)
 }
 
 /**
+ * webkit_web_frame_get_dom_window:
+ * @frame: a #WebKitWebFrame
+ *
+ * returns a Webkit wrapper around a DOMWindow
+ *
+ * Return value: a DOMWindow typecast to a gpointer
+ */
+gpointer webkit_web_frame_get_dom_window(WebKitWebFrame* frame)
+{
+    g_return_val_if_fail(WEBKIT_IS_WEB_FRAME(frame), NULL);
+
+    //WebKitWebFramePrivate* priv = frame->priv;
+
+    Frame* coreFrame = core(frame);
+    ASSERT(coreFrame);
+    return static_cast<gpointer>(coreFrame->domWindow());
+}
+
+/**
+ * webkit_web_frame_get_dom_document:
+ * @frame: a #WebKitWebFrame
+ *
+ * returns a Webkit wrapper around a Document 
+ *
+ * Return value: a Document typecast to a gpointer
+ */
+gpointer webkit_web_frame_get_dom_document(WebKitWebFrame* frame)
+{
+    g_return_val_if_fail(WEBKIT_IS_WEB_FRAME(frame), NULL);
+
+    Frame* coreFrame = core(frame);
+    ASSERT(coreFrame);
+    return static_cast<gpointer>(coreFrame->document());
+}
+
+
+/**
  * webkit_web_frame_get_name:
  * @frame: a #WebKitWebFrame
  *

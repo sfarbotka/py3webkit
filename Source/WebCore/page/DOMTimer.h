@@ -27,13 +27,14 @@
 #ifndef DOMTimer_h
 #define DOMTimer_h
 
+#include "ScheduledActionBase.h"
 #include "SuspendableTimer.h"
 #include <wtf/OwnPtr.h>
 #include <wtf/PassOwnPtr.h>
 
 namespace WebCore {
 
-    class ScheduledAction;
+    //class ScheduledAction;
     class Settings;
 
     class DOMTimer : public SuspendableTimer {
@@ -42,7 +43,7 @@ namespace WebCore {
         virtual ~DOMTimer();
         // Creates a new timer owned by specified ScriptExecutionContext, starts it
         // and returns its Id.
-        static int install(ScriptExecutionContext*, PassOwnPtr<ScheduledAction>, int timeout, bool singleShot);
+        static int install(ScriptExecutionContext*, PassOwnPtr<ScheduledActionBase>, int timeout, bool singleShot);
         static void removeById(ScriptExecutionContext*, int timeoutId);
 
         // ActiveDOMObject
@@ -55,7 +56,7 @@ namespace WebCore {
         void adjustMinimumTimerInterval(double oldMinimumTimerInterval);
 
     private:
-        DOMTimer(ScriptExecutionContext*, PassOwnPtr<ScheduledAction>, int interval, bool singleShot);
+        DOMTimer(ScriptExecutionContext*, PassOwnPtr<ScheduledActionBase>, int interval, bool singleShot);
         virtual void fired();
 
         double intervalClampedToMinimum(int timeout, double minimumTimerInterval) const;
@@ -67,7 +68,7 @@ namespace WebCore {
 
         int m_timeoutId;
         int m_nestingLevel;
-        OwnPtr<ScheduledAction> m_action;
+        OwnPtr<ScheduledActionBase> m_action;
         int m_originalInterval;
         bool m_shouldForwardUserGesture;
         static double s_minDefaultTimerInterval;

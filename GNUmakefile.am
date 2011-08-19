@@ -204,6 +204,10 @@ include Tools/GNUmakefile.am
 include Source/WebKit/gtk/po/GNUmakefile.am
 include Tools/DumpRenderTree/gtk/GNUmakefile.ImageDiff.am
 
+if ENABLE_PYTHON_BINDINGS
+include Source/WebCore/bindings/python/GNUmakefile.am
+endif
+
 if ENABLE_WEBKIT2
 include Source/WebKit2/GNUmakefile.am
 include Tools/MiniBrowser/gtk/GNUmakefile.am

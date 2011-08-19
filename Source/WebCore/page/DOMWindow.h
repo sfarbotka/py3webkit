@@ -59,7 +59,7 @@ namespace WebCore {
     class NotificationCenter;
     class Performance;
     class PostMessageTimer;
-    class ScheduledAction;
+    class ScheduledActionBase;
     class Screen;
     class SecurityOrigin;
     class SerializedScriptValue;
@@ -244,9 +244,9 @@ namespace WebCore {
         void resizeTo(float width, float height) const;
 
         // Timers
-        int setTimeout(PassOwnPtr<ScheduledAction>, int timeout, ExceptionCode&);
+        int setTimeout(PassOwnPtr<ScheduledActionBase>, int timeout, ExceptionCode&);
         void clearTimeout(int timeoutId);
-        int setInterval(PassOwnPtr<ScheduledAction>, int timeout, ExceptionCode&);
+        int setInterval(PassOwnPtr<ScheduledActionBase>, int timeout, ExceptionCode&);
         void clearInterval(int timeoutId);
 
         // WebKit animation extensions

@@ -22,6 +22,7 @@
 
 #include "JSDOMBinding.h"
 #include "PlatformString.h"
+#include "ScheduledActionBase.h"
 #include <heap/Strong.h>
 #include <runtime/JSCell.h>
 #include <wtf/PassOwnPtr.h>
@@ -42,10 +43,9 @@ namespace WebCore {
     * time interval, either once or repeatedly. Used for window.setTimeout()
     * and window.setInterval()
     */
-    class ScheduledAction {
-        WTF_MAKE_NONCOPYABLE(ScheduledAction); WTF_MAKE_FAST_ALLOCATED;
+    class ScheduledAction : public ScheduledActionBase {
     public:
-        static PassOwnPtr<ScheduledAction> create(JSC::ExecState*, DOMWrapperWorld* isolatedWorld, ContentSecurityPolicy*);
+        static PassOwnPtr<ScheduledActionBase> create(JSC::ExecState*, DOMWrapperWorld* isolatedWorld, ContentSecurityPolicy*);
 
         void execute(ScriptExecutionContext*);
 

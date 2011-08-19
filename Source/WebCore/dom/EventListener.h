@@ -44,7 +44,8 @@ namespace WebCore {
             CPPEventListenerType,
             ConditionEventListenerType,
             GObjectEventListenerType,
-            NativeEventListenerType
+            NativeEventListenerType,
+            PythonEventListenerType
         };
 
         virtual ~EventListener() { }

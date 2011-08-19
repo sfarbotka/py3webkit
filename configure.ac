@@ -13,6 +13,9 @@ m4_define([webkit_user_agent_minor_version], [26])
 
 AC_INIT([WebKit],[webkit_major_version.webkit_minor_version.webkit_micro_version],[http://bugs.webkit.org/])
 
+AM_PATH_PYTHON(2.5)
+AM_CHECK_PYTHON_HEADERS(,[AC_MSG_ERROR(could not find Python headers)])
+
 AC_CONFIG_MACRO_DIR([Source/autotools])
 AC_CONFIG_AUX_DIR([Source/autotools])
 AC_SUBST(ACLOCAL_AMFLAGS, "-I Source/autotools")
@@ -348,6 +351,27 @@ AC_SUBST(GTK_CFLAGS)
 AC_SUBST(GTK_LIBS)
 AC_SUBST(CAIRO_CFLAGS)
 AC_SUBST(CAIRO_LIBS)
+
+# check whether to build python bindings
+AC_MSG_CHECKING([whether to enable python bindings])
+AC_ARG_ENABLE(python_bindings,
+              AC_HELP_STRING([--enable-python-bindings],
+                             [enable python bindings [default=yes]]),
+              [],[enable_python_bindings="yes"])
+AC_MSG_RESULT([$enable_python_bindings])
+
+# find python-config
+AC_MSG_CHECKING([finding python-config])
+AC_ARG_WITH(python-config,
+            AC_HELP_STRING([--with-python-config=/usr/bin/python2.N-config],
+                           [Select python config [default=python-config]]),
+            [],[with_python_config="python-config"])
+
+AC_MSG_RESULT([$with_python_config])
+
+PYTHON_CONFIG="$with_python_config"
+AC_SUBST(PYTHON_CONFIG)
+
 
 # check whether to build with debugging enabled
 AC_MSG_CHECKING([whether to do a debug build])
@@ -961,6 +985,12 @@ AC_SUBST([G_IR_SCANNER])
 AC_SUBST([G_IR_COMPILER])
 AC_SUBST([G_IR_GENERATE])
 
+# Python Bindings
+
+if test "$enable_python_bindings" = "yes"; then
+  AC_DEFINE([ENABLE_PYTHON_BINDINGS],[1],[Define to enable python bindings])
+fi
+
 # determine the font backend
 AC_MSG_CHECKING([the font backend to use])
 AC_ARG_WITH(font_backend,
@@ -1153,6 +1183,7 @@ AM_CONDITIONAL([USE_PANGO], [test "$with_font_backend" = "pango"])
 AM_CONDITIONAL([USE_GSTREAMER], [test "$have_gstreamer" = "yes"])
 
 # WebKit feature conditionals
+AM_CONDITIONAL([ENABLE_PYTHON_BINDINGS],[test "$enable_python_bindings" = "yes"])
 AM_CONDITIONAL([ENABLE_DEBUG],[test "$enable_debug_features" = "yes"])
 AM_CONDITIONAL([ENABLE_3D_RENDERING],[test "$enable_3d_rendering" = "yes"])
 AM_CONDITIONAL([ENABLE_WEBGL],[test "$enable_webgl" = "yes"])
@@ -1328,6 +1359,7 @@ GTK+ configuration:
  Introspection support                                    : $enable_introspection
  WebKit2 support                                          : $enable_webkit2
  WebKit2 plugin process                                   : $enable_plugin_process
+ Python bindings                                          : $enable_python_bindings
 "
 if test "$with_unicode_backend" = "glib"; then
    echo "     >> WARNING: the glib-based unicode backend is slow and incomplete <<"

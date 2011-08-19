@@ -28,7 +28,7 @@
 #include "DOMTimer.h"
 
 #include "InspectorInstrumentation.h"
-#include "ScheduledAction.h"
+#include "ScheduledActionBase.h"
 #include "ScriptExecutionContext.h"
 #include "UserGestureIndicator.h"
 #include <wtf/HashSet.h>
@@ -62,7 +62,7 @@ static inline bool shouldForwardUserGesture(int interval, int nestingLevel)
         && nestingLevel == 1; // Gestures should not be forwarded to nested timers.
 }
 
-DOMTimer::DOMTimer(ScriptExecutionContext* context, PassOwnPtr<ScheduledAction> action, int interval, bool singleShot)
+DOMTimer::DOMTimer(ScriptExecutionContext* context, PassOwnPtr<ScheduledActionBase> action, int interval, bool singleShot)
     : SuspendableTimer(context)
     , m_timeoutId(timeoutId())
     , m_nestingLevel(timerNestingLevel + 1)
@@ -85,7 +85,7 @@ DOMTimer::~DOMTimer()
         scriptExecutionContext()->removeTimeout(m_timeoutId);
 }
 
-int DOMTimer::install(ScriptExecutionContext* context, PassOwnPtr<ScheduledAction> action, int timeout, bool singleShot)
+int DOMTimer::install(ScriptExecutionContext* context, PassOwnPtr<ScheduledActionBase> action, int timeout, bool singleShot)
 {
     // DOMTimer constructor links the new timer into a list of ActiveDOMObjects held by the 'context'.
     // The timer is deleted when context is deleted (DOMTimer::contextDestroyed) or explicitly via DOMTimer::removeById(),
@@ -140,7 +140,7 @@ void DOMTimer::fired()
     }
 
     // Delete timer before executing the action for one-shot timers.
-    OwnPtr<ScheduledAction> action = m_action.release();
+    OwnPtr<ScheduledActionBase> action = m_action.release();
 
     // No access to member variables after this point.
     delete this;
@@ -161,7 +161,7 @@ void DOMTimer::contextDestroyed()
 void DOMTimer::stop()
 {
     SuspendableTimer::stop();
-    // Need to release JS objects potentially protected by ScheduledAction
+    // Need to release JS objects potentially protected by ScheduledActionBase
     // because they can form circular references back to the ScriptExecutionContext
     // which will cause a memory leak.
     m_action.clear();
