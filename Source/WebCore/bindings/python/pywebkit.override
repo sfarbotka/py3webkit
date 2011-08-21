@@ -1,0 +1,465 @@
+/* -*- Mode: C; c-basic-offset: 4 -*- */
+/*
+ Copyright (C) 2010, Free Software Foundation
+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU Lesser General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+
+%%
+headers
+#include <Python.h>
+%%
+body
+
+static void py_wk_exc(WebCore::ExceptionCode &ec)
+{
+    WebCore::ExceptionCodeDescription ecdesc;
+    WebCore::getExceptionCodeDescription(ec, ecdesc);
+    PyErr_SetString(PyExc_Exception, ecdesc.name);
+}
+
+typedef struct {
+    PyObject_HEAD
+    void * ptr;
+} PyDOMObject;
+
+static PyObject *
+DOMObject_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    PyDOMObject *self;
+
+    self = (PyDOMObject *)type->tp_alloc(type, 0);
+    if (self != NULL) {
+        self->ptr = NULL;
+    }
+
+    return (PyObject *)self;
+}
+
+/*
+static int
+DOMObject_init(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    static char *kwlist[] = { (char*)"ptr", NULL };
+    long ptr = 0;
+
+    if (! PyArg_ParseTupleAndKeywords(args, kwds, "|l", kwlist,
+                                      &ptr))
+    {
+        ptr = 0;
+    }
+    ((PyDOMObject*)self)->ptr = (void*)ptr;
+    return 0;
+}
+*/
+
+static PyObject *
+DOMObject_getptr(PyDOMObject *self, PyObject *)
+{
+    return PyInt_FromLong((long)self->ptr);
+}
+
+static PyObject *
+DOMObject_setptr(PyDOMObject *self, PyObject *args, PyObject *kwargs)
+{
+    static char *kwlist[] = { (char*)"ptr", NULL };
+    long ptr;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,"l:shoddy.DOMObject.setptr",
+                                     kwlist, &ptr))
+        return NULL;
+
+    self->ptr = (void*)ptr;
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyMethodDef DOMObject_methods[] = {
+    {"setptr", (PyCFunction)DOMObject_setptr, METH_VARARGS|METH_KEYWORDS,
+     PyDoc_STR("set pointer")},
+    {"getptr", (PyCFunction)DOMObject_getptr, METH_NOARGS,
+     PyDoc_STR("get pointer")},
+    {NULL,	NULL, NULL, NULL},
+};
+
+
+static PyTypeObject PyDOMObject_Type = {
+    PyObject_HEAD_INIT(NULL)
+    0,                       /* ob_size */
+    "pywebkit.DOMObject",   /* tp_name */
+    sizeof(PyDOMObject),       /* tp_basicsize */
+    0,                       /* tp_itemsize */
+    0,                       /* tp_dealloc */
+    0,                       /* tp_print */
+    0,                       /* tp_getattr */
+    0,                       /* tp_setattr */
+    0,                       /* tp_compare */
+    0,                       /* tp_repr */
+    0,                       /* tp_as_number */
+    0,                       /* tp_as_sequence */
+    0,                       /* tp_as_mapping */
+    0,                       /* tp_hash */
+    0,                       /* tp_call */
+    0,                       /* tp_str */
+    0,                       /* tp_getattro */
+    0,                       /* tp_setattro */
+    0,                       /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT |
+      Py_TPFLAGS_BASETYPE,   /* tp_flags */
+    0,                       /* tp_doc */
+    0,                       /* tp_traverse */
+    0,                       /* tp_clear */
+    0,                       /* tp_richcompare */
+    0,                       /* tp_weaklistoffset */
+    0,                       /* tp_iter */
+    0,                       /* tp_iternext */
+    DOMObject_methods,          /* tp_methods */
+    0,                       /* tp_members */
+    0,                       /* tp_getset */
+    0,                       /* tp_base */
+    0,                       /* tp_dict */
+    0,                       /* tp_descr_get */
+    0,                       /* tp_descr_set */
+    0,                       /* tp_dictoffset */
+    0,                       /* tp_init */
+    0,                       /* tp_alloc */
+    DOMObject_new,           /* tp_new */
+    0,                       /* tp_free */
+    0,                       /* tp_is_gc */
+    0,                                 /* tp_bases */
+    0,                                 /* tp_mro */
+    0,                                 /* tp_cache */
+    0,                                 /* tp_subclasses */
+    0,                                 /* tp_weaklist */
+    0,                                 /* tp_del */
+    0                                  /* tp_version_tag */
+
+};
+
+static PyObject* PyDOMObject_new(PyTypeObject *type, void *ptr)
+{
+    PyDOMObject *v; 
+    v = (PyDOMObject *)type->tp_alloc(type, 0);
+    v->ptr = ptr;
+    return (PyObject *) v;
+}
+
+/* python callback-wrapped event listener.  associates a python callback
+   function with a c++ object of type "EventListener" so that 
+*/
+
+PyObject *WebKit::toPython(WebCore::Event *);
+
+class PythonEventListener : public WebCore::EventListener {
+public:
+    static PassRefPtr<PythonEventListener> create(PyObject* callback)
+    { return adoptRef(new PythonEventListener(callback)); }
+
+    virtual void handleEvent(WebCore::ScriptExecutionContext*, WebCore::Event*);
+    virtual bool operator==(const EventListener& other);
+    static const PythonEventListener* cast(const EventListener* listener)
+    {
+        return listener->type() == PythonEventListenerType
+            ? static_cast<const PythonEventListener*>(listener)
+            : 0;
+    }
+
+private:
+    PyObject *m_callback;
+    PythonEventListener(PyObject *callback)
+      : WebCore::EventListener(WebCore::EventListener::PythonEventListenerType)
+      , m_callback(callback)
+    {
+        if (callback)
+            Py_INCREF(callback);
+    }
+    ~PythonEventListener()
+    {
+        if (m_callback)
+            Py_DECREF(m_callback);
+    }
+};
+
+void PythonEventListener::handleEvent(WebCore::ScriptExecutionContext*,
+                                      WebCore::Event* event)
+{
+    PyObject* pev = WebKit::toPython(event);
+    PyObject* arglist = Py_BuildValue((char*)"(O)", pev);
+    PyGILState_STATE __py_state;
+    __py_state = PyGILState_Ensure();
+    PyObject* result = PyObject_CallObject(m_callback, arglist);
+    PyGILState_Release(__py_state);
+    Py_DECREF(arglist);
+    Py_DECREF(pev);
+    if (result == NULL) {
+        printf("exception occurred: TODO, something about it!\n");
+        return; /* Pass error back */
+    }
+    /* Here maybe use the result */
+    Py_DECREF(result);
+    return;
+}
+
+bool PythonEventListener::operator==(const EventListener& listener)
+{
+    const PythonEventListener* pyEventListener;
+    pyEventListener = PythonEventListener::cast(&listener);
+    if (pyEventListener)
+        return m_callback == pyEventListener->m_callback;
+
+    return false;
+}
+
+#include "Frame.h"
+#include "ScheduledActionBase.h"
+
+namespace WebCore {
+
+class PythonScheduledAction : public ScheduledActionBase {
+public:
+    static PassOwnPtr<PythonScheduledAction> create(PyObject* callback)
+    { return adoptPtr(new PythonScheduledAction(callback)); }
+
+    void execute(WebCore::ScriptExecutionContext*);
+    void deref_callback()
+    {
+        if (m_callback)
+            Py_DECREF(m_callback);
+    }
+
+
+private:
+    PyObject *m_callback;
+    PythonScheduledAction(PyObject *callback)
+      : m_callback(callback)
+    {
+        if (callback)
+            Py_INCREF(callback);
+    }
+    void execute(Document*);
+};
+
+void PythonScheduledAction::execute(ScriptExecutionContext* context)
+{
+    if (context->isDocument())
+        execute(static_cast<Document*>(context));
+#if 0 // ENABLE(WORKERS)
+    else {
+        ASSERT(context->isWorkerContext());
+        execute(static_cast<WorkerContext*>(context));
+    }
+#else
+    ASSERT(context->isDocument());
+#endif
+}
+
+void PythonScheduledAction::execute(Document* document)
+{
+    RefPtr<Frame> frame = document->frame();
+    PyObject* arglist = Py_BuildValue((char*)"()");
+
+    if (!frame || !frame->script()->canExecuteScripts(AboutToExecuteScript))
+        return;
+
+    // XXX Hack frame->script()->setProcessingTimerCallback(true);
+    PyGILState_STATE __py_state;
+    __py_state = PyGILState_Ensure();
+    PyObject* result = PyObject_CallObject(m_callback, arglist);
+    PyGILState_Release(__py_state);
+    // XXX Hack frame->script()->setProcessingTimerCallback(false);
+
+    Py_DECREF(arglist);
+
+    if (result == NULL) {
+        printf("exception occurred: TODO, something about it!\n");
+        return; /* Pass error back */
+    }
+    /* Here maybe use the result */
+    Py_DECREF(result);
+    return;
+
+}
+}; // namespace WebCore
+
+extern "C" {
+
+// TODO: resolve how to free up the timer, which mayyy be happening
+// automatically through clearTimeout anyway, due to PassOwnPtr
+// clear() handling.  have to check.
+
+PassOwnPtr<WebCore::ScheduledActionBase>
+webkit_create_python_scheduled_action(PyObject *callback)
+{
+    OwnPtr<WebCore::ScheduledActionBase> sa = WebCore::PythonScheduledAction::create(callback);
+    return sa.release();
+}
+
+void webkit_delete_python_scheduled_action(PassOwnPtr<WebCore::ScheduledActionBase> l)
+{
+    //(static_cast<PythonScheduledAction*>(WTF::getPtr(l)))->deref_callback();
+    //delete l.release();
+}
+
+WebCore::EventListener*
+webkit_create_python_event_listener(PyObject *callback)
+{
+    RefPtr<PythonEventListener> listener;
+    listener = PythonEventListener::create(callback);
+    return WTF::getPtr(listener);
+}
+
+void webkit_delete_python_event_listener(WebCore::EventListener *l)
+{
+    l->deref(); /* XXX - results in delete due to refcount=0? */
+}
+
+} /* extern C */
+
+PyTypeObject *PtrPyDOMScheduledActionBase_Type;
+
+namespace Webkit {
+using namespace WebCore;
+
+PyObject* pywrapScheduledActionBase(WebCore::ScheduledActionBase* coreObject)
+{
+    void *coreptr = (static_cast<void*>(coreObject));
+    /*coreObject->ref();*/
+    return PyDOMObject_new(PtrPyDOMScheduledActionBase_Type, coreptr);
+}
+
+PyObject* toPython(WebCore::ScheduledActionBase*);
+
+#define PyDOMScheduledActionBase PyDOMObject
+PyObject* toPython(WebCore::ScheduledActionBase* obj)
+{
+    if (!obj)
+        Py_RETURN_NONE;
+
+    if (PyObject* ret = WebKit::PythonObjectCache::getDOMObject(obj))
+        return ret;
+
+    return WebKit::PythonObjectCache::putDOMObject(obj, pywrapScheduledActionBase(obj));
+}
+
+/* ----------- ScheduledActionBase ----------- */
+
+} // namespace WebKit
+extern "C" {
+
+PassOwnPtr<WebCore::ScheduledActionBase> coreScheduledActionBase(PyDOMObject* request)
+{
+    PyObject *obj = (PyObject*)request;
+    if (obj == Py_None) {
+        return nullptr;
+    }
+    if (Py_TYPE((PyObject*)obj) == PtrPyDOMScheduledActionBase_Type) {
+        void *coreptr = ((PyDOMObject*)request)->ptr;
+        return adoptPtr(static_cast<WebCore::ScheduledActionBase*>(coreptr));
+    }
+    if (!PyCallable_Check(obj)) {
+        PyErr_SetString(PyExc_TypeError, "param must be callable");
+        return nullptr;
+    }
+    return webkit_create_python_scheduled_action(obj);
+}
+
+static int
+ScheduledActionBase_init(WebCore::ScheduledActionBase *self, PyObject *args, PyObject *kwds)
+{
+    if (PyDOMObject_Type.tp_init((PyObject *)self, args, kwds) < 0)
+        return -1;
+    return 0;
+}
+void dealloc_ScheduledActionBase(PyObject *self)
+{
+    PyDOMObject *obj = (PyDOMObject*)self;
+    void *coreptr = obj->ptr;
+    //PassOwnPtr<WebCore::ScheduledActionBase> cobj = static_cast<WebCore::ScheduledActionBase*>(coreScheduledActionBase(obj));
+    WebKit::PythonObjectCache::forgetDOMObject(coreptr);
+    /*cobj->deref();*/
+    self->ob_type->tp_free(self);
+}
+
+PyTypeObject G_GNUC_INTERNAL PyDOMScheduledActionBase_Type = {
+    PyObject_HEAD_INIT(NULL)
+    0,                                 /* ob_size */
+    "pywebkit.ScheduledActionBase",                   /* tp_name */
+    sizeof(PyDOMScheduledActionBase),          /* tp_basicsize */
+    0,                                 /* tp_itemsize */
+    /* methods */
+    (destructor)dealloc_ScheduledActionBase,        /* tp_dealloc */
+    (printfunc)0,                      /* tp_print */
+    (getattrfunc)0,       /* tp_getattr */
+    (setattrfunc)0,       /* tp_setattr */
+    (cmpfunc)0,           /* tp_compare */
+    (reprfunc)0,             /* tp_repr */
+    (PyNumberMethods*)0,     /* tp_as_number */
+    (PySequenceMethods*)0, /* tp_as_sequence */
+    (PyMappingMethods*)0,   /* tp_as_mapping */
+    (hashfunc)0,             /* tp_hash */
+    (ternaryfunc)0,          /* tp_call */
+    (reprfunc)0,              /* tp_str */
+    (getattrofunc)0,     /* tp_getattro */
+    (setattrofunc)0,     /* tp_setattro */
+    (PyBufferProcs*)0,  /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,                      /* tp_flags */
+    NULL,                        /* Documentation string */
+    (traverseproc)0,     /* tp_traverse */
+    (inquiry)0,             /* tp_clear */
+    (richcmpfunc)0,   /* tp_richcompare */
+    0,             /* tp_weaklistoffset */
+    (getiterfunc)0,          /* tp_iter */
+    (iternextfunc)0,     /* tp_iternext */
+    (struct PyMethodDef*)NULL, /* tp_methods */
+    (struct PyMemberDef*)0,              /* tp_members */
+    (struct PyGetSetDef*)0,  /* tp_getset */
+    NULL,                              /* tp_base */
+    NULL,                              /* tp_dict */
+    (descrgetfunc)0,    /* tp_descr_get */
+    (descrsetfunc)0,    /* tp_descr_set */
+    0,                 /* tp_dictoffset */
+    (initproc)ScheduledActionBase_init,             /* tp_init */
+    (allocfunc)0,           /* tp_alloc */
+    (newfunc)DOMObject_new,               /* tp_new */
+    (freefunc)0,             /* tp_free */
+    (inquiry)0,              /* tp_is_gc */
+    0,                                 /* tp_bases */
+    0,                                 /* tp_mro */
+    0,                                 /* tp_cache */
+    0,                                 /* tp_subclasses */
+    0,                                 /* tp_weaklist */
+    0,                                 /* tp_del */
+    0                                  /* tp_version_tag */
+};
+
+}; // extern "C"
+
+
+
+%%
+init
+    Py_INCREF(&PyDOMObject_Type);
+    PyModule_AddObject(m, "DOMObject", (PyObject *) &PyDOMObject_Type);
+
+
+    PtrPyDOMScheduledActionBase_Type = &PyDOMScheduledActionBase_Type;
+    PyDOMScheduledActionBase_Type.tp_base = &PyDOMObject_Type;
+    if (PyType_Ready(&PyDOMScheduledActionBase_Type) < 0) {
+        return;
+    }
+
+    Py_INCREF(&PyDOMScheduledActionBase_Type);
+    PyModule_AddObject(m, "ScheduledActionBase", (PyObject*) &PyDOMScheduledActionBase_Type);
+

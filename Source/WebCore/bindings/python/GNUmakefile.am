@@ -10,18 +10,42 @@ libwebkitgtk_@WEBKITGTK_API_MAJOR_VERSION@_@WEBKITGTK_API_MINOR_VERSION@_la_LDFL
 
 webcore_cppflags += \
 	$(shell $(PYTHON_CONFIG) --includes) \
-	-I$(srcdir)/Source/WebCore/bindings/python 
+	-I$(srcdir)/Source/WebCore/bindings/python \
+	-I$(srcdir)/DerivedSources/WebCore/python
 
-#webcore_built_sources += \
-#	$(srcdir)WebCore/bindings/python/PyWebkit.cpp \
-#	$(srcdir)WebCore/bindings/python/PythonHTMLElementWrapperFactory.cpp \
-#	$(srcdir)WebCore/bindings/python/PythonHTMLElementWrapperFactory.h
+webcore_built_sources += \
+	DerivedSources/WebCore/python/PyWebkit.cpp \
+	DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.cpp \
+	DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.h
 
+DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.h: DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.cpp;
+
+if HTML_FLAGS
+DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.cpp: $(WebCore)/dom/make_py_names.pl $(WebCore)/html/HTMLTagNames.in $(WebCore)/html/HTMLAttributeNames.in DerivedSources/WebCore/HTMLNames.cpp
+	$(PERL) -I$(WebCore)/bindings/scripts $< --bindingType Python --tags $(WebCore)/html/HTMLTagNames.in --attrs $(WebCore)/html/HTMLAttributeNames.in --extraDefines "$(HTML_FEATURES)" --wrapperFactory --outputDir "DerivedSources/WebCore/python"
+else
+DerivedSources/WebCore/python/PythonHTMLElementWrapperFactory.cpp: $(WebCore)/dom/make_py_names.pl $(WebCore)/html/HTMLTagNames.in $(WebCore)/html/HTMLAttributeNames.in DerivedSources/WebCore/HTMLNames.cpp
+	$(PERL) -I$(WebCore)/bindings/scripts $< --bindingType Python --tags $(WebCore)/html/HTMLTagNames.in --attrs $(WebCore)/html/HTMLAttributeNames.in --wrapperFactory --outputDir "DerivedSources/WebCore/python"
+endif # HTML_FLAGS
+
+pycodegen = $(WebCore)/bindings/scripts/python
+
+DerivedSources/WebCore/python/PyWebkit.cpp: \
+				$(pycodegen)/codegen.py \
+				$(pycodegen)/xpidl.py \
+				$(pycodegen)/argtypes.py  \
+				$(WebCore)/bindings/python/pywebkit.override \
+				$(WebCore)/bindings/python/idl_files.txt 
+	mkdir -p DerivedSources/WebCore/python
+	$(PYTHON) $(pycodegen)/xpidl.py \
+				$(WebCore)/bindings/python/pywebkit.override \
+				DerivedSources/WebCore/python/PyWebkit.cpp \
+				$(WebCore)/bindings/python/idl_files.txt \
+                $(srcdir)/Source
 
 webcore_sources += \
 	Source/WebCore/bindings/python/PythonBinding.cpp \
-	Source/WebCore/bindings/python/PyWebkit.cpp \
-	Source/WebCore/bindings/python/PythonHTMLElementWrapperFactory.cpp \
+	Source/WebCore/bindings/python/WebkitCSSRuleCustom.cpp \
 	Source/WebCore/bindings/python/WebkitCSSValueCustom.cpp \
 	Source/WebCore/bindings/python/WebkitDocumentCustom.cpp \
 	Source/WebCore/bindings/python/WebkitElementCustom.cpp \

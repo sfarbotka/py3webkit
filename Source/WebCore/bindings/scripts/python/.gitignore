@@ -1,0 +1,4 @@
+xpidl_debug
+xpidllex.py
+xpidlyacc.py
+*.pyc
