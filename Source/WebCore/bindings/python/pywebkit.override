@@ -91,15 +91,15 @@ static PyMethodDef DOMObject_methods[] = {
      PyDoc_STR("set pointer")},
     {"getptr", (PyCFunction)DOMObject_getptr, METH_NOARGS,
      PyDoc_STR("get pointer")},
-    {NULL,	NULL, NULL, NULL},
+    {NULL,	NULL, 0, NULL},
 };
 
 
 static PyTypeObject PyDOMObject_Type = {
     PyObject_HEAD_INIT(NULL)
     0,                       /* ob_size */
-    "pywebkit.DOMObject",   /* tp_name */
-    sizeof(PyDOMObject),       /* tp_basicsize */
+    "pywebkit.DOMObject",    /* tp_name */
+    sizeof(PyDOMObject),     /* tp_basicsize */
     0,                       /* tp_itemsize */
     0,                       /* tp_dealloc */
     0,                       /* tp_print */
@@ -182,11 +182,13 @@ private:
       : WebCore::EventListener(WebCore::EventListener::PythonEventListenerType)
       , m_callback(callback)
     {
+        printf("PythonEventListener(%p) = %p\n", callback, this);
         if (callback)
             Py_INCREF(callback);
     }
     ~PythonEventListener()
     {
+        printf("~PythonEventListener() = %p\n", this);
         if (m_callback)
             Py_DECREF(m_callback);
     }
@@ -195,6 +197,7 @@ private:
 void PythonEventListener::handleEvent(WebCore::ScriptExecutionContext*,
                                       WebCore::Event* event)
 {
+    printf("PythonEventListener::handleEvent() = %p\n", this);
     PyObject* pev = WebKit::toPython(event);
     PyObject* arglist = Py_BuildValue((char*)"(O)", pev);
     PyGILState_STATE __py_state;
@@ -203,9 +206,13 @@ void PythonEventListener::handleEvent(WebCore::ScriptExecutionContext*,
     PyGILState_Release(__py_state);
     Py_DECREF(arglist);
     Py_DECREF(pev);
-    if (result == NULL) {
-        printf("exception occurred: TODO, something about it!\n");
-        return; /* Pass error back */
+    if (result == NULL)
+    {
+        fprintf(stderr, "Exception occurred while handling event\n");
+        __py_state = PyGILState_Ensure();
+        PyErr_Print();
+        PyGILState_Release(__py_state);
+        return;
     }
     /* Here maybe use the result */
     Py_DECREF(result);
@@ -233,26 +240,32 @@ public:
     { return adoptPtr(new PythonScheduledAction(callback)); }
 
     void execute(WebCore::ScriptExecutionContext*);
-    void deref_callback()
+
+    virtual ~PythonScheduledAction()
     {
+        printf("~PythonScheduledAction() = %p\n", this);
         if (m_callback)
             Py_DECREF(m_callback);
+
+    	//Py_DECREF(WebKit::PythonObjectCache::getDOMObject((void*)this));
     }
-
-
+    
 private:
     PyObject *m_callback;
     PythonScheduledAction(PyObject *callback)
       : m_callback(callback)
     {
+        printf("PythonScheduledAction() = %p\n", this);
         if (callback)
             Py_INCREF(callback);
     }
+
     void execute(Document*);
 };
 
 void PythonScheduledAction::execute(ScriptExecutionContext* context)
 {
+    printf("PythonScheduledAction::execute() = %p\n", this);
     if (context->isDocument())
         execute(static_cast<Document*>(context));
 #if 0 // ENABLE(WORKERS)
@@ -282,9 +295,13 @@ void PythonScheduledAction::execute(Document* document)
 
     Py_DECREF(arglist);
 
-    if (result == NULL) {
-        printf("exception occurred: TODO, something about it!\n");
-        return; /* Pass error back */
+    if (result == NULL)
+    {
+        fprintf(stderr, "Exception occurred while executing scheduled action\n");
+        __py_state = PyGILState_Ensure();
+        PyErr_Print();
+        PyGILState_Release(__py_state);
+        return;
     }
     /* Here maybe use the result */
     Py_DECREF(result);
@@ -302,27 +319,25 @@ extern "C" {
 PassOwnPtr<WebCore::ScheduledActionBase>
 webkit_create_python_scheduled_action(PyObject *callback)
 {
+    printf("create PythonScheduledAction\n");
     OwnPtr<WebCore::ScheduledActionBase> sa = WebCore::PythonScheduledAction::create(callback);
     return sa.release();
-}
-
-void webkit_delete_python_scheduled_action(PassOwnPtr<WebCore::ScheduledActionBase> l)
-{
-    //(static_cast<PythonScheduledAction*>(WTF::getPtr(l)))->deref_callback();
-    //delete l.release();
 }
 
 WebCore::EventListener*
 webkit_create_python_event_listener(PyObject *callback)
 {
+    printf("create PythonEventListener\n");
     RefPtr<PythonEventListener> listener;
     listener = PythonEventListener::create(callback);
-    return WTF::getPtr(listener);
+    listener->ref();
+    return listener.get();
 }
 
 void webkit_delete_python_event_listener(WebCore::EventListener *l)
 {
-    l->deref(); /* XXX - results in delete due to refcount=0? */
+    printf("deref PythonEventListener\n");
+    l->deref();
 }
 
 } /* extern C */
@@ -384,11 +399,10 @@ ScheduledActionBase_init(WebCore::ScheduledActionBase *self, PyObject *args, PyO
 }
 void dealloc_ScheduledActionBase(PyObject *self)
 {
+    printf("dealloc_PythonScheduledAction\n");
     PyDOMObject *obj = (PyDOMObject*)self;
     void *coreptr = obj->ptr;
-    //PassOwnPtr<WebCore::ScheduledActionBase> cobj = static_cast<WebCore::ScheduledActionBase*>(coreScheduledActionBase(obj));
     WebKit::PythonObjectCache::forgetDOMObject(coreptr);
-    /*cobj->deref();*/
     self->ob_type->tp_free(self);
 }
 
