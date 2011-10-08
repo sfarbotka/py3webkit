@@ -14,7 +14,6 @@ extern "C" void* webkit_web_frame_get_xml_http_request(void* webView);
 extern "C" void* webkit_web_view_get_main_frame(void* webView);
 
 static pyjoinapi pywebkit_api_fns;
-static PyObject* pywebkit_module = NULL;
 
 
 static void* pywebkit_get_webview(PyObject* args)
@@ -87,18 +86,45 @@ static PyMethodDef pywebkit_methods[] =
 	{NULL, NULL, 0, NULL}
 };
 
-void pywebkit_init()
+static PyModuleDef pywebkit_module = 
+{
+	PyModuleDef_HEAD_INIT,
+	"pywebkit", 
+	NULL, 
+	-1, 
+	pywebkit_methods, 
+	NULL, 
+	NULL, 
+	NULL, 
+	NULL
+};
+
+PyObject* pywebkit_module_init()
 {
 	printf("Initializing module pywebkit...\n");
-	PyObject* mod = Py_InitModule("pywebkit", pywebkit_methods);
+
+	PyObject* mod = PyModule_Create(&pywebkit_module);
+	if (!mod)
+	{
+		printf("Unable to initalize module pywebkit!!!\n");
+		return NULL;
+	}
 
 	webkit_init_pywebkit(mod, &pywebkit_api_fns);
 
-	pywebkit_module = PyImport_ImportModule("pywebkit");
-
 	printf("Module is initialized\n");
 
-	Py_DECREF(mod);
+	return mod;
+}
+
+void pywebkit_init()
+{
+	PyObject* mod = pywebkit_module_init();
+	if (!mod)
+		return;
+
+	PyObject* mdict = PyImport_GetModuleDict();
+	PyDict_SetItemString(mdict, "pywebkit", mod);
 }
 
 

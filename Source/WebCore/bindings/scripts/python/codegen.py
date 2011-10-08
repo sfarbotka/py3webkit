@@ -106,8 +106,7 @@ class FileOutput:
 class Wrapper:
     type_tmpl = (
         'PyTypeObject G_GNUC_INTERNAL PyDOM%(typename)s_Type = {\n'
-        '    PyObject_HEAD_INIT(NULL)\n'
-        '    0,                                 /* ob_size */\n'
+        '    PyVarObject_HEAD_INIT(NULL, 0)\n'
         '    "%(classname)s",                   /* tp_name */\n'
         '    sizeof(%(tp_basicsize)s),          /* tp_basicsize */\n'
         '    0,                                 /* tp_itemsize */\n'
@@ -116,7 +115,7 @@ class Wrapper:
         '    (printfunc)0,                      /* tp_print */\n'
         '    (getattrfunc)%(tp_getattr)s,       /* tp_getattr */\n'
         '    (setattrfunc)%(tp_setattr)s,       /* tp_setattr */\n'
-        '    (cmpfunc)%(tp_compare)s,           /* tp_compare */\n'
+        '    %(tp_compare)s,           /* tp_compare */\n'
         '    (reprfunc)%(tp_repr)s,             /* tp_repr */\n'
         '    (PyNumberMethods*)%(tp_as_number)s,     /* tp_as_number */\n'
         '    (PySequenceMethods*)%(tp_as_sequence)s, /* tp_as_sequence */\n'
@@ -892,19 +891,19 @@ _wrap__get_symbol_names(PyObject *self)
 """)
         for obj, bases in writer.get_classes():
             self.fp.write('    PyList_Append(pylist, '
-                          'PyString_FromString("%s"));\n' % (obj.name))
+                          'PyUnicode_FromString("%s"));\n' % (obj.name))
 
         for name, cname, flags, docstring in functions:
             self.fp.write('    PyList_Append(pylist, '
-                          'PyString_FromString("%s"));\n' % (name))
+                          'PyUnicode_FromString("%s"));\n' % (name))
 
         for enum in writer.get_enums():
             self.fp.write('    PyList_Append(pylist, '
-                          'PyString_FromString("%s"));\n' % (enum.name))
+                          'PyUnicode_FromString("%s"));\n' % (enum.name))
             for nick, value in enum.values:
                 name = value[len(self.overrides.modulename)+1:]
                 self.fp.write('    PyList_Append(pylist, '
-                              'PyString_FromString("%s"));\n' % (name))
+                              'PyUnicode_FromString("%s"));\n' % (name))
 
         self.fp.write("    return pylist;\n}\n\n");
 
@@ -922,7 +921,7 @@ _wrap__get_symbol(PyObject *self, PyObject *args)
         return NULL;
 
     if (!modulename)
-       modulename = PyString_FromString("%s");
+       modulename = PyUnicode_FromString("%s");
 
     if (!module)
        module = PyDict_GetItemString(d, "__module__");

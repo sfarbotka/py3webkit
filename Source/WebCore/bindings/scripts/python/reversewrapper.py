@@ -404,14 +404,14 @@ class StringParam(Parameter):
         if self.props.get('optional', False):
             self.wrapper.add_declaration("PyObject *py_%s = NULL;" % self.name)
             self.wrapper.write_code(code=("if (%s)\n"
-                                          "    py_%s = PyString_FromString(%s);\n"
+                                          "    py_%s = PyUnicode_FromString(%s);\n"
                                           % (self.name, self.name, self.name)),
                                     cleanup=("Py_XDECREF(py_%s);" % self.name))
             self.wrapper.add_pyargv_item("py_%s" % self.name, optional=True)
         elif self.props.get('nullok', False):
             self.wrapper.add_declaration("PyObject *py_%s;" % self.name)
             self.wrapper.write_code(code=("if (%s)\n"
-                                          "    py_%s = PyString_FromString(%s);\n"
+                                          "    py_%s = PyUnicode_FromString(%s);\n"
                                           "else {\n"
                                           "    Py_INCREF(Py_None);\n"
                                           "    py_%s = Py_None;\n"
@@ -422,7 +422,7 @@ class StringParam(Parameter):
         else:
             self.wrapper.add_declaration("PyObject *py_%s = NULL;" % self.name)
             self.wrapper.write_code(code=("if (%s)\n"
-                                          "    py_%s = PyString_FromString(%s);\n" %
+                                          "    py_%s = PyUnicode_FromString(%s);\n" %
                                           (self.name, self.name, self.name)),
                                     cleanup=("Py_DECREF(py_%s);" % self.name),
                                     failure_expression=("!py_%s" % self.name))
@@ -538,7 +538,7 @@ class IntParam(Parameter):
 
     def convert_c2py(self):
         self.wrapper.add_declaration("PyObject *py_%s;" % self.name)
-        self.wrapper.write_code(code=("py_%s = PyInt_FromLong(%s);" %
+        self.wrapper.write_code(code=("py_%s = PyLong_FromLong(%s);" %
                                       (self.name, self.name)),
                                 cleanup=("Py_DECREF(py_%s);" % self.name))
         self.wrapper.add_pyargv_item("py_%s" % self.name)
@@ -575,7 +575,7 @@ class IntPtrParam(Parameter):
     def convert_c2py(self):
         if self.props["direction"] == "inout":
             self.wrapper.add_declaration("PyObject *py_%s;" % self.name)
-            self.wrapper.write_code(code=("py_%s = PyInt_FromLong(*%s);" %
+            self.wrapper.write_code(code=("py_%s = PyLong_FromLong(*%s);" %
                                           (self.name, self.name)),
                                     cleanup=("Py_DECREF(py_%s);" % self.name))
             self.wrapper.add_pyargv_item("py_%s" % self.name)

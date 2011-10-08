@@ -119,7 +119,7 @@ class URLStringArg(ArgType):
         info.varlist.add('WTF::String', 'ret')
         info.varlist.add('char', '*_ret')
         info.codeafter.append('    _ret = cpUTF8(ret);\n'
-                              '    PyObject *py_ret = PyString_FromString(_ret);\n'
+                              '    PyObject *py_ret = PyUnicode_FromString(_ret);\n'
                               '    free(_ret);\n'
                               '    return py_ret;')
 
@@ -141,7 +141,7 @@ class StringArg(ArgType):
         info.varlist.add('WTF::String', 'ret')
         info.varlist.add('char', '*_ret')
         info.codeafter.append('    _ret = cpUTF8(ret);\n'
-                              '    PyObject *py_ret = PyString_FromString(_ret);\n'
+                              '    PyObject *py_ret = PyUnicode_FromString(_ret);\n'
                               '    free(_ret);\n'
                               '    return py_ret;')
 
@@ -161,7 +161,7 @@ class SerializedStringArg(ArgType):
             info.add_parselist('s', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add('WebCore::SerializedScriptValue*', 'ret')
-        info.codeafter.append('    PyObject *py_ret = PyString_FromString(cpUTF8(ret->toString()));\n' +
+        info.codeafter.append('    PyObject *py_ret = PyUnicode_FromString(cpUTF8(ret->toString()));\n' +
                               '    return py_ret;')
 
 class UCharArg(ArgType):
@@ -193,7 +193,7 @@ class CharArg(ArgType):
         info.add_parselist('c', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add('gchar', 'ret')
-        info.codeafter.append('    return PyString_FromStringAndSize(&ret, 1);')
+        info.codeafter.append('    return PyUnicode_FromStringAndSize(&ret, 1);')
 
 class GUniCharArg(ArgType):
     def write_param(self, ptype, pname, pdflt, pnull, info):
@@ -248,7 +248,7 @@ class CompareHowArg(ArgType):
         info.add_parselist('i', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add('int', 'ret')
-        info.codeafter.append('    return PyInt_FromLong(ret);')
+        info.codeafter.append('    return PyLong_FromLong(ret);')
 
 class IntArg(ArgType):
     def write_param(self, ptype, pname, pdflt, pnull, info):
@@ -260,7 +260,7 @@ class IntArg(ArgType):
         info.add_parselist('i', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add('int', 'ret')
-        info.codeafter.append('    return PyInt_FromLong(ret);')
+        info.codeafter.append('    return PyLong_FromLong(ret);')
 
 class UIntArg(ArgType):
     dflt = ('    if (py_%(name)s) {\n'
@@ -352,7 +352,7 @@ class LongArg(ArgType):
         info.add_parselist('l', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add(ptype, 'ret')
-        info.codeafter.append('    return PyInt_FromLong(ret);\n')
+        info.codeafter.append('    return PyLong_FromLong(ret);\n')
 
 class BoolArg(IntArg):
     def write_param(self, ptype, pname, pdflt, pnull, info):
@@ -378,7 +378,7 @@ class TimeTArg(ArgType):
         info.add_parselist('i', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
         info.varlist.add('time_t', 'ret')
-        info.codeafter.append('    return PyInt_FromLong(ret);')
+        info.codeafter.append('    return PyLong_FromLong(ret);')
 
 class ULongArg(ArgType):
     def write_param(self, ptype, pname, pdflt, pnull, info):
@@ -784,7 +784,7 @@ class AtomArg(IntArg):
         info.varlist.add('PyObject *', 'py_ret')
         info.varlist.add('gchar *', 'name')
         info.codeafter.append('    name = gdk_atom_name(ret);\n'
-                              '    py_ret = PyString_FromString(name);\n'
+                              '    py_ret = PyUnicode_FromString(name);\n'
                               '    g_free(name);\n'
                               '    return py_ret;')
 

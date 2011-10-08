@@ -68,7 +68,7 @@ DOMObject_init(PyObject *self, PyObject *args, PyObject *kwds)
 static PyObject *
 DOMObject_getptr(PyDOMObject *self, PyObject *)
 {
-    return PyInt_FromLong((long)self->ptr);
+    return PyLong_FromLong((long)self->ptr);
 }
 
 static PyObject *
@@ -96,8 +96,7 @@ static PyMethodDef DOMObject_methods[] = {
 
 
 static PyTypeObject PyDOMObject_Type = {
-    PyObject_HEAD_INIT(NULL)
-    0,                       /* ob_size */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "pywebkit.DOMObject",    /* tp_name */
     sizeof(PyDOMObject),     /* tp_basicsize */
     0,                       /* tp_itemsize */
@@ -407,8 +406,7 @@ void dealloc_ScheduledActionBase(PyObject *self)
 }
 
 PyTypeObject G_GNUC_INTERNAL PyDOMScheduledActionBase_Type = {
-    PyObject_HEAD_INIT(NULL)
-    0,                                 /* ob_size */
+    PyVarObject_HEAD_INIT(NULL, 0)
     "pywebkit.ScheduledActionBase",                   /* tp_name */
     sizeof(PyDOMScheduledActionBase),          /* tp_basicsize */
     0,                                 /* tp_itemsize */
@@ -417,7 +415,7 @@ PyTypeObject G_GNUC_INTERNAL PyDOMScheduledActionBase_Type = {
     (printfunc)0,                      /* tp_print */
     (getattrfunc)0,       /* tp_getattr */
     (setattrfunc)0,       /* tp_setattr */
-    (cmpfunc)0,           /* tp_compare */
+    0,           /* tp_compare */
     (reprfunc)0,             /* tp_repr */
     (PyNumberMethods*)0,     /* tp_as_number */
     (PySequenceMethods*)0, /* tp_as_sequence */
