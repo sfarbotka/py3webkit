@@ -404,6 +404,9 @@ webkit_web_view_get_dom_document                (WebKitWebView        *webView);
 WEBKIT_API WebKitViewportAttributes*
 webkit_web_view_get_viewport_attributes         (WebKitWebView        *webView);
 
+WEBKIT_API gulong
+webkit_web_view_get_native_ptr                  (WebKitWebView        *webview);
+
 G_END_DECLS
 
 #endif

@@ -51,6 +51,7 @@
 #include <runtime/InitializeThreading.h>
 #include <stdlib.h>
 #include <wtf/MainThread.h>
+#include "pywebkit.h"
 
 static WebKitCacheModel cacheModel = WEBKIT_CACHE_MODEL_DEFAULT;
 
@@ -344,6 +345,12 @@ void webkitInit()
 
     atexit(webkitExit);
 }
+
+void webkit_init_python(void)
+{
+	pywebkit_init();
+}
+
 
 namespace WebKit {
 

@@ -1,3 +1,5 @@
+#include <Python.h>
+
 typedef PyObject* (*ToPythonFn) (gpointer);
 
 struct pyjoinapi {
@@ -5,4 +7,7 @@ struct pyjoinapi {
     ToPythonFn win;
     ToPythonFn doc;
 };
+
+
+void pywebkit_init();
 

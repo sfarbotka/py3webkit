@@ -73,6 +73,9 @@ webkit_get_text_checker                        (void);
 WEBKIT_API void
 webkit_set_text_checker                        (GObject*  checker);
 
+WEBKIT_API void
+webkit_init_python                             (void);
+
 G_END_DECLS
 
 #endif

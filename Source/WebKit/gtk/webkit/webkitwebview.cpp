@@ -4969,6 +4969,13 @@ webkit_web_view_get_dom_document(WebKitWebView* webView)
     return kit(doc);
 }
 
+gulong
+webkit_web_view_get_native_ptr(WebKitWebView* webview)
+{
+	return (gulong)webview;
+}
+
+
 GtkMenu* webkit_web_view_get_context_menu(WebKitWebView* webView)
 {
     g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(webView), 0);
