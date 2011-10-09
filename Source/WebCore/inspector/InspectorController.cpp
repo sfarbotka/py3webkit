@@ -98,19 +98,17 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
     , m_injectedScriptManager(InjectedScriptManager::createForPage())
     , m_state(adoptPtr(new InspectorState(inspectorClient)))
     , m_inspectorAgent(adoptPtr(new InspectorAgent(page, m_injectedScriptManager.get(), m_instrumentingAgents.get())))
-    , m_pageAgent(InspectorPageAgent::create(m_instrumentingAgents.get(), page, m_injectedScriptManager.get()))
+    , m_pageAgent(InspectorPageAgent::create(m_instrumentingAgents.get(), page, m_state.get(), m_injectedScriptManager.get()))
     , m_domAgent(InspectorDOMAgent::create(m_instrumentingAgents.get(), m_pageAgent.get(), inspectorClient, m_state.get(), m_injectedScriptManager.get()))
     , m_cssAgent(adoptPtr(new InspectorCSSAgent(m_instrumentingAgents.get(), m_domAgent.get())))
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     , m_databaseAgent(InspectorDatabaseAgent::create(m_instrumentingAgents.get(), m_state.get()))
 #endif
 #if ENABLE(DOM_STORAGE)
     , m_domStorageAgent(InspectorDOMStorageAgent::create(m_instrumentingAgents.get(), m_state.get()))
 #endif
     , m_timelineAgent(InspectorTimelineAgent::create(m_instrumentingAgents.get(), m_state.get()))
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     , m_applicationCacheAgent(adoptPtr(new InspectorApplicationCacheAgent(m_instrumentingAgents.get(), page)))
-#endif
     , m_resourceAgent(InspectorResourceAgent::create(m_instrumentingAgents.get(), m_pageAgent.get(), inspectorClient, m_state.get()))
     , m_runtimeAgent(adoptPtr(new PageRuntimeAgent(m_injectedScriptManager.get(), page, m_pageAgent.get())))
     , m_consoleAgent(adoptPtr(new InspectorConsoleAgent(m_instrumentingAgents.get(), m_inspectorAgent.get(), m_state.get(), m_injectedScriptManager.get(), m_domAgent.get())))
@@ -130,7 +128,7 @@ InspectorController::InspectorController(Page* page, InspectorClient* inspectorC
     ASSERT_ARG(inspectorClient, inspectorClient);
     m_injectedScriptManager->injectedScriptHost()->init(m_inspectorAgent.get()
         , m_consoleAgent.get()
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         , m_databaseAgent.get()
 #endif
 #if ENABLE(DOM_STORAGE)
@@ -202,9 +200,7 @@ void InspectorController::connectFrontend()
     // We can reconnect to existing front-end -> unmute state.
     m_state->unmute();
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     m_applicationCacheAgent->setFrontend(m_inspectorFrontend.get());
-#endif
     m_pageAgent->setFrontend(m_inspectorFrontend.get());
     m_domAgent->setFrontend(m_inspectorFrontend.get());
     m_consoleAgent->setFrontend(m_inspectorFrontend.get());
@@ -214,7 +210,7 @@ void InspectorController::connectFrontend()
     m_debuggerAgent->setFrontend(m_inspectorFrontend.get());
     m_profilerAgent->setFrontend(m_inspectorFrontend.get());
 #endif
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     m_databaseAgent->setFrontend(m_inspectorFrontend.get());
 #endif
 #if ENABLE(DOM_STORAGE)
@@ -232,9 +228,7 @@ void InspectorController::connectFrontend()
     ASSERT(m_inspectorClient);
     m_inspectorBackendDispatcher = adoptRef(new InspectorBackendDispatcher(
         m_inspectorClient,
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         m_applicationCacheAgent.get(),
-#endif
         m_cssAgent.get(),
         m_consoleAgent.get(),
         m_domAgent.get(),
@@ -244,7 +238,7 @@ void InspectorController::connectFrontend()
 #if ENABLE(DOM_STORAGE)
         m_domStorageAgent.get(),
 #endif
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         m_databaseAgent.get(),
 #endif
 #if ENABLE(JAVASCRIPT_DEBUGGER)
@@ -285,14 +279,13 @@ void InspectorController::disconnectFrontend()
     m_domDebuggerAgent->clearFrontend();
     m_profilerAgent->clearFrontend();
 #endif
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     m_applicationCacheAgent->clearFrontend();
-#endif
     m_consoleAgent->clearFrontend();
     m_domAgent->clearFrontend();
+    m_cssAgent->clearFrontend();
     m_timelineAgent->clearFrontend();
     m_resourceAgent->clearFrontend();
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     m_databaseAgent->clearFrontend();
 #endif
 #if ENABLE(DOM_STORAGE)
@@ -341,11 +334,12 @@ void InspectorController::restoreInspectorStateFromCookie(const String& inspecto
     connectFrontend();
     m_state->loadFromCookie(inspectorStateCookie);
 
+    m_pageAgent->restore();
     m_domAgent->restore();
     m_resourceAgent->restore();
     m_timelineAgent->restore();
     m_consoleAgent->restore();
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     m_databaseAgent->restore();
 #endif
 #if ENABLE(DOM_STORAGE)

@@ -5,7 +5,9 @@ SET(WTF_HEADERS
     AlwaysInline.h
     Assertions.h
     Atomics.h
+    BitVector.h
     Bitmap.h
+    BoundsCheckedPointer.h
     BumpPointerAllocator.h
     ByteArray.h
     Compiler.h
@@ -42,6 +44,9 @@ SET(WTF_HEADERS
     MallocZoneSupport.h
     MathExtras.h
     MessageQueue.h
+    MetaAllocator.cpp
+    MetaAllocator.h
+    MetaAllocatorHandle.h
     NonCopyingSort.h
     ThreadRestrictionVerifier.h
     Noncopyable.h
@@ -69,6 +74,7 @@ SET(WTF_HEADERS
     PossiblyNull.h
     RandomNumber.h
     RandomNumberSeed.h
+    RedBlackTree.h
     RefCounted.h
     RefCountedLeakCounter.h
     RefPtr.h
@@ -99,6 +105,28 @@ SET(WTF_HEADERS
     WTFThreadData.h
     dtoa.h
 
+    dtoa/bignum-dtoa.h
+    dtoa/bignum.h
+    dtoa/cached-powers.h
+    dtoa/diy-fp.h
+    dtoa/double-conversion.h
+    dtoa/double.h
+    dtoa/fast-dtoa.h
+    dtoa/fixed-dtoa.h
+    dtoa/strtod.h
+    dtoa/utils.h
+
+    dtoa/bignum-dtoa.h
+    dtoa/bignum.h
+    dtoa/cached-powers.h
+    dtoa/diy-fp.h
+    dtoa/double-conversion.h
+    dtoa/double.h
+    dtoa/fast-dtoa.h
+    dtoa/fixed-dtoa.h
+    dtoa/strtod.h
+    dtoa/utils.h
+
     text/AtomicString.h
     text/AtomicStringImpl.h
     text/CString.h
@@ -108,6 +136,8 @@ SET(WTF_HEADERS
     text/StringImplBase.h
     text/WTFString.h
 
+    threads/BinarySemaphore.h
+
     unicode/CharacterNames.h
     unicode/Collator.h
     unicode/UTF8.h
@@ -116,6 +146,7 @@ SET(WTF_HEADERS
 
 SET(WTF_SOURCES
     Assertions.cpp
+    BitVector.cpp
     ByteArray.cpp
     CryptographicallyRandomNumber.cpp
     CurrentTime.cpp
@@ -140,12 +171,32 @@ SET(WTF_SOURCES
     WTFThreadData.cpp
     dtoa.cpp
 
+    dtoa/bignum-dtoa.cc
+    dtoa/bignum.cc
+    dtoa/cached-powers.cc
+    dtoa/diy-fp.cc
+    dtoa/double-conversion.cc
+    dtoa/fast-dtoa.cc
+    dtoa/fixed-dtoa.cc
+    dtoa/strtod.cc
+
+    dtoa/bignum-dtoa.cc
+    dtoa/bignum.cc
+    dtoa/cached-powers.cc
+    dtoa/diy-fp.cc
+    dtoa/double-conversion.cc
+    dtoa/fast-dtoa.cc
+    dtoa/fixed-dtoa.cc
+    dtoa/strtod.cc
+
     text/AtomicString.cpp
     text/CString.cpp
     text/StringBuilder.cpp
     text/StringImpl.cpp
     text/StringStatics.cpp
     text/WTFString.cpp
+
+    threads/BinarySemaphore.cpp
 
     unicode/UTF8.cpp
 )
@@ -154,6 +205,7 @@ SET(WTF_INCLUDE_DIRECTORIES
     "${JAVASCRIPTCORE_DIR}"
     "${JAVASCRIPTCORE_DIR}/wtf"
     "${JAVASCRIPTCORE_DIR}/wtf/unicode"
+    "${JAVASCRIPTCORE_DIR}/wtf/dtoa"
     "${JavaScriptCore_INCLUDE_DIRECTORIES}"
 )
 

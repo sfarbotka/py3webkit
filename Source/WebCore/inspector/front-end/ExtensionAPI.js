@@ -28,8 +28,34 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.injectedExtensionAPI = function(InjectedScriptHost, inspectedWindow, injectedScriptId)
+function defineCommonExtensionSymbols(apiPrivate)
 {
+    if (!apiPrivate.audits)
+        apiPrivate.audits = {};
+
+    apiPrivate.audits.Severity = {
+        Info: "info",
+        Warning: "warning",
+        Severe: "severe"
+    };
+
+    if (!apiPrivate.console)
+        apiPrivate.console = {};
+    apiPrivate.console.Severity = {
+        Tip: "tip",
+        Debug: "debug",
+        Log: "log",
+        Warning: "warning",
+        Error: "error"
+    };
+}
+
+function injectedExtensionAPI(injectedScriptId)
+{
+
+var apiPrivate = {};
+
+defineCommonExtensionSymbols(apiPrivate);
 
 // Here and below, all constructors are private to API implementation.
 // For a public type Foo, if internal fields are present, these are on
@@ -48,7 +74,7 @@ EventSinkImpl.prototype = {
     addListener: function(callback)
     {
         if (typeof callback != "function")
-            throw new "addListener: callback is not a function";
+            throw "addListener: callback is not a function";
         if (this._listeners.length === 0)
             extensionServer.sendRequest({ command: "subscribe", type: this._type });
         this._listeners.push(callback);
@@ -90,8 +116,10 @@ function InspectorExtensionAPI()
     this.audits = new Audits();
     this.inspectedWindow = new InspectedWindow();
     this.panels = new Panels();
-    this.resources = new Resources();
+    this.network = new Network();
+    defineDeprecatedProperty(this, "webInspector", "resources", "network");
     this.timeline = new Timeline();
+    this.console = new Console();
 
     this.onReset = new EventSink("reset");
 }
@@ -103,27 +131,49 @@ InspectorExtensionAPI.prototype = {
     }
 }
 
-function Resources()
+function Console()
 {
-    function resourceDispatch(request)
-    {
-        var resource = request.arguments[1];
-        resource.__proto__ = new Resource(request.arguments[0]);
-        this._fire(resource);
-    }
-    this.onFinished = new EventSink("resource-finished", resourceDispatch);
-    this.onNavigated = new EventSink("inspectedURLChanged");
-    this.onContentEdited = new EventSink("resource-content-edited");
+    this.onMessageAdded = new EventSink("console-message-added");
 }
 
-Resources.prototype = {
+Console.prototype = {
+    getMessages: function(callback)
+    {
+        extensionServer.sendRequest({ command: "getConsoleMessages" }, callback);
+    },
+
+    addMessage: function(severity, text, url, line)
+    {
+        extensionServer.sendRequest({ command: "addConsoleMessage", severity: severity, text: text, url: url, line: line });
+    },
+
+    get Severity()
+    {
+        return apiPrivate.console.Severity;
+    }
+};
+
+function Network()
+{
+    function dispatchRequestEvent(message)
+    {
+        var request = message.arguments[1];
+        request.__proto__ = new Request(message.arguments[0]);
+        this._fire(request);
+    }
+    this.onRequestFinished = new EventSink("network-request-finished", dispatchRequestEvent);
+    defineDeprecatedProperty(this, "network", "onFinished", "onRequestFinished");
+    this.onNavigated = new EventSink("inspectedURLChanged");
+}
+
+Network.prototype = {
     getHAR: function(callback)
     {
         function callbackWrapper(result)
         {
             var entries = (result && result.entries) || [];
             for (var i = 0; i < entries.length; ++i) {
-                entries[i].__proto__ = new Resource(entries[i]._requestId);
+                entries[i].__proto__ = new Request(entries[i]._requestId);
                 delete entries[i]._requestId;
             }
             callback(result);
@@ -137,19 +187,19 @@ Resources.prototype = {
     }
 }
 
-function ResourceImpl(id)
+function RequestImpl(id)
 {
     this._id = id;
 }
 
-ResourceImpl.prototype = {
+RequestImpl.prototype = {
     getContent: function(callback)
     {
         function callbackWrapper(response)
         {
             callback(response.content, response.encoding);
         }
-        extensionServer.sendRequest({ command: "getResourceContent", id: this._id }, callback && callbackWrapper);
+        extensionServer.sendRequest({ command: "getRequestContent", id: this._id }, callback && callbackWrapper);
     }
 };
 
@@ -179,6 +229,24 @@ Panels.prototype = {
             page: page
         };
         extensionServer.sendRequest(request, callback && bind(callback, this, new ExtensionPanel(id)));
+    },
+
+    setOpenResourceHandler: function(callback)
+    {
+        var hadHandler = extensionServer.hasHandler("open-resource");
+
+        if (!callback)
+            extensionServer.deregisterHandler("open-resource");
+        else {
+            function callbackWrapper(message)
+            {
+                callback.call(null, message.resource);
+            }
+            extensionServer.registerHandler("open-resource", callbackWrapper);
+        }
+        // Only send command if we either removed an existing handler or added handler and had none before.
+        if (hadHandler === !callback)
+            extensionServer.sendRequest({ command: "setOpenResourceHandler", "handlerPresent": !!callback });
     }
 }
 
@@ -270,7 +338,7 @@ Audits.prototype = {
 
 function AuditCategoryImpl(id)
 {
-    function auditResultDispatch(request)
+    function dispatchAuditEvent(request)
     {
         var auditResult = new AuditResult(request.arguments[0]);
         try {
@@ -281,7 +349,7 @@ function AuditCategoryImpl(id)
         }
     }
     this._id = id;
-    this.onAuditStarted = new EventSink("audit-started-" + id, auditResultDispatch);
+    this.onAuditStarted = new EventSink("audit-started-" + id, dispatchAuditEvent);
 }
 
 function AuditResultImpl(id)
@@ -356,6 +424,16 @@ AuditResultNode.prototype = {
 
 function InspectedWindow()
 {
+    function dispatchResourceEvent(message)
+    {
+        this._fire(new Resource(message.arguments[0]));
+    }
+    function dispatchResourceContentEvent(message)
+    {
+        this._fire(new Resource(message.arguments[0]), message.arguments[1]);
+    }
+    this.onResourceAdded = new EventSink("resource-added", dispatchResourceEvent);
+    this.onResourceContentCommitted = new EventSink("resource-content-committed", dispatchResourceContentEvent);
 }
 
 InspectedWindow.prototype = {
@@ -374,8 +452,54 @@ InspectedWindow.prototype = {
             callback(value, result.isException);
         }
         return extensionServer.sendRequest({ command: "evaluateOnInspectedPage", expression: expression }, callback && callbackWrapper);
+    },
+
+    getResources: function(callback)
+    {
+        function wrapResource(resourceData)
+        {
+            return new Resource(resourceData);
+        }
+        function callbackWrapper(resources)
+        {
+            callback(resources.map(wrapResource));
+        }
+        return extensionServer.sendRequest({ command: "getPageResources" }, callback && callbackWrapper);
     }
 }
+
+function ResourceImpl(resourceData)
+{
+    this._url = resourceData.url
+    this._type = resourceData.type;
+}
+
+ResourceImpl.prototype = {
+    get url()
+    {
+        return this._url;
+    },
+
+    get type()
+    {
+        return this._type;
+    },
+
+    getContent: function(callback)
+    {
+        function callbackWrapper(response)
+        {
+            callback(response.content, response.encoding);
+        }
+
+        return extensionServer.sendRequest({ command: "getResourceContent", url: this._url }, callback && callbackWrapper);
+    },
+
+    setContent: function(content, commit, callback)
+    {
+        return extensionServer.sendRequest({ command: "setResourceContent", url: this._url, content: content, commit: commit }, callback);
+    }
+};
 
 function TimelineImpl()
 {
@@ -407,9 +531,19 @@ ExtensionServerClient.prototype = {
         return this._port.postMessage(message);
     },
 
+    hasHandler: function(command)
+    {
+        return !!this._handlers[command];
+    },
+
     registerHandler: function(command, handler)
     {
         this._handlers[command] = handler;
+    },
+
+    deregisterHandler: function(command)
+    {
+        delete this._handlers[command];
     },
 
     nextObjectId: function()
@@ -453,9 +587,18 @@ function populateInterfaceClass(interface, implementation)
     for (var member in implementation) {
         if (member.charAt(0) === "_")
             continue;
-        var value = implementation[member];
-        interface[member] = typeof value === "function" ? bind(value, implementation)
-            : interface[member] = implementation[member];
+        var descriptor = null;
+        // Traverse prototype chain until we find the owner.
+        for (var owner = implementation; owner && !descriptor; owner = owner.__proto__)
+            descriptor = Object.getOwnPropertyDescriptor(owner, member);
+        if (!descriptor)
+            continue;
+        if (typeof descriptor.value === "function")
+            interface[member] = bind(descriptor.value, implementation);
+        else if (typeof descriptor.get === "function")
+            interface.__defineGetter__(member, bind(descriptor.get, implementation));
+        else
+            Object.defineProperty(interface, member, descriptor);
     }
 }
 
@@ -469,12 +612,27 @@ function declareInterfaceClass(implConstructor)
     }
 }
 
+function defineDeprecatedProperty(object, className, oldName, newName)
+{
+    var warningGiven = false;
+    function getter()
+    {
+        if (!warningGiven) {
+            console.warn(className + "." + oldName + " is deprecated. Use " + className + "." + newName + " instead");
+            warningGiven = true;
+        }
+        return object[newName];
+    }
+    object.__defineGetter__(oldName, getter);
+}
+
 var AuditCategory = declareInterfaceClass(AuditCategoryImpl);
 var AuditResult = declareInterfaceClass(AuditResultImpl);
 var EventSink = declareInterfaceClass(EventSinkImpl);
 var ExtensionSidebarPane = declareInterfaceClass(ExtensionSidebarPaneImpl);
 var Panel = declareInterfaceClass(PanelImpl);
 var PanelWithSidebar = declareInterfaceClass(PanelWithSidebarImpl);
+var Request = declareInterfaceClass(RequestImpl);
 var Resource = declareInterfaceClass(ResourceImpl);
 var Timeline = declareInterfaceClass(TimelineImpl);
 
@@ -484,4 +642,14 @@ webInspector = new InspectorExtensionAPI();
 experimental = window.experimental || {};
 experimental.webInspector = webInspector;
 
+}
+
+function buildExtensionAPIInjectedScript(platformAPI)
+{
+    return "(function(injectedScriptHost, inspectedWindow, injectedScriptId){ " +
+        defineCommonExtensionSymbols.toString() + ";" +
+        injectedExtensionAPI.toString() + ";" +
+        "injectedExtensionAPI(injectedScriptId);" +
+        (platformAPI || "") +
+        "})";
 }

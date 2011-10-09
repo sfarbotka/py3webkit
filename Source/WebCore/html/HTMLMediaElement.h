@@ -39,12 +39,17 @@
 
 namespace WebCore {
 
+#if ENABLE(WEB_AUDIO)
+class AudioSourceProvider;
+class MediaElementAudioSourceNode;
+#endif
 class Event;
 class HTMLSourceElement;
 class MediaControls;
 class MediaError;
 class KURL;
 class TimeRanges;
+class Uint8Array;
 #if ENABLE(PLUGIN_PROXY_FOR_VIDEO)
 class Widget;
 #endif
@@ -106,6 +111,7 @@ public:
 // playback state
     float currentTime() const;
     void setCurrentTime(float, ExceptionCode&);
+    double initialTime() const;
     float startTime() const;
     float duration() const;
     bool paused() const;
@@ -136,6 +142,17 @@ public:
     unsigned webkitVideoDecodedByteCount() const;
 #endif
 
+#if ENABLE(MEDIA_SOURCE)
+//  Media Source.
+    const KURL& webkitMediaSourceURL() const { return m_mediaSourceURL; }
+    void webkitSourceAppend(PassRefPtr<Uint8Array> data, ExceptionCode&);
+    enum EndOfStreamStatus { EOS_NO_ERROR, EOS_NETWORK_ERR, EOS_DECODE_ERR };
+    void webkitSourceEndOfStream(unsigned short, ExceptionCode&);
+    enum SourceState { SOURCE_CLOSED, SOURCE_OPEN, SOURCE_ENDED };
+    SourceState webkitSourceState() const;
+    void setSourceState(SourceState);
+#endif 
+
 // controls
     bool controls() const;
     void setControls(bool);
@@ -143,6 +160,7 @@ public:
     void setVolume(float, ExceptionCode&);
     bool muted() const;
     void setMuted(bool);
+
     void togglePlayState();
     void beginScrubbing();
     void endScrubbing();
@@ -179,27 +197,19 @@ public:
 
     void privateBrowsingStateDidChange();
 
-    // Restrictions to change default behaviors.
-    enum BehaviorRestrictionFlags {
-        NoRestrictions = 0,
-        RequireUserGestureForLoadRestriction = 1 << 0,
-        RequireUserGestureForRateChangeRestriction = 1 << 1,
-        RequireUserGestureForFullScreenRestriction = 1 << 2
-    };
-    typedef unsigned BehaviorRestrictions;
-    
-    bool requireUserGestureForLoad() const { return m_restrictions & RequireUserGestureForLoadRestriction; }
-    bool requireUserGestureForRateChange() const { return m_restrictions & RequireUserGestureForRateChangeRestriction; }
-    bool requireUserGestureForFullScreen() const { return m_restrictions & RequireUserGestureForFullScreenRestriction; }
-
-    void setBehaviorRestrictions(BehaviorRestrictions restrictions) { m_restrictions = restrictions; }
-
     // Media cache management.
     static void getSitesInMediaCache(Vector<String>&);
     static void clearMediaCache();
     static void clearMediaCacheForSite(const String&);
 
     bool isPlaying() const { return m_playing; }
+
+#if ENABLE(WEB_AUDIO)
+    MediaElementAudioSourceNode* audioSourceNode() { return m_audioSourceNode; }
+    void setAudioSourceNode(MediaElementAudioSourceNode*);
+
+    AudioSourceProvider* audioSourceProvider();
+#endif
 
 protected:
     HTMLMediaElement(const QualifiedName&, Document*);
@@ -218,13 +228,34 @@ protected:
     
     virtual bool isMediaElement() const { return true; }
 
+    // Restrictions to change default behaviors.
+    enum BehaviorRestrictionFlags {
+        NoRestrictions = 0,
+        RequireUserGestureForLoadRestriction = 1 << 0,
+        RequireUserGestureForRateChangeRestriction = 1 << 1,
+        RequireUserGestureForFullscreenRestriction = 1 << 2,
+        RequirePageConsentToLoadMediaRestriction = 1 << 3,
+    };
+    typedef unsigned BehaviorRestrictions;
+    
+    bool userGestureRequiredForLoad() const { return m_restrictions & RequireUserGestureForLoadRestriction; }
+    bool userGestureRequiredForRateChange() const { return m_restrictions & RequireUserGestureForRateChangeRestriction; }
+    bool userGestureRequiredForFullscreen() const { return m_restrictions & RequireUserGestureForFullscreenRestriction; }
+    bool pageConsentRequiredForLoad() const { return m_restrictions & RequirePageConsentToLoadMediaRestriction; }
+    
+    void addBehaviorRestriction(BehaviorRestrictions restriction) { m_restrictions |= restriction; }
+    void removeBehaviorRestriction(BehaviorRestrictions restriction) { m_restrictions &= ~restriction; }
+    
 private:
+    void createMediaPlayer();
+
+    virtual bool supportsFocus() const;
     virtual void attributeChanged(Attribute*, bool preserveDecls);
     virtual bool rendererIsNeeded(const NodeRenderingContext&);
     virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
     virtual void insertedIntoDocument();
     virtual void removedFromDocument();
-    virtual void recalcStyle(StyleChange);
+    virtual void didRecalcStyle(StyleChange);
     
     virtual void defaultEventHandler(Event*);
 
@@ -265,6 +296,11 @@ private:
     
     virtual void mediaPlayerFirstVideoFrameAvailable(MediaPlayer*);
     virtual void mediaPlayerCharacteristicChanged(MediaPlayer*);
+
+#if ENABLE(MEDIA_SOURCE)
+    virtual void mediaPlayerSourceOpened();
+    virtual String mediaPlayerSourceURL() const;
+#endif
 
     void loadTimerFired(Timer<HTMLMediaElement>*);
     void asyncEventTimerFired(Timer<HTMLMediaElement>*);
@@ -339,6 +375,7 @@ private:
 
     bool hasMediaControls();
     bool createMediaControls();
+    void configureMediaControls();
 
     virtual void* preDispatchEventHandler(Event*);
 
@@ -393,6 +430,11 @@ private:
     // calling the media engine recursively.
     int m_processingMediaPlayerCallback;
 
+#if ENABLE(MEDIA_SOURCE)
+    KURL m_mediaSourceURL;
+    SourceState m_sourceState;
+#endif
+
     mutable float m_cachedTime;
     mutable double m_cachedTimeWallClockUpdateTime;
     mutable double m_minimumWallClockTimeToCacheMediaTime;
@@ -430,6 +472,13 @@ private:
     bool m_loadInitiatedByUserGesture : 1;
     bool m_completelyLoaded : 1;
     bool m_havePreparedToPlay : 1;
+
+#if ENABLE(WEB_AUDIO)
+    // This is a weak reference, since m_audioSourceNode holds a reference to us.
+    // The value is set just after the MediaElementAudioSourceNode is created.
+    // The value is cleared in MediaElementAudioSourceNode::~MediaElementAudioSourceNode().
+    MediaElementAudioSourceNode* m_audioSourceNode;
+#endif
 };
 
 } //namespace

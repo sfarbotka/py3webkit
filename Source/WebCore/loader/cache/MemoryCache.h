@@ -99,9 +99,7 @@ public:
         TypeStatistic images;
         TypeStatistic cssStyleSheets;
         TypeStatistic scripts;
-#if ENABLE(XSLT)
         TypeStatistic xslStyleSheets;
-#endif
         TypeStatistic fonts;
     };
     
@@ -130,20 +128,8 @@ public:
     void evictResources();
     
     void setPruneEnabled(bool enabled) { m_pruneEnabled = enabled; }
-    void prune()
-    {
-        if (m_liveSize + m_deadSize <= m_capacity && m_maxDeadCapacity && m_deadSize <= m_maxDeadCapacity) // Fast path.
-            return;
-            
-        pruneDeadResources(); // Prune dead first, in case it was "borrowing" capacity from live.
-        pruneLiveResources();
-    }
-
-    void pruneToPercentage(float targetPercentLive)
-    {
-        pruneDeadResourcesToPercentage(targetPercentLive); // Prune dead first, in case it was "borrowing" capacity from live.
-        pruneLiveResourcesToPercentage(targetPercentLive);
-    }
+    void prune();
+    void pruneToPercentage(float targetPercentLive);
 
     void setDeadDecodedDataDeletionInterval(double interval) { m_deadDecodedDataDeletionInterval = interval; }
     double deadDecodedDataDeletionInterval() const { return m_deadDecodedDataDeletionInterval; }

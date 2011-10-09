@@ -54,8 +54,13 @@ static EncodedJSValue JSC_HOST_CALL JSONProtoFuncStringify(ExecState*);
 namespace JSC {
 
 JSONObject::JSONObject(JSGlobalObject* globalObject, Structure* structure)
-    : JSObjectWithGlobalObject(globalObject, structure)
+    : JSNonFinalObject(globalObject->globalData(), structure)
 {
+}
+
+void JSONObject::finishCreation(JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 }
 
@@ -148,8 +153,8 @@ static inline UString gap(ExecState* exec, JSValue space)
     space = unwrapBoxedPrimitive(exec, space);
 
     // If the space value is a number, create a gap string with that number of spaces.
-    double spaceCount;
-    if (space.getNumber(spaceCount)) {
+    if (space.isNumber()) {
+        double spaceCount = space.asNumber();
         int count;
         if (spaceCount > maxGapLength)
             count = maxGapLength;
@@ -223,9 +228,8 @@ Stringifier::Stringifier(ExecState* exec, const Local<Unknown>& replacer, const 
                 continue;
             }
 
-            double value = 0;
-            if (name.getNumber(value)) {
-                m_arrayReplacerPropertyNames.add(Identifier::from(exec, value));
+            if (name.isNumber()) {
+                m_arrayReplacerPropertyNames.add(Identifier::from(exec, name.asNumber()));
                 continue;
             }
 
@@ -241,7 +245,7 @@ Stringifier::Stringifier(ExecState* exec, const Local<Unknown>& replacer, const 
         return;
     }
 
-    m_replacerCallType = m_replacer.asObject()->getCallData(m_replacerCallData);
+    m_replacerCallType = m_replacer.asObject()->getCallDataVirtual(m_replacerCallData);
 }
 
 Local<Unknown> Stringifier::stringify(Handle<Unknown> value)
@@ -332,7 +336,7 @@ inline JSValue Stringifier::toJSON(JSValue value, const PropertyNameForFunctionC
 
     JSObject* object = asObject(toJSONFunction);
     CallData callData;
-    CallType callType = object->getCallData(callData);
+    CallType callType = object->getCallDataVirtual(callData);
     if (callType == CallTypeNone)
         return value;
 
@@ -371,7 +375,7 @@ Stringifier::StringifyResult Stringifier::appendStringifiedValue(UStringBuilder&
         return StringifyFailed;
 
     if (value.isBoolean()) {
-        builder.append(value.getBoolean() ? "true" : "false");
+        builder.append(value.isTrue() ? "true" : "false");
         return StringifySucceeded;
     }
 
@@ -381,12 +385,12 @@ Stringifier::StringifyResult Stringifier::appendStringifiedValue(UStringBuilder&
         return StringifySucceeded;
     }
 
-    double numericValue;
-    if (value.getNumber(numericValue)) {
-        if (!isfinite(numericValue))
+    if (value.isNumber()) {
+        double number = value.asNumber();
+        if (!isfinite(number))
             builder.append("null");
         else
-            builder.append(UString::number(numericValue));
+            builder.append(UString::number(number));
         return StringifySucceeded;
     }
 
@@ -396,7 +400,7 @@ Stringifier::StringifyResult Stringifier::appendStringifiedValue(UStringBuilder&
     JSObject* object = asObject(value);
 
     CallData callData;
-    if (object->getCallData(callData) != CallTypeNone) {
+    if (object->getCallDataVirtual(callData) != CallTypeNone) {
         if (holder->inherits(&JSArray::s_info)) {
             builder.append("null");
             return StringifySucceeded;
@@ -583,7 +587,7 @@ bool Stringifier::Holder::appendNextProperty(Stringifier& stringifier, UStringBu
 
 // ------------------------------ JSONObject --------------------------------
 
-const ClassInfo JSONObject::s_info = { "JSON", &JSObjectWithGlobalObject::s_info, 0, ExecState::jsonTable };
+const ClassInfo JSONObject::s_info = { "JSON", &JSNonFinalObject::s_info, 0, ExecState::jsonTable, CREATE_METHOD_TABLE(JSONObject) };
 
 /* Source for JSONObject.lut.h
 @begin jsonTable

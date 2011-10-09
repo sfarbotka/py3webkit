@@ -34,6 +34,8 @@
 #include "RoundedRect.h"
 #include "TextRun.h"
 
+#include "stdio.h"
+
 using namespace std;
 
 namespace WebCore {
@@ -78,6 +80,7 @@ private:
 
 GraphicsContext::GraphicsContext(PlatformGraphicsContext* platformGraphicsContext)
     : m_updatingControlTints(false)
+    , m_transparencyCount(0)
 {
     platformInit(platformGraphicsContext);
 }
@@ -85,6 +88,7 @@ GraphicsContext::GraphicsContext(PlatformGraphicsContext* platformGraphicsContex
 GraphicsContext::~GraphicsContext()
 {
     ASSERT(m_stack.isEmpty());
+    ASSERT(!m_transparencyCount);
     platformDestroy();
 }
 
@@ -330,6 +334,26 @@ bool GraphicsContext::shadowsIgnoreTransforms() const
     return m_state.shadowsIgnoreTransforms;
 }
 
+void GraphicsContext::beginTransparencyLayer(float opacity)
+{
+    beginPlatformTransparencyLayer(opacity);
+    ++m_transparencyCount;
+}
+
+void GraphicsContext::endTransparencyLayer()
+{
+    endPlatformTransparencyLayer();
+    ASSERT(m_transparencyCount > 0);
+    --m_transparencyCount;
+}
+
+#if !PLATFORM(QT)
+bool GraphicsContext::isInTransparencyLayer() const
+{
+    return (m_transparencyCount > 0) && supportsTransparencyLayers();
+}
+#endif
+
 bool GraphicsContext::updatingControlTints() const
 {
     return m_updatingControlTints;
@@ -477,7 +501,8 @@ void GraphicsContext::drawTiledImage(Image* image, ColorSpace styleColorSpace, c
         image->drawTiled(this, rect, srcPoint, tileSize, styleColorSpace, op);
 }
 
-void GraphicsContext::drawTiledImage(Image* image, ColorSpace styleColorSpace, const IntRect& dest, const IntRect& srcRect, Image::TileRule hRule, Image::TileRule vRule, CompositeOperator op, bool useLowQualityScale)
+void GraphicsContext::drawTiledImage(Image* image, ColorSpace styleColorSpace, const IntRect& dest, const IntRect& srcRect,
+    const FloatSize& tileScaleFactor, Image::TileRule hRule, Image::TileRule vRule, CompositeOperator op, bool useLowQualityScale)
 {
     if (paintingDisabled() || !image)
         return;
@@ -491,10 +516,10 @@ void GraphicsContext::drawTiledImage(Image* image, ColorSpace styleColorSpace, c
     if (useLowQualityScale) {
         InterpolationQuality previousInterpolationQuality = imageInterpolationQuality();
         setImageInterpolationQuality(InterpolationLow);
-        image->drawTiled(this, dest, srcRect, hRule, vRule, styleColorSpace, op);
+        image->drawTiled(this, dest, srcRect, tileScaleFactor, hRule, vRule, styleColorSpace, op);
         setImageInterpolationQuality(previousInterpolationQuality);
     } else
-        image->drawTiled(this, dest, srcRect, hRule, vRule, styleColorSpace, op);
+        image->drawTiled(this, dest, srcRect, tileScaleFactor, hRule, vRule, styleColorSpace, op);
 }
 
 void GraphicsContext::drawImageBuffer(ImageBuffer* image, ColorSpace styleColorSpace, const IntPoint& p, CompositeOperator op)
@@ -672,7 +697,7 @@ void GraphicsContext::setPlatformTextDrawingMode(TextDrawingModeFlags mode)
 }
 #endif
 
-#if !PLATFORM(QT) && !USE(CAIRO) && !USE(SKIA) && !PLATFORM(HAIKU) && !PLATFORM(OPENVG)
+#if !PLATFORM(QT) && !USE(CAIRO) && !USE(SKIA) && !PLATFORM(OPENVG)
 void GraphicsContext::setPlatformStrokeStyle(StrokeStyle)
 {
 }
@@ -684,23 +709,10 @@ void GraphicsContext::setPlatformShouldSmoothFonts(bool)
 }
 #endif
 
-#if !USE(SKIA)
-void GraphicsContext::setGraphicsContext3D(GraphicsContext3D*, DrawingBuffer*, const IntSize&)
-{
-}
-#endif
-
 #if !USE(SKIA) && !USE(CG)
 bool GraphicsContext::isAcceleratedContext() const
 {
     return false;
-}
-#endif
-
-#if !USE(SKIA)
-bool GraphicsContext::paintsIntoImageBuffer() const
-{
-    return true;
 }
 #endif
 

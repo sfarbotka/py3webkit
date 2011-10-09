@@ -48,13 +48,19 @@ static NPIdentifier npIdentifierFromIdentifier(const Identifier& identifier)
     return static_cast<NPIdentifier>(IdentifierRep::get(identifier.ustring().utf8().data()));
 }
 
-const ClassInfo JSNPObject::s_info = { "NPObject", &JSObjectWithGlobalObject::s_info, 0, 0 };
+const ClassInfo JSNPObject::s_info = { "NPObject", &JSNonFinalObject::s_info, 0, 0, CREATE_METHOD_TABLE(JSNPObject) };
 
-JSNPObject::JSNPObject(JSGlobalObject* globalObject, NPRuntimeObjectMap* objectMap, NPObject* npObject)
-    : JSObjectWithGlobalObject(globalObject, createStructure(globalObject->globalData(), globalObject->objectPrototype()))
+JSNPObject::JSNPObject(JSGlobalObject* globalObject, Structure* structure, NPRuntimeObjectMap* objectMap, NPObject* npObject)
+    : JSNonFinalObject(globalObject->globalData(), structure)
     , m_objectMap(objectMap)
     , m_npObject(npObject)
 {
+    ASSERT(globalObject == structure->globalObject());
+}
+
+void JSNPObject::finishCreation(JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 
     // We should never have an NPJSObject inside a JSNPObject.
@@ -75,6 +81,16 @@ void JSNPObject::invalidate()
 
     releaseNPObject(m_npObject);
     m_npObject = 0;
+}
+
+NPObject* JSNPObject::leakNPObject()
+{
+    ASSERT(m_npObject);
+    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+
+    NPObject* object = m_npObject;
+    m_npObject = 0;
+    return object;
 }
 
 JSValue JSNPObject::callMethod(ExecState* exec, NPIdentifier methodName)
@@ -201,10 +217,16 @@ static EncodedJSValue JSC_HOST_CALL callNPJSObject(ExecState* exec)
     return JSValue::encode(static_cast<JSNPObject*>(object)->callObject(exec));
 }
 
-JSC::CallType JSNPObject::getCallData(JSC::CallData& callData)
+CallType JSNPObject::getCallDataVirtual(CallData& callData)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
-    if (!m_npObject || !m_npObject->_class->invokeDefault)
+    return getCallData(this, callData);
+}
+
+JSC::CallType JSNPObject::getCallData(JSC::JSCell* cell, JSC::CallData& callData)
+{
+    JSNPObject* thisObject = static_cast<JSNPObject*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
+    if (!thisObject->m_npObject || !thisObject->m_npObject->_class->invokeDefault)
         return CallTypeNone;
 
     callData.native.function = callNPJSObject;

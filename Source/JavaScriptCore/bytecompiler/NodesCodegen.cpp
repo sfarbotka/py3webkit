@@ -1308,7 +1308,7 @@ RegisterID* ConstDeclNode::emitCodeSingle(BytecodeGenerator& generator)
         if (entry.isNull())
             continue;
 
-        return generator.emitPutScopedVar(depth, entry.getIndex(), value.get(), currentVariableObject->isGlobalObject() ? currentVariableObject : 0);
+        return generator.emitPutScopedVar(generator.scopeDepth() + depth, entry.getIndex(), value.get(), currentVariableObject->isGlobalObject() ? currentVariableObject : 0);
     }
 
     if (generator.codeType() != EvalCode)
@@ -1469,7 +1469,7 @@ RegisterID* DoWhileNode::emitBytecode(BytecodeGenerator& generator, RegisterID* 
 
     RefPtr<Label> topOfLoop = generator.newLabel();
     generator.emitLabel(topOfLoop.get());
-
+    generator.emitLoopHint();
     generator.emitDebugHook(WillExecuteStatement, firstLine(), lastLine());
    
     RefPtr<RegisterID> result = generator.emitNode(dst, m_statement);
@@ -1497,6 +1497,7 @@ RegisterID* WhileNode::emitBytecode(BytecodeGenerator& generator, RegisterID* ds
 
     RefPtr<Label> topOfLoop = generator.newLabel();
     generator.emitLabel(topOfLoop.get());
+    generator.emitLoopHint();
     
     generator.emitNode(dst, m_statement);
 
@@ -1532,6 +1533,7 @@ RegisterID* ForNode::emitBytecode(BytecodeGenerator& generator, RegisterID* dst)
 
     RefPtr<Label> topOfLoop = generator.newLabel();
     generator.emitLabel(topOfLoop.get());
+    generator.emitLoopHint();
 
     RefPtr<RegisterID> result = generator.emitNode(dst, m_statement);
 
@@ -1579,6 +1581,7 @@ RegisterID* ForInNode::emitBytecode(BytecodeGenerator& generator, RegisterID* ds
 
     RefPtr<Label> loopStart = generator.newLabel();
     generator.emitLabel(loopStart.get());
+    generator.emitLoopHint();
 
     RegisterID* propertyName;
     bool optimizedForinAccess = false;
@@ -1740,7 +1743,7 @@ static void processClauseList(ClauseListNode* list, Vector<ExpressionNode*, 8>& 
             }
             const UString& value = static_cast<StringNode*>(clauseExpression)->value().ustring();
             if (singleCharacterSwitch &= value.length() == 1) {
-                int32_t intVal = value.impl()->characters()[0];
+                int32_t intVal = value[0];
                 if (intVal < min_num)
                     min_num = intVal;
                 if (intVal > max_num)

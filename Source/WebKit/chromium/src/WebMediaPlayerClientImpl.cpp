@@ -24,12 +24,13 @@
 
 #include "VideoFrameChromium.h"
 #include "VideoFrameChromiumImpl.h"
+#include "WebAudioSourceProvider.h"
 #include "WebCanvas.h"
 #include "WebCString.h"
 #include "WebFrameClient.h"
 #include "WebFrameImpl.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebMediaElement.h"
 #include "WebMediaPlayer.h"
 #include "WebMimeRegistry.h"
@@ -195,6 +196,24 @@ WebMediaPlayer::Preload WebMediaPlayerClientImpl::preload() const
     return static_cast<WebMediaPlayer::Preload>(m_preload);
 }
 
+void WebMediaPlayerClientImpl::sourceOpened()
+{
+#if ENABLE(MEDIA_SOURCE)
+    ASSERT(m_mediaPlayer);
+    m_mediaPlayer->sourceOpened();
+#endif
+}
+
+WebKit::WebURL WebMediaPlayerClientImpl::sourceURL() const
+{
+#if ENABLE(MEDIA_SOURCE)
+    ASSERT(m_mediaPlayer);
+    return KURL(ParsedURLString, m_mediaPlayer->sourceURL());
+#else
+    return KURL();
+#endif
+}
+
 // MediaPlayerPrivateInterface -------------------------------------------------
 
 void WebMediaPlayerClientImpl::load(const String& url)
@@ -256,6 +275,21 @@ void WebMediaPlayerClientImpl::pause()
     if (m_webMediaPlayer.get())
         m_webMediaPlayer->pause();
 }
+
+#if ENABLE(MEDIA_SOURCE)
+bool WebMediaPlayerClientImpl::sourceAppend(const unsigned char* data, unsigned length)
+{
+    if (m_webMediaPlayer.get())
+        return m_webMediaPlayer->sourceAppend(data, length);
+    return false;
+}
+
+void WebMediaPlayerClientImpl::sourceEndOfStream(WebCore::MediaPlayer::EndOfStreamStatus status)
+{
+    if (m_webMediaPlayer.get())
+        m_webMediaPlayer->sourceEndOfStream(static_cast<WebMediaPlayer::EndOfStreamStatus>(status));
+}
+#endif
 
 void WebMediaPlayerClientImpl::prepareToPlay()
 {
@@ -520,6 +554,18 @@ unsigned WebMediaPlayerClientImpl::videoDecodedByteCount() const
     return 0;
 }
 
+WebCore::AudioSourceProvider* WebMediaPlayerClientImpl::audioSourceProvider()
+{
+#if ENABLE(WEB_AUDIO)
+    if (m_webMediaPlayer.get()) {
+        // Wrap the WebAudioSourceProvider in the form of WebCore::AudioSourceProvider.
+        m_audioSourceProvider.initialize(m_webMediaPlayer->audioSourceProvider());
+        return &m_audioSourceProvider;
+    }
+#endif
+    return 0;
+}
+
 #if USE(ACCELERATED_COMPOSITING)
 bool WebMediaPlayerClientImpl::supportsAcceleratedRendering() const
 {
@@ -528,7 +574,7 @@ bool WebMediaPlayerClientImpl::supportsAcceleratedRendering() const
 
 bool WebMediaPlayerClientImpl::acceleratedRenderingInUse()
 {
-    return m_videoLayer.get() && m_videoLayer->layerRenderer();
+    return m_videoLayer.get() && m_videoLayer->layerTreeHost();
 }
 
 VideoFrameChromium* WebMediaPlayerClientImpl::getCurrentFrame()
@@ -583,8 +629,7 @@ void WebMediaPlayerClientImpl::getSupportedTypes(HashSet<String>& supportedTypes
 MediaPlayer::SupportsType WebMediaPlayerClientImpl::supportsType(const String& type,
                                                                  const String& codecs)
 {
-    WebMimeRegistry::SupportsType supportsType =
-        webKitClient()->mimeRegistry()->supportsMediaMIMEType(type, codecs);
+    WebMimeRegistry::SupportsType supportsType = webKitPlatformSupport()->mimeRegistry()->supportsMediaMIMEType(type, codecs);
 
     switch (supportsType) {
     default:
@@ -619,6 +664,29 @@ WebMediaPlayerClientImpl::WebMediaPlayerClientImpl()
 #endif
 {
 }
+
+#if ENABLE(WEB_AUDIO)
+void WebMediaPlayerClientImpl::AudioSourceProviderImpl::provideInput(WebCore::AudioBus* bus, size_t framesToProcess)
+{
+    ASSERT(bus);
+    if (!bus)
+        return;
+
+    ASSERT(m_webAudioSourceProvider);
+    if (!m_webAudioSourceProvider) {
+        bus->zero();
+        return;
+    }
+
+    // Wrap the AudioBus channel data using WebVector.
+    size_t n = bus->numberOfChannels();
+    WebVector<float*> webAudioData(n);
+    for (size_t i = 0; i < n; ++i)
+        webAudioData[i] = bus->channel(i)->data();
+
+    m_webAudioSourceProvider->provideInput(webAudioData, framesToProcess);
+}
+#endif
 
 } // namespace WebKit
 

@@ -27,7 +27,7 @@
 #define IDBLevelDBBackingStore_h
 
 #if ENABLE(INDEXED_DATABASE)
-#if ENABLE(LEVELDB)
+#if USE(LEVELDB)
 
 #include "IDBBackingStore.h"
 #include <wtf/OwnPtr.h>
@@ -44,6 +44,7 @@ public:
     static PassRefPtr<IDBBackingStore> open(SecurityOrigin*, const String& pathBase, int64_t maximumSize, const String& fileIdentifier, IDBFactoryBackendImpl*);
     virtual ~IDBLevelDBBackingStore();
 
+    virtual void getDatabaseNames(Vector<String>& foundNames);
     virtual bool extractIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId);
     virtual bool setIDBDatabaseMetaData(const String& name, const String& version, int64_t& rowId, bool invalidRowId);
 
@@ -103,7 +104,7 @@ private:
 } // namespace WebCore
 
 
-#endif // ENABLE(LEVELDB)
+#endif // USE(LEVELDB)
 #endif // ENABLE(INDEXED_DATABASE)
 
 #endif // IDBLevelDBBackingStore_h

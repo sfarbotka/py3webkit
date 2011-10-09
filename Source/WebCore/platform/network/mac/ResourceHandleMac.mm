@@ -34,6 +34,7 @@
 #import "BlobRegistry.h"
 #import "BlockExceptions.h"
 #import "CookieStorage.h"
+#import "CookieStorageCFNet.h"
 #import "CredentialStorage.h"
 #import "CachedResourceLoader.h"
 #import "EmptyProtocolDefinitions.h"
@@ -68,10 +69,6 @@ using namespace WebCore;
 // warning that the compiler would otherwise emit.
 @interface WebCoreNSURLConnectionDelegateProxy : NSObject <NSURLConnectionDelegate>
 - (void)setDelegate:(id<NSURLConnectionDelegate>)delegate;
-@end
-
-@interface NSURLConnection (NSURLConnectionTigerPrivate)
-- (NSData *)_bufferedData;
 @end
 
 @interface NSURLConnection (Details)
@@ -131,9 +128,11 @@ namespace WebCore {
 static bool isInitializingConnection;
 #endif
     
-static String encodeBasicAuthorization(const String& user, const String& password)
+static void applyBasicAuthorizationHeader(ResourceRequest& request, const Credential& credential)
 {
-    return base64Encode(String(user + ":" + password).utf8());
+    String authenticationHeader = "Basic " + base64Encode(String(credential.user() + ":" + credential.password()).utf8());
+    request.clearHTTPAuthorization(); // FIXME: Should addHTTPHeaderField be smart enough to not build comma-separated lists in headers like Authorization?
+    request.addHTTPHeaderField("Authorization", authenticationHeader);
 }
 
 ResourceHandleInternal::~ResourceHandleInternal()
@@ -162,9 +161,9 @@ static bool shouldRelaxThirdPartyCookiePolicy(const KURL& url)
 
     NSHTTPCookieAcceptPolicy cookieAcceptPolicy;
 #if USE(CFURLSTORAGESESSIONS)
-    CFHTTPCookieStorageRef cfPrivateBrowsingStorage = privateBrowsingCookieStorage().get();
-    if (cfPrivateBrowsingStorage)
-        cookieAcceptPolicy =  wkGetHTTPCookieAcceptPolicy(cfPrivateBrowsingStorage);
+    RetainPtr<CFHTTPCookieStorageRef> cfCookieStorage = currentCFHTTPCookieStorage();
+    if (cfCookieStorage)
+        cookieAcceptPolicy = wkGetHTTPCookieAcceptPolicy(cfCookieStorage.get());
     else
 #endif
         cookieAcceptPolicy = [sharedStorage cookieAcceptPolicy];
@@ -174,8 +173,8 @@ static bool shouldRelaxThirdPartyCookiePolicy(const KURL& url)
 
     NSArray *cookies;
 #if USE(CFURLSTORAGESESSIONS)
-    if (cfPrivateBrowsingStorage)
-        cookies = wkHTTPCookiesForURL(cfPrivateBrowsingStorage, url);
+    if (cfCookieStorage)
+        cookies = wkHTTPCookiesForURL(cfCookieStorage.get(), url);
     else
 #endif
         cookies = [sharedStorage cookiesForURL:url];
@@ -211,8 +210,7 @@ void ResourceHandle::createNSURLConnection(id delegate, bool shouldUseCredential
         
     if (!d->m_initialCredential.isEmpty()) {
         // FIXME: Support Digest authentication, and Proxy-Authorization.
-        String authHeader = "Basic " + encodeBasicAuthorization(d->m_initialCredential.user(), d->m_initialCredential.password());
-        firstRequest().addHTTPHeaderField("Authorization", authHeader);
+        applyBasicAuthorizationHeader(firstRequest(), d->m_initialCredential);
     }
 
     NSURLRequest *nsRequest = firstRequest().nsURLRequest();
@@ -230,7 +228,7 @@ void ResourceHandle::createNSURLConnection(id delegate, bool shouldUseCredential
 #endif
 
 #if USE(CFURLSTORAGESESSIONS)
-    if (CFURLStorageSessionRef storageSession = privateBrowsingStorageSession())
+    if (CFURLStorageSessionRef storageSession = currentStorageSession())
         nsRequest = [wkCopyRequestWithStorageSession(storageSession, nsRequest) autorelease];
 #endif
 
@@ -372,20 +370,6 @@ void ResourceHandle::releaseDelegate()
     d->m_delegate = nil;
 }
 
-bool ResourceHandle::supportsBufferedData()
-{
-    static bool supportsBufferedData = [NSURLConnection instancesRespondToSelector:@selector(_bufferedData)];
-    return supportsBufferedData;
-}
-
-PassRefPtr<SharedBuffer> ResourceHandle::bufferedData()
-{
-    if (ResourceHandle::supportsBufferedData())
-        return SharedBuffer::wrapNSData([d->m_connection.get() _bufferedData]);
-
-    return 0;
-}
-
 id ResourceHandle::releaseProxy()
 {
     id proxy = [[d->m_proxy.get() retain] autorelease];
@@ -496,11 +480,28 @@ void ResourceHandle::willSendRequest(ResourceRequest& request, const ResourceRes
     d->m_pass = url.pass();
     d->m_lastHTTPMethod = request.httpMethod();
     request.removeCredentials();
-    if (!protocolHostAndPortAreEqual(request.url(), redirectResponse.url()))
+
+    if (!protocolHostAndPortAreEqual(request.url(), redirectResponse.url())) {
+        // If the network layer carries over authentication headers from the original request
+        // in a cross-origin redirect, we want to clear those headers here.
+        // As of Lion, CFNetwork no longer does this.
         request.clearHTTPAuthorization();
+    } else {
+        // Only consider applying authentication credentials if this is actually a redirect and the redirect
+        // URL didn't include credentials of its own.
+        if (d->m_user.isEmpty() && d->m_pass.isEmpty() && !redirectResponse.isNull()) {
+            Credential credential = CredentialStorage::get(request.url());
+            if (!credential.isEmpty()) {
+                d->m_initialCredential = credential;
+                
+                // FIXME: Support Digest authentication, and Proxy-Authorization.
+                applyBasicAuthorizationHeader(request, d->m_initialCredential);
+            }
+        }
+    }
 
 #if USE(CFURLSTORAGESESSIONS)
-    if (CFURLStorageSessionRef storageSession = privateBrowsingStorageSession())
+    if (CFURLStorageSessionRef storageSession = currentStorageSession())
         request.setStorageSession(storageSession);
 #endif
 
@@ -636,11 +637,6 @@ void ResourceHandle::receivedCancellation(const AuthenticationChallenge& challen
 }
 
 #if USE(CFURLSTORAGESESSIONS)
-
-RetainPtr<CFURLStorageSessionRef> ResourceHandle::createPrivateBrowsingStorageSession(CFStringRef identifier)
-{
-    return RetainPtr<CFURLStorageSessionRef>(AdoptCF, wkCreatePrivateStorageSession(identifier));
-}
 
 String ResourceHandle::privateBrowsingStorageSessionIdentifierDefaultBase()
 {
@@ -800,7 +796,7 @@ String ResourceHandle::privateBrowsingStorageSessionIdentifierDefaultBase()
     m_handle->client()->didReceiveResponse(m_handle, r);
 }
 
-#if HAVE(CFNETWORK_DATA_ARRAY_CALLBACK)
+#if HAVE(NETWORK_CFDATA_ARRAY_CALLBACK)
 - (void)connection:(NSURLConnection *)connection didReceiveDataArray:(NSArray *)dataArray
 {
     UNUSED_PARAM(connection);

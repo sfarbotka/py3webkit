@@ -33,23 +33,14 @@ class ViewportArguments;
 
 namespace WebKit {
 
-class SGAgent;
+class SGUpdateQueue;
 
 class TouchViewInterface : public ViewInterface
 {
 public:
     TouchViewInterface(QTouchWebView* viewportView, QTouchWebPage* pageView);
 
-    void panGestureStarted();
-    void panGestureRequestScroll(qreal deltaX, qreal deltaY);
-    void panGestureEnded();
-    void panGestureCancelled();
-
-    void pinchGestureStarted();
-    void pinchGestureRequestUpdate(const QPointF&, qreal);
-    void pinchGestureEnded();
-
-    SGAgent* sceneGraphAgent() const;
+    SGUpdateQueue* sceneGraphUpdateQueue() const;
 
 private:
     /* Implementation of ViewInterface */
@@ -73,6 +64,7 @@ private:
     virtual void didChangeStatusText(const QString&);
     virtual void didChangeCursor(const QCursor&);
     virtual void loadDidBegin();
+    virtual void loadDidCommit();
     virtual void loadDidSucceed();
     virtual void loadDidFail(const QWebError&);
     virtual void didChangeLoadProgress(int);
@@ -80,14 +72,22 @@ private:
     virtual void showContextMenu(QSharedPointer<QMenu>);
     virtual void hideContextMenu();
 
+    virtual void runJavaScriptAlert(const QString&);
+    virtual bool runJavaScriptConfirm(const QString&);
+    virtual QString runJavaScriptPrompt(const QString&, const QString& defaultValue, bool& ok);
+
     virtual void processDidCrash();
     virtual void didRelaunchProcess();
+
+    virtual QJSEngine* engine();
+
+    virtual void chooseFiles(WKOpenPanelResultListenerRef, const QStringList&, FileChooserType) { }
+
+    virtual void didMouseMoveOverElement(const QUrl&, const QString&) { }
 
 private:
     QTouchWebView* const m_viewportView;
     QTouchWebPage* const m_pageView;
-
-    qreal m_pinchStartScale;
 };
 
 }

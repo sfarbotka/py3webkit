@@ -25,79 +25,28 @@
 #include "qtouchwebpage_p.h"
 #include "qtouchwebview.h"
 #include "qtouchwebview_p.h"
+#include "qweberror.h"
+
+#include <QDeclarativeEngine>
+#include <QSGView>
 
 namespace WebKit {
 
 TouchViewInterface::TouchViewInterface(QTouchWebView* viewportView, QTouchWebPage* pageView)
     : m_viewportView(viewportView)
     , m_pageView(pageView)
-    , m_pinchStartScale(1.f)
 {
     Q_ASSERT(m_viewportView);
     Q_ASSERT(m_pageView);
-}
-
-void TouchViewInterface::panGestureStarted()
-{
-    // FIXME: suspend the Web engine (stop animated GIF, etc).
-    // FIXME: initialize physics for panning (stop animation, etc).
-}
-
-void TouchViewInterface::panGestureRequestScroll(qreal deltaX, qreal deltaY)
-{
-    // Translate the delta from page to viewport coordinates.
-    QPointF itemPositionInItemCoords = m_pageView->mapFromItem(m_pageView->parentItem(), m_pageView->pos());
-    QPointF destInViewportCoords = m_viewportView->mapFromItem(m_pageView, itemPositionInItemCoords + QPointF(deltaX, deltaY));
-    QPointF offsetInViewportCoords = destInViewportCoords - m_viewportView->mapFromItem(m_pageView->parentItem(), m_pageView->pos());
-    m_viewportView->d->scroll(offsetInViewportCoords.x(), offsetInViewportCoords.y());
-}
-
-void TouchViewInterface::panGestureEnded()
-{
-    // FIXME: trigger physics engine for animation (the Web engine should be resumed after the animation.)
-}
-
-void TouchViewInterface::panGestureCancelled()
-{
-    // FIXME: reset physics.
-    // FIXME: resume the Web engine.
-}
-
-void TouchViewInterface::pinchGestureStarted()
-{
-    // FIXME: suspend the engine.
-    m_pinchStartScale = m_pageView->scale();
-}
-
-void TouchViewInterface::pinchGestureRequestUpdate(const QPointF& pinchCenterInPageViewCoordinate, qreal totalScaleFactor)
-{
-    // FIXME: it is a more complicated than that:
-    // -the scale should be done centered on the pinch center.
-    // -changes of the center position should move the page even if the zoom factor
-    //  does not change. Both the zoom and the panning should be handled through the physics engine.
-    const qreal scale = m_pinchStartScale * totalScaleFactor;
-    QPointF oldPinchCenterOnParent = m_pageView->mapToItem(m_pageView->parentItem(), pinchCenterInPageViewCoordinate);
-    m_pageView->setScale(scale);
-    QPointF newPinchCenterOnParent = m_pageView->mapToItem(m_pageView->parentItem(), pinchCenterInPageViewCoordinate);
-    m_pageView->setPos(m_pageView->pos() - (newPinchCenterOnParent - oldPinchCenterOnParent));
-}
-
-void TouchViewInterface::pinchGestureEnded()
-{
-    // FIXME: commit scale with the scale value in the valid range in order to get new tiles.
-    // FIXME: animate the back zoom in the valid range.
-    // FIXME: resume the engine after the animation.
-    m_pageView->d->commitScaleChange();
-    m_viewportView->d->viewportRectUpdated();
 }
 
 void TouchViewInterface::didFindZoomableArea(const QPoint&, const QRect&)
 {
 }
 
-SGAgent* TouchViewInterface::sceneGraphAgent() const
+SGUpdateQueue* TouchViewInterface::sceneGraphUpdateQueue() const
 {
-    return &m_pageView->d->sgAgent;
+    return &m_pageView->d->sgUpdateQueue;
 }
 
 void TouchViewInterface::setViewNeedsDisplay(const QRect&)
@@ -111,14 +60,9 @@ QSize TouchViewInterface::drawingAreaSize()
 
 void TouchViewInterface::contentSizeChanged(const QSize& newSize)
 {
-    // FIXME: the viewport should take care of:
-    // -resize the page
-    // -change the zoom level if needed
-    // -move the page back in viewport boundaries if needed
-    // -update the viewport rect
     m_pageView->setWidth(newSize.width());
     m_pageView->setHeight(newSize.height());
-    m_viewportView->d->viewportRectUpdated();
+    m_viewportView->d->updateViewportConstraints();
 }
 
 bool TouchViewInterface::isActive()
@@ -178,6 +122,11 @@ void TouchViewInterface::loadDidBegin()
     emit m_pageView->loadStarted();
 }
 
+void TouchViewInterface::loadDidCommit()
+{
+    m_viewportView->d->loadDidCommit();
+}
+
 void TouchViewInterface::loadDidSucceed()
 {
     emit m_pageView->loadSucceeded();
@@ -185,7 +134,7 @@ void TouchViewInterface::loadDidSucceed()
 
 void TouchViewInterface::loadDidFail(const QWebError& error)
 {
-    emit m_pageView->loadFailed(error);
+    emit m_pageView->loadFailed(static_cast<QTouchWebPage::ErrorType>(error.type()), error.errorCode(), error.url());
 }
 
 void TouchViewInterface::didChangeLoadProgress(int percentageLoaded)
@@ -203,6 +152,23 @@ void TouchViewInterface::hideContextMenu()
     // FIXME
 }
 
+void TouchViewInterface::runJavaScriptAlert(const QString&)
+{
+    // FIXME.
+}
+
+bool TouchViewInterface::runJavaScriptConfirm(const QString&)
+{
+    // FIXME.
+    return true;
+}
+
+QString TouchViewInterface::runJavaScriptPrompt(const QString&, const QString& defaultValue, bool&)
+{
+    // FIXME.
+    return defaultValue;
+}
+
 void TouchViewInterface::processDidCrash()
 {
     // FIXME
@@ -211,6 +177,14 @@ void TouchViewInterface::processDidCrash()
 void TouchViewInterface::didRelaunchProcess()
 {
     // FIXME
+}
+
+QJSEngine* TouchViewInterface::engine()
+{
+    QSGView* view = qobject_cast<QSGView*>(m_pageView->canvas());
+    if (view)
+        return view->engine();
+    return 0;
 }
 
 }

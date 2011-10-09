@@ -31,6 +31,8 @@
 #include "config.h"
 #include "JSMessageEvent.h"
 
+#include "JSArrayBuffer.h"
+#include "JSBlob.h"
 #include "JSDOMBinding.h"
 #include "JSDOMWindow.h"
 #include "JSEventTarget.h"
@@ -42,11 +44,44 @@ using namespace JSC;
 
 namespace WebCore {
 
+JSValue JSMessageEvent::data(ExecState* exec) const
+{
+    if (JSValue cachedValue = m_data.get())
+        return cachedValue;
+
+    MessageEvent* event = static_cast<MessageEvent*>(impl());
+    JSValue result;
+    switch (event->dataType()) {
+    case MessageEvent::DataTypeSerializedScriptValue:
+        if (SerializedScriptValue* serializedValue = event->dataAsSerializedScriptValue())
+            result = serializedValue->deserialize(exec, globalObject(), NonThrowing);
+        else
+            result = jsNull();
+        break;
+
+    case MessageEvent::DataTypeString:
+        result = jsString(exec, event->dataAsString());
+        break;
+
+    case MessageEvent::DataTypeBlob:
+        result = toJS(exec, globalObject(), event->dataAsBlob());
+        break;
+
+    case MessageEvent::DataTypeArrayBuffer:
+        result = toJS(exec, globalObject(), event->dataAsArrayBuffer());
+        break;
+    }
+
+    // Save the result so we don't have to deserialize the value again.
+    const_cast<JSMessageEvent*>(this)->m_data.set(exec->globalData(), this, result);
+    return result;
+}
+
 JSValue JSMessageEvent::ports(ExecState* exec) const
 {
     MessagePortArray* ports = static_cast<MessageEvent*>(impl())->ports();
-    if (!ports || ports->isEmpty())
-        return jsNull();
+    if (!ports)
+        return constructEmptyArray(exec, globalObject());
 
     MarkedArgumentBuffer list;
     for (size_t i = 0; i < ports->size(); i++)
@@ -59,7 +94,7 @@ JSC::JSValue JSMessageEvent::initMessageEvent(JSC::ExecState* exec)
     const UString& typeArg = exec->argument(0).toString(exec);
     bool canBubbleArg = exec->argument(1).toBoolean(exec);
     bool cancelableArg = exec->argument(2).toBoolean(exec);
-    PassRefPtr<SerializedScriptValue> dataArg = SerializedScriptValue::create(exec, exec->argument(3));
+    RefPtr<SerializedScriptValue> dataArg = SerializedScriptValue::create(exec, exec->argument(3));
     if (exec->hadException())
         return jsUndefined();
     const UString& originArg = exec->argument(4).toString(exec);
@@ -74,8 +109,19 @@ JSC::JSValue JSMessageEvent::initMessageEvent(JSC::ExecState* exec)
     }
 
     MessageEvent* event = static_cast<MessageEvent*>(this->impl());
-    event->initMessageEvent(ustringToAtomicString(typeArg), canBubbleArg, cancelableArg, dataArg, ustringToString(originArg), ustringToString(lastEventIdArg), sourceArg, messagePorts.release());
+    event->initMessageEvent(ustringToAtomicString(typeArg), canBubbleArg, cancelableArg, dataArg.release(), ustringToString(originArg), ustringToString(lastEventIdArg), sourceArg, messagePorts.release());
+    JSValue result;
+    if (SerializedScriptValue* serializedValue = event->dataAsSerializedScriptValue())
+        result = serializedValue->deserialize(exec, globalObject(), NonThrowing);
+    else
+        result = jsNull();
+    m_data.set(exec->globalData(), this, result);
     return jsUndefined();
+}
+
+JSC::JSValue JSMessageEvent::webkitInitMessageEvent(JSC::ExecState* exec)
+{
+    return initMessageEvent(exec);
 }
 
 } // namespace WebCore

@@ -36,23 +36,13 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(JSNotAnObject);
 
+const ClassInfo JSNotAnObject::s_info = { "Object", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(JSNotAnObject) };
+
 // JSValue methods
-JSValue JSNotAnObject::toPrimitive(ExecState* exec, PreferredPrimitiveType) const
+JSValue JSNotAnObject::defaultValue(ExecState* exec, PreferredPrimitiveType) const
 {
     ASSERT_UNUSED(exec, exec->hadException());
     return jsNumber(0);
-}
-
-bool JSNotAnObject::getPrimitiveNumber(ExecState* exec, double&, JSValue&)
-{
-    ASSERT_UNUSED(exec, exec->hadException());
-    return false;
-}
-
-bool JSNotAnObject::toBoolean(ExecState* exec) const
-{
-    ASSERT_UNUSED(exec, exec->hadException());
-    return false;
 }
 
 double JSNotAnObject::toNumber(ExecState* exec) const
@@ -65,12 +55,6 @@ UString JSNotAnObject::toString(ExecState* exec) const
 {
     ASSERT_UNUSED(exec, exec->hadException());
     return "";
-}
-
-JSObject* JSNotAnObject::toObject(ExecState* exec, JSGlobalObject*) const
-{
-    ASSERT_UNUSED(exec, exec->hadException());
-    return const_cast<JSNotAnObject*>(this);
 }
 
 // JSObject methods
@@ -92,23 +76,43 @@ bool JSNotAnObject::getOwnPropertyDescriptor(ExecState* exec, const Identifier&,
     return false;
 }
 
-void JSNotAnObject::put(ExecState* exec, const Identifier& , JSValue, PutPropertySlot&)
+void JSNotAnObject::put(ExecState* exec, const Identifier& identifier, JSValue value, PutPropertySlot& slot)
+{
+    put(this, exec, identifier, value, slot);
+}
+
+void JSNotAnObject::put(JSCell*, ExecState* exec, const Identifier& , JSValue, PutPropertySlot&)
 {
     ASSERT_UNUSED(exec, exec->hadException());
 }
 
-void JSNotAnObject::put(ExecState* exec, unsigned, JSValue)
+void JSNotAnObject::put(ExecState* exec, unsigned i, JSValue value)
+{
+    put(this, exec, i, value);
+}
+
+void JSNotAnObject::put(JSCell*, ExecState* exec, unsigned, JSValue)
 {
     ASSERT_UNUSED(exec, exec->hadException());
 }
 
-bool JSNotAnObject::deleteProperty(ExecState* exec, const Identifier&)
+bool JSNotAnObject::deleteProperty(ExecState* exec, const Identifier& propertyName)
+{
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool JSNotAnObject::deleteProperty(JSCell*, ExecState* exec, const Identifier&)
 {
     ASSERT_UNUSED(exec, exec->hadException());
     return false;
 }
 
-bool JSNotAnObject::deleteProperty(ExecState* exec, unsigned)
+bool JSNotAnObject::deleteProperty(ExecState* exec, unsigned propertyName)
+{
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool JSNotAnObject::deleteProperty(JSCell*, ExecState* exec, unsigned)
 {
     ASSERT_UNUSED(exec, exec->hadException());
     return false;

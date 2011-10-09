@@ -76,6 +76,7 @@
 #include <QLineEdit>
 #include <QMacStyle>
 #include <QPainter>
+#include <QPlastiqueStyle>
 #include <QPushButton>
 #include <QStyleFactory>
 #include <QStyleOptionButton>
@@ -175,7 +176,7 @@ PassRefPtr<RenderTheme> RenderTheme::themeForPage(Page* page)
     if (page)
         return RenderThemeQt::create(page);
 
-    static RenderTheme* fallback = RenderThemeQt::create(0).releaseRef();
+    static RenderTheme* fallback = RenderThemeQt::create(0).leakRef();
     return fallback;
 }
 
@@ -438,6 +439,7 @@ void RenderThemeQt::systemFont(int, FontDescription&) const
 Color RenderThemeQt::systemColor(int cssValueId) const
 {
     QPalette pal = QApplication::palette();
+    setPaletteFromPageClientIfExists(pal);
     switch (cssValueId) {
     case CSSValueButtontext:
         return pal.brush(QPalette::Active, QPalette::ButtonText).color();
@@ -909,47 +911,25 @@ bool RenderThemeQt::paintSliderTrack(RenderObject* o, const PaintInfo& pi,
 {
     StylePainter p(this, pi);
     if (!p.isValid())
-       return true;
+        return true;
 
     QStyleOptionSlider option;
     initStyleOption(p.widget, option);
-    option.subControls = QStyle::SC_SliderGroove | QStyle::SC_SliderHandle;
+    option.subControls = QStyle::SC_SliderGroove;
     ControlPart appearance = initializeCommonQStyleOptions(option, o);
-
-    RenderSlider* renderSlider = toRenderSlider(o);
-    HTMLInputElement* input = renderSlider->node()->toInputElement();
-    IntRect thumbRect = sliderThumbElementOf(input)->getRect();
-
     option.rect = r;
-
-    int value;
-    if (appearance == SliderVerticalPart) {
-        option.maximum = r.height() - thumbRect.height();
-        value = thumbRect.y() - r.y();
-    } else {
-        option.maximum = r.width() - thumbRect.width();
-        value = thumbRect.x() - r.x();
-    }
-
-    value = QStyle::sliderValueFromPosition(0, option.maximum, value, option.maximum);
-
-    option.sliderValue = value;
-    option.sliderPosition = value;
     if (appearance == SliderVerticalPart)
         option.orientation = Qt::Vertical;
-
-    if (renderSlider->inDragMode()) {
-        option.activeSubControls = QStyle::SC_SliderHandle;
+    if (isPressed(o))
         option.state |= QStyle::State_Sunken;
-    }
-
-    const QPoint topLeft = r.location();
-    p.painter->translate(topLeft);
-    option.rect.moveTo(QPoint(0, 0));
-    option.rect.setSize(r.size());
 
     p.drawComplexControl(QStyle::CC_Slider, option);
-    p.painter->translate(-topLeft);
+
+    if (option.state & QStyle::State_HasFocus) {
+        QStyleOptionFocusRect focusOption;
+        focusOption.rect = r;
+        p.drawPrimitive(QStyle::PE_FrameFocusRect, focusOption);
+    }
 
     return false;
 }
@@ -962,7 +942,24 @@ void RenderThemeQt::adjustSliderTrackStyle(CSSStyleSelector*, RenderStyle* style
 bool RenderThemeQt::paintSliderThumb(RenderObject* o, const PaintInfo& pi,
                                      const IntRect& r)
 {
-    // We've already painted it in paintSliderTrack(), no need to do anything here.
+    StylePainter p(this, pi);
+    if (!p.isValid())
+        return true;
+
+    QStyleOptionSlider option;
+    initStyleOption(p.widget, option);
+    option.subControls = QStyle::SC_SliderHandle;
+    ControlPart appearance = initializeCommonQStyleOptions(option, o);
+    option.rect = r;
+    if (appearance == SliderThumbVerticalPart)
+        option.orientation = Qt::Vertical;
+    if (isPressed(o)) {
+        option.activeSubControls = QStyle::SC_SliderHandle;
+        option.state |= QStyle::State_Sunken;
+    }
+
+    p.drawComplexControl(QStyle::CC_Slider, option);
+
     return false;
 }
 
@@ -1037,8 +1034,8 @@ bool RenderThemeQt::paintSearchFieldCancelButton(RenderObject* o, const PaintInf
                              inputContentBox.y() + (inputContentBox.height() - cancelButtonSize + 1) / 2,
                              cancelButtonSize, cancelButtonSize);
     IntRect paintingRect = convertToPaintingRect(inputRenderBox, o, cancelButtonRect, r);
-    static Image* cancelImage = Image::loadPlatformResource("searchCancelButton").releaseRef();
-    static Image* cancelPressedImage = Image::loadPlatformResource("searchCancelButtonPressed").releaseRef();
+    static Image* cancelImage = Image::loadPlatformResource("searchCancelButton").leakRef();
+    static Image* cancelPressedImage = Image::loadPlatformResource("searchCancelButtonPressed").leakRef();
     pi.context->drawImage(isPressed(o) ? cancelPressedImage : cancelImage,
                                  o->style()->colorSpace(), paintingRect);
     return false;
@@ -1071,6 +1068,71 @@ bool RenderThemeQt::paintSearchFieldResultsDecoration(RenderObject* o, const Pai
     notImplemented();
     return RenderTheme::paintSearchFieldResultsDecoration(o, pi, r);
 }
+
+#ifndef QT_NO_SPINBOX
+void RenderThemeQt::adjustInnerSpinButtonStyle(CSSStyleSelector* selector, RenderStyle* style,
+                                               Element* e) const
+{
+    // Use the same width as our native scrollbar
+    int width = ScrollbarTheme::nativeTheme()->scrollbarThickness();
+    style->setWidth(Length(width, Fixed));
+    style->setMinWidth(Length(width, Fixed));
+}
+
+bool RenderThemeQt::paintInnerSpinButton(RenderObject* o, const PaintInfo& paintInfo, const IntRect& rect)
+{
+    StylePainter p(this, paintInfo);
+    if (!p.isValid())
+       return true;
+
+    QStyleOptionSpinBox option;
+    initStyleOption(p.widget, option);
+    option.subControls = QStyle::SC_SpinBoxUp | QStyle::SC_SpinBoxDown;
+    if (!isReadOnlyControl(o)) {
+        if (isEnabled(o))
+            option.stepEnabled = QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+        if (isPressed(o)) {
+            option.state |= QStyle::State_Sunken;
+            if (isSpinUpButtonPartPressed(o))
+                option.activeSubControls = QStyle::SC_SpinBoxUp;
+            else
+                option.activeSubControls = QStyle::SC_SpinBoxDown;
+        }
+    }
+    // Render the spin buttons for LTR or RTL accordingly.
+    option.direction = o->style()->isLeftToRightDirection() ? Qt::LeftToRight : Qt::RightToLeft;
+
+    IntRect buttonRect = rect;
+    // Default to moving the buttons a little bit within the editor frame.
+    int inflateX = -2;
+    int inflateY = -2;
+#if defined(Q_WS_MAC) && !defined(QT_NO_STYLE_MAC)
+    // QMacStyle will position the aqua buttons flush to the right.
+    // This will move them more within the control for better style, a la
+    // Chromium look & feel.
+    if (qobject_cast<QMacStyle*>(p.style)) {
+        inflateX = -4;
+        // Render mini aqua spin buttons for QMacStyle to fit nicely into
+        // the editor area, like Chromium.
+        option.state |= QStyle::State_Mini;
+    }
+#endif
+#if defined(Q_WS_X11) && !defined(QT_NO_STYLE_PLASTIQUE)
+    // QPlastiqueStyle looks best when the spin buttons are flush with the frame's edge.
+    if (qobject_cast<QPlastiqueStyle*>(p.style)) {
+        inflateX = 0;
+        inflateY = 0;
+    }
+#endif
+
+    buttonRect.inflateX(inflateX);
+    buttonRect.inflateY(inflateY);
+    option.rect = buttonRect;
+
+    p.drawComplexControl(QStyle::CC_SpinBox, option);
+    return false;
+}
+#endif
 
 bool RenderThemeQt::supportsFocus(ControlPart appearance) const
 {
@@ -1491,10 +1553,15 @@ void RenderThemeQt::adjustSliderThumbSize(RenderStyle* style) const
 
         QStyle* qstyle = qStyle();
 
-        int width = qstyle->pixelMetric(QStyle::PM_SliderLength, &option);
-        int height = qstyle->pixelMetric(QStyle::PM_SliderThickness, &option);
-        style->setWidth(Length(width, Fixed));
-        style->setHeight(Length(height, Fixed));
+        int length = qstyle->pixelMetric(QStyle::PM_SliderLength, &option);
+        int thickness = qstyle->pixelMetric(QStyle::PM_SliderThickness, &option);
+        if (option.orientation == Qt::Vertical) {
+            style->setWidth(Length(thickness, Fixed));
+            style->setHeight(Length(length, Fixed));
+        } else {
+            style->setWidth(Length(length, Fixed));
+            style->setHeight(Length(thickness, Fixed));
+        }
     }
 }
 

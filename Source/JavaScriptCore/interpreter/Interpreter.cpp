@@ -608,6 +608,7 @@ NEVER_INLINE bool Interpreter::unwindCallFrame(CallFrame*& callFrame, JSValue ex
     }
 
     CallFrame* callerFrame = callFrame->callerFrame();
+    callFrame->globalData().topCallFrame = callerFrame;
     if (callerFrame->hasHostCallFrameFlag())
         return false;
 
@@ -707,8 +708,7 @@ NEVER_INLINE HandlerInfo* Interpreter::throwException(CallFrame*& callFrame, JSV
             addErrorInfo(callFrame, exception, codeBlock->lineNumberForBytecodeOffset(bytecodeOffset), codeBlock->ownerExecutable()->source());
         }
 
-        ComplType exceptionType = exception->exceptionType();
-        isInterrupt = exceptionType == Interrupted || exceptionType == Terminated;
+        isInterrupt = isInterruptedExecutionException(exception) || isTerminatedExecutionException(exception);
     }
 
     if (Debugger* debugger = callFrame->dynamicGlobalObject()->debugger()) {
@@ -881,6 +881,7 @@ failedJSONP:
     ASSERT(codeBlock->m_numParameters == 1); // 1 parameter for 'this'.
     newCallFrame->init(codeBlock, 0, scopeChain, CallFrame::noCaller(), codeBlock->m_numParameters, 0);
     newCallFrame->uncheckedR(newCallFrame->hostThisRegister()) = JSValue(thisObj);
+    TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
 
     Profiler** profiler = Profiler::enabledProfilerReference();
     if (*profiler)
@@ -954,6 +955,8 @@ JSValue Interpreter::executeCall(CallFrame* callFrame, JSObject* function, CallT
 
         newCallFrame->init(newCodeBlock, 0, callDataScopeChain, callFrame->addHostCallFrameFlag(), argCount, function);
 
+        TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
+
         Profiler** profiler = Profiler::enabledProfilerReference();
         if (*profiler)
             (*profiler)->willExecute(callFrame, function);
@@ -983,6 +986,8 @@ JSValue Interpreter::executeCall(CallFrame* callFrame, JSObject* function, CallT
     ScopeChainNode* scopeChain = callFrame->scopeChain();
     newCallFrame = CallFrame::create(newCallFrame->registers() + registerOffset);
     newCallFrame->init(0, 0, scopeChain, callFrame->addHostCallFrameFlag(), argCount, function);
+
+    TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
 
     DynamicGlobalObjectScope globalObjectScope(*scopeChain->globalData, scopeChain->globalObject.get());
 
@@ -1048,6 +1053,8 @@ JSObject* Interpreter::executeConstruct(CallFrame* callFrame, JSObject* construc
 
         newCallFrame->init(newCodeBlock, 0, constructDataScopeChain, callFrame->addHostCallFrameFlag(), argCount, constructor);
 
+        TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
+
         Profiler** profiler = Profiler::enabledProfilerReference();
         if (*profiler)
             (*profiler)->willExecute(callFrame, constructor);
@@ -1080,6 +1087,8 @@ JSObject* Interpreter::executeConstruct(CallFrame* callFrame, JSObject* construc
     ScopeChainNode* scopeChain = callFrame->scopeChain();
     newCallFrame = CallFrame::create(newCallFrame->registers() + registerOffset);
     newCallFrame->init(0, 0, scopeChain, callFrame->addHostCallFrameFlag(), argCount, constructor);
+
+    TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
 
     DynamicGlobalObjectScope globalObjectScope(*scopeChain->globalData, scopeChain->globalObject.get());
 
@@ -1143,6 +1152,7 @@ CallFrameClosure Interpreter::prepareForRepeatCall(FunctionExecutable* FunctionE
         return CallFrameClosure();
     }
     newCallFrame->init(codeBlock, 0, scopeChain, callFrame->addHostCallFrameFlag(), argc, function);  
+    scopeChain->globalData->topCallFrame = newCallFrame;
     CallFrameClosure result = { callFrame, newCallFrame, function, FunctionExecutable, scopeChain->globalData, oldEnd, scopeChain, codeBlock->m_numParameters, argc };
     return result;
 }
@@ -1156,7 +1166,9 @@ JSValue Interpreter::execute(CallFrameClosure& closure)
     Profiler** profiler = Profiler::enabledProfilerReference();
     if (*profiler)
         (*profiler)->willExecute(closure.oldCallFrame, closure.function);
-    
+
+    TopCallFrameSetter topCallFrame(*closure.globalData, closure.newCallFrame);
+
     JSValue result;
     {
         SamplingTool::CallRecord callRecord(m_sampler.get());
@@ -1176,7 +1188,7 @@ JSValue Interpreter::execute(CallFrameClosure& closure)
 #endif
         m_reentryDepth--;
     }
-    
+
     if (*profiler)
         (*profiler)->didExecute(closure.oldCallFrame, closure.function);
     return checkedReturn(result);
@@ -1184,6 +1196,7 @@ JSValue Interpreter::execute(CallFrameClosure& closure)
 
 void Interpreter::endRepeatCall(CallFrameClosure& closure)
 {
+    closure.globalData->topCallFrame = closure.oldCallFrame;
     m_registerFile.shrink(closure.oldEnd);
 }
 
@@ -1262,6 +1275,8 @@ JSValue Interpreter::execute(EvalExecutable* eval, CallFrame* callFrame, JSValue
     ASSERT(codeBlock->m_numParameters == 1); // 1 parameter for 'this'.
     newCallFrame->init(codeBlock, 0, scopeChain, callFrame->addHostCallFrameFlag(), codeBlock->m_numParameters, 0);
     newCallFrame->uncheckedR(newCallFrame->hostThisRegister()) = thisValue;
+
+    TopCallFrameSetter topCallFrame(callFrame->globalData(), newCallFrame);
 
     Profiler** profiler = Profiler::enabledProfilerReference();
     if (*profiler)
@@ -1589,9 +1604,12 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
     return JSValue();
 #else
 
+    ASSERT(callFrame->globalData().topCallFrame == callFrame);
+
     JSGlobalData* globalData = &callFrame->globalData();
     JSValue exceptionValue;
     HandlerInfo* handler = 0;
+    CallFrame** topCallFrameSlot = &globalData->topCallFrame;
 
     CodeBlock* codeBlock = callFrame->codeBlock();
     Instruction* vPC = codeBlock->instructions().begin();
@@ -1956,10 +1974,10 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
             callFrame->uncheckedR(srcDst) = jsNumber(v.asInt32() + 1);
             callFrame->uncheckedR(dst) = v;
         } else {
-            JSValue number = callFrame->r(srcDst).jsValue().toJSNumber(callFrame);
+            double number = callFrame->r(srcDst).jsValue().toNumber(callFrame);
             CHECK_FOR_EXCEPTION();
-            callFrame->uncheckedR(srcDst) = jsNumber(number.uncheckedGetNumber() + 1);
-            callFrame->uncheckedR(dst) = number;
+            callFrame->uncheckedR(srcDst) = jsNumber(number + 1);
+            callFrame->uncheckedR(dst) = jsNumber(number);
         }
 
         vPC += OPCODE_LENGTH(op_post_inc);
@@ -1979,10 +1997,10 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
             callFrame->uncheckedR(srcDst) = jsNumber(v.asInt32() - 1);
             callFrame->uncheckedR(dst) = v;
         } else {
-            JSValue number = callFrame->r(srcDst).jsValue().toJSNumber(callFrame);
+            double number = callFrame->r(srcDst).jsValue().toNumber(callFrame);
             CHECK_FOR_EXCEPTION();
-            callFrame->uncheckedR(srcDst) = jsNumber(number.uncheckedGetNumber() - 1);
-            callFrame->uncheckedR(dst) = number;
+            callFrame->uncheckedR(srcDst) = jsNumber(number - 1);
+            callFrame->uncheckedR(dst) = jsNumber(number);
         }
 
         vPC += OPCODE_LENGTH(op_post_dec);
@@ -2002,9 +2020,9 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
         if (LIKELY(srcVal.isNumber()))
             callFrame->uncheckedR(dst) = callFrame->r(src);
         else {
-            JSValue result = srcVal.toJSNumber(callFrame);
+            double number = srcVal.toNumber(callFrame);
             CHECK_FOR_EXCEPTION();
-            callFrame->uncheckedR(dst) = result;
+            callFrame->uncheckedR(dst) = jsNumber(number);
         }
 
         vPC += OPCODE_LENGTH(op_to_jsnumber);
@@ -2811,7 +2829,7 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
                     if (GetterSetter* getterSetter = asGetterSetter(protoObject->getDirectOffset(offset).asCell())) {
                         JSObject* getter = getterSetter->getter();
                         CallData callData;
-                        CallType callType = getter->getCallData(callData);
+                        CallType callType = getter->getCallDataVirtual(callData);
                         JSValue result = call(callFrame, getter, callType, callData, asObject(baseCell), ArgList());
                         CHECK_FOR_EXCEPTION();
                         callFrame->uncheckedR(dst) = result;
@@ -2946,7 +2964,7 @@ JSValue Interpreter::privateExecute(ExecutionFlag flag, RegisterFile* registerFi
                 if (GetterSetter* getterSetter = asGetterSetter(baseObject->getDirectOffset(offset).asCell())) {
                     JSObject* getter = getterSetter->getter();
                     CallData callData;
-                    CallType callType = getter->getCallData(callData);
+                    CallType callType = getter->getCallDataVirtual(callData);
                     JSValue result = call(callFrame, getter, callType, callData, baseObject, ArgList());
                     CHECK_FOR_EXCEPTION();
                     callFrame->uncheckedR(dst) = result;
@@ -3054,7 +3072,7 @@ skip_id_custom_self:
                         if (GetterSetter* getterSetter = asGetterSetter(baseObject->getDirectOffset(offset).asCell())) {
                             JSObject* getter = getterSetter->getter();
                             CallData callData;
-                            CallType callType = getter->getCallData(callData);
+                            CallType callType = getter->getCallDataVirtual(callData);
                             JSValue result = call(callFrame, getter, callType, callData, baseValue, ArgList());
                             CHECK_FOR_EXCEPTION();
                             callFrame->uncheckedR(dst) = result;
@@ -3488,12 +3506,11 @@ skip_id_custom_self:
                     jsArray->JSArray::put(callFrame, i, callFrame->r(value).jsValue());
             } else if (isJSByteArray(globalData, baseValue) && asByteArray(baseValue)->canAccessIndex(i)) {
                 JSByteArray* jsByteArray = asByteArray(baseValue);
-                double dValue = 0;
                 JSValue jsValue = callFrame->r(value).jsValue();
                 if (jsValue.isInt32())
                     jsByteArray->setIndex(i, jsValue.asInt32());
-                else if (jsValue.getNumber(dValue))
-                    jsByteArray->setIndex(i, dValue);
+                else if (jsValue.isDouble())
+                    jsByteArray->setIndex(i, jsValue.asDouble());
                 else
                     baseValue.put(callFrame, i, jsValue);
             } else
@@ -3594,6 +3611,10 @@ skip_id_custom_self:
         int target = vPC[1].u.operand;
 
         vPC += target;
+        NEXT_INSTRUCTION();
+    }
+    DEFINE_OPCODE(op_loop_hint) {
+        // This is a no-op unless we intend on doing OSR from the interpreter.
         NEXT_INSTRUCTION();
     }
     DEFINE_OPCODE(op_loop_if_true) {
@@ -4027,14 +4048,10 @@ skip_id_custom_self:
         JSValue scrutinee = callFrame->r(vPC[3].u.operand).jsValue();
         if (scrutinee.isInt32())
             vPC += codeBlock->immediateSwitchJumpTable(tableIndex).offsetForValue(scrutinee.asInt32(), defaultOffset);
-        else {
-            double value;
-            int32_t intValue;
-            if (scrutinee.getNumber(value) && ((intValue = static_cast<int32_t>(value)) == value))
-                vPC += codeBlock->immediateSwitchJumpTable(tableIndex).offsetForValue(intValue, defaultOffset);
-            else
-                vPC += defaultOffset;
-        }
+        else if (scrutinee.isDouble() && scrutinee.asDouble() == static_cast<int32_t>(scrutinee.asDouble()))
+            vPC += codeBlock->immediateSwitchJumpTable(tableIndex).offsetForValue(static_cast<int32_t>(scrutinee.asDouble()), defaultOffset);
+        else
+            vPC += defaultOffset;
         NEXT_INSTRUCTION();
     }
     DEFINE_OPCODE(op_switch_char) {
@@ -4056,7 +4073,7 @@ skip_id_custom_self:
             if (value->length() != 1)
                 vPC += defaultOffset;
             else
-                vPC += codeBlock->characterSwitchJumpTable(tableIndex).offsetForValue(value->characters()[0], defaultOffset);
+                vPC += codeBlock->characterSwitchJumpTable(tableIndex).offsetForValue((*value)[0], defaultOffset);
         }
         NEXT_INSTRUCTION();
     }
@@ -4147,7 +4164,7 @@ skip_id_custom_self:
         ASSERT(codeBlock->codeType() != FunctionCode || !codeBlock->needsFullScopeChain() || callFrame->r(codeBlock->activationRegister()).jsValue());
         JSValue funcVal = callFrame->r(func).jsValue();
 
-        if (isHostFunction(callFrame->globalData(), funcVal, globalFuncEval)) {
+        if (isHostFunction(funcVal, globalFuncEval)) {
             Register* newCallFrame = callFrame->registers() + registerOffset;
             Register* argv = newCallFrame - RegisterFile::CallFrameHeaderSize - argCount;
 
@@ -4205,6 +4222,7 @@ skip_id_custom_self:
             callFrame->init(newCodeBlock, vPC + OPCODE_LENGTH(op_call), callDataScopeChain, previousCallFrame, argCount, asFunction(v));
             codeBlock = newCodeBlock;
             ASSERT(codeBlock == callFrame->codeBlock());
+            *topCallFrameSlot = callFrame;
             vPC = newCodeBlock->instructions().begin();
 
 #if ENABLE(OPCODE_STATS)
@@ -4223,11 +4241,12 @@ skip_id_custom_self:
             }
 
             newCallFrame->init(0, vPC + OPCODE_LENGTH(op_call), scopeChain, callFrame, argCount, asObject(v));
-
             JSValue returnValue;
             {
+                *topCallFrameSlot = newCallFrame;
                 SamplingTool::HostCallRecord callRecord(m_sampler.get());
                 returnValue = JSValue::decode(callData.native.function(newCallFrame));
+                *topCallFrameSlot = callFrame;
             }
             CHECK_FOR_EXCEPTION();
 
@@ -4373,6 +4392,7 @@ skip_id_custom_self:
             callFrame->init(newCodeBlock, vPC + OPCODE_LENGTH(op_call_varargs), callDataScopeChain, previousCallFrame, argCount, asFunction(v));
             codeBlock = newCodeBlock;
             ASSERT(codeBlock == callFrame->codeBlock());
+            *topCallFrameSlot = callFrame;
             vPC = newCodeBlock->instructions().begin();
             
 #if ENABLE(OPCODE_STATS)
@@ -4393,8 +4413,10 @@ skip_id_custom_self:
             
             JSValue returnValue;
             {
+                *topCallFrameSlot = newCallFrame;
                 SamplingTool::HostCallRecord callRecord(m_sampler.get());
                 returnValue = JSValue::decode(callData.native.function(newCallFrame));
+                *topCallFrameSlot = callFrame;
             }
             CHECK_FOR_EXCEPTION();
             
@@ -4476,10 +4498,11 @@ skip_id_custom_self:
 
         vPC = callFrame->returnVPC();
         callFrame = callFrame->callerFrame();
-        
+
         if (callFrame->hasHostCallFrameFlag())
             return returnValue;
 
+        *topCallFrameSlot = callFrame;
         functionReturnValue = returnValue;
         codeBlock = callFrame->codeBlock();
         ASSERT(codeBlock == callFrame->codeBlock());
@@ -4521,6 +4544,7 @@ skip_id_custom_self:
         if (callFrame->hasHostCallFrameFlag())
             return returnValue;
 
+        *topCallFrameSlot = callFrame;
         functionReturnValue = returnValue;
         codeBlock = callFrame->codeBlock();
         ASSERT(codeBlock == callFrame->codeBlock());
@@ -4694,6 +4718,7 @@ skip_id_custom_self:
 
             callFrame->init(newCodeBlock, vPC + OPCODE_LENGTH(op_construct), callDataScopeChain, previousCallFrame, argCount, asFunction(v));
             codeBlock = newCodeBlock;
+            *topCallFrameSlot = callFrame;
             vPC = newCodeBlock->instructions().begin();
 #if ENABLE(OPCODE_STATS)
             OpcodeStats::resetLastInstruction();
@@ -4713,8 +4738,10 @@ skip_id_custom_self:
 
             JSValue returnValue;
             {
+                *topCallFrameSlot = newCallFrame;
                 SamplingTool::HostCallRecord callRecord(m_sampler.get());
                 returnValue = JSValue::decode(constructData.native.function(newCallFrame));
+                *topCallFrameSlot = callFrame;
             }
             CHECK_FOR_EXCEPTION();
             functionReturnValue = returnValue;

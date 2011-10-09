@@ -22,14 +22,21 @@
 
 #include "config.h"
 #include "Event.h"
+
 #include "EventDispatcher.h"
 #include "EventTarget.h"
-
 #include "UserGestureIndicator.h"
 #include <wtf/CurrentTime.h>
 #include <wtf/text/AtomicString.h>
 
 namespace WebCore {
+
+EventInit::EventInit()
+    : bubbles(false)
+    , cancelable(false)
+{
+}
+
 
 Event::Event()
     : m_canBubble(false)
@@ -49,6 +56,21 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
     : m_type(eventType)
     , m_canBubble(canBubbleArg)
     , m_cancelable(cancelableArg)
+    , m_propagationStopped(false)
+    , m_immediatePropagationStopped(false)
+    , m_defaultPrevented(false)
+    , m_defaultHandled(false)
+    , m_cancelBubble(false)
+    , m_eventPhase(0)
+    , m_currentTarget(0)
+    , m_createTime(convertSecondsToDOMTimeStamp(currentTime()))
+{
+}
+
+Event::Event(const AtomicString& eventType, const EventInit& initializer)
+    : m_type(eventType)
+    , m_canBubble(initializer.bubbles)
+    , m_cancelable(initializer.cancelable)
     , m_propagationStopped(false)
     , m_immediatePropagationStopped(false)
     , m_defaultPrevented(false)
@@ -257,6 +279,14 @@ bool Event::isMediaStreamEvent() const
 }
 #endif
 
+#if ENABLE(WEBGL)
+bool Event::isWebGLContextEvent() const
+{
+    return false;
+}
+#endif
+
+
 bool Event::storesResultAsString() const
 {
     return false;
@@ -287,25 +317,6 @@ void Event::setUnderlyingEvent(PassRefPtr<Event> ue)
         if (e == this)
             return;
     m_underlyingEvent = ue;
-}
-
-PassRefPtr<EventDispatchMediator> EventDispatchMediator::create(PassRefPtr<Event> event)
-{
-    return adoptRef(new EventDispatchMediator(event));
-}
-
-EventDispatchMediator::EventDispatchMediator(PassRefPtr<Event> event)
-    : m_event(event)
-{
-}
-
-EventDispatchMediator::~EventDispatchMediator()
-{
-}
-
-bool EventDispatchMediator::dispatchEvent(EventDispatcher* dispatcher) const
-{
-    return dispatcher->dispatchEvent(m_event.get());
 }
 
 } // namespace WebCore

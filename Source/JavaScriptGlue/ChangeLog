@@ -1,3 +1,367 @@
+2011-10-08  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r96996.
+        http://trac.webkit.org/changeset/96996
+        https://bugs.webkit.org/show_bug.cgi?id=69697
+
+        It broke all tests on the Qt bot (Requested by Ossy_night on
+        #webkit).
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectCallFunction):
+        * UserObjectImp.cpp:
+        (UserObjectImp::getCallDataVirtual):
+        * UserObjectImp.h:
+
+2011-10-07  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Remove getCallDataVirtual methods
+        https://bugs.webkit.org/show_bug.cgi?id=69186
+
+        Reviewed by Geoffrey Garen.
+
+        Removed all getCallDataVirtual methods and replaced their call sites 
+        with an explicit lookup in the MethodTable.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectCallFunction):
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-07  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add static version of JSCell::put
+        https://bugs.webkit.org/show_bug.cgi?id=69382
+
+        Reviewed by Geoffrey Garen.
+
+        Added static version of both versions of put to all classes that 
+        override them and changed the virtual versions to call the static 
+        versions.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::put):
+        * UserObjectImp.h:
+
+2011-10-06  Anders Carlsson  <andersca@apple.com>
+
+        When building with clang, enable -Wglobal-constructors and -Wexit-time-destructors
+        https://bugs.webkit.org/show_bug.cgi?id=69586
+
+        Reviewed by Darin Adler.
+
+        * Configurations/Base.xcconfig:
+        Add -Wglobal-constructors and -Wexit-time-destructors when building with clang.
+        
+        * JavaScriptGlue.xcodeproj/project.pbxproj:
+        When building with clang, we don't need to run the check-for-global-initializers and
+        check-for-exit-time-destructors anymore.
+
+2011-10-05  Gavin Barraclough  <barraclough@apple.com>
+
+        Add explicit JSGlobalThis type.
+        https://bugs.webkit.org/show_bug.cgi?id=69478
+
+        Reviewed by Darin Adler.
+
+        JSC supports a split global object, as used by WebCore for the Window. As a stage
+        of making this visible to JSC, make it so that if the global this value is not the
+        global object itself, it must be a subclass of JSGlobalThis.
+
+        * JSRun.h:
+        (JSGlueGlobalObject::create):
+            - Don't pass the thisValue to JSGlobalObject::finishCreation.
+
+2011-10-01  Geoffrey Garen  <ggaren@apple.com>
+
+        Removed redundant helper functions for allocating Strong handles
+        https://bugs.webkit.org/show_bug.cgi?id=69218
+
+        Reviewed by Sam Weinig.
+
+        * JSRun.cpp:
+        * JSValueWrapper.cpp:
+
+2011-09-29  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualize JSCell::visitChildrenVirtual and remove all other visitChildrenVirtual methods
+        https://bugs.webkit.org/show_bug.cgi?id=68839
+
+        Reviewed by Geoffrey Garen.
+
+        Removed the remaining visitChildrenVirtual methods.  This patch completes the process of 
+        de-virtualizing visitChildren.
+
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-09-27  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add static version of JSCell::getCallData
+        https://bugs.webkit.org/show_bug.cgi?id=68741
+
+        Reviewed by Darin Adler.
+
+        In this patch we just extract the bodies of the virtual getCallData methods
+        throughout the JSCell inheritance hierarchy out into static methods, which are 
+        now called from the virtual methods.  This is an intermediate step in trying to 
+        move the virtual-ness of getCallData into our own method table stored in 
+        ClassInfo.  We need to convert the methods to static methods because static methods 
+        can be represented as function pointers rather than pointers to member functions, and
+        function pointers are smaller and faster to call than pointers to member functions.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectCallFunction):
+        * UserObjectImp.cpp:
+        (UserObjectImp::getCallDataVirtual):
+        (UserObjectImp::getCallData):
+        * UserObjectImp.h:
+
+2011-09-25  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add custom vtable struct to ClassInfo struct
+        https://bugs.webkit.org/show_bug.cgi?id=68567
+
+        Reviewed by Oliver Hunt.
+
+        Added CREATE_METHOD_TABLE macro to generate the custom vtable for the 
+        specified class in its ClassInfo.  Also added to it the first function to use 
+        this macro, visitChildren.  This is part of the process of getting rid of all 
+        C++ virtual methods in JSCell.  Eventually all virtual functions in JSCell 
+        that can't easily be converted to non-virtual functions will be put into 
+        this custom vtable structure.
+
+        * UserObjectImp.cpp:
+
+2011-09-23  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add static version of JSCell::visitChildren
+        https://bugs.webkit.org/show_bug.cgi?id=68404
+
+        Reviewed by Darin Adler.
+
+        In this patch we just extract the bodies of the virtual visitChildren methods
+        throughout the JSCell inheritance hierarchy out into static methods, which are 
+        now called from the virtual methods.  This is an intermediate step in trying to 
+        move the virtual-ness of visitChildren into our own custom vtable stored in 
+        ClassInfo.  We need to convert the methods to static methods in order to be 
+        able to more easily store and refer to them in our custom vtable since normal 
+        member methods store some implicit information in their types, making it 
+        impossible to store them generically in ClassInfo.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::visitChildrenVirtual):
+        (UserObjectImp::visitChildren):
+        * UserObjectImp.h:
+
+2011-09-14  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Unzip initialization lists and constructors in JSCell hierarchy (6/7)
+        https://bugs.webkit.org/show_bug.cgi?id=67692
+
+        Reviewed by Geoffrey Garen.
+
+        Completed the sixth level of the refactoring to add finishCreation() 
+        methods to all classes within the JSCell hierarchy with non-trivial 
+        constructor bodies.
+
+        This primarily consists of pushing the calls to finishCreation() down 
+        into the constructors of the subclasses of the fifth level of the hierarchy 
+        as well as pulling the finishCreation() calls out into the class's corresponding
+        create() method if it has one.  Doing both simultaneously allows us to 
+        maintain the invariant that the finishCreation() method chain is called exactly 
+        once during the creation of an object, since calling it any other number of 
+        times (0, 2, or more) will cause an assertion failure.
+
+        * JSRun.cpp:
+        (JSGlueGlobalObject::JSGlueGlobalObject):
+        * JSRun.h:
+        (JSGlueGlobalObject::create):
+
+2011-09-13  Anders Carlsson  <andersca@apple.com>
+
+        Disable C++ exceptions when building with clang
+        https://bugs.webkit.org/show_bug.cgi?id=68031
+        <rdar://problem/9556880>
+
+        Reviewed by Mark Rowe.
+
+        * Configurations/Base.xcconfig:
+
+2011-09-09  Oliver Hunt  <oliver@apple.com>
+
+        Remove support for anonymous storage from jsobjects
+        https://bugs.webkit.org/show_bug.cgi?id=67881
+
+        Reviewed by Sam Weinig.
+
+        Don't need an anonymous slot count anymore
+
+        * UserObjectImp.h:
+        (UserObjectImp::createStructure):
+
+2011-08-18  Filip Pizlo  <fpizlo@apple.com>
+
+        The executable allocator makes it difficult to free individual
+        chunks of executable memory
+        https://bugs.webkit.org/show_bug.cgi?id=66363
+
+        Reviewed by Oliver Hunt.
+        
+        Introduced a best-fit, balanced-tree based allocator. The allocator
+        required a balanced tree that does not allocate memory and that
+        permits the removal of individual nodes directly (as opposed to by
+        key); neither AVLTree nor WebCore's PODRedBlackTree supported this.
+        Changed all references to executable code to use a reference counted
+        handle.
+
+        * ForwardingHeaders/wtf/MetaAllocatorHandle.h: Added.
+
+2011-09-09  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Unzip initialization lists and constructors in JSCell hierarchy (5/7)
+        https://bugs.webkit.org/show_bug.cgi?id=67420
+
+        Reviewed by Geoffrey Garen.
+
+        Completed the fifth level of the refactoring to add finishCreation() 
+        methods to all classes within the JSCell hierarchy with non-trivial 
+        constructor bodies.
+
+        This primarily consists of pushing the calls to finishCreation() down 
+        into the constructors of the subclasses of the second level of the hierarchy 
+        as well as pulling the finishCreation() calls out into the class's corresponding
+        create() method if it has one.  Doing both simultaneously allows us to 
+        maintain the invariant that the finishCreation() method chain is called exactly 
+        once during the creation of an object, since calling it any other number of 
+        times (0, 2, or more) will cause an assertion failure.
+
+        * JSRun.cpp:
+        (JSGlueGlobalObject::JSGlueGlobalObject):
+
+2011-09-08  Sam Weinig  <sam@webkit.org>
+
+        Remove the Completion object from JSC, I have never liked it
+        https://bugs.webkit.org/show_bug.cgi?id=67755
+
+        Reviewed by Gavin Barraclough.
+
+        * JSRun.cpp:
+        (JSRun::Evaluate):
+        (JSRun::CheckSyntax):
+        * JSRun.h:
+        * JavaScriptGlue.cpp:
+        (JSRunEvaluate):
+
+2011-09-07  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r94627 and r94632.
+        http://trac.webkit.org/changeset/94627
+        http://trac.webkit.org/changeset/94632
+        https://bugs.webkit.org/show_bug.cgi?id=67698
+
+        It broke tests on GTK and Qt (Requested by Ossy on #webkit).
+
+        * JSRun.cpp:
+        (JSGlueGlobalObject::JSGlueGlobalObject):
+
+2011-09-06  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Unzip initialization lists and constructors in JSCell hierarchy (5/7)
+        https://bugs.webkit.org/show_bug.cgi?id=67420
+
+        Reviewed by Geoffrey Garen.
+
+        Completed the fifth level of the refactoring to add finishCreation() 
+        methods to all classes within the JSCell hierarchy with non-trivial 
+        constructor bodies.
+
+        This primarily consists of pushing the calls to finishCreation() down 
+        into the constructors of the subclasses of the second level of the hierarchy 
+        as well as pulling the finishCreation() calls out into the class's corresponding
+        create() method if it has one.  Doing both simultaneously allows us to 
+        maintain the invariant that the finishCreation() method chain is called exactly 
+        once during the creation of an object, since calling it any other number of 
+        times (0, 2, or more) will cause an assertion failure.
+
+        * JSRun.cpp:
+        (JSGlueGlobalObject::JSGlueGlobalObject):
+
+2011-09-05  Oliver Hunt  <oliver@apple.com>
+
+        An object's structure should reference the global object responsible for its creation
+        https://bugs.webkit.org/show_bug.cgi?id=67624
+
+        Reviewed by Gavin Barraclough.
+
+        Update for Structure::create() requiring a global object.
+
+        * JSRun.h:
+        (JSGlueGlobalObject::create):
+        * UserObjectImp.h:
+        (UserObjectImp::createStructure):
+
+2011-09-01  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Unzip initialization lists and constructors in JSCell hierarchy (4/7)
+        https://bugs.webkit.org/show_bug.cgi?id=67174
+
+        Reviewed by Oliver Hunt.
+
+        Completed the fourth level of the refactoring to add finishCreation() 
+        methods to all classes within the JSCell hierarchy with non-trivial 
+        constructor bodies.
+
+        This primarily consists of pushing the calls to finishCreation() down 
+        into the constructors of the subclasses of the second level of the hierarchy 
+        as well as pulling the finishCreation() calls out into the class's corresponding
+        create() method if it has one.  Doing both simultaneously allows us to 
+        maintain the invariant that the finishCreation() method chain is called exactly 
+        once during the creation of an object, since calling it any other number of 
+        times (0, 2, or more) will cause an assertion failure.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::UserObjectImp):
+        * UserObjectImp.h:
+        (UserObjectImp::create):
+
+2011-08-29  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Unzip initialization lists and constructors in JSCell hierarchy (3/7)
+        https://bugs.webkit.org/show_bug.cgi?id=67064
+
+        Reviewed by Darin Adler.
+
+        Completed the third level of the refactoring to add finishCreation() 
+        methods to all classes within the JSCell hierarchy with non-trivial 
+        constructor bodies.
+
+        This primarily consists of pushing the calls to finishCreation() down 
+        into the constructors of the subclasses of the second level of the hierarchy 
+        as well as pulling the finishCreation() calls out into the class's corresponding
+        create() method if it has one.  Doing both simultaneously allows us to 
+        maintain the invariant that the finishCreation() method chain is called exactly 
+        once during the creation of an object, since calling it any other number of 
+        times (0, 2, or more) will cause an assertion failure.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::UserObjectImp):
+
+2011-08-15  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Refactor JS objects to allocate in static create methods rather than constructors
+        https://bugs.webkit.org/show_bug.cgi?id=65347
+
+        Reviewed by Geoffrey Garen.
+
+        Removed all calls to deprecatedGetDOMObject from initialization lists as part of a 
+        larger refactoring to get rid of all allocation during initialization.
+
+        * JSRun.cpp:
+        (JSGlueGlobalObject::JSGlueGlobalObject):
+        * JSRun.h:
+        (JSGlueGlobalObject::create):
+
 2011-08-12  Mark Rowe  <mrowe@apple.com>
 
         Be more forward-looking in the choice of compiler.

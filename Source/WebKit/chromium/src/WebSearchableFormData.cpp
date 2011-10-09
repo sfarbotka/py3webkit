@@ -64,7 +64,9 @@ void GetFormEncoding(const HTMLFormElement* form, TextEncoding* encoding)
         if (encoding->isValid())
             return;
     }
-    *encoding = TextEncoding(form->document()->loader()->writer()->encoding());
+    if (!form->document()->loader())
+         return;
+    *encoding = TextEncoding(form->document()->encoding());
 }
 
 // Returns true if the submit request results in an HTTP URL.

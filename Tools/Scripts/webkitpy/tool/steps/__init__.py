@@ -29,6 +29,7 @@
 # FIXME: Is this the right way to do this?
 from webkitpy.tool.steps.applypatch import ApplyPatch
 from webkitpy.tool.steps.applypatchwithlocalcommit import ApplyPatchWithLocalCommit
+from webkitpy.tool.steps.applywatchlist import ApplyWatchList
 from webkitpy.tool.steps.attachtobug import AttachToBug
 from webkitpy.tool.steps.build import Build
 from webkitpy.tool.steps.checkstyle import CheckStyle
@@ -41,7 +42,6 @@ from webkitpy.tool.steps.commit import Commit
 from webkitpy.tool.steps.confirmdiff import ConfirmDiff
 from webkitpy.tool.steps.createbug import CreateBug
 from webkitpy.tool.steps.editchangelog import EditChangeLog
-from webkitpy.tool.steps.ensurebuildersaregreen import EnsureBuildersAreGreen
 from webkitpy.tool.steps.ensurelocalcommitifneeded import EnsureLocalCommitIfNeeded
 from webkitpy.tool.steps.obsoletepatches import ObsoletePatches
 from webkitpy.tool.steps.options import Options

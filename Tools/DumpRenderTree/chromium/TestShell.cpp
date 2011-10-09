@@ -104,6 +104,7 @@ TestShell::TestShell(bool testShellMode)
     , m_devTools(0)
     , m_allowExternalPages(false)
     , m_acceleratedCompositingEnabled(false)
+    , m_threadedCompositingEnabled(false)
     , m_compositeToTexture(false)
     , m_forceCompositingMode(false)
     , m_accelerated2dCanvasEnabled(false)
@@ -121,7 +122,7 @@ TestShell::TestShell(bool testShellMode)
     WebRuntimeFeatures::enableMediaStream(true);
     WebRuntimeFeatures::enableWebAudio(true); 
 
-    m_webPermissions = adoptPtr(new WebPermissions());
+    m_webPermissions = adoptPtr(new WebPermissions(this));
     m_accessibilityController = adoptPtr(new AccessibilityController(this));
     m_layoutTestController = adoptPtr(new LayoutTestController(this));
     m_eventSender = adoptPtr(new EventSender(this));
@@ -135,12 +136,6 @@ TestShell::TestShell(bool testShellMode)
     // (new-)run-webkit-tests, (new-)run-webkit-tests misunderstands that a
     // timed-out DRT process was crashed.
     m_timeout = 30 * 1000;
-
-#if ENABLE(INDEXED_DATABASE)
-    m_tempIndexedDBDirectory = adoptPtr(webkit_support::CreateScopedTempDirectory());
-    m_tempIndexedDBDirectory->CreateUniqueTempDir();
-    WebIDBFactory::setTemporaryDatabaseFolder(WebString::fromUTF8(m_tempIndexedDBDirectory->path().c_str()));
-#endif
 
     createMainWindow();
 }
@@ -176,6 +171,7 @@ void TestShell::showDevTools()
             return;
         }
         m_devTools = createNewWindow(url);
+        m_devTools->webView()->settings()->setMemoryInfoEnabled(true);
         ASSERT(m_devTools);
         createDRTDevToolsClient(m_drtDevToolsAgent.get());
     }
@@ -185,6 +181,7 @@ void TestShell::showDevTools()
 void TestShell::closeDevTools()
 {
     if (m_devTools) {
+        m_devTools->webView()->settings()->setMemoryInfoEnabled(false);
         m_drtDevToolsAgent->reset();
         m_drtDevToolsClient.clear();
         closeWindow(m_devTools);
@@ -196,6 +193,7 @@ void TestShell::resetWebSettings(WebView& webView)
 {
     m_prefs.reset();
     m_prefs.acceleratedCompositingEnabled = m_acceleratedCompositingEnabled;
+    m_prefs.threadedCompositingEnabled = m_threadedCompositingEnabled;
     m_prefs.compositeToTexture = m_compositeToTexture;
     m_prefs.forceCompositingMode = m_forceCompositingMode;
     m_prefs.accelerated2dCanvasEnabled = m_accelerated2dCanvasEnabled;
@@ -267,7 +265,10 @@ void TestShell::resetTestController()
     if (m_drtDevToolsClient)
         m_drtDevToolsClient->reset();
     webView()->scalePage(1, WebPoint(0, 0));
+    webView()->enableFixedLayoutMode(false);
+    webView()->setFixedLayoutSize(WebSize(0, 0));
     webView()->mainFrame()->clearOpener();
+    WebTestingSupport::resetInternalsObject(webView()->mainFrame());
 }
 
 void TestShell::loadURL(const WebURL& url)
@@ -395,6 +396,21 @@ static bool HistoryItemCompareLess(const WebHistoryItem& item1, const WebHistory
     return target1 < target2;
 }
 
+static string normalizeLayoutTestURLInternal(const string& url)
+{
+    string result = url;
+    size_t pos;
+    if (!url.find(fileUrlPattern) && ((pos = url.find(layoutTestsPattern)) != string::npos)) {
+        // adjust file URLs to match upstream results.
+        result.replace(0, pos + layoutTestsPatternSize, fileTestPrefix);
+    } else if (!url.find(dataUrlPattern)) {
+        // URL-escape data URLs to match results upstream.
+        string path = url.substr(dataUrlPatternSize);
+        result.replace(dataUrlPatternSize, url.length(), path);
+    }
+    return result;
+}
+
 static string dumpHistoryItem(const WebHistoryItem& item, int indent, bool isCurrent)
 {
     string result;
@@ -405,17 +421,7 @@ static string dumpHistoryItem(const WebHistoryItem& item, int indent, bool isCur
     } else
         result.append(indent, ' ');
 
-    string url = item.urlString().utf8();
-    size_t pos;
-    if (!url.find(fileUrlPattern) && ((pos = url.find(layoutTestsPattern)) != string::npos)) {
-        // adjust file URLs to match upstream results.
-        url.replace(0, pos + layoutTestsPatternSize, fileTestPrefix);
-    } else if (!url.find(dataUrlPattern)) {
-        // URL-escape data URLs to match results upstream.
-        string path = webkit_support::EscapePath(url.substr(dataUrlPatternSize));
-        url.replace(dataUrlPatternSize, url.length(), path);
-    }
-
+    string url = normalizeLayoutTestURLInternal(item.urlString().utf8());
     result.append(url);
     if (!item.target().isEmpty()) {
         result.append(" (in frame \"");
@@ -687,4 +693,9 @@ void TestShell::closeRemainingWindows()
 int TestShell::windowCount()
 {
     return m_windowList.size();
+}
+
+string TestShell::normalizeLayoutTestURL(const string& url)
+{
+    return normalizeLayoutTestURLInternal(url);
 }

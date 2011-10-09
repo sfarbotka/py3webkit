@@ -44,12 +44,12 @@ public:
     explicit WebSettingsImpl(WebCore::Settings*);
     virtual ~WebSettingsImpl() { }
 
-    virtual void setStandardFontFamily(const WebString&);
-    virtual void setFixedFontFamily(const WebString&);
-    virtual void setSerifFontFamily(const WebString&);
-    virtual void setSansSerifFontFamily(const WebString&);
-    virtual void setCursiveFontFamily(const WebString&);
-    virtual void setFantasyFontFamily(const WebString&);
+    virtual void setStandardFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
+    virtual void setFixedFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
+    virtual void setSerifFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
+    virtual void setSansSerifFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
+    virtual void setCursiveFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
+    virtual void setFantasyFontFamily(const WebString&, UScriptCode = USCRIPT_COMMON);
     virtual void setDefaultFontSize(int);
     virtual void setDefaultFixedFontSize(int);
     virtual void setMinimumFontSize(int);
@@ -80,7 +80,6 @@ public:
     virtual void setEditableLinkBehaviorNeverLive();
     virtual void setFrameFlatteningEnabled(bool);
     virtual void setFontRenderingModeNormal();
-    virtual void setShouldPaintCustomScrollbars(bool);
     virtual void setAllowUniversalAccessFromFileURLs(bool);
     virtual void setAllowFileAccessFromFileURLs(bool);
     virtual void setTextDirectionSubmenuInclusionBehaviorNeverIncluded();
@@ -107,6 +106,8 @@ public:
     virtual void setLegacyAccelerated2dCanvasEnabled(bool);
     virtual void setMinimumAccelerated2dCanvasSize(int);
     virtual void setAcceleratedDrawingEnabled(bool);
+    virtual void setUseThreadedCompositor(bool);
+    virtual bool useThreadedCompositor() const { return m_useThreadedCompositor; }
     virtual void setMemoryInfoEnabled(bool);
     virtual void setHyperlinkAuditingEnabled(bool);
     virtual void setAsynchronousSpellCheckingEnabled(bool);
@@ -126,6 +127,7 @@ private:
     bool m_compositeToTextureEnabled;
     bool m_showFPSCounter;
     bool m_showPlatformLayerTree;
+    bool m_useThreadedCompositor;
 };
 
 } // namespace WebKit

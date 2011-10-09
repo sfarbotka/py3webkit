@@ -70,11 +70,6 @@ FloatRect ChromeClientWinCE::pageRect()
     return windowRect();
 }
 
-float ChromeClientWinCE::scaleFactor()
-{
-    return 1.0;
-}
-
 void ChromeClientWinCE::focus()
 {
     notImplemented();
@@ -278,7 +273,7 @@ void ChromeClientWinCE::contentsSizeChanged(Frame*, const IntSize&) const
     notImplemented();
 }
 
-void ChromeClientWinCE::scrollRectIntoView(const IntRect&, const ScrollView*) const
+void ChromeClientWinCE::scrollRectIntoView(const IntRect&) const
 {
     notImplemented();
 }
@@ -303,14 +298,13 @@ void ChromeClientWinCE::print(Frame*)
     notImplemented();
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void ChromeClientWinCE::exceededDatabaseQuota(Frame*, const String&)
 {
     notImplemented();
 }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClientWinCE::reachedMaxAppCacheSize(int64_t)
 {
     notImplemented();
@@ -320,7 +314,6 @@ void ChromeClientWinCE::reachedApplicationCacheOriginQuota(SecurityOrigin*, int6
 {
     notImplemented();
 }
-#endif
 
 #if ENABLE(TOUCH_EVENTS)
 void ChromeClientWinCE::needTouchEvents(bool)

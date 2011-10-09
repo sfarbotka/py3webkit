@@ -67,6 +67,10 @@
 @property(assign) id delegate;
 
 - (CGFloat)knobMinLength;
+- (CGFloat)trackOverlapEndInset;
+- (CGFloat)knobOverlapEndInset;
+- (CGFloat)trackEndInset;
+- (CGFloat)knobEndInset;
 - (CGFloat)trackBoxWidth;
 - (CGFloat)trackWidth;
 - (void)setBoundsSize:(NSSize)size;
@@ -88,6 +92,7 @@
 @property(retain) NSScrollerImp *verticalScrollerImp;
 @property(assign) id delegate;
 
+- (void)hideOverlayScrollers;
 - (void)flashScrollers;
 - (void)contentAreaScrolled;
 - (void)contentAreaWillDraw;
@@ -187,6 +192,11 @@ void wkScrollbarPainterSetDelegate(WKScrollbarPainterRef painter, id scrollbarPa
     [painter setDelegate:scrollbarPainterDelegate];
 }
 
+void wkScrollbarPainterSetEnabled(WKScrollbarPainterRef painter, bool enabled)
+{
+    [painter setEnabled:enabled];
+}
+
 CGFloat wkScrollbarPainterTrackAlpha(WKScrollbarPainterRef painter)
 {
     return [painter trackAlpha];
@@ -204,8 +214,10 @@ int wkScrollbarThickness(int controlSize)
 
 int wkScrollbarMinimumTotalLengthNeededForThumb(WKScrollbarPainterRef painter)
 {
-    // TODO(sail): This doesn't match the implementation in WebKitSystemInterface.
-    return wkScrollbarMinimumThumbLength(painter);
+    return [painter knobMinLength] +
+           [painter trackOverlapEndInset] +
+           [painter knobOverlapEndInset] +
+           ([painter trackEndInset] + [painter knobEndInset]) * 2;
 }
 
 WKScrollbarPainterRef wkVerticalScrollbarPainterForController(WKScrollbarPainterControllerRef controller)
@@ -338,6 +350,7 @@ void wkDidEndScrollGesture(WKScrollbarPainterControllerRef controller)
 
 void wkScrollbarPainterForceFlashScrollers(WKScrollbarPainterControllerRef controller)
 {
+    [controller hideOverlayScrollers];
     [controller flashScrollers];
 }
 

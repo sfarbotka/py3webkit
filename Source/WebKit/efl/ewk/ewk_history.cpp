@@ -34,7 +34,7 @@
 #include <wtf/text/CString.h>
 
 struct _Ewk_History {
-    WebCore::BackForwardListImpl *core;
+    WebCore::BackForwardListImpl* core;
 };
 
 #define EWK_HISTORY_CORE_GET_OR_RETURN(history, core_, ...)      \
@@ -50,16 +50,16 @@ struct _Ewk_History {
         ERR("history->core is disabled!.");                      \
         return __VA_ARGS__;                                      \
     }                                                            \
-    WebCore::BackForwardListImpl *core_ = (history)->core
+    WebCore::BackForwardListImpl* core_ = (history)->core
 
 
 struct _Ewk_History_Item {
-    WebCore::HistoryItem *core;
+    WebCore::HistoryItem* core;
 
-    const char *title;
-    const char *alternate_title;
-    const char *uri;
-    const char *original_uri;
+    const char* title;
+    const char* alternate_title;
+    const char* uri;
+    const char* original_uri;
 };
 
 #define EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core_, ...) \
@@ -71,10 +71,10 @@ struct _Ewk_History_Item {
         CRITICAL("item->core is NULL.");                      \
         return __VA_ARGS__;                                   \
     }                                                         \
-    WebCore::HistoryItem *core_ = (item)->core
+    WebCore::HistoryItem* core_ = (item)->core
 
 
-static inline Ewk_History_Item *_ewk_history_item_new(WebCore::HistoryItem *core)
+static inline Ewk_History_Item* _ewk_history_item_new(WebCore::HistoryItem* core)
 {
     Ewk_History_Item* item;
 
@@ -83,7 +83,7 @@ static inline Ewk_History_Item *_ewk_history_item_new(WebCore::HistoryItem *core
         return 0;
     }
 
-    item = (Ewk_History_Item *)calloc(1, sizeof(Ewk_History_Item));
+    item = static_cast<Ewk_History_Item*>(calloc(1, sizeof(Ewk_History_Item)));
     if (!item) {
         CRITICAL("Could not allocate item memory.");
         return 0;
@@ -95,7 +95,7 @@ static inline Ewk_History_Item *_ewk_history_item_new(WebCore::HistoryItem *core
     return item;
 }
 
-static inline Eina_List *_ewk_history_item_list_get(const WebCore::HistoryItemVector &core_items)
+static inline Eina_List* _ewk_history_item_list_get(const WebCore::HistoryItemVector& core_items)
 {
     Eina_List* ret = 0;
     unsigned int i, size;
@@ -153,7 +153,10 @@ Ewk_History_Item* ewk_history_history_item_back_get(const Ewk_History* history)
 Ewk_History_Item* ewk_history_history_item_current_get(const Ewk_History* history)
 {
     EWK_HISTORY_CORE_GET_OR_RETURN(history, core, 0);
-    return _ewk_history_item_new(core->currentItem());
+    WebCore::HistoryItem* currentItem = core->currentItem();
+    if (currentItem)
+        return _ewk_history_item_new(currentItem);
+    return 0;
 }
 
 Ewk_History_Item* ewk_history_history_item_forward_get(const Ewk_History* history)
@@ -268,7 +271,7 @@ const char* ewk_history_item_title_get(const Ewk_History_Item* item)
 {
     EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
     // hide the following optimzation from outside
-    Ewk_History_Item* i = (Ewk_History_Item*)item;
+    Ewk_History_Item* i = const_cast<Ewk_History_Item*>(item);
     eina_stringshare_replace(&i->title, core->title().utf8().data());
     return i->title;
 }
@@ -277,7 +280,7 @@ const char* ewk_history_item_title_alternate_get(const Ewk_History_Item* item)
 {
     EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
     // hide the following optimzation from outside
-    Ewk_History_Item* i = (Ewk_History_Item*)item;
+    Ewk_History_Item* i = const_cast<Ewk_History_Item*>(item);
     eina_stringshare_replace(&i->alternate_title,
                              core->alternateTitle().utf8().data());
     return i->alternate_title;
@@ -295,7 +298,7 @@ const char* ewk_history_item_uri_get(const Ewk_History_Item* item)
 {
     EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
     // hide the following optimzation from outside
-    Ewk_History_Item* i = (Ewk_History_Item*)item;
+    Ewk_History_Item* i = const_cast<Ewk_History_Item*>((item));
     eina_stringshare_replace(&i->uri, core->urlString().utf8().data());
     return i->uri;
 }
@@ -304,7 +307,7 @@ const char* ewk_history_item_uri_original_get(const Ewk_History_Item* item)
 {
     EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
     // hide the following optimzation from outside
-    Ewk_History_Item* i = (Ewk_History_Item*)item;
+    Ewk_History_Item* i = const_cast<Ewk_History_Item*>(item);
     eina_stringshare_replace(&i->original_uri,
                              core->originalURLString().utf8().data());
     return i->original_uri;
@@ -319,7 +322,7 @@ double ewk_history_item_time_last_visited_get(const Ewk_History_Item* item)
 cairo_surface_t* ewk_history_item_icon_surface_get(const Ewk_History_Item* item)
 {
     EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
-    
+
     WebCore::Image* icon = WebCore::iconDatabase().synchronousIconForPageURL(core->url(), WebCore::IntSize(16, 16));
     if (!icon) {
         ERR("icon is NULL.");
@@ -380,7 +383,7 @@ Ewk_History* ewk_history_new(WebCore::BackForwardListImpl* core)
     EINA_SAFETY_ON_NULL_RETURN_VAL(core, 0);
     DBG("core=%p", core);
 
-    history = (Ewk_History*)malloc(sizeof(Ewk_History));
+    history = static_cast<Ewk_History*>(malloc(sizeof(Ewk_History)));
     if (!history) {
         CRITICAL("Could not allocate history memory.");
         return 0;
@@ -405,4 +408,53 @@ void ewk_history_free(Ewk_History* history)
     DBG("history=%p", history);
     history->core->deref();
     free(history);
+}
+
+/**
+ * @internal
+ *
+ * Returns a newly-allocated string with the item's target name.
+ * Callers are responsible for freeing the allocated memory with free(3).
+ *
+ * @param item instance to operate upon.
+ */
+char* ewk_history_item_target_get(const Ewk_History_Item* item)
+{
+    EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
+    return strdup(core->target().utf8().data());
+}
+
+/**
+ * @internal
+ *
+ * Returns whether the given item is currently a target.
+ *
+ * @param item instance to check.
+ */
+Eina_Bool ewk_history_item_target_is(const Ewk_History_Item* item)
+{
+    EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
+    return core->isTargetItem();
+}
+
+/**
+ * @internal
+ *
+ * Returns a list of child history items relative to the given item,
+ * or @c NULL if there are none.
+ *
+ * @param item instance to operate upon.
+ */
+Eina_List* ewk_history_item_children_get(const Ewk_History_Item* item)
+{
+    EWK_HISTORY_ITEM_CORE_GET_OR_RETURN(item, core, 0);
+    const WebCore::HistoryItemVector& children = core->children();
+    if (!children.size())
+        return 0;
+
+    Eina_List* kids = 0;
+    const unsigned size = children.size();
+    for (unsigned i = 0; i < size; ++i)
+        kids = eina_list_append(kids, _ewk_history_item_new(children[i].get()));
+    return kids;
 }

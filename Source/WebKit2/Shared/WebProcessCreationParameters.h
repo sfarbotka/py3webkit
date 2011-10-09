@@ -67,6 +67,7 @@ struct WebProcessCreationParameters {
     bool shouldTrackVisitedLinks;
 
     bool shouldAlwaysUseComplexTextCodePath;
+    bool shouldUseFontSmoothing;
 
     bool iconDatabaseEnabled;
 
@@ -111,6 +112,9 @@ struct WebProcessCreationParameters {
     RetainPtr<CFDataRef> serializedDefaultStorageSession;
 #endif // USE(CFURLSTORAGESESSIONS)
 #endif // PLATFORM(WIN)
+#if PLATFORM(QT)
+    String cookieStorageDirectory;
+#endif
 };
 
 } // namespace WebKit

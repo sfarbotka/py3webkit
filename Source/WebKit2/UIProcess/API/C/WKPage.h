@@ -160,7 +160,7 @@ typedef struct WKPageResourceLoadClient WKPageResourceLoadClient;
 enum { kWKPageResourceLoadClientCurrentVersion = 0 };
 
 // UI Client
-typedef WKPageRef (*WKPageCreateNewPageCallback)(WKPageRef page, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton mouseButton, const void *clientInfo);
+typedef WKPageRef (*WKPageCreateNewPageCallback)(WKPageRef page, WKURLRequestRef urlRequest, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton mouseButton, const void *clientInfo);
 typedef void (*WKPageRunJavaScriptAlertCallback)(WKPageRef page, WKStringRef alertText, WKFrameRef frame, const void *clientInfo);
 typedef bool (*WKPageRunJavaScriptConfirmCallback)(WKPageRef page, WKStringRef message, WKFrameRef frame, const void *clientInfo);
 typedef WKStringRef (*WKPageRunJavaScriptPromptCallback)(WKPageRef page, WKStringRef message, WKStringRef defaultValue, WKFrameRef frame, const void *clientInfo);
@@ -168,7 +168,7 @@ typedef void (*WKPageTakeFocusCallback)(WKPageRef page, WKFocusDirection directi
 typedef void (*WKPageFocusCallback)(WKPageRef page, const void *clientInfo);
 typedef void (*WKPageUnfocusCallback)(WKPageRef page, const void *clientInfo);
 typedef void (*WKPageSetStatusTextCallback)(WKPageRef page, WKStringRef text, const void *clientInfo);
-typedef void (*WKPageMouseDidMoveOverElementCallback)(WKPageRef page, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo);
+typedef void (*WKPageMouseDidMoveOverElementCallback)(WKPageRef page, WKHitTestResultRef hitTestResult, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo);
 typedef void (*WKPageMissingPluginButtonClickedCallback)(WKPageRef page, WKStringRef mimeType, WKStringRef url, WKStringRef pluginsPageURL, const void* clientInfo);
 typedef void (*WKPageDidNotHandleKeyEventCallback)(WKPageRef page, WKNativeEventPtr event, const void *clientInfo);
 typedef void (*WKPageDidNotHandleWheelEventCallback)(WKPageRef page, WKNativeEventPtr event, const void *clientInfo);
@@ -191,14 +191,19 @@ typedef float (*WKPageFooterHeightCallback)(WKPageRef page, WKFrameRef frame, co
 typedef void (*WKPageDrawHeaderCallback)(WKPageRef page, WKFrameRef frame, WKRect rect, const void* clientInfo);
 typedef void (*WKPageDrawFooterCallback)(WKPageRef page, WKFrameRef frame, WKRect rect, const void* clientInfo);
 typedef void (*WKPagePrintFrameCallback)(WKPageRef page, WKFrameRef frame, const void* clientInfo);
-typedef void (*WKPageDidCompleteRubberBandForMainFrameCallback)(WKPageRef page, WKSize initialOverhang, const void* clientInfo);
 typedef void (*WKPageSaveDataToFileInDownloadsFolderCallback)(WKPageRef page, WKStringRef suggestedFilename, WKStringRef mimeType, WKURLRef originatingURL, WKDataRef data, const void* clientInfo);
 typedef bool (*WKPageShouldInterruptJavaScriptCallback)(WKPageRef page, const void *clientInfo);
+
+// Deprecated    
+typedef WKPageRef (*WKPageCreateNewPageCallback_deprecatedForUseWithV0)(WKPageRef page, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton mouseButton, const void *clientInfo);
+typedef void      (*WKPageMouseDidMoveOverElementCallback_deprecatedForUseWithV0)(WKPageRef page, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo);
 
 struct WKPageUIClient {
     int                                                                 version;
     const void *                                                        clientInfo;
-    WKPageCreateNewPageCallback                                         createNewPage;
+
+    // Version 0
+    WKPageCreateNewPageCallback_deprecatedForUseWithV0                  createNewPage_deprecatedForUseWithV0;
     WKPageCallback                                                      showPage;
     WKPageCallback                                                      close;
     WKPageTakeFocusCallback                                             takeFocus;
@@ -208,7 +213,7 @@ struct WKPageUIClient {
     WKPageRunJavaScriptConfirmCallback                                  runJavaScriptConfirm;
     WKPageRunJavaScriptPromptCallback                                   runJavaScriptPrompt;
     WKPageSetStatusTextCallback                                         setStatusText;
-    WKPageMouseDidMoveOverElementCallback                               mouseDidMoveOverElement;
+    WKPageMouseDidMoveOverElementCallback_deprecatedForUseWithV0        mouseDidMoveOverElement_deprecatedForUseWithV0;
     WKPageMissingPluginButtonClickedCallback                            missingPluginButtonClicked;
     WKPageDidNotHandleKeyEventCallback                                  didNotHandleKeyEvent;
     WKPageDidNotHandleWheelEventCallback                                didNotHandleWheelEvent;
@@ -234,13 +239,17 @@ struct WKPageUIClient {
     WKPageDrawFooterCallback                                            drawFooter;
     WKPagePrintFrameCallback                                            printFrame;
     WKPageCallback                                                      runModal;
-    WKPageDidCompleteRubberBandForMainFrameCallback                     didCompleteRubberBandForMainFrame;
+    void*                                                               unused1; // Used to be didCompleteRubberBandForMainFrame
     WKPageSaveDataToFileInDownloadsFolderCallback                       saveDataToFileInDownloadsFolder;
-    WKPageShouldInterruptJavaScriptCallback                             shouldInterruptJavaScript;
+    WKPageShouldInterruptJavaScriptCallback                             shouldInterruptJavaScript;    
+
+    // Version 1
+    WKPageCreateNewPageCallback                                         createNewPage;
+    WKPageMouseDidMoveOverElementCallback                               mouseDidMoveOverElement;
 };
 typedef struct WKPageUIClient WKPageUIClient;
 
-enum { kWKPageUIClientCurrentVersion = 0 };
+enum { kWKPageUIClientCurrentVersion = 1 };
 
 // Find client.
 typedef void (*WKPageDidFindStringCallback)(WKPageRef page, WKStringRef string, unsigned matchCount, const void* clientInfo);
@@ -265,16 +274,22 @@ enum {
 // ContextMenu client
 typedef void (*WKPageGetContextMenuFromProposedContextMenuCallback)(WKPageRef page, WKArrayRef proposedMenu, WKArrayRef* newMenu, WKTypeRef userData, const void* clientInfo);
 typedef void (*WKPageCustomContextMenuItemSelectedCallback)(WKPageRef page, WKContextMenuItemRef contextMenuItem, const void* clientInfo);
+typedef void (*WKPageContextMenuDismissedCallback)(WKPageRef page, const void* clientInfo);
 
 struct WKPageContextMenuClient {
     int                                                                 version;
     const void *                                                        clientInfo;
+    
+    // Version 0
     WKPageGetContextMenuFromProposedContextMenuCallback                 getContextMenuFromProposedMenu;
     WKPageCustomContextMenuItemSelectedCallback                         customContextMenuItemSelected;
+    
+    // Version 1
+    WKPageContextMenuDismissedCallback                                  contextMenuDismissed;
 };
 typedef struct WKPageContextMenuClient WKPageContextMenuClient;
 
-enum { kWKPageContextMenuClientCurrentVersion = 0 };
+enum { kWKPageContextMenuClientCurrentVersion = 1 };
 
 WK_EXPORT WKTypeID WKPageGetTypeID();
 
@@ -340,6 +355,9 @@ WK_EXPORT WKStringRef WKPageGetSessionHistoryURLValueType(void);
 typedef bool (*WKPageSessionStateFilterCallback)(WKPageRef page, WKStringRef valueType, WKTypeRef value, void* context);
 WK_EXPORT WKDataRef WKPageCopySessionState(WKPageRef page, void* context, WKPageSessionStateFilterCallback urlAllowedCallback);
 WK_EXPORT void WKPageRestoreFromSessionState(WKPageRef page, WKDataRef sessionStateData);
+
+WK_EXPORT double WKPageGetBackingScaleFactor(WKPageRef page);
+WK_EXPORT void WKPageSetCustomBackingScaleFactor(WKPageRef page, double customScaleFactor);
 
 WK_EXPORT bool WKPageSupportsTextZoom(WKPageRef page);
 WK_EXPORT double WKPageGetTextZoomFactor(WKPageRef page);

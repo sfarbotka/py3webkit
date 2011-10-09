@@ -65,8 +65,10 @@
 #include <windows.h>
 #elif OS(DARWIN)
 #include <libkern/OSAtomic.h>
+#elif OS(QNX)
+#include <atomic.h>
 #elif OS(ANDROID)
-#include <cutils/atomic.h>
+#include <sys/atomics.h>
 #elif COMPILER(GCC) && !OS(SYMBIAN)
 #if (__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 2))
 #include <ext/atomicity.h>
@@ -94,10 +96,17 @@ inline int atomicDecrement(int volatile* addend) { return InterlockedDecrement(r
 inline int atomicIncrement(int volatile* addend) { return OSAtomicIncrement32Barrier(const_cast<int*>(addend)); }
 inline int atomicDecrement(int volatile* addend) { return OSAtomicDecrement32Barrier(const_cast<int*>(addend)); }
 
+#elif OS(QNX)
+#define WTF_USE_LOCKFREE_THREADSAFEREFCOUNTED 1
+
+// Note, atomic_{add, sub}_value() return the previous value of addend's content.
+inline int atomicIncrement(int volatile* addend) { return static_cast<int>(atomic_add_value(reinterpret_cast<unsigned volatile*>(addend), 1)) + 1; }
+inline int atomicDecrement(int volatile* addend) { return static_cast<int>(atomic_sub_value(reinterpret_cast<unsigned volatile*>(addend), 1)) - 1; }
+
 #elif OS(ANDROID)
 
-inline int atomicIncrement(int volatile* addend) { return android_atomic_inc(addend); }
-inline int atomicDecrement(int volatile* addend) { return android_atomic_dec(addend); }
+inline int atomicIncrement(int volatile* addend) { return __atomic_inc(addend); }
+inline int atomicDecrement(int volatile* addend) { return __atomic_dec(addend); }
 
 #elif COMPILER(GCC) && !CPU(SPARC64) && !OS(SYMBIAN) // sizeof(_Atomic_word) != sizeof(int) on sparc64 gcc
 #define WTF_USE_LOCKFREE_THREADSAFEREFCOUNTED 1

@@ -97,7 +97,7 @@ public:
     // Used for rendering
     void didDraw(const FloatRect&);
 
-    void paint(GraphicsContext*, const IntRect&, bool useLowQualityScale = false);
+    void paint(GraphicsContext*, const LayoutRect&, bool useLowQualityScale = false);
 
     GraphicsContext* drawingContext() const;
     GraphicsContext* existingDrawingContext() const;
@@ -111,9 +111,8 @@ public:
     void makePresentationCopy();
     void clearPresentationCopy();
 
-    IntRect convertLogicalToDevice(const FloatRect&) const;
-    IntSize convertLogicalToDevice(const FloatSize&) const;
-    IntSize convertToValidDeviceSize(float width, float height) const;
+    FloatRect convertLogicalToDevice(const FloatRect&) const;
+    FloatSize convertLogicalToDevice(const FloatSize&) const;
 
     SecurityOrigin* securityOrigin() const;
     void setOriginTainted() { m_originClean = false; }
@@ -128,6 +127,9 @@ public:
 #endif
 
     void makeRenderingResultsAvailable();
+    bool hasCreatedImageBuffer() const { return m_hasCreatedImageBuffer; }
+
+    bool shouldAccelerate(const IntSize&) const;
 
 private:
     HTMLCanvasElement(const QualifiedName&, Document*);
@@ -140,7 +142,6 @@ private:
     void createImageBuffer() const;
 
     void setSurfaceSize(const IntSize&);
-    bool hasCreatedImageBuffer() const { return m_hasCreatedImageBuffer; }
 
     HashSet<CanvasObserver*> m_observers;
 
@@ -153,7 +154,7 @@ private:
     bool m_ignoreReset;
     FloatRect m_dirtyRect;
 
-    float m_pageScaleFactor;
+    float m_deviceScaleFactor;
     bool m_originClean;
 
     // m_createdImageBuffer means we tried to malloc the buffer.  We didn't necessarily get it.

@@ -136,6 +136,20 @@ int main(int argc, char* argv[])
     _setmode(2, _O_BINARY);
 #endif
 
+    // Suppress debug output from Qt if not started with -v
+    bool suppressQtDebugOutput = true;
+    for (int i = 1; i < argc; ++i) {
+        if (!qstrcmp(argv[i], "-v")) {
+            suppressQtDebugOutput = false;
+            break;
+        }
+    }
+
+    // Has to be done before QApplication is constructed in case
+    // QApplication itself produces debug output.
+    if (suppressQtDebugOutput)
+        qInstallMsgHandler(messageHandler);
+
 #ifdef Q_WS_X11
     FcInit();
     WebCore::DumpRenderTree::initializeFonts();
@@ -144,17 +158,25 @@ int main(int argc, char* argv[])
     QApplication::setGraphicsSystem("raster");
     QApplication::setStyle(new QWindowsStyle);
 
-    QFont f("Sans Serif");
-    f.setPointSize(9);
-    f.setWeight(QFont::Normal);
-    f.setStyle(QFont::StyleNormal);
-    QApplication::setFont(f);
-
     QApplication app(argc, argv);
+
 #ifdef Q_WS_X11
     QX11Info::setAppDpiY(0, 96);
     QX11Info::setAppDpiX(0, 96);
 #endif
+
+   /*
+    * QApplication will initialize the default application font based
+    * on the application DPI at construction time, which might be
+    * different from the DPI we explicitly set using QX11Info above.
+    * See: https://bugreports.qt.nokia.com/browse/QTBUG-21603
+    *
+    * To ensure that the application font DPI matches the application
+    * DPI, we override the application font using the font we get from
+    * a QWidget, which has already been resolved against the existing
+    * default font, but with the correct paint-device DPI.
+   */
+    QApplication::setFont(QWidget().font());
 
 #if HAVE(SIGNAL_H)
     signal(SIGILL, crashHandler);    /* 4:   illegal instruction (not reset when caught) */
@@ -169,7 +191,7 @@ int main(int argc, char* argv[])
 #endif
 
     QStringList args = app.arguments();
-    if (args.count() < 2) {
+    if (args.count() < (!suppressQtDebugOutput ? 3 : 2)) {
         printUsage();
         exit(1);
     }
@@ -177,16 +199,9 @@ int main(int argc, char* argv[])
     // Remove the first arguments, it is application name itself
     args.removeAt(0);
 
-    // Suppress debug output from Qt if not started with -v
-    int index = args.indexOf(QLatin1String("-v"));
-    if (index == -1) 
-        qInstallMsgHandler(messageHandler);
-    else
-        args.removeAt(index);
-
     WebCore::DumpRenderTree dumper;
 
-    index = args.indexOf(QLatin1String("--pixel-tests"));
+    int index = args.indexOf(QLatin1String("--pixel-tests"));
     if (index != -1) {
         dumper.setDumpPixels(true);
         args.removeAt(index);

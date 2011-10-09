@@ -41,6 +41,7 @@ module WTR {
         void dumpStatusCallbacks();
         void dumpTitleChanges();
         void dumpFullScreenCallbacks();
+        void dumpConfigurationForViewport(in int deviceDPI, in int deviceWidth, in int deviceHeight, in int availableWidth, in int availableHeight);
 
         // Special options.
         void keepWebHistory();
@@ -65,6 +66,9 @@ module WTR {
         boolean isCommandEnabled(in DOMString name);
         DOMString markerTextForListItem(in object element);
         unsigned long windowCount();
+
+        // Special DOM variables.
+        attribute boolean globalFlag;
 
         // Repaint testing.
         void testRepaint();
@@ -93,6 +97,10 @@ module WTR {
         void setDatabaseQuota(in unsigned long long quota);
         DOMString pathToLocalResource(in DOMString url);
 
+        // Application Cache API
+        void clearAllApplicationCaches();
+        void setAppCacheMaximumSize(in unsigned long long size);
+
         // Compositing testing.
         DOMString layerTreeAsText();
 
@@ -114,6 +122,11 @@ module WTR {
         void setWillSendRequestReturnsNull(in boolean flag);
         
         void setShouldStayOnPageAfterHandlingBeforeUnload(in boolean flag);
+        
+        // Focus testing.
+        void addChromeInputField(in object callback);
+        void removeChromeInputField(in object callback);
+        void focusWebView(in object callback);
     };
 
 }

@@ -2,6 +2,9 @@
 
 contains(QT_CONFIG, qpa)|contains(QT_CONFIG, embedded): CONFIG += embedded
 
+# For convenience
+greaterThan(QT_MAJOR_VERSION, 4): CONFIG += qt5
+
 # Detect that we are building as a standalone package by the presence of
 # either the generated files directory or as part of the Qt package through
 # QTDIR_build
@@ -135,6 +138,17 @@ valgrind {
     DEFINES += ENABLE_JIT=0
     JAVASCRIPTCORE_JIT = no
 }
+
+contains(JAVASCRIPTCORE_JIT,yes): DEFINES+=ENABLE_JIT=1
+contains(JAVASCRIPTCORE_JIT,no): DEFINES+=ENABLE_JIT=0
+
+linux-g++ {
+isEmpty($$(SBOX_DPKG_INST_ARCH)):exists(/usr/bin/ld.gold) {
+    message(Using gold linker)
+    QMAKE_LFLAGS+=-fuse-ld=gold
+}
+}
+
 
 # Disable dependency to a specific version of a Qt package for non-production builds
 symbian:!CONFIG(production):default_deployment.pkg_prerules -= pkg_depends_qt

@@ -161,6 +161,7 @@ Eina_Bool _ewk_init_body(void)
 
     WebCore::ScriptController::initializeThreading();
     WebCore::InitializeLoggingChannelsIfNecessary();
+    WebCore::Settings::setDefaultMinDOMTimerInterval(0.004);
 
     // Page cache capacity (in pages). Comment from Mac port:
     // (Research indicates that value / page drops substantially after 3 pages.)
@@ -181,16 +182,13 @@ Eina_Bool _ewk_init_body(void)
     WTF::String wkdir = home + "/.webkit";
     if (WebCore::makeAllDirectories(wkdir)) {
         ewk_settings_web_database_path_set(wkdir.utf8().data());
-
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         ewk_settings_cache_directory_path_set(wkdir.utf8().data());
-#endif
     }
 
     // TODO: this should move to WebCore, already reported to webkit-gtk folks:
 #if USE(SOUP)
     if (1) {
-        SoupSession *session = WebCore::ResourceHandle::defaultSession();
+        SoupSession* session = WebCore::ResourceHandle::defaultSession();
         soup_session_add_feature_by_type(session, SOUP_TYPE_CONTENT_SNIFFER);
         soup_session_add_feature_by_type(session, SOUP_TYPE_CONTENT_DECODER);
 

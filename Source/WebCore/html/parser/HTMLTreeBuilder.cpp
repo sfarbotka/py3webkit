@@ -58,9 +58,9 @@ using namespace HTMLNames;
 
 static const int uninitializedLineNumberValue = -1;
 
-static TextPosition1 uninitializedPositionValue1()
+static TextPosition uninitializedPositionValue1()
 {
-    return TextPosition1(WTF::OneBasedNumber::fromOneBasedInt(-1), WTF::OneBasedNumber::base());
+    return TextPosition(OrdinalNumber::fromOneBasedInt(-1), OrdinalNumber::first());
 }
 
 namespace {
@@ -291,7 +291,7 @@ public:
         return String(start, m_current - start);
     }
 
-    void giveRemainingTo(Vector<UChar>& recipient)
+    void giveRemainingTo(StringBuilder& recipient)
     {
         recipient.append(m_current, m_end - m_current);
         m_current = m_end;
@@ -351,7 +351,7 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser, HTMLDocument* docum
     , m_originalInsertionMode(InitialMode)
     , m_parser(parser)
     , m_scriptToProcessStartPosition(uninitializedPositionValue1())
-    , m_lastScriptElementStartPosition(TextPosition0::belowRangePosition())
+    , m_lastScriptElementStartPosition(TextPosition::belowRangePosition())
     , m_usePreHTML5ParserQuirks(usePreHTML5ParserQuirks)
     , m_hasPendingForeignInsertionModeSteps(false)
 {
@@ -370,7 +370,7 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser, DocumentFragment* f
     , m_originalInsertionMode(InitialMode)
     , m_parser(parser)
     , m_scriptToProcessStartPosition(uninitializedPositionValue1())
-    , m_lastScriptElementStartPosition(TextPosition0::belowRangePosition())
+    , m_lastScriptElementStartPosition(TextPosition::belowRangePosition())
     , m_usePreHTML5ParserQuirks(usePreHTML5ParserQuirks)
     , m_hasPendingForeignInsertionModeSteps(false)
 {
@@ -420,7 +420,7 @@ HTMLTreeBuilder::FragmentParsingContext::~FragmentParsingContext()
 {
 }
 
-PassRefPtr<Element> HTMLTreeBuilder::takeScriptToProcess(TextPosition1& scriptStartPosition)
+PassRefPtr<Element> HTMLTreeBuilder::takeScriptToProcess(TextPosition& scriptStartPosition)
 {
     // Unpause ourselves, callers may pause us again when processing the script.
     // The HTML5 spec is written as though scripts are executed inside the tree
@@ -605,13 +605,13 @@ void HTMLTreeBuilder::processCloseWhenNestedTag(AtomicHTMLToken& token)
     m_framesetOk = false;
     HTMLElementStack::ElementRecord* nodeRecord = m_tree.openElements()->topRecord();
     while (1) {
-        ContainerNode* node = nodeRecord->node();
-        if (shouldClose(node)) {
+        RefPtr<ContainerNode> node = nodeRecord->node();
+        if (shouldClose(node.get())) {
             ASSERT(node->isElementNode());
-            processFakeEndTag(toElement(node)->tagQName());
+            processFakeEndTag(toElement(node.get())->tagQName());
             break;
         }
-        if (isSpecialNode(node) && !node->hasTagName(addressTag) && !node->hasTagName(divTag) && !node->hasTagName(pTag))
+        if (isSpecialNode(node.get()) && !node->hasTagName(addressTag) && !node->hasTagName(divTag) && !node->hasTagName(pTag))
             break;
         nodeRecord = nodeRecord->next();
     }
@@ -1556,7 +1556,7 @@ void HTMLTreeBuilder::processAnyOtherEndTagForInBody(AtomicHTMLToken& token)
     ASSERT(token.type() == HTMLTokenTypes::EndTag);
     HTMLElementStack::ElementRecord* record = m_tree.openElements()->topRecord();
     while (1) {
-        ContainerNode* node = record->node();
+        RefPtr<ContainerNode> node = record->node();
         if (node->hasLocalName(token.name())) {
             m_tree.generateImpliedEndTags();
             // FIXME: The ElementRecord pointed to by record might be deleted by
@@ -1570,13 +1570,13 @@ void HTMLTreeBuilder::processAnyOtherEndTagForInBody(AtomicHTMLToken& token)
                 // http://www.w3.org/Bugs/Public/show_bug.cgi?id=10080
                 // We might have already popped the node for the token in
                 // generateImpliedEndTags, just abort.
-                if (!m_tree.openElements()->contains(toElement(node)))
+                if (!m_tree.openElements()->contains(toElement(node.get())))
                     return;
             }
-            m_tree.openElements()->popUntilPopped(toElement(node));
+            m_tree.openElements()->popUntilPopped(toElement(node.get()));
             return;
         }
-        if (isSpecialNode(node)) {
+        if (isSpecialNode(node.get())) {
             parseError(token);
             return;
         }
@@ -1633,7 +1633,7 @@ void HTMLTreeBuilder::callTheAdoptionAgency(AtomicHTMLToken& token)
         }
         // 4.
         ASSERT(furthestBlock->isAbove(formattingElementRecord));
-        ContainerNode* commonAncestor = formattingElementRecord->next()->node();
+        RefPtr<ContainerNode> commonAncestor = formattingElementRecord->next()->node();
         // 5.
         HTMLFormattingElementList::Bookmark bookmark = m_tree.activeFormattingElements()->bookmarkFor(formattingElement);
         // 6.
@@ -1665,7 +1665,7 @@ void HTMLTreeBuilder::callTheAdoptionAgency(AtomicHTMLToken& token)
             if (lastNode == furthestBlock)
                 bookmark.moveToAfter(nodeEntry);
             // 6.6
-            if (Element* parent = lastNode->element()->parentElement())
+            if (ContainerNode* parent = lastNode->element()->parentNode())
                 parent->parserRemoveChild(lastNode->element());
             node->element()->parserAddChild(lastNode->element());
             if (lastNode->element()->parentElement()->attached() && !lastNode->element()->attached())
@@ -1675,7 +1675,7 @@ void HTMLTreeBuilder::callTheAdoptionAgency(AtomicHTMLToken& token)
         }
         // 7
         const AtomicString& commonAncestorTag = commonAncestor->localName();
-        if (Element* parent = lastNode->element()->parentElement())
+        if (ContainerNode* parent = lastNode->element()->parentNode())
             parent->parserRemoveChild(lastNode->element());
         // FIXME: If this moves to HTMLConstructionSite, this check should use
         // causesFosterParenting(tagName) instead.
@@ -2220,7 +2220,7 @@ void HTMLTreeBuilder::processEndTag(AtomicHTMLToken& token)
             m_isPaused = true;
             ASSERT(m_tree.currentElement()->hasTagName(scriptTag));
             m_scriptToProcess = m_tree.currentElement();
-            m_scriptToProcessStartPosition = WTF::toOneBasedTextPosition(m_lastScriptElementStartPosition);
+            m_scriptToProcessStartPosition = m_lastScriptElementStartPosition;
             m_tree.openElements()->pop();
             if (isParsingFragment() && m_fragmentContext.scriptingPermission() == FragmentScriptingNotAllowed)
                 m_scriptToProcess->removeAllChildren();
@@ -2718,7 +2718,8 @@ void HTMLTreeBuilder::defaultForAfterHead()
 
 void HTMLTreeBuilder::defaultForInTableText()
 {
-    String characters = String::adopt(m_pendingTableCharacters);
+    String characters = m_pendingTableCharacters.toString();
+    m_pendingTableCharacters.clear();
     if (!isAllWhitespace(characters)) {
         // FIXME: parse error
         HTMLConstructionSite::RedirectToFosterParentGuard redirecter(m_tree);
@@ -2806,9 +2807,9 @@ void HTMLTreeBuilder::processScriptStartTag(AtomicHTMLToken& token)
     m_parser->tokenizer()->setState(HTMLTokenizerState::ScriptDataState);
     m_originalInsertionMode = m_insertionMode;
 
-    TextPosition0 position = m_parser->textPosition();
+    TextPosition position = m_parser->textPosition();
 
-    ASSERT(position.m_line.zeroBasedInt() == m_parser->tokenizer()->lineNumber());
+    ASSERT(position.m_line == m_parser->tokenizer()->lineNumber());
 
     m_lastScriptElementStartPosition = position;
 

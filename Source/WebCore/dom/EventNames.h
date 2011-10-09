@@ -34,7 +34,6 @@ namespace WebCore {
     macro(beforecut) \
     macro(beforeload) \
     macro(beforepaste) \
-    macro(beforeprocess) \
     macro(beforeunload) \
     macro(blocked) \
     macro(blur) \
@@ -146,6 +145,10 @@ namespace WebCore {
     \
     macro(webkitbeginfullscreen) \
     macro(webkitendfullscreen) \
+    \
+    macro(webkitsourceopen) \
+    macro(webkitsourceended) \
+    macro(webkitsourceclose) \
     \
     macro(progress) \
     macro(stalled) \

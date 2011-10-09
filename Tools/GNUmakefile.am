@@ -5,6 +5,10 @@ noinst_PROGRAMS += \
 if ENABLE_WEBKIT2
 noinst_PROGRAMS += \
 	Programs/GtkLauncher2
+
+# FIXME: should this dependency be automatically identified by
+# automake somehow?
+Tools/GtkLauncher/main.c: $(GENSOURCES_WEBKIT2)/webkit2gtk/webkit2/WebKitEnumTypes.h $(GENSOURCES_WEBKIT2)/webkit2gtk/webkit2/WebKitEnumTypes.cpp
 endif
 
 # GtkLauncher
@@ -57,6 +61,8 @@ Programs_GtkLauncher2_CPPFLAGS = \
 	-I$(srcdir)/Source/WebKit2/UIProcess/API/gtk \
 	-I$(top_builddir)/Source/WebKit2/UIProcess/API/gtk \
 	-I$(srcdir)/Source/WebKit/gtk \
+	-I$(top_builddir)/DerivedSources/WebKit2/webkit2gtk \
+	-I$(top_builddir)/DerivedSources/WebKit2/webkit2gtk/include \
 	-I$(top_builddir)/Source/WebKit/gtk \
 	-I$(top_builddir)/DerivedSources \
 	$(global_cppflags) \
@@ -258,6 +264,7 @@ TestNetscapePlugin_libtestnetscapeplugin_la_SOURCES = \
 	Tools/DumpRenderTree/TestNetscapePlugIn/Tests/NullNPPGetValuePointer.cpp \
 	Tools/DumpRenderTree/TestNetscapePlugIn/Tests/PassDifferentNPPStruct.cpp \
 	Tools/DumpRenderTree/TestNetscapePlugIn/Tests/PluginScriptableNPObjectInvokeDefault.cpp \
+	Tools/DumpRenderTree/TestNetscapePlugIn/Tests/PrivateBrowsing.cpp \
 	Tools/DumpRenderTree/TestNetscapePlugIn/Tests/x11/CallInvalidateRectWithNullNPPArgument.cpp \
 	Tools/DumpRenderTree/TestNetscapePlugIn/PluginTest.cpp \
 	Tools/DumpRenderTree/TestNetscapePlugIn/PluginTest.h \

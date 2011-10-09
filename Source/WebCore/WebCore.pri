@@ -1,12 +1,11 @@
 # Include file for WebCore
 
-include(../common.pri)
 include(features.pri)
 
 # We enable TextureMapper by default; remove this line to enable GraphicsLayerQt.
 CONFIG += texmap
 
-QT *= network
+QT *= network sql
 
 SOURCE_DIR = $$replace(PWD, /WebCore, "")
 
@@ -30,7 +29,7 @@ V8_DIR = "$$[QT_INSTALL_PREFIX]/src/3rdparty/v8"
 V8_LIB_DIR = "$$[QT_INSTALL_PREFIX]/src/script/v8"
 
 v8 {
-    lessThan(QT_MAJOR_VERSION, 5): error("To build QtWebKit+V8 you need qtscript-staging's v8 branch. (See: http://qt.gitorious.org/+qt-developers/qt/qtscript-staging)")
+    !qt5: error("To build QtWebKit+V8 you need qtscript-staging's v8 branch. (See: http://qt.gitorious.org/+qt-developers/qt/qtscript-staging)")
     !exists($${V8_DIR}$${QMAKE_DIR_SEP}include$${QMAKE_DIR_SEP}v8.h): error("Cannot build with V8. Needed file $${V8_DIR}$${QMAKE_DIR_SEP}include$${QMAKE_DIR_SEP}v8.h does not exist.")
     !exists($${V8_LIB_DIR}$${QMAKE_DIR_SEP}libv8.a): error("Cannot build with V8. Needed library $${V8_LIB_DIR}$${QMAKE_DIR_SEP}libv8.a does not exist.")
 
@@ -76,6 +75,7 @@ WEBCORE_INCLUDEPATH = \
     $$SOURCE_DIR/WebCore/html/canvas \
     $$SOURCE_DIR/WebCore/html/parser \
     $$SOURCE_DIR/WebCore/html/shadow \
+    $$SOURCE_DIR/WebCore/html/track \
     $$SOURCE_DIR/WebCore/inspector \
     $$SOURCE_DIR/WebCore/loader \
     $$SOURCE_DIR/WebCore/loader/appcache \
@@ -101,7 +101,6 @@ WEBCORE_INCLUDEPATH = \
     $$SOURCE_DIR/WebCore/platform/sql \
     $$SOURCE_DIR/WebCore/platform/text \
     $$SOURCE_DIR/WebCore/platform/text/transcoder \
-    $$SOURCE_DIR/WebCore/platform/track \
     $$SOURCE_DIR/WebCore/plugins \
     $$SOURCE_DIR/WebCore/rendering \
     $$SOURCE_DIR/WebCore/rendering/mathml \
@@ -185,7 +184,6 @@ contains(DEFINES, ENABLE_SQLITE=1) {
             INCLUDEPATH += $${SQLITE3SRCDIR}
             DEFINES += SQLITE_CORE SQLITE_OMIT_LOAD_EXTENSION SQLITE_OMIT_COMPLETE
             CONFIG(release, debug|release): DEFINES *= NDEBUG
-            contains(DEFINES, ENABLE_SINGLE_THREADED=1): DEFINES += SQLITE_THREADSAFE=0
     } else {
         # Use sqlite3 from the underlying OS
         CONFIG(QTDIR_build) {
@@ -243,15 +241,6 @@ contains(DEFINES, ENABLE_DEVICE_ORIENTATION=1) {
 contains(DEFINES, WTF_USE_QT_MOBILITY_SYSTEMINFO=1) {
      CONFIG *= mobility
      MOBILITY *= systeminfo
-}
-
-contains(DEFINES, WTF_USE_QT_BEARER=1) {
-    # Bearer management is part of Qt 4.7, so don't accidentially
-    # pull in Qt Mobility when building against >= 4.7
-    !greaterThan(QT_MINOR_VERSION, 6) {
-        CONFIG *= mobility
-        MOBILITY *= bearer
-    }
 }
 
 contains(DEFINES, ENABLE_VIDEO=1) {
@@ -317,7 +306,7 @@ win32-* {
 }
 
 # Remove whole program optimizations due to miscompilations
-win32-msvc2005|win32-msvc2008|wince*:{
+win32-msvc2005|win32-msvc2008|win32-msvc2010|wince*:{
     QMAKE_CFLAGS_RELEASE -= -GL
     QMAKE_CXXFLAGS_RELEASE -= -GL
 
@@ -343,7 +332,10 @@ unix:!mac:*-g++*:QMAKE_CXXFLAGS += -ffunction-sections -fdata-sections
 unix:!mac:*-g++*:QMAKE_LFLAGS += -Wl,--gc-sections
 linux*-g++*:QMAKE_LFLAGS += $$QMAKE_LFLAGS_NOUNDEF
 
-unix|win32-g++*:QMAKE_PKGCONFIG_REQUIRES = QtCore QtGui QtNetwork
+unix|win32-g++* {
+    QMAKE_PKGCONFIG_REQUIRES = QtCore QtGui QtNetwork
+    qt5: QMAKE_PKGCONFIG_REQUIRES += QtWidgets
+}
 unix:!mac:!symbian:CONFIG += link_pkgconfig
 
 # Disable C++0x mode in WebCore for those who enabled it in their Qt's mkspec

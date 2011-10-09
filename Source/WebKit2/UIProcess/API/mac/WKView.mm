@@ -109,6 +109,13 @@ struct WKViewInterpretKeyEventsParameters {
     Vector<KeypressCommand>* commands;
 };
 
+@interface WKView ()
+- (float)_intrinsicDeviceScaleFactor;
+- (void)_setDrawingAreaSize:(NSSize)size;
+- (void)_setPluginComplexTextInputState:(PluginComplexTextInputState)pluginComplexTextInputState;
+- (void)_disableComplexTextInputIfNecessary;
+@end
+
 @interface WKViewData : NSObject {
 @public
     OwnPtr<PageClientImpl> _pageClient;
@@ -139,6 +146,9 @@ struct WKViewInterpretKeyEventsParameters {
 
     // The identifier of the plug-in we want to send complex text input to, or 0 if there is none.
     uint64_t _pluginComplexTextInputIdentifier;
+
+    // The state of complex text input for the plug-in.
+    PluginComplexTextInputState _pluginComplexTextInputState;
 
     bool _inBecomeFirstResponder;
     bool _inResignFirstResponder;
@@ -301,10 +311,14 @@ struct WKViewInterpretKeyEventsParameters {
     _data->_page->viewStateDidChange(WebPageProxy::ViewIsFocused);
 
     _data->_inBecomeFirstResponder = false;
-
-    if (direction != NSDirectSelection)
-        _data->_page->setInitialFocus(direction == NSSelectingNext);
-
+    
+    if (direction != NSDirectSelection) {
+        NSEvent *event = [NSApp currentEvent];
+        NSEvent *keyboardEvent = nil;
+        if ([event type] == NSKeyDown || [event type] == NSKeyUp)
+            keyboardEvent = event;
+        _data->_page->setInitialFocus(direction == NSSelectingNext, keyboardEvent != nil, NativeWebKeyboardEvent(keyboardEvent, self));
+    }
     return YES;
 }
 
@@ -313,7 +327,7 @@ struct WKViewInterpretKeyEventsParameters {
     _data->_inResignFirstResponder = true;
 
     if (_data->_page->editorState().hasComposition && !_data->_page->editorState().shouldIgnoreCompositionSelectionChange)
-        _data->_page->confirmCompositionWithoutDisturbingSelection();
+        _data->_page->cancelComposition();
     [self _resetTextInputState];
     
     if (!_data->_page->maintainsInactiveSelection())
@@ -379,6 +393,17 @@ struct WKViewInterpretKeyEventsParameters {
         [self _updateWindowAndViewFrames];
 
     [super renewGState];
+}
+
+- (void)_setPluginComplexTextInputState:(PluginComplexTextInputState)pluginComplexTextInputState
+{
+    _data->_pluginComplexTextInputState = pluginComplexTextInputState;
+    
+    if (_data->_pluginComplexTextInputState != PluginComplexTextInputDisabled)
+        return;
+
+    // Send back an empty string to the plug-in. This will disable text input.
+    _data->_page->sendComplexTextInputToPlugin(_data->_pluginComplexTextInputIdentifier, String());
 }
 
 typedef HashMap<SEL, String> SelectorNameMap;
@@ -1220,6 +1245,9 @@ static const short kIOHIDEventTypeScroll = 6;
     
     BOOL eventWasSentToWebCore = (_data->_keyDownEventBeingResent == event);
 
+    if (!eventWasSentToWebCore)
+        [self _disableComplexTextInputIfNecessary];
+
     // Pass key combos through WebCore if there is a key binding available for
     // this event. This lets web pages have a crack at intercepting key-modified keypresses.
     // But don't do it if we have already handled the event.
@@ -1237,6 +1265,55 @@ static const short kIOHIDEventTypeScroll = 6;
     _data->_page->handleKeyboardEvent(NativeWebKeyboardEvent(theEvent, self));
 }
 
+- (void)_disableComplexTextInputIfNecessary
+{
+    if (!_data->_pluginComplexTextInputIdentifier)
+        return;
+
+    if (_data->_pluginComplexTextInputState != PluginComplexTextInputEnabled)
+        return;
+
+    // Check if the text input window has been dismissed.
+    if (![[WKTextInputWindowController sharedTextInputWindowController] hasMarkedText])
+        [self _setPluginComplexTextInputState:PluginComplexTextInputDisabled];
+}
+
+- (BOOL)_handlePluginComplexTextInputKeyDown:(NSEvent *)event
+{
+    ASSERT(_data->_pluginComplexTextInputIdentifier);
+    ASSERT(_data->_pluginComplexTextInputState != PluginComplexTextInputDisabled);
+
+    BOOL usingLegacyCocoaTextInput = _data->_pluginComplexTextInputState == PluginComplexTextInputEnabledLegacy;
+
+    NSString *string = nil;
+    BOOL didHandleEvent = [[WKTextInputWindowController sharedTextInputWindowController] interpretKeyEvent:event usingLegacyCocoaTextInput:usingLegacyCocoaTextInput string:&string];
+
+    if (string) {
+        _data->_page->sendComplexTextInputToPlugin(_data->_pluginComplexTextInputIdentifier, string);
+
+        if (!usingLegacyCocoaTextInput)
+            _data->_pluginComplexTextInputState = PluginComplexTextInputDisabled;
+    }
+
+    return didHandleEvent;
+}
+
+- (BOOL)_tryHandlePluginComplexTextInputKeyDown:(NSEvent *)event
+{
+    if (!_data->_pluginComplexTextInputIdentifier || _data->_pluginComplexTextInputState == PluginComplexTextInputDisabled)
+        return NO;
+
+    // Check if the text input window has been dismissed and let the plug-in process know.
+    // This is only valid with the updated Cocoa text input spec.
+    [self _disableComplexTextInputIfNecessary];
+
+    // Try feeding the keyboard event directly to the plug-in.
+    if (_data->_pluginComplexTextInputState == PluginComplexTextInputEnabledLegacy)
+        return [self _handlePluginComplexTextInputKeyDown:event];
+
+    return NO;
+}
+
 - (void)keyDown:(NSEvent *)theEvent
 {
     // There's a chance that responding to this event will run a nested event loop, and
@@ -1244,15 +1321,8 @@ static const short kIOHIDEventTypeScroll = 6;
     // the current event prevents that from causing a problem inside WebKit or AppKit code.
     [[theEvent retain] autorelease];
 
-    if (_data->_pluginComplexTextInputIdentifier) {
-        // Try feeding the keyboard event directly to the plug-in.
-        NSString *string = nil;
-        if ([[WKTextInputWindowController sharedTextInputWindowController] interpretKeyEvent:theEvent string:&string]) {
-            if (string)
-                _data->_page->sendComplexTextInputToPlugin(_data->_pluginComplexTextInputIdentifier, string);
-            return;
-        }
-    }
+    if ([self _tryHandlePluginComplexTextInputKeyDown:theEvent])
+        return;
 
     // We could be receiving a key down from AppKit if we have re-sent an event
     // that maps to an action that is currently unavailable (for example a copy when
@@ -1594,25 +1664,26 @@ static void extractUnderlines(NSAttributedString *string, Vector<CompositionUnde
 
 // FIXME: This code is more or less copied from Pasteboard::getBestURL.
 // It would be nice to be able to share the code somehow.
-static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, SandboxExtension::Handle& sandboxExtensionHandle)
+static bool maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, SandboxExtension::Handle& sandboxExtensionHandle)
 {
     NSArray *types = [pasteboard types];
     if (![types containsObject:NSFilenamesPboardType])
-        return;
+        return false;
 
     NSArray *files = [pasteboard propertyListForType:NSFilenamesPboardType];
     if ([files count] != 1)
-        return;
+        return false;
 
     NSString *file = [files objectAtIndex:0];
     BOOL isDirectory;
     if (![[NSFileManager defaultManager] fileExistsAtPath:file isDirectory:&isDirectory])
-        return;
+        return false;
 
     if (isDirectory)
-        return;
+        return false;
 
     SandboxExtension::createHandle("/", SandboxExtension::ReadOnly, sandboxExtensionHandle);
+    return true;
 }
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)draggingInfo
@@ -1622,7 +1693,9 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
     DragData dragData(draggingInfo, client, global, static_cast<DragOperation>([draggingInfo draggingSourceOperationMask]), [self applicationFlags:draggingInfo]);
 
     SandboxExtension::Handle sandboxExtensionHandle;
-    maybeCreateSandboxExtensionFromPasteboard([draggingInfo draggingPasteboard], sandboxExtensionHandle);
+    bool createdExtension = maybeCreateSandboxExtensionFromPasteboard([draggingInfo draggingPasteboard], sandboxExtensionHandle);
+    if (createdExtension)
+        _data->_page->process()->willAcquireUniversalFileReadSandboxExtension();
 
     _data->_page->performDrag(&dragData, [[draggingInfo draggingPasteboard] name], sandboxExtensionHandle);
 
@@ -1700,6 +1773,9 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
     return ownsGrowBox;
 }
 
+// FIXME: Use an AppKit constant for this once one is available.
+static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidChangeResolutionNotification";
+
 - (void)addWindowObserversForWindow:(NSWindow *)window
 {
     if (window) {
@@ -1719,6 +1795,9 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
                                                      name:@"NSWindowDidOrderOffScreenNotification" object:window];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidOrderOnScreen:) 
                                                      name:@"_NSWindowDidBecomeVisible" object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeResolution:)
+                                                     name:windowDidChangeResolutionNotification object:window];
+
     }
 }
 
@@ -1736,6 +1815,8 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
     [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidResizeNotification object:window];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"NSWindowDidOrderOffScreenNotification" object:window];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"_NSWindowDidBecomeVisible" object:window];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:windowDidChangeResolutionNotification object:window];
+
 }
 
 - (void)viewWillMoveToWindow:(NSWindow *)window
@@ -1783,6 +1864,8 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
         WKHideWordDefinitionWindow();
 #endif
     }
+
+    _data->_page->setIntrinsicDeviceScaleFactor([self _intrinsicDeviceScaleFactor]);
 }
 
 - (void)_windowDidBecomeKey:(NSNotification *)notification
@@ -1826,6 +1909,11 @@ static void maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
 - (void)_windowDidOrderOnScreen:(NSNotification *)notification
 {
     _data->_page->viewStateDidChange(WebPageProxy::ViewIsVisible);
+}
+
+- (void)_windowDidChangeResolution:(NSNotification *)notification
+{
+    _data->_page->setIntrinsicDeviceScaleFactor([self _intrinsicDeviceScaleFactor]);
 }
 
 static void drawPageBackground(CGContextRef context, WebPageProxy* page, const IntRect& rect)
@@ -1983,6 +2071,29 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     }
 }
 
+- (float)_intrinsicDeviceScaleFactor
+{
+    NSWindow *window = [self window];
+#if !defined(BUILDING_ON_SNOW_LEOPARD)
+    if (window)
+        return [window backingScaleFactor];
+    return [[NSScreen mainScreen] backingScaleFactor];
+#else
+    if (window)
+        return [window userSpaceScaleFactor];
+    return [[NSScreen mainScreen] userSpaceScaleFactor];
+#endif
+}
+
+- (void)_setDrawingAreaSize:(NSSize)size
+{
+    if (!_data->_page->drawingArea())
+        return;
+    
+    _data->_page->drawingArea()->setSize(IntSize(size), IntSize(_data->_resizeScrollOffset));
+    _data->_resizeScrollOffset = NSZeroSize;
+}
+
 @end
 
 @implementation WKView (Internal)
@@ -2037,8 +2148,31 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     }
 }
 
-- (void)_resendKeyDownEvent:(NSEvent *)event
+- (BOOL)_tryPostProcessPluginComplexTextInputKeyDown:(NSEvent *)event
 {
+    if (!_data->_pluginComplexTextInputIdentifier || _data->_pluginComplexTextInputState == PluginComplexTextInputDisabled)
+        return NO;
+
+    // In the legacy text input model, the event has already been sent to the input method.
+    if (_data->_pluginComplexTextInputState == PluginComplexTextInputEnabledLegacy)
+        return NO;
+
+    return [self _handlePluginComplexTextInputKeyDown:event];
+}
+
+- (void)_doneWithKeyEvent:(NSEvent *)event eventWasHandled:(BOOL)eventWasHandled
+{
+    if ([event type] != NSKeyDown)
+        return;
+
+    if ([self _tryPostProcessPluginComplexTextInputKeyDown:event])
+        return;
+    
+    if (eventWasHandled) {
+        [NSCursor setHiddenUntilMouseMoves:YES];
+        return;
+    }
+
     // resending the event may destroy this WKView
     RetainPtr<WKView> protector(self);
 
@@ -2265,11 +2399,11 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     [self _updateRemoteAccessibilityRegistration:YES];
 }
 
-- (void)_setComplexTextInputEnabled:(BOOL)complexTextInputEnabled pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier
+- (void)_pluginFocusOrWindowFocusChanged:(BOOL)pluginHasFocusAndWindowHasFocus pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier
 {
     BOOL inputSourceChanged = _data->_pluginComplexTextInputIdentifier;
 
-    if (complexTextInputEnabled) {
+    if (pluginHasFocusAndWindowHasFocus) {
         // Check if we're already allowing text input for this plug-in.
         if (pluginComplexTextInputIdentifier == _data->_pluginComplexTextInputIdentifier)
             return;
@@ -2277,7 +2411,7 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
         _data->_pluginComplexTextInputIdentifier = pluginComplexTextInputIdentifier;
 
     } else {
-        // Check if we got a request to disable complex text input for a plug-in that is not the current plug-in.
+        // Check if we got a request to unfocus a plug-in that isn't focused.
         if (pluginComplexTextInputIdentifier != _data->_pluginComplexTextInputIdentifier)
             return;
 
@@ -2285,9 +2419,22 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     }
 
     if (inputSourceChanged) {
-        // Inform the out of line window that the input source changed.
-        [[WKTextInputWindowController sharedTextInputWindowController] keyboardInputSourceChanged];
+        // The input source changed, go ahead and discard any entered text.
+        [[WKTextInputWindowController sharedTextInputWindowController] unmarkText];
     }
+
+    // This will force the current input context to be updated to its correct value.
+    [NSApp updateWindows];
+}
+
+- (void)_setPluginComplexTextInputState:(PluginComplexTextInputState)pluginComplexTextInputState pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier
+{
+    if (pluginComplexTextInputIdentifier != _data->_pluginComplexTextInputIdentifier) {
+        // We're asked to update the state for a plug-in that doesn't have focus.
+        return;
+    }
+
+    [self _setPluginComplexTextInputState:pluginComplexTextInputState];
 }
 
 - (void)_setPageHasCustomRepresentation:(BOOL)pageHasCustomRepresentation
@@ -2397,7 +2544,7 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     if (!editorState.hasComposition || editorState.shouldIgnoreCompositionSelectionChange)
         return;
 
-    _data->_page->confirmCompositionWithoutDisturbingSelection();
+    _data->_page->cancelComposition();
 
     [self _notifyInputContextAboutDiscardedComposition];
 }
@@ -2410,15 +2557,6 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
         DisableSecureEventInput();
         _data->_inSecureInputState = NO;
     }
-}
-
-- (void)_setDrawingAreaSize:(NSSize)size
-{
-    if (!_data->_page->drawingArea())
-        return;
-    
-    _data->_page->drawingArea()->setSize(IntSize(size), IntSize(_data->_resizeScrollOffset));
-    _data->_resizeScrollOffset = NSZeroSize;
 }
 
 - (void)_didChangeScrollbarsForMainFrame

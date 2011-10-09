@@ -831,7 +831,7 @@ void GraphicsLayerCA::recursiveCommitChanges(const TransformState& state, float 
     TransformState localState = state;
     
     TransformState::TransformAccumulation accumulation = preserves3D() ? TransformState::AccumulateTransform : TransformState::FlattenTransform;
-    localState.move(-m_position.x(), -m_position.y(), accumulation);
+    localState.move(m_position.x(), m_position.y(), accumulation);
     
     if (!transform().isIdentity()) {
         TransformationMatrix transformWithAnchorPoint;
@@ -2047,7 +2047,7 @@ void GraphicsLayerCA::updateContentsScale(float pageScaleFactor, const FloatPoin
     if (needTiledLayer != m_usingTiledLayer)
         swapFromOrToTiledLayer(needTiledLayer, pageScaleFactor, positionRelativeToBase);
 
-    float contentsScale = clampedContentsScaleForScale(pageScaleFactor * backingScaleFactor());
+    float contentsScale = clampedContentsScaleForScale(pageScaleFactor * deviceScaleFactor());
     
     m_layer->setContentsScale(contentsScale);
     if (drawsContent())
@@ -2102,7 +2102,7 @@ bool GraphicsLayerCA::requiresTiledLayer(float pageScaleFactor) const
     if (!m_drawsContent || !m_allowTiledLayer)
         return false;
 
-    float contentsScale = pageScaleFactor * backingScaleFactor();
+    float contentsScale = pageScaleFactor * deviceScaleFactor();
 
     // FIXME: catch zero-size height or width here (or earlier)?
     return m_size.width() * contentsScale > cMaxPixelDimension || m_size.height() * contentsScale > cMaxPixelDimension;
@@ -2485,7 +2485,7 @@ void GraphicsLayerCA::setMaintainsPixelAlignment(bool maintainsAlignment)
     noteChangesForScaleSensitiveProperties();
 }
 
-void GraphicsLayerCA::pageScaleFactorChanged()
+void GraphicsLayerCA::deviceOrPageScaleFactorChanged()
 {
     noteChangesForScaleSensitiveProperties();
 }

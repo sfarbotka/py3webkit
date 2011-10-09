@@ -42,13 +42,13 @@ public:
 
     VisibleSelection();
 
-    VisibleSelection(const Position&, EAffinity);
-    VisibleSelection(const Position&, const Position&, EAffinity = SEL_DEFAULT_AFFINITY);
+    VisibleSelection(const Position&, EAffinity, bool isDirectional = false);
+    VisibleSelection(const Position&, const Position&, EAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
 
-    VisibleSelection(const Range*, EAffinity = SEL_DEFAULT_AFFINITY);
+    VisibleSelection(const Range*, EAffinity = SEL_DEFAULT_AFFINITY, bool isDirectional = false);
     
-    VisibleSelection(const VisiblePosition&);
-    VisibleSelection(const VisiblePosition&, const VisiblePosition&);
+    VisibleSelection(const VisiblePosition&, bool isDirectional = false);
+    VisibleSelection(const VisiblePosition&, const VisiblePosition&, bool isDirectional = false);
 
     static VisibleSelection selectionFromContentsOfNode(Node*);
 
@@ -69,6 +69,8 @@ public:
     
     VisiblePosition visibleStart() const { return VisiblePosition(m_start, isRange() ? DOWNSTREAM : affinity()); }
     VisiblePosition visibleEnd() const { return VisiblePosition(m_end, isRange() ? UPSTREAM : affinity()); }
+    VisiblePosition visibleBase() const { return VisiblePosition(m_base, isRange() ? (isBaseFirst() ? UPSTREAM : DOWNSTREAM) : affinity()); }
+    VisiblePosition visibleExtent() const { return VisiblePosition(m_extent, isRange() ? (isBaseFirst() ? DOWNSTREAM : UPSTREAM) : affinity()); }
 
     bool isNone() const { return selectionType() == NoSelection; }
     bool isCaret() const { return selectionType() == CaretSelection; }

@@ -97,8 +97,6 @@ namespace WebCore {
 
         FloatRect pageRect() const;
         
-        float scaleFactor();
-
         void focus() const;
         void unfocus() const;
 
@@ -159,7 +157,7 @@ namespace WebCore {
 
 #if ENABLE(INPUT_COLOR)
         void openColorChooser(ColorChooser*, const Color&);
-        void closeColorChooser();
+        void cleanupColorChooser();
         void setSelectedColorInColorChooser(const Color&);
 #endif
 

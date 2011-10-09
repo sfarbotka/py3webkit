@@ -1,5 +1,10 @@
 all:
     touch "%ConfigurationBuildDir%\buildfailed"
+
+    -mkdir 2>NUL "%ConfigurationBuildDir%\obj\WebKit2\scripts"
+    xcopy /y /d "..\Scripts\webkit2\model.py" "%ConfigurationBuildDir%\obj\WebKit2\scripts"
+    xcopy /y /d "..\Scripts\webkit2\parser.py" "%ConfigurationBuildDir%\obj\WebKit2\scripts"
+
     -mkdir 2>NUL "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\Shared\API\c\cairo\WKImageCairo.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\Shared\API\c\cf\WKErrorCF.h" "%ConfigurationBuildDir%\include\WebKit2"
@@ -58,6 +63,8 @@ all:
     xcopy /y /d "..\UIProcess\API\C\WKGeolocationManager.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKGeolocationPermissionRequest.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKGeolocationPosition.h" "%ConfigurationBuildDir%\include\WebKit2"
+    xcopy /y /d "..\UIProcess\API\C\WKGrammarDetail.h" "%ConfigurationBuildDir%\include\WebKit2"
+    xcopy /y /d "..\UIProcess\API\C\WKHitTestResult.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKInspector.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKIconDatabase.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKKeyValueStorageManager.h" "%ConfigurationBuildDir%\include\WebKit2"
@@ -75,9 +82,8 @@ all:
     xcopy /y /d "..\UIProcess\API\C\WKProtectionSpace.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKProtectionSpaceTypes.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\WKResourceCacheManager.h" "%ConfigurationBuildDir%\include\WebKit2"
+    xcopy /y /d "..\UIProcess\API\C\WKTextChecker.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\win\WKContextPrivateWin.h" "%ConfigurationBuildDir%\include\WebKit2"
-    xcopy /y /d "..\UIProcess\API\C\win\WKGrammarDetail.h" "%ConfigurationBuildDir%\include\WebKit2"
-    xcopy /y /d "..\UIProcess\API\C\win\WKTextChecker.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\win\WKView.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\C\win\WKViewPrivate.h" "%ConfigurationBuildDir%\include\WebKit2"
     xcopy /y /d "..\UIProcess\API\cpp\WKRetainPtr.h" "%ConfigurationBuildDir%\include\WebKit2"

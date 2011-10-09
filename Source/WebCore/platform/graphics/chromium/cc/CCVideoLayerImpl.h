@@ -47,26 +47,34 @@ public:
     typedef ProgramBinding<VertexShaderPosTexTransform, FragmentShaderRGBATexFlipAlpha> RGBAProgram;
     typedef ProgramBinding<VertexShaderPosTexYUVStretch, FragmentShaderYUVVideo> YUVProgram;
 
-    virtual void draw();
+    virtual void draw(LayerRendererChromium*);
 
     virtual void dumpLayerProperties(TextStream&, int indent) const;
 
     void setSkipsDraw(bool skipsDraw) { m_skipsDraw = skipsDraw; }
     void setFrameFormat(VideoFrameChromium::Format format) { m_frameFormat = format; }
-    void setTexture(size_t, VideoLayerChromium::Texture);
+    void setTexture(size_t, Platform3DObject textureId, const IntSize&, const IntSize& visibleSize);
 
 private:
     explicit CCVideoLayerImpl(int);
 
-    void drawYUV(const YUVProgram*) const;
-    void drawRGBA(const RGBAProgram*) const;
+    virtual const char* layerTypeAsString() const { return "VideoLayer"; }
+
+    struct Texture {
+        Platform3DObject id;
+        IntSize size;
+        IntSize visibleSize;
+    };
+
+    void drawYUV(LayerRendererChromium*) const;
+    void drawRGBA(LayerRendererChromium*) const;
 
     static const float yuv2RGB[9];
     static const float yuvAdjust[3];
 
     bool m_skipsDraw;
     VideoFrameChromium::Format m_frameFormat;
-    VideoLayerChromium::Texture m_textures[3];
+    Texture m_textures[3];
 };
 
 }

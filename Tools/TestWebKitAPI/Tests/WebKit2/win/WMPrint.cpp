@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "Test.h"
-
+#include "config.h"
 #include "PlatformUtilities.h"
 #include "PlatformWebView.h"
 #include <WebKit2/WKRetainPtr.h>

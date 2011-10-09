@@ -50,6 +50,7 @@ MESSAGE_RECEIVERS = \
     NPObjectMessageReceiver \
     PluginControllerProxy \
     PluginProcess \
+    PluginProcessConnection \
     PluginProcessProxy \
     PluginProxy \
     WebApplicationCacheManager \
@@ -85,6 +86,8 @@ SCRIPTS = \
     $(WebKit2)/Scripts/generate-messages-header.py \
     $(WebKit2)/Scripts/webkit2/__init__.py \
     $(WebKit2)/Scripts/webkit2/messages.py \
+    $(WebKit2)/Scripts/webkit2/model.py \
+    $(WebKit2)/Scripts/webkit2/parser.py \
 #
 
 .PHONY : all
@@ -111,6 +114,6 @@ ifeq ($(OS),Windows_NT)
 all : HeaderDetection.h
 
 HeaderDetection.h : DerivedSources.make
-	if [ -f "$(WEBKITLIBRARIESDIR)/include/WebKitQuartzCoreAdditions/WebKitQuartzCoreAdditionsBase.h" ]; then echo "#define HAVE_WKQCA 1" > $@; else echo > $@; fi
+	if [ -f "$(WEBKITLIBRARIESDIR)/include/WebKitQuartzCoreAdditions/WebKitQuartzCoreAdditionsBase.h" ] && [ ! -f "$(WEBKITLIBRARIESDIR)/include/cairo/cairo.h" ]; then echo "#define HAVE_WKQCA 1" > $@; else echo > $@; fi
 
 endif # Windows_NT

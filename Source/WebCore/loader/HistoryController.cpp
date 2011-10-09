@@ -86,7 +86,7 @@ void HistoryController::saveScrollPositionAndViewStateToItem(HistoryItem* item)
     else
         item->setScrollPoint(m_frame->view()->scrollPosition());
 
-    item->setPageScaleFactor(m_frame->pageScaleFactor());
+    item->setPageScaleFactor(m_frame->frameScaleFactor());
     
     // FIXME: It would be great to work out a way to put this code in WebCore instead of calling through to the client.
     m_frame->loader()->client()->saveViewStateToItem(item);
@@ -125,7 +125,8 @@ void HistoryController::restoreScrollPositionAndViewState()
     if (FrameView* view = m_frame->view()) {
         if (!view->wasScrolledByUser()) {
             view->setScrollPosition(m_currentItem->scrollPoint());
-            m_frame->scalePage(m_currentItem->pageScaleFactor(), m_currentItem->scrollPoint());
+            if (Page* page = m_frame->page())
+                page->setPageScaleFactor(m_currentItem->pageScaleFactor(), m_currentItem->scrollPoint());
         }
     }
 }
@@ -524,6 +525,11 @@ void HistoryController::recursiveUpdateForSameDocumentNavigation()
     if (!m_provisionalItem)
         return;
 
+    // The provisional item may represent a different pending navigation.
+    // Don't commit it if it isn't a same document navigation.
+    if (m_currentItem && !m_currentItem->shouldDoSameDocumentNavigationTo(m_provisionalItem.get()))
+        return;
+
     // Commit the provisional item.
     m_frameLoadComplete = false;
     m_previousItem = m_currentItem;
@@ -824,6 +830,10 @@ void HistoryController::pushState(PassRefPtr<SerializedScriptValue> stateObject,
 
     page->backForward()->addItem(topItem.release());
 
+    Settings* settings = m_frame->settings();
+    if (!settings || settings->privateBrowsingEnabled())
+        return;
+
     addVisitedLink(page, KURL(ParsedURLString, urlString));
     m_frame->loader()->client()->updateGlobalHistory();
 
@@ -838,6 +848,10 @@ void HistoryController::replaceState(PassRefPtr<SerializedScriptValue> stateObje
         m_currentItem->setURLString(urlString);
     m_currentItem->setTitle(title);
     m_currentItem->setStateObject(stateObject);
+
+    Settings* settings = m_frame->settings();
+    if (!settings || settings->privateBrowsingEnabled())
+        return;
 
     ASSERT(m_frame->page());
     addVisitedLink(m_frame->page(), KURL(ParsedURLString, urlString));

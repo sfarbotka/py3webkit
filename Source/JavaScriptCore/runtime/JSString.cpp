@@ -34,7 +34,7 @@ namespace JSC {
     
 static const unsigned substringFromRopeCutoff = 4;
 
-const ClassInfo JSString::s_info = { "string", 0, 0, 0 };
+const ClassInfo JSString::s_info = { "string", 0, 0, 0, CREATE_METHOD_TABLE(JSString) };
 
 void JSString::resolveRope(ExecState* exec) const
 {
@@ -194,7 +194,7 @@ JSString* JSString::substringFromRope(ExecState* exec, unsigned substringStart, 
 
     if (substringLength == 1) {
         ASSERT(substringFiberCount == 1);
-        UChar c = substringFibers[0].characters()[0];
+        UChar c = substringFibers[0][0];
         if (c <= maxSingleCharacterString)
             return globalData->smallStrings.singleCharacterString(globalData, c);
     }
@@ -274,7 +274,7 @@ JSValue JSString::toPrimitive(ExecState*, PreferredPrimitiveType) const
     return const_cast<JSString*>(this);
 }
 
-bool JSString::getPrimitiveNumber(ExecState* exec, double& number, JSValue& result)
+bool JSString::getPrimitiveNumber(ExecState* exec, double& number, JSValue& result) const
 {
     result = this;
     number = jsToNumber(value(exec));
@@ -298,7 +298,9 @@ UString JSString::toString(ExecState* exec) const
 
 inline StringObject* StringObject::create(ExecState* exec, JSGlobalObject* globalObject, JSString* string)
 {
-    return new (allocateCell<StringObject>(*exec->heap())) StringObject(exec->globalData(), globalObject->stringObjectStructure(), string);
+    StringObject* object = new (allocateCell<StringObject>(*exec->heap())) StringObject(exec->globalData(), globalObject->stringObjectStructure());
+    object->finishCreation(exec->globalData(), string);
+    return object;
 }
 
 JSObject* JSString::toObject(ExecState* exec, JSGlobalObject* globalObject) const

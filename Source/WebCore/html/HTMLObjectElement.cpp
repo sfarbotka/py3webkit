@@ -85,7 +85,9 @@ RenderWidget* HTMLObjectElement::renderWidgetForJSBindings()
 
 void HTMLObjectElement::parseMappedAttribute(Attribute* attr)
 {
-    if (attr->name() == typeAttr) {
+    if (attr->name() == formAttr)
+        formAttributeChanged();
+    else if (attr->name() == typeAttr) {
         m_serviceType = attr->value().lower();
         size_t pos = m_serviceType.find(";");
         if (pos != notFound)
@@ -120,13 +122,9 @@ void HTMLObjectElement::parseMappedAttribute(Attribute* attr)
             document->addNamedItem(newName);
         }
         m_name = newName;
-    } else if (attr->name() == borderAttr) {
-        addCSSLength(attr, CSSPropertyBorderWidth, String::number(parseBorderWidthAttribute(attr)));
-        addCSSProperty(attr, CSSPropertyBorderTopStyle, CSSValueSolid);
-        addCSSProperty(attr, CSSPropertyBorderRightStyle, CSSValueSolid);
-        addCSSProperty(attr, CSSPropertyBorderBottomStyle, CSSValueSolid);
-        addCSSProperty(attr, CSSPropertyBorderLeftStyle, CSSValueSolid);
-    } else if (isIdAttributeName(attr->name())) {
+    } else if (attr->name() == borderAttr)
+        applyBorderAttribute(attr);
+    else if (isIdAttributeName(attr->name())) {
         const AtomicString& newId = attr->value();
         if (isDocNamedItem() && inDocument() && document()->isHTMLDocument()) {
             HTMLDocument* document = static_cast<HTMLDocument*>(this->document());
@@ -329,6 +327,7 @@ void HTMLObjectElement::updateWidget(PluginCreationOption pluginCreationOption)
     if (!renderer())
         return;
 
+    RefPtr<HTMLObjectElement> protect(this); // Loading the plugin might remove us from the document.
     SubframeLoader* loader = document()->frame()->loader()->subframeLoader();
     bool success = beforeLoadAllowedLoad && hasValidClassId() && loader->requestObject(this, url, getAttribute(nameAttr), serviceType, paramNames, paramValues);
 
@@ -371,14 +370,6 @@ void HTMLObjectElement::removedFromDocument()
 
     HTMLPlugInImageElement::removedFromDocument();
     FormAssociatedElement::removedFromDocument();
-}
-
-void HTMLObjectElement::attributeChanged(Attribute* attr, bool preserveDecls)
-{
-    if (attr->name() == formAttr)
-        formAttributeChanged();
-    else
-        HTMLPlugInImageElement::attributeChanged(attr, preserveDecls);
 }
 
 void HTMLObjectElement::childrenChanged(bool changedByParser, Node* beforeChange, Node* afterChange, int childCountDelta)

@@ -33,6 +33,7 @@
 #include "JSDOMWindow.h"
 #include "DOMWindow.h"
 #include "ScriptController.h"
+#include <heap/StrongInlines.h>
 #include <runtime/JSObject.h>
 
 using namespace JSC;
@@ -41,12 +42,17 @@ namespace WebCore {
 
 ASSERT_CLASS_FITS_IN_CELL(JSDOMWindowShell);
 
-const ClassInfo JSDOMWindowShell::s_info = { "JSDOMWindowShell", &Base::s_info, 0, 0 };
+const ClassInfo JSDOMWindowShell::s_info = { "JSDOMWindowShell", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(JSDOMWindowShell) };
 
-JSDOMWindowShell::JSDOMWindowShell(PassRefPtr<DOMWindow> window, Structure* structure, DOMWrapperWorld* world)
+JSDOMWindowShell::JSDOMWindowShell(Structure* structure, DOMWrapperWorld* world)
     : Base(*world->globalData(), structure)
     , m_world(world)
 {
+}
+
+void JSDOMWindowShell::finishCreation(JSGlobalData& globalData, PassRefPtr<DOMWindow> window)
+{
+    Base::finishCreation(globalData);
     ASSERT(inherits(&s_info));
     setWindow(window);
 }
@@ -57,30 +63,36 @@ JSDOMWindowShell::~JSDOMWindowShell()
 
 void JSDOMWindowShell::setWindow(PassRefPtr<DOMWindow> domWindow)
 {
+    // Replacing JSDOMWindow via telling JSDOMWindowShell to use the same DOMWindow it already uses makes no sense,
+    // so we'd better never try to.
+    ASSERT(!m_window || domWindow.get() != m_window->impl());
     // Explicitly protect the global object's prototype so it isn't collected
     // when we allocate the global object. (Once the global object is fully
     // constructed, it can mark its own prototype.)
-    Structure* prototypeStructure = JSDOMWindowPrototype::createStructure(*JSDOMWindow::commonJSGlobalData(), jsNull());
+    Structure* prototypeStructure = JSDOMWindowPrototype::createStructure(*JSDOMWindow::commonJSGlobalData(), 0, jsNull());
     Strong<JSDOMWindowPrototype> prototype(*JSDOMWindow::commonJSGlobalData(), JSDOMWindowPrototype::create(*JSDOMWindow::commonJSGlobalData(), 0, prototypeStructure));
 
-    Structure* structure = JSDOMWindow::createStructure(*JSDOMWindow::commonJSGlobalData(), prototype.get());
+    Structure* structure = JSDOMWindow::createStructure(*JSDOMWindow::commonJSGlobalData(), 0, prototype.get());
     JSDOMWindow* jsDOMWindow = JSDOMWindow::create(*JSDOMWindow::commonJSGlobalData(), structure, domWindow, this);
-    prototype->putAnonymousValue(*JSDOMWindow::commonJSGlobalData(), 0, jsDOMWindow);
+    prototype->structure()->setGlobalObject(*JSDOMWindow::commonJSGlobalData(), jsDOMWindow);
     setWindow(*JSDOMWindow::commonJSGlobalData(), jsDOMWindow);
+    ASSERT(jsDOMWindow->globalObject() == jsDOMWindow);
+    ASSERT(prototype->globalObject() == jsDOMWindow);
 }
 
 // ----
 // JSObject methods
 // ----
 
-void JSDOMWindowShell::visitChildren(SlotVisitor& visitor)
+void JSDOMWindowShell::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    JSDOMWindowShell* thisObject = static_cast<JSDOMWindowShell*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    Base::visitChildren(visitor);
-    if (m_window)
-        visitor.append(&m_window);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    Base::visitChildren(thisObject, visitor);
+    if (thisObject->m_window)
+        visitor.append(&thisObject->m_window);
 }
 
 UString JSDOMWindowShell::className() const
@@ -164,7 +176,12 @@ DOMWindow* JSDOMWindowShell::impl() const
 
 void* JSDOMWindowShell::operator new(size_t size)
 {
-    return JSDOMWindow::commonJSGlobalData()->heap.allocate(size);
+    Heap& heap = JSDOMWindow::commonJSGlobalData()->heap;
+#if ENABLE(GC_VALIDATION)
+    ASSERT(!heap.globalData()->isInitializingObject());
+    heap.globalData()->setInitializingObject(true);
+#endif
+    return heap.allocate(size);
 }
 
 // ----

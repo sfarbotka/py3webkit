@@ -57,12 +57,16 @@ public:
     virtual void clientDestroyed();
 
     virtual void attachDevTools();
+    virtual void reattachDevTools(const WebString& savedState);
     virtual void detachDevTools();
     virtual void dispatchDevToolsMessage(const WebString&);
 
     // WebWorkerBase methods:
     WebWorkerClient* client();
     WebCommonWorkerClient* commonClient() { return m_client; }
+
+    // NewWebWorkerBase methods:
+    NewWebCommonWorkerClient* newCommonClient() { return m_client; }
 
 private:
     virtual ~WebSharedWorkerImpl();

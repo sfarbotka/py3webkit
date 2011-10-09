@@ -27,10 +27,15 @@
 #define PlatformUtilities_h
 
 #include <WebKit2/WKRetainPtr.h>
-#include <WebKit2/WebKit2.h>
-#include <gtest/gtest.h>
 #include <string>
-#include <wtf/Platform.h>
+
+#if PLATFORM(MAC)
+#if __OBJC__
+@class NSString;
+#else
+class NSString;
+#endif
+#endif
 
 namespace TestWebKitAPI {
 namespace Util {
@@ -57,6 +62,9 @@ bool isKeyDown(WKNativeEventPtr);
 std::string toSTD(WKStringRef);
 std::string toSTD(WKRetainPtr<WKStringRef>);
 std::string toSTD(const char*);
+#if PLATFORM(MAC)
+std::string toSTD(NSString *);
+#endif
 
 WKRetainPtr<WKStringRef> toWK(const char* utf8String);
 

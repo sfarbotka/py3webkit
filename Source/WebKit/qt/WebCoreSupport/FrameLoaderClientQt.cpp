@@ -170,6 +170,7 @@ static QString drtDescriptionSuitableForTestResult(const RefPtr<WebCore::Node> n
 namespace WebCore {
 
 bool FrameLoaderClientQt::dumpFrameLoaderCallbacks = false;
+bool FrameLoaderClientQt::dumpProgressFinishedCallback = false;
 bool FrameLoaderClientQt::dumpUserGestureInFrameLoaderCallbacks = false;
 bool FrameLoaderClientQt::dumpResourceLoadCallbacks = false;
 bool FrameLoaderClientQt::sendRequestReturnsNullOnRedirect = false;
@@ -592,6 +593,9 @@ void FrameLoaderClientQt::postProgressEstimateChangedNotification()
 
 void FrameLoaderClientQt::postProgressFinishedNotification()
 {
+    if (dumpProgressFinishedCallback)
+        printf("postProgressFinishedNotification\n");
+
     // Send a mousemove event to:
     // (1) update the cursor to change according to whatever is underneath the mouse cursor right now;
     // (2) display the tool tip if the mouse hovers a node which has a tool tip.
@@ -680,6 +684,9 @@ String FrameLoaderClientQt::generatedMIMETypeForURLScheme(const String&) const
 void FrameLoaderClientQt::frameLoadCompleted()
 {
     // Note that this can be called multiple times.
+    if (!m_webFrame)
+        return;
+    m_webFrame->page()->d->updateNavigationActions();
 }
 
 
@@ -845,18 +852,6 @@ bool FrameLoaderClientQt::shouldGoToHistoryItem(WebCore::HistoryItem*) const
 bool FrameLoaderClientQt::shouldStopLoadingForHistoryItem(WebCore::HistoryItem*) const
 {
     return true;
-}
-
-void FrameLoaderClientQt::dispatchDidAddBackForwardItem(WebCore::HistoryItem*) const
-{
-}
-
-void FrameLoaderClientQt::dispatchDidRemoveBackForwardItem(WebCore::HistoryItem*) const
-{
-}
-
-void FrameLoaderClientQt::dispatchDidChangeBackForwardIndex() const
-{
 }
 
 void FrameLoaderClientQt::didDisplayInsecureContent()
@@ -1316,15 +1311,15 @@ PassRefPtr<Frame> FrameLoaderClientQt::createFrame(const KURL& url, const String
     frameData.marginWidth = marginWidth;
     frameData.marginHeight = marginHeight;
 
-    QPointer<QWebFrame> webFrame = new QWebFrame(m_webFrame, &frameData);
+    QWeakPointer<QWebFrame> webFrame = new QWebFrame(m_webFrame, &frameData);
     // The creation of the frame may have run arbitrary JavaScript that removed it from the page already.
-    if (!webFrame->d->frame->page()) {
+    if (!webFrame.data()->d->frame->page()) {
         frameData.frame.release();
         ASSERT(webFrame.isNull());
         return 0;
     }
 
-    emit m_webFrame->page()->frameCreated(webFrame);
+    emit m_webFrame->page()->frameCreated(webFrame.data());
 
     // FIXME: Set override encoding if we have one.
 
@@ -1355,7 +1350,7 @@ void FrameLoaderClientQt::didTransferChildFrameToNewDocument(Page*)
     }
 }
 
-void FrameLoaderClientQt::transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*)
+void FrameLoaderClientQt::transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*)
 {
 }
 

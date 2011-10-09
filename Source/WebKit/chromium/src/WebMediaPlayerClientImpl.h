@@ -33,6 +33,7 @@
 
 #if ENABLE(VIDEO)
 
+#include "AudioSourceProvider.h"
 #include "MediaPlayerPrivate.h"
 #include "VideoFrameChromium.h"
 #include "VideoFrameProvider.h"
@@ -42,6 +43,7 @@
 
 namespace WebKit {
 
+class WebAudioSourceProvider;
 class WebMediaElement;
 class WebMediaPlayer;
 
@@ -78,6 +80,8 @@ public:
     virtual float volume() const;
     virtual void playbackStateChanged();
     virtual WebMediaPlayer::Preload preload() const;
+    virtual void sourceOpened();
+    virtual WebKit::WebURL sourceURL() const;
 
     // MediaPlayerPrivateInterface methods:
     virtual void load(const WTF::String& url);
@@ -122,12 +126,19 @@ public:
     virtual unsigned droppedFrameCount() const;
     virtual unsigned audioDecodedByteCount() const;
     virtual unsigned videoDecodedByteCount() const;
+    virtual WebCore::AudioSourceProvider* audioSourceProvider();
+
 #if USE(ACCELERATED_COMPOSITING)
     virtual bool supportsAcceleratedRendering() const;
 
     // VideoFrameProvider methods:
     virtual WebCore::VideoFrameChromium* getCurrentFrame();
     virtual void putCurrentFrame(WebCore::VideoFrameChromium*);
+#endif
+
+#if ENABLE(MEDIA_SOURCE)
+    virtual bool sourceAppend(const unsigned char* data, unsigned length);
+    virtual void sourceEndOfStream(WebCore::MediaPlayer::EndOfStreamStatus);
 #endif
 
 private:
@@ -153,6 +164,28 @@ private:
     bool m_supportsAcceleratedCompositing;
 #endif
     static bool m_isEnabled;
+
+#if ENABLE(WEB_AUDIO)
+    // AudioSourceProviderImpl wraps a WebAudioSourceProvider.
+
+    class AudioSourceProviderImpl : public WebCore::AudioSourceProvider {
+    public:
+        AudioSourceProviderImpl()
+            : m_webAudioSourceProvider(0)
+        {
+        }
+
+        virtual ~AudioSourceProviderImpl() { }
+
+        virtual void provideInput(WebCore::AudioBus*, size_t framesToProcess);
+        void initialize(WebAudioSourceProvider* provider) { m_webAudioSourceProvider = provider; }
+
+    private:
+        WebAudioSourceProvider* m_webAudioSourceProvider;
+    };
+
+    AudioSourceProviderImpl m_audioSourceProvider;
+#endif
 };
 
 } // namespace WebKit

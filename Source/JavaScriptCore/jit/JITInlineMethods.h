@@ -253,6 +253,11 @@ ALWAYS_INLINE void JIT::restoreArgumentReference()
     poke(callFrameRegister, OBJECT_OFFSETOF(struct JITStackFrame, callFrame) / sizeof(void*));
 }
 
+ALWAYS_INLINE void JIT::updateTopCallFrame()
+{
+    storePtr(callFrameRegister, &m_globalData->topCallFrame);
+}
+
 ALWAYS_INLINE void JIT::restoreArgumentReferenceForTrampoline()
 {
 #if CPU(X86)
@@ -294,6 +299,14 @@ ALWAYS_INLINE void JIT::addSlowCase(JumpList jumpList)
         m_slowCases.append(SlowCaseEntry(jumpVector[i], m_bytecodeOffset));
 }
 
+ALWAYS_INLINE void JIT::addSlowCase()
+{
+    ASSERT(m_bytecodeOffset != (unsigned)-1); // This method should only be called during hot/cold path generation, so that m_bytecodeOffset is set.
+    
+    Jump emptyJump; // Doing it this way to make Windows happy.
+    m_slowCases.append(SlowCaseEntry(emptyJump, m_bytecodeOffset));
+}
+
 ALWAYS_INLINE void JIT::addJump(Jump jump, int relativeOffset)
 {
     ASSERT(m_bytecodeOffset != (unsigned)-1); // This method should only be called during hot/cold path generation, so that m_bytecodeOffset is set.
@@ -306,6 +319,17 @@ ALWAYS_INLINE void JIT::emitJumpSlowToHot(Jump jump, int relativeOffset)
     ASSERT(m_bytecodeOffset != (unsigned)-1); // This method should only be called during hot/cold path generation, so that m_bytecodeOffset is set.
 
     jump.linkTo(m_labels[m_bytecodeOffset + relativeOffset], this);
+}
+
+ALWAYS_INLINE JIT::Jump JIT::emitJumpIfNotObject(RegisterID structureReg)
+{
+    return branch8(Below, Address(structureReg, Structure::typeInfoTypeOffset()), TrustedImm32(ObjectType));
+}
+
+ALWAYS_INLINE JIT::Jump JIT::emitJumpIfNotType(RegisterID baseReg, RegisterID scratchReg, JSType type)
+{
+    loadPtr(Address(baseReg, JSCell::structureOffset()), scratchReg);
+    return branch8(NotEqual, Address(scratchReg, Structure::typeInfoTypeOffset()), TrustedImm32(type));
 }
 
 #if ENABLE(SAMPLING_FLAGS)
@@ -376,7 +400,7 @@ ALWAYS_INLINE bool JIT::isOperandConstantImmediateChar(unsigned src)
 
 template <typename ClassType, typename StructureType> inline void JIT::emitAllocateBasicJSObject(StructureType structure, void* vtable, RegisterID result, RegisterID storagePtr)
 {
-    NewSpace::SizeClass* sizeClass = &m_globalData->heap.sizeClassFor(sizeof(ClassType));
+    MarkedSpace::SizeClass* sizeClass = &m_globalData->heap.sizeClassForObject(sizeof(ClassType));
     loadPtr(&sizeClass->firstFreeCell, result);
     addSlowCase(branchTestPtr(Zero, result));
 
@@ -413,14 +437,6 @@ inline void JIT::emitAllocateJSFunction(FunctionExecutable* executable, Register
     // store the function's executable member
     storePtr(TrustedImmPtr(executable), Address(result, JSFunction::offsetOfExecutable()));
 
-    
-    // store the function's global object
-    int globalObjectOffset = sizeof(JSValue) * JSFunction::GlobalObjectSlot;
-    storePtr(TrustedImmPtr(m_codeBlock->globalObject()), Address(regT1, globalObjectOffset + OBJECT_OFFSETOF(JSValue, u.asBits.payload)));
-#if USE(JSVALUE32_64)
-    store32(TrustedImm32(JSValue::CellTag), Address(regT1, globalObjectOffset + OBJECT_OFFSETOF(JSValue, u.asBits.tag)));
-#endif
-
     // store the function's name
     ASSERT(executable->nameValue());
     int functionNameOffset = sizeof(JSValue) * m_codeBlock->globalObject()->functionNameOffset();
@@ -429,6 +445,35 @@ inline void JIT::emitAllocateJSFunction(FunctionExecutable* executable, Register
     store32(TrustedImm32(JSValue::CellTag), Address(regT1, functionNameOffset + OBJECT_OFFSETOF(JSValue, u.asBits.tag)));
 #endif
 }
+
+#if ENABLE(VALUE_PROFILER)
+inline void JIT::emitValueProfilingSite(ValueProfilingSiteKind siteKind)
+{
+    if (!shouldEmitProfiling())
+        return;
+    
+    const RegisterID value = regT0;
+    const RegisterID scratch = regT3;
+    
+    ValueProfile* valueProfile;
+    if (siteKind == FirstProfilingSite)
+        valueProfile = m_codeBlock->addValueProfile(m_bytecodeOffset);
+    else {
+        ASSERT(siteKind == SubsequentProfilingSite);
+        valueProfile = m_codeBlock->valueProfileForBytecodeOffset(m_bytecodeOffset);
+    }
+    
+    ASSERT(valueProfile);
+    
+    if (m_randomGenerator.getUint32() & 1)
+        add32(Imm32(1), bucketCounterRegister);
+    else
+        add32(Imm32(3), bucketCounterRegister);
+    and32(Imm32(ValueProfile::bucketIndexMask), bucketCounterRegister);
+    move(ImmPtr(valueProfile->m_buckets), scratch);
+    storePtr(value, BaseIndex(scratch, bucketCounterRegister, TimesEight));
+}
+#endif
 
 #if USE(JSVALUE32_64)
 
@@ -538,6 +583,12 @@ inline void JIT::emitStoreInt32(unsigned index, RegisterID payload, bool indexIs
     store32(payload, payloadFor(index, callFrameRegister));
     if (!indexIsInt32)
         store32(TrustedImm32(JSValue::Int32Tag), tagFor(index, callFrameRegister));
+}
+
+inline void JIT::emitStoreAndMapInt32(unsigned index, RegisterID tag, RegisterID payload, bool indexIsInt32, size_t opcodeLength)
+{
+    emitStoreInt32(index, payload, indexIsInt32);
+    map(m_bytecodeOffset + opcodeLength, index, tag, payload);
 }
 
 inline void JIT::emitStoreInt32(unsigned index, TrustedImm32 payload, bool indexIsInt32)

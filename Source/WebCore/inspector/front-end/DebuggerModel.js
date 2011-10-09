@@ -28,12 +28,24 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.Object}
+ */
 WebInspector.DebuggerModel = function()
 {
     this._debuggerPausedDetails = {};
     this._scripts = {};
 
-    InspectorBackend.registerDomainDispatcher("Debugger", new WebInspector.DebuggerDispatcher(this));
+    InspectorBackend.registerDebuggerDispatcher(new WebInspector.DebuggerDispatcher(this));
+}
+
+/**
+ * @constructor
+ */
+WebInspector.DebuggerModel.Location = function()
+{
+    this.scriptId = null;
 }
 
 WebInspector.DebuggerModel.Events = {
@@ -45,6 +57,13 @@ WebInspector.DebuggerModel.Events = {
     FailedToParseScriptSource: "failed-to-parse-script-source",
     BreakpointResolved: "breakpoint-resolved",
     Reset: "reset"
+}
+
+WebInspector.DebuggerModel.BreakReason = {
+    DOM: "DOM",
+    EventListener: "EventListener",
+    XHR: "XHR",
+    Exception: "exception"
 }
 
 WebInspector.DebuggerModel.prototype = {
@@ -73,6 +92,15 @@ WebInspector.DebuggerModel.prototype = {
         DebuggerAgent.continueToLocation(location);
     },
 
+    setBreakpointByScriptLocation: function(location, condition, callback)
+    {
+        var script = this.scriptForSourceID(location.scriptId);
+        if (script.sourceURL)
+            this.setBreakpoint(script.sourceURL, location.lineNumber, location.columnNumber, condition, callback);
+        else
+            this.setBreakpointBySourceId(location, condition, callback);
+    },
+
     setBreakpoint: function(url, lineNumber, columnNumber, condition, callback)
     {
         // Adjust column if needed.
@@ -89,7 +117,7 @@ WebInspector.DebuggerModel.prototype = {
             if (callback)
                 callback(error ? null : breakpointId, locations);
         }
-        DebuggerAgent.setBreakpointByUrl(url, undefined, lineNumber, columnNumber, condition, didSetBreakpoint.bind(this));
+        DebuggerAgent.setBreakpointByUrl(lineNumber, url, undefined, columnNumber, condition, didSetBreakpoint.bind(this));
         WebInspector.userMetrics.ScriptsBreakpointSet.record();
     },
 
@@ -169,8 +197,9 @@ WebInspector.DebuggerModel.prototype = {
         return this._debuggerPausedDetails;
     },
 
-    _pausedScript: function(details)
+    _pausedScript: function(callFrames, reason, auxData)
     {
+        var details = { callFrames: callFrames, reason: reason, auxData: auxData };
         this._debuggerPausedDetails = details;
         this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.DebuggerPaused, details);
     },
@@ -203,15 +232,19 @@ WebInspector.DebuggerEventTypes = {
     NativeBreakpoint: 2
 };
 
+/**
+ * @constructor
+ * @implements {DebuggerAgent.Dispatcher}
+ */
 WebInspector.DebuggerDispatcher = function(debuggerModel)
 {
     this._debuggerModel = debuggerModel;
 }
 
 WebInspector.DebuggerDispatcher.prototype = {
-    paused: function(details)
+    paused: function(callFrames, reason, auxData)
     {
-        this._debuggerModel._pausedScript(details);
+        this._debuggerModel._pausedScript(callFrames, reason, auxData);
     },
 
     resumed: function()
@@ -244,3 +277,8 @@ WebInspector.DebuggerDispatcher.prototype = {
         this._debuggerModel._breakpointResolved(breakpointId, scriptId, lineNumber, columnNumber);
     }
 }
+
+/**
+ * @type {?WebInspector.DebuggerModel}
+ */
+WebInspector.debuggerModel = null;

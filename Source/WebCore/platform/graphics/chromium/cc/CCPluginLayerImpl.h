@@ -42,7 +42,7 @@ public:
 
     typedef ProgramBinding<VertexShaderPosTex, FragmentShaderRGBATexFlipAlpha> Program;
 
-    virtual void draw();
+    virtual void draw(LayerRendererChromium*);
 
     virtual void dumpLayerProperties(TextStream&, int indent) const;
 
@@ -50,6 +50,8 @@ public:
 
 private:
     explicit CCPluginLayerImpl(int);
+
+    virtual const char* layerTypeAsString() const { return "PluginLayer"; }
 
     unsigned m_textureId;
 };

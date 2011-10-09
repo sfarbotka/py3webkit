@@ -88,6 +88,7 @@ public:
     static bool supportsType(const String&); 
 
     virtual bool isBitmapImage() const { return false; }
+    virtual bool currentFrameHasAlpha() { return false; }
 
     // Derived classes should override this if they can assure that 
     // the image contains only resources from its own security origin.
@@ -127,7 +128,7 @@ public:
     // Typically the CachedImage that owns us.
     ImageObserver* imageObserver() const { return m_imageObserver; }
 
-    enum TileRule { StretchTile, RoundTile, RepeatTile };
+    enum TileRule { StretchTile, RoundTile, SpaceTile, RepeatTile };
 
     virtual NativeImagePtr nativeImageForCurrentFrame() { return 0; }
     
@@ -157,6 +158,10 @@ public:
     virtual void drawPattern(GraphicsContext*, const FloatRect& srcRect, const AffineTransform& patternTransform,
                              const FloatPoint& phase, ColorSpace styleColorSpace, CompositeOperator, const FloatRect& destRect);
 
+#if !ASSERT_DISABLED
+    virtual bool notSolidColor() { return true; }
+#endif
+
 protected:
     Image(ImageObserver* = 0);
 
@@ -168,7 +173,7 @@ protected:
 #endif
     virtual void draw(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, ColorSpace styleColorSpace, CompositeOperator) = 0;
     void drawTiled(GraphicsContext*, const FloatRect& dstRect, const FloatPoint& srcPoint, const FloatSize& tileSize, ColorSpace styleColorSpace, CompositeOperator);
-    void drawTiled(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, TileRule hRule, TileRule vRule, ColorSpace styleColorSpace, CompositeOperator);
+    void drawTiled(GraphicsContext*, const FloatRect& dstRect, const FloatRect& srcRect, const FloatSize& tileScaleFactor, TileRule hRule, TileRule vRule, ColorSpace styleColorSpace, CompositeOperator);
 
     // Supporting tiled drawing
     virtual bool mayFillWithSolidColor() { return false; }

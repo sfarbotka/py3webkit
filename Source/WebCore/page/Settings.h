@@ -220,9 +220,6 @@ namespace WebCore {
         void setNeedsLeopardMailQuirks(bool);
         bool needsLeopardMailQuirks() const { return m_needsLeopardMailQuirks; }
 
-        void setNeedsTigerMailQuirks(bool);
-        bool needsTigerMailQuirks() const { return m_needsTigerMailQuirks; }
-
         void setDOMPasteAllowed(bool);
         bool isDOMPasteAllowed() const { return m_isDOMPasteAllowed; }
         
@@ -281,21 +278,12 @@ namespace WebCore {
 
         void setOfflineWebApplicationCacheEnabled(bool);
         bool offlineWebApplicationCacheEnabled() const { return m_offlineWebApplicationCacheEnabled; }
-
-        void setShouldPaintCustomScrollbars(bool);
-        bool shouldPaintCustomScrollbars() const { return m_shouldPaintCustomScrollbars; }
         
         void setEnforceCSSMIMETypeInNoQuirksMode(bool);
         bool enforceCSSMIMETypeInNoQuirksMode() { return m_enforceCSSMIMETypeInNoQuirksMode; }
 
         void setMaximumDecodedImageSize(size_t size) { m_maximumDecodedImageSize = size; }
         size_t maximumDecodedImageSize() const { return m_maximumDecodedImageSize; }
-
-#if USE(SAFARI_THEME)
-        // Windows debugging pref (global) for switching between the Aqua look and a native windows look.
-        static void setShouldPaintNativeControls(bool);
-        static bool shouldPaintNativeControls() { return gShouldPaintNativeControls; }
-#endif
 
         void setAllowScriptsToCloseWindows(bool);
         bool allowScriptsToCloseWindows() const { return m_allowScriptsToCloseWindows; }
@@ -440,7 +428,14 @@ namespace WebCore {
 
         void setForceCompositingMode(bool flag) { m_forceCompositingMode = flag; }
         bool forceCompositingMode() { return m_forceCompositingMode; }
-        
+
+        void setZoomAnimatorScale(float scale) { m_zoomAnimatorScale = scale; }
+        float zoomAnimatorScale() { return m_zoomAnimatorScale; }
+
+        void setZoomAnimatorPosition(float x, float y) { m_zoomAnimatorPosX = x; m_zoomAnimatorPosY = y; }
+        float zoomAnimatorPosX() { return m_zoomAnimatorPosX; }
+        float zoomAnimatorPosY() { return m_zoomAnimatorPosY; }
+
         void setShouldInjectUserScriptsInInitialEmptyDocument(bool flag) { m_shouldInjectUserScriptsInInitialEmptyDocument = flag; }
         bool shouldInjectUserScriptsInInitialEmptyDocument() { return m_shouldInjectUserScriptsInInitialEmptyDocument; }
 
@@ -464,6 +459,24 @@ namespace WebCore {
         void setMediaPlaybackAllowsInline(bool flag) { m_mediaPlaybackAllowsInline = flag; };
         bool mediaPlaybackAllowsInline() const { return m_mediaPlaybackAllowsInline; }
 
+        void setPasswordEchoEnabled(bool flag) { m_passwordEchoEnabled = flag; }
+        bool passwordEchoEnabled() const { return m_passwordEchoEnabled; }
+
+        void setSuppressIncrementalRendering(bool flag) { m_suppressIncrementalRendering = flag; }
+        bool suppressIncrementalRendering() const { return m_suppressIncrementalRendering; }
+
+        void setPasswordEchoDurationInSeconds(double durationInSeconds) { m_passwordEchoDurationInSeconds = durationInSeconds; }
+        double passwordEchoDurationInSeconds() const { return m_passwordEchoDurationInSeconds; }
+
+#if USE(SAFARI_THEME)
+        // Windows debugging pref (global) for switching between the Aqua look and a native windows look.
+        static void setShouldPaintNativeControls(bool);
+        static bool shouldPaintNativeControls() { return gShouldPaintNativeControls; }
+#endif
+
+        static void setMockScrollbarsEnabled(bool flag);
+        static bool mockScrollbarsEnabled();
+
     private:
         Page* m_page;
 
@@ -480,6 +493,7 @@ namespace WebCore {
         ScriptFontFamilyMap m_pictographFontFamilyMap;
         EditableLinkBehavior m_editableLinkBehavior;
         TextDirectionSubmenuInclusionBehavior m_textDirectionSubmenuInclusionBehavior;
+        double m_passwordEchoDurationInSeconds;
         int m_minimumFontSize;
         int m_minimumLogicalFontSize;
         int m_defaultFontSize;
@@ -521,7 +535,6 @@ namespace WebCore {
         bool m_needsKeyboardEventDisambiguationQuirks : 1;
         bool m_treatsAnyTextCSSLinkAsStylesheet : 1;
         bool m_needsLeopardMailQuirks : 1;
-        bool m_needsTigerMailQuirks : 1;
         bool m_isDOMPasteAllowed : 1;
         bool m_shrinksStandaloneImagesToFit : 1;
         bool m_usesPageCache: 1;
@@ -537,7 +550,6 @@ namespace WebCore {
         bool m_localFileContentSniffingEnabled : 1;
         bool m_inApplicationChromeMode : 1;
         bool m_offlineWebApplicationCacheEnabled : 1;
-        bool m_shouldPaintCustomScrollbars : 1;
         bool m_enforceCSSMIMETypeInNoQuirksMode : 1;
         bool m_usesEncodingDetector : 1;
         bool m_allowScriptsToCloseWindows : 1;
@@ -584,6 +596,8 @@ namespace WebCore {
 #endif
         bool m_mediaPlaybackRequiresUserGesture : 1;
         bool m_mediaPlaybackAllowsInline : 1;
+        bool m_passwordEchoEnabled : 1;
+        bool m_suppressIncrementalRendering : 1;
 
         Timer<Settings> m_loadsImagesAutomaticallyTimer;
         void loadsImagesAutomaticallyTimerFired(Timer<Settings>*);
@@ -591,6 +605,11 @@ namespace WebCore {
 #if USE(AVFOUNDATION)
         static bool gAVFoundationEnabled;
 #endif
+        static bool gMockScrollbarsEnabled;
+
+        float m_zoomAnimatorScale;
+        float m_zoomAnimatorPosX;
+        float m_zoomAnimatorPosY;
 
 #if USE(SAFARI_THEME)
         static bool gShouldPaintNativeControls;

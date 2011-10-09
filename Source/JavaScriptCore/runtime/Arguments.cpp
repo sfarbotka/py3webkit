@@ -35,7 +35,7 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(Arguments);
 
-const ClassInfo Arguments::s_info = { "Arguments", &JSNonFinalObject::s_info, 0, 0 };
+const ClassInfo Arguments::s_info = { "Arguments", &JSNonFinalObject::s_info, 0, 0, CREATE_METHOD_TABLE(Arguments) };
 
 Arguments::~Arguments()
 {
@@ -43,25 +43,26 @@ Arguments::~Arguments()
         delete [] d->extraArguments;
 }
 
-void Arguments::visitChildren(SlotVisitor& visitor)
+void Arguments::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    Arguments* thisObject = static_cast<Arguments*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    JSObject::visitChildren(visitor);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    JSObject::visitChildren(thisObject, visitor);
 
-    if (d->registerArray)
-        visitor.appendValues(d->registerArray.get(), d->numParameters);
+    if (thisObject->d->registerArray)
+        visitor.appendValues(thisObject->d->registerArray.get(), thisObject->d->numParameters);
 
-    if (d->extraArguments) {
-        unsigned numExtraArguments = d->numArguments - d->numParameters;
-        visitor.appendValues(d->extraArguments, numExtraArguments);
+    if (thisObject->d->extraArguments) {
+        unsigned numExtraArguments = thisObject->d->numArguments - thisObject->d->numParameters;
+        visitor.appendValues(thisObject->d->extraArguments, numExtraArguments);
     }
 
-    visitor.append(&d->callee);
+    visitor.append(&thisObject->d->callee);
 
-    if (d->activation)
-        visitor.append(&d->activation);
+    if (thisObject->d->activation)
+        visitor.append(&thisObject->d->activation);
 }
 
 void Arguments::copyToRegisters(ExecState* exec, Register* buffer, uint32_t maxSize)
@@ -258,99 +259,123 @@ void Arguments::getOwnPropertyNames(ExecState* exec, PropertyNameArray& property
 
 void Arguments::put(ExecState* exec, unsigned i, JSValue value)
 {
-    if (i < d->numArguments && (!d->deletedArguments || !d->deletedArguments[i])) {
-        if (i < d->numParameters)
-            d->registers[d->firstParameterIndex + i].set(exec->globalData(), d->activation ? static_cast<JSCell*>(d->activation.get()) : static_cast<JSCell*>(this), value);
+    put(this, exec, i, value);
+}
+
+void Arguments::put(JSCell* cell, ExecState* exec, unsigned i, JSValue value)
+{
+    Arguments* thisObject = static_cast<Arguments*>(cell);
+    if (i < thisObject->d->numArguments && (!thisObject->d->deletedArguments || !thisObject->d->deletedArguments[i])) {
+        if (i < thisObject->d->numParameters)
+            thisObject->d->registers[thisObject->d->firstParameterIndex + i].set(exec->globalData(), thisObject->d->activation ? static_cast<JSCell*>(thisObject->d->activation.get()) : cell, value);
         else
-            d->extraArguments[i - d->numParameters].set(exec->globalData(), this, value);
+            thisObject->d->extraArguments[i - thisObject->d->numParameters].set(exec->globalData(), thisObject, value);
         return;
     }
 
     PutPropertySlot slot;
-    JSObject::put(exec, Identifier(exec, UString::number(i)), value, slot);
+    JSObject::put(thisObject, exec, Identifier(exec, UString::number(i)), value, slot);
 }
 
 void Arguments::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
+    put(this, exec, propertyName, value, slot);
+}
+    
+void Arguments::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    Arguments* thisObject = static_cast<Arguments*>(cell);
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
-    if (isArrayIndex && i < d->numArguments && (!d->deletedArguments || !d->deletedArguments[i])) {
-        if (i < d->numParameters)
-            d->registers[d->firstParameterIndex + i].set(exec->globalData(), d->activation ? static_cast<JSCell*>(d->activation.get()) : static_cast<JSCell*>(this), value);
+    if (isArrayIndex && i < thisObject->d->numArguments && (!thisObject->d->deletedArguments || !thisObject->d->deletedArguments[i])) {
+        if (i < thisObject->d->numParameters)
+            thisObject->d->registers[thisObject->d->firstParameterIndex + i].set(exec->globalData(), thisObject->d->activation ? static_cast<JSCell*>(thisObject->d->activation.get()) : static_cast<JSCell*>(thisObject), value);
         else
-            d->extraArguments[i - d->numParameters].set(exec->globalData(), this, value);
+            thisObject->d->extraArguments[i - thisObject->d->numParameters].set(exec->globalData(), thisObject, value);
         return;
     }
 
-    if (propertyName == exec->propertyNames().length && !d->overrodeLength) {
-        d->overrodeLength = true;
-        putDirect(exec->globalData(), propertyName, value, DontEnum);
+    if (propertyName == exec->propertyNames().length && !thisObject->d->overrodeLength) {
+        thisObject->d->overrodeLength = true;
+        thisObject->putDirect(exec->globalData(), propertyName, value, DontEnum);
         return;
     }
 
-    if (propertyName == exec->propertyNames().callee && !d->overrodeCallee) {
-        if (!d->isStrictMode) {
-            d->overrodeCallee = true;
-            putDirect(exec->globalData(), propertyName, value, DontEnum);
+    if (propertyName == exec->propertyNames().callee && !thisObject->d->overrodeCallee) {
+        if (!thisObject->d->isStrictMode) {
+            thisObject->d->overrodeCallee = true;
+            thisObject->putDirect(exec->globalData(), propertyName, value, DontEnum);
             return;
         }
-        createStrictModeCalleeIfNecessary(exec);
+        thisObject->createStrictModeCalleeIfNecessary(exec);
     }
 
-    if (propertyName == exec->propertyNames().caller && d->isStrictMode)
-        createStrictModeCallerIfNecessary(exec);
+    if (propertyName == exec->propertyNames().caller && thisObject->d->isStrictMode)
+        thisObject->createStrictModeCallerIfNecessary(exec);
 
-    JSObject::put(exec, propertyName, value, slot);
+    JSObject::put(thisObject, exec, propertyName, value, slot);
 }
 
 bool Arguments::deleteProperty(ExecState* exec, unsigned i) 
 {
-    if (i < d->numArguments) {
-        if (!d->deletedArguments) {
-            d->deletedArguments = adoptArrayPtr(new bool[d->numArguments]);
-            memset(d->deletedArguments.get(), 0, sizeof(bool) * d->numArguments);
+    return deleteProperty(this, exec, i);
+}
+
+bool Arguments::deleteProperty(JSCell* cell, ExecState* exec, unsigned i) 
+{
+    Arguments* thisObject = static_cast<Arguments*>(cell);
+    if (i < thisObject->d->numArguments) {
+        if (!thisObject->d->deletedArguments) {
+            thisObject->d->deletedArguments = adoptArrayPtr(new bool[thisObject->d->numArguments]);
+            memset(thisObject->d->deletedArguments.get(), 0, sizeof(bool) * thisObject->d->numArguments);
         }
-        if (!d->deletedArguments[i]) {
-            d->deletedArguments[i] = true;
+        if (!thisObject->d->deletedArguments[i]) {
+            thisObject->d->deletedArguments[i] = true;
             return true;
         }
     }
 
-    return JSObject::deleteProperty(exec, Identifier(exec, UString::number(i)));
+    return JSObject::deleteProperty(thisObject, exec, Identifier(exec, UString::number(i)));
 }
 
 bool Arguments::deleteProperty(ExecState* exec, const Identifier& propertyName) 
 {
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool Arguments::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName) 
+{
+    Arguments* thisObject = static_cast<Arguments*>(cell);
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
-    if (isArrayIndex && i < d->numArguments) {
-        if (!d->deletedArguments) {
-            d->deletedArguments = adoptArrayPtr(new bool[d->numArguments]);
-            memset(d->deletedArguments.get(), 0, sizeof(bool) * d->numArguments);
+    if (isArrayIndex && i < thisObject->d->numArguments) {
+        if (!thisObject->d->deletedArguments) {
+            thisObject->d->deletedArguments = adoptArrayPtr(new bool[thisObject->d->numArguments]);
+            memset(thisObject->d->deletedArguments.get(), 0, sizeof(bool) * thisObject->d->numArguments);
         }
-        if (!d->deletedArguments[i]) {
-            d->deletedArguments[i] = true;
+        if (!thisObject->d->deletedArguments[i]) {
+            thisObject->d->deletedArguments[i] = true;
             return true;
         }
     }
 
-    if (propertyName == exec->propertyNames().length && !d->overrodeLength) {
-        d->overrodeLength = true;
+    if (propertyName == exec->propertyNames().length && !thisObject->d->overrodeLength) {
+        thisObject->d->overrodeLength = true;
         return true;
     }
 
-    if (propertyName == exec->propertyNames().callee && !d->overrodeCallee) {
-        if (!d->isStrictMode) {
-            d->overrodeCallee = true;
+    if (propertyName == exec->propertyNames().callee && !thisObject->d->overrodeCallee) {
+        if (!thisObject->d->isStrictMode) {
+            thisObject->d->overrodeCallee = true;
             return true;
         }
-        createStrictModeCalleeIfNecessary(exec);
+        thisObject->createStrictModeCalleeIfNecessary(exec);
     }
     
-    if (propertyName == exec->propertyNames().caller && !d->isStrictMode)
-        createStrictModeCallerIfNecessary(exec);
+    if (propertyName == exec->propertyNames().caller && !thisObject->d->isStrictMode)
+        thisObject->createStrictModeCallerIfNecessary(exec);
 
-    return JSObject::deleteProperty(exec, propertyName);
+    return JSObject::deleteProperty(thisObject, exec, propertyName);
 }
 
 } // namespace JSC

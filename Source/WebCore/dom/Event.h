@@ -34,6 +34,13 @@ namespace WebCore {
     class EventTarget;
     class EventDispatcher;
 
+    struct EventInit {
+        EventInit();
+        
+        bool bubbles;
+        bool cancelable;
+    };
+
     class Event : public RefCounted<Event> {
     public:
         enum PhaseType { 
@@ -69,6 +76,12 @@ namespace WebCore {
         {
             return adoptRef(new Event(type, canBubble, cancelable));
         }
+
+        static PassRefPtr<Event> create(const AtomicString& type, const EventInit& initializer)
+        {
+            return adoptRef(new Event(type, initializer));
+        }
+
         virtual ~Event();
 
         void initEvent(const AtomicString& type, bool canBubble, bool cancelable);
@@ -150,6 +163,10 @@ namespace WebCore {
 #if ENABLE(MEDIA_STREAM)
         virtual bool isMediaStreamEvent() const;
 #endif
+#if ENABLE(WEBGL)
+        virtual bool isWebGLContextEvent() const;
+#endif
+
         bool propagationStopped() const { return m_propagationStopped || m_immediatePropagationStopped; }
         bool immediatePropagationStopped() const { return m_immediatePropagationStopped; }
 
@@ -176,6 +193,7 @@ namespace WebCore {
     protected:
         Event();
         Event(const AtomicString& type, bool canBubble, bool cancelable);
+        Event(const AtomicString& type, const EventInit&);
 
         virtual void receivedTarget();
         bool dispatched() const { return m_target; }
@@ -198,37 +216,6 @@ namespace WebCore {
 
         RefPtr<Event> m_underlyingEvent;
     };
-
-class EventDispatchMediator : public RefCounted<EventDispatchMediator> {
-public:
-    static PassRefPtr<EventDispatchMediator> create(PassRefPtr<Event>);
-    virtual ~EventDispatchMediator();
-
-    virtual bool dispatchEvent(EventDispatcher*) const;
-    Event* event() const;
-
-protected:
-    explicit EventDispatchMediator(PassRefPtr<Event>);
-    EventDispatchMediator();
-    void setEvent(PassRefPtr<Event>);
-
-private:
-    RefPtr<Event> m_event;
-};
-
-inline EventDispatchMediator::EventDispatchMediator()
-{
-}
-
-inline Event* EventDispatchMediator::event() const
-{
-    return m_event.get();
-}
-
-inline void EventDispatchMediator::setEvent(PassRefPtr<Event> event)
-{
-    m_event = event;
-}
 
 } // namespace WebCore
 

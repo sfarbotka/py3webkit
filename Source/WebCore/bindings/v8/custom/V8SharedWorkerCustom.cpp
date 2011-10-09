@@ -49,10 +49,10 @@ v8::Handle<v8::Value> V8SharedWorker::constructorCallback(const v8::Arguments& a
     INC_STATS(L"DOM.SharedWorker.Constructor");
 
     if (!args.IsConstructCall())
-        return throwError("DOM object constructor cannot be called as a function.");
+        return throwError("DOM object constructor cannot be called as a function.", V8Proxy::TypeError);
 
     if (!args.Length())
-        return throwError("Not enough arguments", V8Proxy::SyntaxError);
+        return throwError("Not enough arguments", V8Proxy::TypeError);
 
     v8::TryCatch tryCatch;
     v8::Handle<v8::String> scriptUrl = args[0]->ToString();

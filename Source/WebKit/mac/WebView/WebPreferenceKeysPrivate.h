@@ -110,12 +110,13 @@
 #define WebKitHixie76WebSocketProtocolEnabledKey @"WebKitHixie76WebSocketProtocolEnabled"
 #define WebKitMediaPlaybackRequiresUserGesturePreferenceKey @"WebKitMediaPlaybackRequiresUserGesture"
 #define WebKitMediaPlaybackAllowsInlinePreferenceKey @"WebKitMediaPlaybackAllowsInline"
+#define WebKitMockScrollbarsEnabledPreferenceKey @"WebKitMockScrollbarsEnabled"
 
 // These are private both because callers should be using the cover methods and because the
 // cover methods themselves are private.
 #define WebKitRespectStandardStyleKeyEquivalentsPreferenceKey @"WebKitRespectStandardStyleKeyEquivalents"
 #define WebKitShowsURLsInToolTipsPreferenceKey @"WebKitShowsURLsInToolTips"
-#define WebKitShowsToolTipOverTruncatedTextPreferenceKey @"WebKitShowsToolTipForTruncatedText"
+#define WebKitShowsToolTipOverTruncatedTextPreferenceKey @"WebKitShowsToolTipOverTruncatedText"
 #define WebKitPDFDisplayModePreferenceKey @"WebKitPDFDisplayMode"
 #define WebKitPDFScaleFactorPreferenceKey @"WebKitPDFScaleFactor"
 #define WebKitUseSiteSpecificSpoofingPreferenceKey @"WebKitUseSiteSpecificSpoofing"
@@ -124,6 +125,7 @@
 #define WebKitTextDirectionSubmenuInclusionBehaviorPreferenceKey @"WebKitTextDirectionSubmenuInclusionBehaviorPreferenceKey"
 #define WebKitEditingBehaviorPreferenceKey @"WebKitEditingBehavior"
 #define WebKitUsePreHTML5ParserQuirksKey @"WebKitUsePreHTML5ParserQuirks"
+#define WebKitSuppressIncrementalRenderingKey @"WebKitSuppressIncrementalRendering"
 
 // CoreGraphics deferred updates are disabled if WebKitEnableCoalescedUpdatesPreferenceKey is set
 // to NO, or has no value.  For compatibility with Mac OS X 10.4.6, deferred updates are OFF by

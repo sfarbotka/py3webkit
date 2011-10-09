@@ -64,6 +64,7 @@ my $noWebKit2 = 0;
 my $startTime = time();
 
 my (
+    $requestAnimationFrameSupport,
     $threeDCanvasSupport,
     $threeDRenderingSupport,
     $accelerated2dCanvasSupport,
@@ -72,34 +73,42 @@ my (
     $channelMessagingSupport,
     $clientBasedGeolocationSupport,
     $coverageSupport,
+    $cssFiltersSupport,
     $css3FlexboxSupport,
-    $databaseSupport,
+    $sqlDatabaseSupport,
     $datalistSupport,
     $dataTransferItemsSupport,
     $detailsSupport,
     $deviceOrientationSupport,
     $directoryUploadSupport,
     $domStorageSupport,
-    $eventsourceSupport,
     $fileSystemSupport,
     $filtersSupport,
     $fullscreenAPISupport,
+    $gamepadSupport,
     $geolocationSupport,
     $iconDatabaseSupport,
     $imageResizerSupport,
     $indexedDatabaseSupport,
     $inputColorSupport,
     $inputSpeechSupport,
+    $inputTypeDateSupport,
+    $inputTypeDatetimeSupport,
+    $inputTypeDatetimelocalSupport,
+    $inputTypeMonthSupport,
+    $inputTypeTimeSupport,
+    $inputTypeWeekSupport,
     $javaScriptDebuggerSupport,
     $linkPrefetchSupport,
     $mathmlSupport,
+    $mediaSourceSupport,
     $mediaStatisticsSupport,
     $mediaStreamSupport,
     $meterTagSupport,
     $mhtmlSupport,
+    $mutationObserversSupport,
     $netscapePluginSupport,
     $notificationsSupport,
-    $offlineWebApplicationSupport,
     $orientationEventsSupport,
     $pageVisibilityApiSupport,
     $progressTagSupport,
@@ -107,18 +116,13 @@ my (
     $registerProtocolHandlerSupport,
     $sharedWorkersSupport,
     $svgSupport,
-    $svgAnimationSupport,
-    $svgAsImageSupport,
     $svgDOMObjCBindingsSupport,
     $svgFontsSupport,
-    $svgForeignObjectSupport,
-    $svgUseSupport,
     $systemMallocSupport,
     $tiledBackingStoreSupport,
     $touchEventsSupport,
     $touchIconLoadingSupport,
     $videoSupport,
-    $wcssSupport,
     $webAudioSupport,
     $webInspectorSupport,
     $webSocketsSupport,
@@ -130,6 +134,9 @@ my (
 );
 
 my @features = (
+    { option => "request-animation-frame", desc => "Toggle requestAnimationFrame support",
+      define => "ENABLE_REQUEST_ANIMATION_FRAME", default => (isAppleMacWebKit()), value => \$requestAnimationFrameSupport },
+
     { option => "3d-canvas", desc => "Toggle 3D canvas (WebGL) support",
       define => "ENABLE_WEBGL", default => (isAppleMacWebKit() && !isLeopard()), value => \$threeDCanvasSupport },
 
@@ -151,14 +158,17 @@ my @features = (
     { option => "client-based-geolocation", desc => "Toggle client-based Geolocation support",
       define => "ENABLE_CLIENT_BASED_GEOLOCATION", default => isAppleWebKit(), value => \$clientBasedGeolocationSupport },
 
+    { option => "css-filters", desc => "Toggle CSS Filters support",
+      define => "ENABLE_CSS_FILTERS", default => isAppleWebKit(), value => \$cssFiltersSupport },
+
     { option => "css3-flexbox", desc => "Toggle CSS3 Flexbox support",
       define => "ENABLE_CSS3_FLEXBOX", default => 0, value => \$css3FlexboxSupport },
 
     { option => "coverage", desc => "Toggle code coverage support",
       define => "", default => 0, value => \$coverageSupport },
 
-    { option => "database", desc => "Toggle Database Support",
-      define => "ENABLE_DATABASE", default => 1, value => \$databaseSupport },
+    { option => "sql-database", desc => "Toggle SQL Database Support",
+      define => "ENABLE_SQL_DATABASE", default => 1, value => \$sqlDatabaseSupport },
 
     { option => "datalist", desc => "Toggle HTML5 datalist support",
       define => "ENABLE_DATALIST", default => 1, value => \$datalistSupport },
@@ -175,20 +185,23 @@ my @features = (
     { option => "directory-upload", desc => "Toogle Directory upload support",
       define => "ENABLE_DIRECTORY_UPLOAD", default => 0, value => \$directoryUploadSupport },
 
+    { option => "mutation-observers", desc => "Toggle DOM mutation observer support",
+      define => "ENABLE_MUTATION_OBSERVERS", default => 0, value => \$mutationObserversSupport },
+
     { option => "dom-storage", desc => "Toggle DOM Storage Support",
       define => "ENABLE_DOM_STORAGE", default => 1, value => \$domStorageSupport },
-
-    { option => "eventsource", desc => "Toggle server-sent events support",
-      define => "ENABLE_EVENTSOURCE", default => 1, value => \$eventsourceSupport },
 
     { option => "file-system", desc => "Toggle FileSystem support",
       define => "ENABLE_FILE_SYSTEM", default => 0, value => \$fileSystemSupport },
 
-    { option => "filters", desc => "Toggle Filters support",
+    { option => "filters", desc => "Toggle SVG Filters support",
       define => "ENABLE_FILTERS", default => (isAppleWebKit() || isGtk() || isQt() || isEfl()), value => \$filtersSupport },
 
     { option => "fullscreen-api", desc => "Toggle Fullscreen API support",
       define => "ENABLE_FULLSCREEN_API", default => (isAppleMacWebKit() || isGtk()), value => \$fullscreenAPISupport },
+
+    { option => "gamepad", desc => "Toggle Gamepad support",
+      define => "ENABLE_GAMEPAD", default => 0, value => \$gamepadSupport },
 
     { option => "geolocation", desc => "Toggle Geolocation support",
       define => "ENABLE_GEOLOCATION", default => (isAppleWebKit() || isGtk()), value => \$geolocationSupport },
@@ -205,6 +218,24 @@ my @features = (
     { option => "input-speech", desc => "Speech Input API support",
       define => "ENABLE_INPUT_SPEECH", default => 0, value => \$inputSpeechSupport },
 
+    { option => "input-type-date", desc => "Toggle date type <input> support",
+      define => "ENABLE_INPUT_TYPE_DATE", default => 0, value => \$inputTypeDateSupport },
+
+    { option => "input-type-datetime", desc => "Toggle datetime type <input> support",
+      define => "ENABLE_INPUT_TYPE_DATETIME", default => 0, value => \$inputTypeDatetimeSupport },
+
+    { option => "input-type-datetimelocal", desc => "Toggle datetime-local type <input> support",
+      define => "ENABLE_INPUT_TYPE_DATETIMELOCAL", default => 0, value => \$inputTypeDatetimelocalSupport },
+
+    { option => "input-type-month", desc => "Toggle month type <input> support",
+      define => "ENABLE_INPUT_TYPE_MONTH", default => 0, value => \$inputTypeMonthSupport },
+
+    { option => "input-type-time", desc => "Toggle time type <input> support",
+      define => "ENABLE_INPUT_TYPE_TIME", default => 0, value => \$inputTypeTimeSupport },
+
+    { option => "input-type-week", desc => "Toggle week type <input> support",
+      define => "ENABLE_INPUT_TYPE_WEEK", default => 0, value => \$inputTypeWeekSupport },
+
     { option => "inspector", desc => "Toggle Web Inspector support",
       define => "ENABLE_INSPECTOR", default => 1, value => \$webInspectorSupport },
 
@@ -216,6 +247,9 @@ my @features = (
 
     { option => "mathml", desc => "Toggle MathML support",
       define => "ENABLE_MATHML", default => 1, value => \$mathmlSupport },
+
+    { option => "media-source", desc => "Toggle Media Source support",
+      define => "ENABLE_MEDIA_SOURCE", default => 0, value => \$mediaSourceSupport },
 
     { option => "media-statistics", desc => "Toggle Media Statistics support",
       define => "ENABLE_MEDIA_STATISTICS", default => 0, value => \$mediaStatisticsSupport },
@@ -234,9 +268,6 @@ my @features = (
 
     { option => "notifications", desc => "Toggle Desktop Notifications Support",
       define => "ENABLE_NOTIFICATIONS", default => 0, value => \$notificationsSupport },
-
-    { option => "offline-web-applications", desc => "Toggle Offline Web Application Support",
-      define => "ENABLE_OFFLINE_WEB_APPLICATIONS", default => 1, value => \$offlineWebApplicationSupport },
 
     { option => "orientation-events", desc => "Toggle Orientation Events support",
       define => "ENABLE_ORIENTATION_EVENTS", default => 0, value => \$orientationEventsSupport },
@@ -262,23 +293,11 @@ my @features = (
     { option => "svg", desc => "Toggle SVG support",
       define => "ENABLE_SVG", default => 1, value => \$svgSupport },
 
-    { option => "svg-animation", desc => "Toggle SVG animation support (implies SVG support)",
-      define => "ENABLE_SVG_ANIMATION", default => 1, value => \$svgAnimationSupport },
-
-    { option => "svg-as-image", desc => "Toggle SVG as Image support (implies SVG support)",
-      define => "ENABLE_SVG_AS_IMAGE", default => 1, value => \$svgAsImageSupport },
-
     { option => "svg-dom-objc-bindings", desc => "Toggle SVG DOM Objective-C bindings support (implies SVG support)",
       define => "ENABLE_SVG_DOM_OBJC_BINDINGS", default => isAppleMacWebKit(), value => \$svgDOMObjCBindingsSupport },
 
     { option => "svg-fonts", desc => "Toggle SVG fonts support (imples SVG support)",
       define => "ENABLE_SVG_FONTS", default => 1, value => \$svgFontsSupport },
-
-    { option => "svg-foreign-object", desc => "Toggle SVG foreign object support (implies SVG support)",
-      define => "ENABLE_SVG_FOREIGN_OBJECT", default => 1, value => \$svgForeignObjectSupport },
-
-    { option => "svg-use", desc => "Toggle SVG use element support (implies SVG support)",
-      define => "ENABLE_SVG_USE", default => 1, value => \$svgUseSupport },
 
     { option => "tiled-backing-store", desc => "Toggle Tiled Backing Store support",
       define => "ENABLE_TILED_BACKING_STORE", default => isQt(), value => \$tiledBackingStoreSupport },
@@ -291,9 +310,6 @@ my @features = (
 
     { option => "video", desc => "Toggle Video support",
       define => "ENABLE_VIDEO", default => (isAppleWebKit() || isGtk()), value => \$videoSupport },
-
-    { option => "wcss", desc => "Toggle WCSS support",
-      define => "ENABLE_WCSS", default => 0, value => \$wcssSupport },
 
     { option => "web-audio", desc => "Toggle Web Audio support",
       define => "ENABLE_WEB_AUDIO", default => 0, value=> \$webAudioSupport },
@@ -349,9 +365,7 @@ foreach (@features) {
     ${$_->{value}} = ($_->{default} && !$minimal) || 0;
 }
 
-$svgSupport = $svgSupport || $svgAnimationSupport || $svgAsImageSupport
-    || $svgDOMObjCBindingsSupport || $svgFontsSupport
-    || $svgForeignObjectSupport || $svgUseSupport;
+$svgSupport = $svgSupport || $svgDOMObjCBindingsSupport || $svgFontsSupport;
 
 $blobSupport = $blobSupport || $mediaStreamSupport;
 
@@ -365,6 +379,7 @@ Usage: $programName [options] [options to pass to build system]
   --dsym                            Change debugging format to dwarf-with-dsym (Mac only)
 
   --chromium                        Build the Chromium port on Mac/Win/Linux
+  --chromium-android                Build the Chromium port on Android
   --efl                             Build the EFL port
   --gtk                             Build the GTK+ port
   --qt                              Build the Qt port
@@ -578,6 +593,7 @@ if (isChromium()) {
     @options = @ARGV;
     # Chromium doesn't build by project directories.
     @projects = ();
+    push @options, "--makeargs=" . $makeArgs if $makeArgs;
     my $result = buildChromium($clean, @options);
     exit exitStatus($result) if exitStatus($result);
 }
@@ -605,7 +621,7 @@ for my $dir (@projects) {
 
     my $project = basename($dir);
     if (isGtk()) {
-        $result = buildGtkProject($project, $clean,  @options);
+        $result = buildGtkProject($project, $clean, !$noWebKit2, @options);
     } elsif (isQt()) {
         #FIXME: $dir should probably be $project.
         $result = buildQMakeQtProject($dir, $clean, @options);

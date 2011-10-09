@@ -33,6 +33,7 @@
 #endif
 
 #include <wtf/text/CString.h>
+#include <wtf/text/StringBuilder.h>
 
 using namespace std;
 
@@ -124,21 +125,17 @@ String Text::wholeText() const
             CRASH();
         resultLength += data.length();
     }
-    UChar* resultData;
-    String result = String::createUninitialized(resultLength, resultData);
-    UChar* p = resultData;
+    StringBuilder result;
+    result.reserveCapacity(resultLength);
     for (const Node* n = startText; n != onePastEndText; n = n->nextSibling()) {
         if (!n->isTextNode())
             continue;
         const Text* t = static_cast<const Text*>(n);
-        const String& data = t->data();
-        unsigned dataLength = data.length();
-        memcpy(p, data.characters(), dataLength * sizeof(UChar));
-        p += dataLength;
+        result.append(t->data());
     }
-    ASSERT(p == resultData + resultLength);
+    ASSERT(result.length() == resultLength);
 
-    return result;
+    return result.toString();
 }
 
 PassRefPtr<Text> Text::replaceWholeText(const String& newText, ExceptionCode&)
@@ -237,11 +234,7 @@ RenderObject* Text::createRenderer(RenderArena* arena, RenderStyle* style)
 {
 #if ENABLE(SVG)
     Node* parentOrHost = parentOrHostNode();
-    if (parentOrHost->isSVGElement()
-#if ENABLE(SVG_FOREIGN_OBJECT)
-        && !parentOrHost->hasTagName(SVGNames::foreignObjectTag)
-#endif
-    )
+    if (parentOrHost->isSVGElement() && !parentOrHost->hasTagName(SVGNames::foreignObjectTag))
         return new (arena) RenderSVGInlineText(this, dataImpl());
 #endif
 
@@ -257,8 +250,11 @@ void Text::attach()
     CharacterData::attach();
 }
 
-void Text::recalcStyle(StyleChange change)
+void Text::recalcTextStyle(StyleChange change)
 {
+    if (hasCustomWillOrDidRecalcStyle())
+        willRecalcTextStyle(change);
+
     if (change != NoChange && parentNode() && parentNode()->renderer()) {
         if (renderer())
             renderer()->setStyle(parentNode()->renderer()->style());

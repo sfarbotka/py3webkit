@@ -66,8 +66,8 @@ PassOwnPtr<InputType> ColorInputType::create(HTMLInputElement* element)
 
 ColorInputType::~ColorInputType()
 {
-    closeColorChooserIfCurrentClient();
-}    
+    cleanupColorChooserIfCurrentClient();
+}
 
 bool ColorInputType::isColorControl() const
 {
@@ -105,11 +105,6 @@ Color ColorInputType::valueAsColor() const
     return Color(element()->value());
 }
 
-void ColorInputType::setValueAsColor(const Color& color) const
-{
-    element()->setValue(color.serialized(), true);
-}
-
 void ColorInputType::createShadowSubtree()
 {
     Document* document = element()->document();
@@ -126,8 +121,13 @@ void ColorInputType::createShadowSubtree()
     updateColorSwatch();
 }
 
-void ColorInputType::valueChanged()
+void ColorInputType::setValue(const String& value, bool valueChanged, bool sendChangeEvent);
 {
+    InputType::setValue(value, valueChanged, sendChangeEvent);
+
+    if (!valueChanged)
+        return;
+
     updateColorSwatch();
     if (ColorChooser::chooser()->client() == this) {
         if (Chrome* chrome = this->chrome())
@@ -167,19 +167,29 @@ void ColorInputType::handleDOMActivateEvent(Event* event)
 
 void ColorInputType::detach()
 {
-    closeColorChooserIfCurrentClient();
+    cleanupColorChooserIfCurrentClient();
 }
 
-void ColorInputType::colorSelected(const Color& color)
+void ColorInputType::didChooseColor(const Color& color)
 {
-    if (element()->disabled() || element()->readOnly())
+    if (element()->disabled() || element()->readOnly() || color == valueAsColor())
         return;
-    setValueAsColor(color);
+    element()->setValueFromRenderer(color.serialized());
+    updateColorSwatch();
+    element()->dispatchFormControlChangeEvent();
 }
 
 bool ColorInputType::isColorInputType() const
 {
     return true;
+}
+
+void ColorInputType::cleanupColorChooserIfCurrentClient() const
+{
+    if (ColorChooser::chooser()->client() != this)
+        return;
+    if (Chrome* chrome = this->chrome())
+        chrome->cleanupColorChooser();
 }
 
 void ColorInputType::updateColorSwatch()
@@ -196,14 +206,6 @@ HTMLElement* ColorInputType::shadowColorSwatch() const
 {
     ShadowRoot* shadow = element()->shadowRoot();
     return shadow ? toHTMLElement(shadow->firstChild()->firstChild()) : 0;
-}
-
-void ColorInputType::closeColorChooserIfCurrentClient() const
-{
-    if (ColorChooser::chooser()->client() != this)
-        return;
-    if (Chrome* chrome = this->chrome())
-        chrome->closeColorChooser();
 }
 
 } // namespace WebCore

@@ -1,6 +1,5 @@
 # Derived source generators
 
-include(../common.pri)
 include(features.pri)
 
 CONFIG(standalone_package) {
@@ -18,8 +17,6 @@ XLINK_NAMES = $$PWD/svg/xlinkattrs.in
 
 TOKENIZER = $$PWD/css/tokenizer.flex
 
-DOCTYPESTRINGS_GPERF = $$PWD/html/DocTypeStrings.gperf
-
 CSSBISON = $$PWD/css/CSSGrammar.y
 
 contains(DEFINES, ENABLE_XSLT=1) {
@@ -28,6 +25,8 @@ contains(DEFINES, ENABLE_XSLT=1) {
         XMLVIEWER_JS = $$PWD/xml/XMLViewer.js
     }
 }
+
+FONT_NAMES = $$PWD/css/WebKitFontFamilyNames.in
 
 HTML_NAMES = $$PWD/html/HTMLTagNames.in
 
@@ -60,17 +59,13 @@ contains(DEFINES, ENABLE_SVG=1) {
     EXTRACSSVALUES += $$PWD/css/SVGCSSValueKeywords.in
 }
 
-contains(DEFINES, ENABLE_WCSS=1) {
-    EXTRACSSPROPERTIES += $$PWD/css/WCSSPropertyNames.in
-    EXTRACSSVALUES += $$PWD/css/WCSSValueKeywords.in
-}
-
 STYLESHEETS_EMBED = \
     $$PWD/css/html.css \
     $$PWD/css/quirks.css \
     $$PWD/css/mathml.css \
     $$PWD/css/svg.css \
     $$PWD/css/view-source.css \
+    $$PWD/css/fullscreen.css \
     $$PWD/css/mediaControls.css \
     $$PWD/css/mediaControlsQt.css \
     $$PWD/css/mediaControlsQtFullscreen.css \
@@ -105,13 +100,13 @@ IDL_BINDINGS += \
     css/StyleMedia.idl \
     css/StyleSheet.idl \
     css/StyleSheetList.idl \
+    css/WebKitCSSFilterValue.idl \
     css/WebKitCSSKeyframeRule.idl \
     css/WebKitCSSKeyframesRule.idl \
     css/WebKitCSSMatrix.idl \
     css/WebKitCSSTransformValue.idl \
     dom/Attr.idl \
     dom/BeforeLoadEvent.idl \
-    dom/BeforeProcessEvent.idl \
     dom/CharacterData.idl \
     dom/ClientRect.idl \
     dom/ClientRectList.idl \
@@ -164,6 +159,7 @@ IDL_BINDINGS += \
     dom/ProgressEvent.idl \
     dom/RangeException.idl \
     dom/Range.idl \
+    dom/RequestAnimationFrameCallback.idl \
     dom/StringCallback.idl \
     dom/Text.idl \
     dom/TextEvent.idl \
@@ -223,6 +219,7 @@ IDL_BINDINGS += \
     html/canvas/WebGLActiveInfo.idl \
     html/canvas/WebGLBuffer.idl \
     html/canvas/WebGLContextAttributes.idl \
+    html/canvas/WebGLContextEvent.idl \
     html/canvas/WebGLFramebuffer.idl \
     html/canvas/WebGLProgram.idl \
     html/canvas/WebGLRenderbuffer.idl \
@@ -247,7 +244,6 @@ IDL_BINDINGS += \
     html/HTMLAreaElement.idl \
     html/HTMLBaseElement.idl \
     html/HTMLBaseFontElement.idl \
-    html/HTMLBlockquoteElement.idl \
     html/HTMLBodyElement.idl \
     html/HTMLBRElement.idl \
     html/HTMLButtonElement.idl \
@@ -300,6 +296,7 @@ IDL_BINDINGS += \
     html/HTMLScriptElement.idl \
     html/HTMLSelectElement.idl \
     html/HTMLSourceElement.idl \
+    html/HTMLSpanElement.idl \
     html/HTMLStyleElement.idl \
     html/HTMLTableCaptionElement.idl \
     html/HTMLTableCellElement.idl \
@@ -672,6 +669,14 @@ v8 {
 addExtraCompiler(idl)
 
 # GENERATOR 2: inspector idl compiler
+inspectorValidate.output = $${WC_GENERATED_SOURCES_DIR}/InspectorProtocolVersion.h
+inspectorValidate.input = INSPECTOR_JSON
+inspectorValidate.wkScript = $$PWD/inspector/generate-inspector-protocol-version
+inspectorValidate.commands = python $$inspectorValidate.wkScript -o $${WC_GENERATED_SOURCES_DIR}/InspectorProtocolVersion.h $$PWD/inspector/Inspector.json
+inspectorValidate.depends = $$PWD/inspector/generate-inspector-protocol-version
+inspectorValidate.wkAddOutputToSources = false
+addExtraCompiler(inspectorValidate)
+
 inspectorJSON.output = $${WC_GENERATED_SOURCES_DIR}/Inspector.idl
 inspectorJSON.input = INSPECTOR_JSON
 inspectorJSON.wkScript = $$PWD/inspector/generate-inspector-idl
@@ -762,6 +767,14 @@ xmlnames.wkScript = $$PWD/dom/make_names.pl
 xmlnames.commands = perl -I$$PWD/bindings/scripts $$xmlnames.wkScript --attrs $$PWD/xml/xmlattrs.in --preprocessor \"$${QMAKE_MOC} -E\" --outputDir $$WC_GENERATED_SOURCES_DIR
 addExtraCompiler(xmlnames)
 
+# GENERATOR 5-D:
+fontnames.output = $${WC_GENERATED_SOURCES_DIR}/WebKitFontFamilyNames.cpp
+fontnames.input = FONT_NAMES
+fontnames.wkScript = $$PWD/dom/make_names.pl
+fontnames.commands = perl -I$$PWD/bindings/scripts $$fontnames.wkScript --fonts $$FONT_NAMES --outputDir $$WC_GENERATED_SOURCES_DIR
+entities.depends = $$PWD/dom/make_names.pl $$FONT_NAMES
+addExtraCompiler(fontnames)
+
 # GENERATOR 8-A:
 entities.output = $${WC_GENERATED_SOURCES_DIR}/HTMLEntityTable.cpp
 entities.input = HTML_ENTITIES
@@ -772,15 +785,6 @@ entities.depends = $$PWD/html/parser/create-html-entity-table
 addExtraCompiler(entities)
 
 # GENERATOR 8-B:
-doctypestrings.output = $${WC_GENERATED_SOURCES_DIR}/DocTypeStrings.cpp
-doctypestrings.input = DOCTYPESTRINGS_GPERF
-doctypestrings.wkScript = $$PWD/make-hash-tools.pl
-doctypestrings.commands = perl $$doctypestrings.wkScript $${WC_GENERATED_SOURCES_DIR} $$DOCTYPESTRINGS_GPERF
-doctypestrings.clean = ${QMAKE_FILE_OUT}
-doctypestrings.depends = $$PWD/make-hash-tools.pl
-addExtraCompiler(doctypestrings)
-
-# GENERATOR 8-C:
 colordata.output = $${WC_GENERATED_SOURCES_DIR}/ColorData.cpp
 colordata.input = COLORDATA_GPERF
 colordata.wkScript = $$PWD/make-hash-tools.pl
@@ -791,7 +795,7 @@ addExtraCompiler(colordata)
 
 contains(DEFINES, ENABLE_XSLT=1) {
 contains(DEFINES, WTF_USE_LIBXML2=1) {
-# GENERATOR 8-D:
+# GENERATOR 8-C:
 xmlviewercss.output = $${WC_GENERATED_SOURCES_DIR}/XMLViewerCSS.h
 xmlviewercss.input = XMLVIEWER_CSS
 xmlviewercss.wkScript = $$PWD/inspector/xxd.pl
@@ -801,7 +805,7 @@ xmlviewercss.depends = $$PWD/inspector/xxd.pl
 xmlviewercss.wkAddOutputToSources = false
 addExtraCompiler(xmlviewercss)
 
-# GENERATOR 8-E:
+# GENERATOR 8-D:
 xmlviewerjs.output = $${WC_GENERATED_SOURCES_DIR}/XMLViewerJS.h
 xmlviewerjs.input = XMLVIEWER_JS
 xmlviewerjs.wkScript = $$PWD/inspector/xxd.pl

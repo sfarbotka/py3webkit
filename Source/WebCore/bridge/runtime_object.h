@@ -28,18 +28,19 @@
 
 #include "BridgeJSC.h"
 #include <runtime/JSGlobalObject.h>
-#include <runtime/JSObjectWithGlobalObject.h>
 
 namespace JSC {
 namespace Bindings {
 
-class RuntimeObject : public JSObjectWithGlobalObject {
+class RuntimeObject : public JSNonFinalObject {
 public:
-    typedef JSObjectWithGlobalObject Base;
+    typedef JSNonFinalObject Base;
 
     static RuntimeObject* create(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, PassRefPtr<Instance> instance)
     {
-        return new (allocateCell<RuntimeObject>(*exec->heap())) RuntimeObject(exec, globalObject, structure, instance);
+        RuntimeObject* object = new (allocateCell<RuntimeObject>(*exec->heap())) RuntimeObject(exec, globalObject, structure, instance);
+        object->finishCreation(globalObject);
+        return object;
     }
 
     virtual ~RuntimeObject();
@@ -47,9 +48,12 @@ public:
     virtual bool getOwnPropertySlot(ExecState*, const Identifier& propertyName, PropertySlot&);
     virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier& propertyName, PropertyDescriptor&);
     virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+    static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
     virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
+    static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
     virtual JSValue defaultValue(ExecState*, PreferredPrimitiveType) const;
-    virtual CallType getCallData(CallData&);
+    virtual CallType getCallDataVirtual(CallData&);
+    static CallType getCallData(JSCell*, CallData&);
     virtual ConstructType getConstructData(ConstructData&);
 
     virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
@@ -67,14 +71,15 @@ public:
         return globalObject->objectPrototype();
     }
 
-    static Structure* createStructure(JSGlobalData& globalData, JSValue prototype)
+    static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
     {
-        return Structure::create(globalData, prototype, TypeInfo(ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+        return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info);
     }
 
 protected:
     RuntimeObject(ExecState*, JSGlobalObject*, Structure*, PassRefPtr<Instance>);
-    static const unsigned StructureFlags = OverridesGetOwnPropertySlot | OverridesGetPropertyNames | JSObjectWithGlobalObject::StructureFlags;
+    void finishCreation(JSGlobalObject*);
+    static const unsigned StructureFlags = OverridesGetOwnPropertySlot | OverridesGetPropertyNames | Base::StructureFlags;
 
 private:
     static JSValue fallbackObjectGetter(ExecState*, JSValue, const Identifier&);

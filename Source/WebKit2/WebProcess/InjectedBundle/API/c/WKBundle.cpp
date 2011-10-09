@@ -151,6 +151,11 @@ void WKBundleSetPrivateBrowsingEnabled(WKBundleRef bundleRef, WKBundlePageGroupR
     toImpl(bundleRef)->setPrivateBrowsingEnabled(toImpl(pageGroupRef), enabled);
 }
 
+void WKBundleSwitchNetworkLoaderToNewTestingSession(WKBundleRef bundleRef)
+{
+    toImpl(bundleRef)->switchNetworkLoaderToNewTestingSession();
+}
+
 void WKBundleSetAuthorAndUserStylesEnabled(WKBundleRef bundleRef, WKBundlePageGroupRef pageGroupRef, bool enabled)
 {
     toImpl(bundleRef)->setAuthorAndUserStylesEnabled(toImpl(pageGroupRef), enabled);
@@ -184,6 +189,16 @@ void WKBundleClearAllDatabases(WKBundleRef bundleRef)
 void WKBundleSetDatabaseQuota(WKBundleRef bundleRef, uint64_t quota)
 {
     toImpl(bundleRef)->setDatabaseQuota(quota);
+}
+
+void WKBundleClearApplicationCache(WKBundleRef bundleRef)
+{
+    toImpl(bundleRef)->clearApplicationCache();
+}
+
+void WKBundleSetAppCacheMaximumSize(WKBundleRef bundleRef, uint64_t size)
+{
+    toImpl(bundleRef)->setAppCacheMaximumSize(size);
 }
 
 int WKBundleNumberOfPages(WKBundleRef bundleRef, WKBundleFrameRef frameRef, double pageWidthInPixels, double pageHeightInPixels)

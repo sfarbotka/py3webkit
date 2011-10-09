@@ -45,9 +45,7 @@ public:
         , m_bidiEmbeddingLevel(0)
         , m_dirty(false)
         , m_extracted(false)
-#if ENABLE(SVG)
         , m_hasVirtualLogicalHeight(false)
-#endif
         , m_isHorizontal(true)
         , m_endsWithBreak(false)
         , m_hasSelectedChildrenOrCanHaveLeadingExpansion(false)
@@ -56,9 +54,7 @@ public:
         , m_dirOverride(false)
         , m_isText(false)
         , m_determinedIfNextOnLineExists(false)
-        , m_determinedIfPrevOnLineExists(false)
         , m_nextOnLineExists(false)
-        , m_prevOnLineExists(false)
         , m_expansion(0)
 #ifndef NDEBUG
         , m_hasBadParent(false)
@@ -79,9 +75,7 @@ public:
         , m_bidiEmbeddingLevel(0)
         , m_dirty(dirty)
         , m_extracted(extracted)
-#if ENABLE(SVG)
         , m_hasVirtualLogicalHeight(false)
-#endif
         , m_isHorizontal(isHorizontal)
         , m_endsWithBreak(false)
         , m_hasSelectedChildrenOrCanHaveLeadingExpansion(false)
@@ -90,9 +84,7 @@ public:
         , m_dirOverride(false)
         , m_isText(false)
         , m_determinedIfNextOnLineExists(false)
-        , m_determinedIfPrevOnLineExists(false)
         , m_nextOnLineExists(false)
-        , m_prevOnLineExists(false)
         , m_expansion(0)
 #ifndef NDEBUG
         , m_hasBadParent(false)
@@ -203,7 +195,6 @@ public:
         m_prev = prev;
     }
     bool nextOnLineExists() const;
-    bool prevOnLineExists() const;
 
     virtual bool isLeaf() const { return true; }
     
@@ -271,14 +262,13 @@ public:
     // The logical height is our extent in the block flow direction, i.e., height for horizontal text and width for vertical text.
     LayoutUnit logicalHeight() const;
 
-    FloatRect logicalFrameRect() const { return isHorizontal() ? IntRect(m_topLeft.x(), m_topLeft.y(), m_logicalWidth, logicalHeight()) : IntRect(m_topLeft.y(), m_topLeft.x(), m_logicalWidth, logicalHeight()); }
+    FloatRect logicalFrameRect() const { return isHorizontal() ? FloatRect(m_topLeft.x(), m_topLeft.y(), m_logicalWidth, logicalHeight()) : FloatRect(m_topLeft.y(), m_topLeft.x(), m_logicalWidth, logicalHeight()); }
 
-    virtual int baselinePosition(FontBaseline baselineType) const { return boxModelObject()->baselinePosition(baselineType, m_firstLine, isHorizontal() ? HorizontalLine : VerticalLine, PositionOnContainingLine); }
-    virtual int lineHeight() const { return boxModelObject()->lineHeight(m_firstLine, isHorizontal() ? HorizontalLine : VerticalLine, PositionOnContainingLine); }
+    virtual LayoutUnit baselinePosition(FontBaseline baselineType) const { return boxModelObject()->baselinePosition(baselineType, m_firstLine, isHorizontal() ? HorizontalLine : VerticalLine, PositionOnContainingLine); }
+    virtual LayoutUnit lineHeight() const { return boxModelObject()->lineHeight(m_firstLine, isHorizontal() ? HorizontalLine : VerticalLine, PositionOnContainingLine); }
     
     virtual int caretMinOffset() const;
     virtual int caretMaxOffset() const;
-    virtual unsigned caretMaxRenderedOffset() const;
 
     unsigned char bidiLevel() const { return m_bidiEmbeddingLevel; }
     void setBidiLevel(unsigned char level) { m_bidiEmbeddingLevel = level; }
@@ -365,9 +355,7 @@ public:
     bool m_isText : 1; // Whether or not this object represents text with a non-zero height. Includes non-image list markers, text boxes.
 protected:
     mutable bool m_determinedIfNextOnLineExists : 1;
-    mutable bool m_determinedIfPrevOnLineExists : 1;
     mutable bool m_nextOnLineExists : 1;
-    mutable bool m_prevOnLineExists : 1;
     signed m_expansion : 11; // for justified text
 
 #ifndef NDEBUG

@@ -79,6 +79,8 @@ bool Settings::gShouldPaintNativeControls = true;
 bool Settings::gAVFoundationEnabled(false);
 #endif
 
+bool Settings::gMockScrollbarsEnabled = false;
+
 #if PLATFORM(WIN) || (OS(WINDOWS) && PLATFORM(WX))
 bool Settings::gShouldUseHighResolutionTimers = true;
 #endif
@@ -108,6 +110,7 @@ Settings::Settings(Page* page)
     : m_page(page)
     , m_editableLinkBehavior(EditableLinkDefaultBehavior)
     , m_textDirectionSubmenuInclusionBehavior(TextDirectionSubmenuAutomaticallyIncluded)
+    , m_passwordEchoDurationInSeconds(1)
     , m_minimumFontSize(0)
     , m_minimumLogicalFontSize(0)
     , m_defaultFontSize(0)
@@ -149,7 +152,6 @@ Settings::Settings(Page* page)
     , m_needsKeyboardEventDisambiguationQuirks(false)
     , m_treatsAnyTextCSSLinkAsStylesheet(false)
     , m_needsLeopardMailQuirks(false)
-    , m_needsTigerMailQuirks(false)
     , m_isDOMPasteAllowed(false)
     , m_shrinksStandaloneImagesToFit(true)
     , m_usesPageCache(false)
@@ -165,7 +167,6 @@ Settings::Settings(Page* page)
     , m_localFileContentSniffingEnabled(false)
     , m_inApplicationChromeMode(false)
     , m_offlineWebApplicationCacheEnabled(false)
-    , m_shouldPaintCustomScrollbars(false)
     , m_enforceCSSMIMETypeInNoQuirksMode(true)
     , m_usesEncodingDetector(false)
     , m_allowScriptsToCloseWindows(false)
@@ -207,14 +208,23 @@ Settings::Settings(Page* page)
     , m_allowDisplayOfInsecureContent(true)
     , m_allowRunningOfInsecureContent(true)
 #if ENABLE(SMOOTH_SCROLLING)
-    , m_scrollAnimatorEnabled(false)
+    , m_scrollAnimatorEnabled(true)
 #endif
 #if ENABLE(WEB_SOCKETS)
     , m_useHixie76WebSocketProtocol(true)
 #endif
     , m_mediaPlaybackRequiresUserGesture(false)
     , m_mediaPlaybackAllowsInline(true)
+#if OS(SYMBIAN)
+    , m_passwordEchoEnabled(true)
+#else
+    , m_passwordEchoEnabled(false)
+#endif
+    , m_suppressIncrementalRendering(false)
     , m_loadsImagesAutomaticallyTimer(this, &Settings::loadsImagesAutomaticallyTimerFired)
+    , m_zoomAnimatorScale(1)
+    , m_zoomAnimatorPosX(0)
+    , m_zoomAnimatorPosY(0)
 {
     // A Frame may not have been created yet, so we initialize the AtomicString 
     // hash before trying to use it.
@@ -410,15 +420,25 @@ void Settings::setSessionStorageQuota(unsigned sessionStorageQuota)
 
 void Settings::setPrivateBrowsingEnabled(bool privateBrowsingEnabled)
 {
-    if (m_privateBrowsingEnabled == privateBrowsingEnabled)
-        return;
-
+    // FIXME http://webkit.org/b/67870: The private browsing storage session and cookie private
+    // browsing mode (which is used if storage sessions are not available) are global settings, so
+    // it is misleading to have them as per-page settings.
+    // In addition, if they are treated as a per Page settings, the global values can get out of
+    // sync with the per Page value in the following situation:
+    // 1. The global values get set to true when setPrivateBrowsingEnabled(true) is called.
+    // 2. All Pages are closed, so all Settings objects go away.
+    // 3. A new Page is created, and a corresponding new Settings object is created - with
+    //    m_privateBrowsingEnabled starting out as false in the constructor.
+    // 4. The WebPage settings get applied to the new Page and setPrivateBrowsingEnabled(false)
+    //    is called, but an if (m_privateBrowsingEnabled == privateBrowsingEnabled) early return
+    //    prevents the global values from getting changed from true to false.
 #if USE(CFURLSTORAGESESSIONS)
     ResourceHandle::setPrivateBrowsingEnabled(privateBrowsingEnabled);
 #endif
-
-    // FIXME: We can only enable cookie private browsing mode globally, so it's misleading to have it as a per-page setting.
     setCookieStoragePrivateBrowsingEnabled(privateBrowsingEnabled);
+
+    if (m_privateBrowsingEnabled == privateBrowsingEnabled)
+        return;
 
     m_privateBrowsingEnabled = privateBrowsingEnabled;
     m_page->privateBrowsingStateChanged();
@@ -505,11 +525,6 @@ void Settings::setNeedsLeopardMailQuirks(bool needsQuirks)
     m_needsLeopardMailQuirks = needsQuirks;
 }
 
-void Settings::setNeedsTigerMailQuirks(bool needsQuirks)
-{
-    m_needsTigerMailQuirks = needsQuirks;
-}
-    
 void Settings::setDOMPasteAllowed(bool DOMPasteAllowed)
 {
     m_isDOMPasteAllowed = DOMPasteAllowed;
@@ -637,11 +652,6 @@ void Settings::setApplicationChromeMode(bool mode)
 void Settings::setOfflineWebApplicationCacheEnabled(bool enabled)
 {
     m_offlineWebApplicationCacheEnabled = enabled;
-}
-
-void Settings::setShouldPaintCustomScrollbars(bool shouldPaintCustomScrollbars)
-{
-    m_shouldPaintCustomScrollbars = shouldPaintCustomScrollbars;
 }
 
 void Settings::setEnforceCSSMIMETypeInNoQuirksMode(bool enforceCSSMIMETypeInNoQuirksMode)
@@ -806,6 +816,16 @@ void Settings::setTiledBackingStoreEnabled(bool enabled)
     if (m_page->mainFrame())
         m_page->mainFrame()->setTiledBackingStoreEnabled(enabled);
 #endif
+}
+
+void Settings::setMockScrollbarsEnabled(bool flag)
+{
+    gMockScrollbarsEnabled = flag;
+}
+
+bool Settings::mockScrollbarsEnabled()
+{
+    return gMockScrollbarsEnabled;
 }
 
 } // namespace WebCore

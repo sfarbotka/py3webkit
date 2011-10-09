@@ -27,6 +27,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.View}
+ */
 WebInspector.CookieItemsView = function(treeElement, cookieDomain)
 {
     WebInspector.View.call(this);
@@ -45,7 +49,7 @@ WebInspector.CookieItemsView = function(treeElement, cookieDomain)
 
     this._emptyView = new WebInspector.EmptyView(WebInspector.UIString("This site has no cookies."));
     this._emptyView.show(this.element);
-    
+
     this.element.addEventListener("contextmenu", this._contextMenu.bind(this), true);
 }
 
@@ -67,7 +71,7 @@ WebInspector.CookieItemsView.prototype = {
         this._deleteButton.visible = false;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this._cookiesTable)
             this._cookiesTable.updateWidths();
@@ -154,8 +158,8 @@ WebInspector.CookieItemsView.prototype = {
     {
         this._update();
     },
-    
-    _contextMenu: function()
+
+    _contextMenu: function(event)
     {
         if (!this._cookies.length) {
             var contextMenu = new WebInspector.ContextMenu();
@@ -167,6 +171,9 @@ WebInspector.CookieItemsView.prototype = {
 
 WebInspector.CookieItemsView.prototype.__proto__ = WebInspector.View.prototype;
 
+/**
+ * @constructor
+ */
 WebInspector.SimpleCookiesTable = function()
 {
     this.element = document.createElement("div");
@@ -202,7 +209,7 @@ WebInspector.SimpleCookiesTable.prototype = {
         this._dataGrid.children[0].selected = true;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this._dataGrid)
             this._dataGrid.updateWidths();
@@ -249,7 +256,7 @@ WebInspector.Cookies.buildCookiesFromString = function(rawCookieString)
 WebInspector.Cookies.cookieMatchesResourceURL = function(cookie, resourceURL)
 {
     var url = resourceURL.asParsedURL();
-    if (!url || !this.cookieDomainMatchesResourceDomain(cookie.domain, url.host))
+    if (!url || !WebInspector.Cookies.cookieDomainMatchesResourceDomain(cookie.domain, url.host))
         return false;
     return (url.path.indexOf(cookie.path) === 0
         && (!cookie.port || url.port == cookie.port)

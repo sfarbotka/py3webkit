@@ -55,6 +55,18 @@ WK_EXPORT void WKBundlePageSimulateMouseMotion(WKBundlePageRef page, WKPoint pos
 
 WK_EXPORT uint64_t WKBundlePageGetRenderTreeSize(WKBundlePageRef page);
 
+WK_EXPORT void WKBundlePageSetTracksRepaints(WKBundlePageRef page, bool trackRepaints);
+WK_EXPORT bool WKBundlePageIsTrackingRepaints(WKBundlePageRef page);
+WK_EXPORT void WKBundlePageResetTrackedRepaints(WKBundlePageRef page);
+WK_EXPORT WKArrayRef WKBundlePageCopyTrackedRepaintRects(WKBundlePageRef page);
+
+WK_EXPORT WKStringRef WKBundlePageViewportConfigurationAsText(WKBundlePageRef, int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight);
+
+WK_EXPORT void WKBundlePageSetComposition(WKBundlePageRef page, WKStringRef text, int from, int length);
+WK_EXPORT bool WKBundlePageHasComposition(WKBundlePageRef page);
+WK_EXPORT void WKBundlePageConfirmComposition(WKBundlePageRef page);
+WK_EXPORT void WKBundlePageConfirmCompositionWithText(WKBundlePageRef page, WKStringRef text);
+
 #ifdef __cplusplus
 }
 #endif

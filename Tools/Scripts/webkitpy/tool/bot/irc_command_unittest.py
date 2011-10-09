@@ -41,28 +41,38 @@ class IRCCommandTest(unittest.TestCase):
 
     def test_whois(self):
         whois = Whois()
-        self.assertEquals("tom: Usage: BUGZILLA_EMAIL",
+        self.assertEquals("tom: Usage: whois SEARCH_STRING",
                           whois.execute("tom", [], None, None))
-        self.assertEquals("tom: Usage: BUGZILLA_EMAIL",
+        self.assertEquals("tom: Usage: whois SEARCH_STRING",
                           whois.execute("tom", ["Adam", "Barth"], None, None))
-        self.assertEquals("tom: Sorry, I don't know unknown@example.com. Maybe you could introduce me?",
+        self.assertEquals("tom: Sorry, I don't know any contributors matching 'unknown@example.com'.",
                           whois.execute("tom", ["unknown@example.com"], None, None))
         self.assertEquals("tom: tonyg@chromium.org is tonyg-cr. Why do you ask?",
                           whois.execute("tom", ["tonyg@chromium.org"], None, None))
-        self.assertEquals("tom: vicki@apple.com hasn't told me their nick. Boo hoo :-(",
+        self.assertEquals("tom: TonyG@Chromium.org is tonyg-cr. Why do you ask?",
+                          whois.execute("tom", ["TonyG@Chromium.org"], None, None))
+        self.assertEquals("tom: rniwa is rniwa (rniwa@webkit.org). Why do you ask?",
+                          whois.execute("tom", ["rniwa"], None, None))
+        self.assertEquals("tom: lopez is xan (xan.lopez@gmail.com, xan@gnome.org, xan@webkit.org, xlopez@igalia.com). Why do you ask?",
+                          whois.execute("tom", ["lopez"], None, None))
+        self.assertEquals('tom: "Vicki Murley" <vicki@apple.com> hasn\'t told me their nick. Boo hoo :-(',
                           whois.execute("tom", ["vicki@apple.com"], None, None))
+        self.assertEquals('tom: I\'m not sure who you mean?  eroman, ericu, eric_carlson, or eseidel could be \'Eric\'.',
+                          whois.execute("tom", ["Eric"], None, None))
+        self.assertEquals('tom: More than 5 contributors match \'david\', could you be more specific?',
+                          whois.execute("tom", ["david"], None, None))
 
     def test_create_bug(self):
         create_bug = CreateBug()
-        self.assertEquals("tom: Usage: BUG_TITLE",
+        self.assertEquals("tom: Usage: create-bug BUG_TITLE",
                           create_bug.execute("tom", [], None, None))
 
         example_args = ["sherrif-bot", "should", "have", "a", "create-bug", "command"]
         tool = MockTool()
 
         # MockBugzilla has a create_bug, but it logs to stderr, this avoids any logging.
-        tool.bugs.create_bug = lambda a, b, cc=None, assignee=None: 78
-        self.assertEquals("tom: Created bug: http://example.com/78",
+        tool.bugs.create_bug = lambda a, b, cc=None, assignee=None: 50004
+        self.assertEquals("tom: Created bug: http://example.com/50004",
                           create_bug.execute("tom", example_args, tool, None))
 
         def mock_create_bug(title, description, cc=None, assignee=None):
@@ -88,12 +98,24 @@ class IRCCommandTest(unittest.TestCase):
         self.assertEquals(([1234], "testing foo"),
                           rollout._parse_args(["1234", "testing", "foo"]))
 
+        self.assertEquals(([554], "testing foo"),
+                          rollout._parse_args(["r554", "testing", "foo"]))
+
+        self.assertEquals(([556, 792], "testing foo"),
+                          rollout._parse_args(["r556", "792", "testing", "foo"]))
+
+        self.assertEquals(([128, 256], "testing foo"),
+                          rollout._parse_args(["r128,r256", "testing", "foo"]))
+
+        self.assertEquals(([512, 1024, 2048], "testing foo"),
+                          rollout._parse_args(["512,", "1024,2048", "testing", "foo"]))
+
         # Test invalid argument parsing:
         self.assertEquals((None, None), rollout._parse_args([]))
         self.assertEquals((None, None), rollout._parse_args(["--bar", "1234"]))
 
         # Invalid arguments result in the USAGE message.
-        self.assertEquals("tom: Usage: SVN_REVISION [SVN_REVISIONS] REASON",
+        self.assertEquals("tom: Usage: rollout SVN_REVISION [SVN_REVISIONS] REASON",
                           rollout.execute("tom", [], None, None))
 
         # FIXME: We need a better way to test IRCCommands which call tool.irc().post()

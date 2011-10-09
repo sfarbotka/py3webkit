@@ -40,6 +40,7 @@ symbian: {
 include(../../../WebKit.pri)
 
 QT += declarative
+qt5: QT += widgets
 
 contains(QT_CONFIG, qtquick1): {
     QT += qtquick1

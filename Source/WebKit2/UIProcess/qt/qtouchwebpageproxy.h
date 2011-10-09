@@ -30,19 +30,24 @@
 #include "TouchViewInterface.h"
 #include <wtf/PassOwnPtr.h>
 
+namespace WebKit {
+class ViewportInteractionEngine;
+}
+
 using namespace WebKit;
 
 class QTouchWebPageProxy : public QtWebPageProxy
 {
 public:
-    QTouchWebPageProxy(TouchViewInterface*, QWKContext*, WKPageGroupRef = 0);
+    QTouchWebPageProxy(TouchViewInterface*, ViewportInteractionEngine*);
 
     virtual bool handleEvent(QEvent*);
 
-    void setVisibleContentRect(const QRectF&);
+    void setVisibleContentRectAndScale(const QRectF&, float);
+    void setVisibleContentRectTrajectoryVector(const QPointF&);
     void setResizesToContentsUsingLayoutSize(const QSize& targetLayoutSize);
     void findZoomableAreaForPoint(const QPoint&);
-    void setContentsScale(qreal);
+    void renderNextFrame();
 
 protected:
     virtual void paintContent(QPainter* painter, const QRect& area);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006, 2007, 2008 Apple Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2008, 2011 Apple Inc. All rights reserved.
  * Copyright (C) 2008 Nokia Corporation and/or its subsidiary(-ies)
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,6 +79,7 @@
 #include "SpellingCorrectionCommand.h"
 #include "Text.h"
 #include "TextCheckerClient.h"
+#include "TextCheckingHelper.h"
 #include "TextEvent.h"
 #include "TextIterator.h"
 #include "TypingCommand.h"
@@ -110,7 +111,7 @@ VisibleSelection Editor::selectionForCommand(Event* event)
     HTMLTextFormControlElement* textFromControlOfTarget = toTextFormControl(event->target()->toNode());
     if (textFromControlOfTarget && (selection.start().isNull() || textFromControlOfTarget != textFormControlOfSelectionStart)) {
         if (RefPtr<Range> range = textFromControlOfTarget->selection())
-            return VisibleSelection(range.get());
+            return VisibleSelection(range.get(), DOWNSTREAM, selection.isDirectional());
     }
     return selection;
 }
@@ -1469,30 +1470,32 @@ void Editor::confirmComposition()
 {
     if (!m_compositionNode)
         return;
-    confirmComposition(m_compositionNode->data().substring(m_compositionStart, m_compositionEnd - m_compositionStart), false);
+    setComposition(m_compositionNode->data().substring(m_compositionStart, m_compositionEnd - m_compositionStart), ConfirmComposition);
 }
 
-void Editor::confirmCompositionWithoutDisturbingSelection()
+void Editor::cancelComposition()
 {
     if (!m_compositionNode)
         return;
-    confirmComposition(m_compositionNode->data().substring(m_compositionStart, m_compositionEnd - m_compositionStart), true);
+    setComposition(emptyString(), CancelComposition);
 }
 
 void Editor::confirmComposition(const String& text)
 {
-    confirmComposition(text, false);
+    setComposition(text, ConfirmComposition);
 }
 
-void Editor::confirmComposition(const String& text, bool preserveSelection)
+void Editor::setComposition(const String& text, SetCompositionMode mode)
 {
+    ASSERT(mode == ConfirmComposition || mode == CancelComposition);
     UserTypingGestureIndicator typingGestureIndicator(m_frame);
 
     setIgnoreCompositionSelectionChange(true);
 
-    VisibleSelection oldSelection = m_frame->selection()->selection();
-
-    selectComposition();
+    if (mode == CancelComposition)
+        ASSERT(text == emptyString());
+    else
+        selectComposition();
 
     if (m_frame->selection()->isNone()) {
         setIgnoreCompositionSelectionChange(false);
@@ -1519,8 +1522,7 @@ void Editor::confirmComposition(const String& text, bool preserveSelection)
 
     insertTextForConfirmedComposition(text);
 
-    if (preserveSelection) {
-        m_frame->selection()->setSelection(oldSelection, 0);
+    if (mode == CancelComposition) {
         // An open typing command that disagrees about current selection would cause issues with typing later on.
         TypingCommand::closeTyping(m_lastEditCommand.get());
     }
@@ -1941,16 +1943,7 @@ void Editor::clearMisspellingsAndBadGrammar(const VisibleSelection &movingSelect
 
 void Editor::markMisspellingsAndBadGrammar(const VisibleSelection &movingSelection)
 {
-    bool markSpelling = isContinuousSpellCheckingEnabled();
-    bool markGrammar = markSpelling && isGrammarCheckingEnabled();
-
-    if (markSpelling) {
-        RefPtr<Range> unusedFirstMisspellingRange;
-        markMisspellings(movingSelection, unusedFirstMisspellingRange);
-    }
-
-    if (markGrammar)
-        markBadGrammar(movingSelection);
+    markMisspellingsAndBadGrammar(movingSelection, isContinuousSpellCheckingEnabled() && isGrammarCheckingEnabled(), movingSelection);
 }
 
 void Editor::markMisspellingsAfterTypingToWord(const VisiblePosition &wordStart, const VisibleSelection& selectionAfterTyping, bool doReplacement)
@@ -2150,10 +2143,10 @@ void Editor::markAllMisspellingsAndBadGrammarInRanges(TextCheckingTypeMask textC
 
     Vector<TextCheckingResult> results;
     if (shouldMarkGrammar)
-        textChecker()->checkTextOfParagraph(grammarParagraph.textCharacters(), grammarParagraph.textLength(), 
+        checkTextOfParagraph(textChecker(), grammarParagraph.textCharacters(), grammarParagraph.textLength(), 
                                             resolveTextCheckingTypeMask(textCheckingOptions), results);
     else
-        textChecker()->checkTextOfParagraph(spellingParagraph.textCharacters(), spellingParagraph.textLength(), 
+        checkTextOfParagraph(textChecker(), spellingParagraph.textCharacters(), spellingParagraph.textLength(), 
                                             resolveTextCheckingTypeMask(textCheckingOptions), results);
         
 
@@ -2415,7 +2408,7 @@ void Editor::deletedAutocorrectionAtPosition(const Position& position, const Str
     m_spellingCorrector->deletedAutocorrectionAtPosition(position, originalString);
 }
 
-PassRefPtr<Range> Editor::rangeForPoint(const IntPoint& windowPoint)
+PassRefPtr<Range> Editor::rangeForPoint(const LayoutPoint& windowPoint)
 {
     Document* document = m_frame->documentAtPoint(windowPoint);
     if (!document)
@@ -2426,7 +2419,7 @@ PassRefPtr<Range> Editor::rangeForPoint(const IntPoint& windowPoint)
     FrameView* frameView = frame->view();
     if (!frameView)
         return 0;
-    IntPoint framePoint = frameView->windowToContents(windowPoint);
+    LayoutPoint framePoint = frameView->windowToContents(windowPoint);
     VisibleSelection selection(frame->visiblePositionForPoint(framePoint));
     return avoidIntersectionWithNode(selection.toNormalizedRange().get(), m_deleteButtonController->containerElement());
 }
@@ -2553,7 +2546,7 @@ void Editor::dismissCorrectionPanelAsIgnored()
     m_spellingCorrector->dismiss(ReasonForDismissingCorrectionPanelIgnored);
 }
 
-bool Editor::insideVisibleArea(const IntPoint& point) const
+bool Editor::insideVisibleArea(const LayoutPoint& point) const
 {
     if (m_frame->excludeFromTextSearch())
         return false;
@@ -2572,9 +2565,9 @@ bool Editor::insideVisibleArea(const IntPoint& point) const
     if (!(container->style()->overflowX() == OHIDDEN || container->style()->overflowY() == OHIDDEN))
         return true;
 
-    IntRect rectInPageCoords = container->overflowClipRect(IntPoint());
-    IntRect rectInFrameCoords = IntRect(renderer->x() * -1, renderer->y() * -1,
-                                    rectInPageCoords.width(), rectInPageCoords.height());
+    LayoutRect rectInPageCoords = container->overflowClipRect(IntPoint(), 0); // FIXME: Incorrect for CSS regions.
+    LayoutRect rectInFrameCoords = LayoutRect(renderer->x() * -1, renderer->y() * -1,
+                                              rectInPageCoords.width(), rectInPageCoords.height());
 
     return rectInFrameCoords.contains(point);
 }
@@ -2601,10 +2594,10 @@ bool Editor::insideVisibleArea(Range* range) const
     if (!(container->style()->overflowX() == OHIDDEN || container->style()->overflowY() == OHIDDEN))
         return true;
 
-    IntRect rectInPageCoords = container->overflowClipRect(IntPoint());
-    IntRect rectInFrameCoords = IntRect(renderer->x() * -1, renderer->y() * -1,
+    LayoutRect rectInPageCoords = container->overflowClipRect(LayoutPoint(), 0); // FIXME: Incorrect for CSS regions.
+    LayoutRect rectInFrameCoords = LayoutRect(renderer->x() * -1, renderer->y() * -1,
                                     rectInPageCoords.width(), rectInPageCoords.height());
-    IntRect resultRect = range->boundingBox();
+    LayoutRect resultRect = range->boundingBox();
     
     return rectInFrameCoords.contains(resultRect);
 }
@@ -2922,64 +2915,75 @@ bool Editor::findString(const String& target, bool forward, bool caseFlag, bool 
 
 bool Editor::findString(const String& target, FindOptions options)
 {
-    if (target.isEmpty())
-        return false;
-
-    if (m_frame->excludeFromTextSearch())
-        return false;
-
-    // Start from an edge of the selection, if there's a selection that's not in shadow content. Which edge
-    // is used depends on whether we're searching forward or backward, and whether startInSelection is set.
-    RefPtr<Range> searchRange(rangeOfContents(m_frame->document()));
     VisibleSelection selection = m_frame->selection()->selection();
 
-    bool forward = !(options & Backwards);
-    bool startInSelection = options & StartInSelection;
-    if (forward)
-        setStart(searchRange.get(), startInSelection ? selection.visibleStart() : selection.visibleEnd());
-    else
-        setEnd(searchRange.get(), startInSelection ? selection.visibleEnd() : selection.visibleStart());
+    RefPtr<Range> resultRange = rangeOfString(target, selection.firstRange().get(), options);
 
-    RefPtr<Node> shadowTreeRoot = selection.nonBoundaryShadowTreeRootNode();
-    if (shadowTreeRoot) {
-        ExceptionCode ec = 0;
+    if (!resultRange)
+        return false;
+
+    m_frame->selection()->setSelection(VisibleSelection(resultRange.get(), DOWNSTREAM));
+    m_frame->selection()->revealSelection();
+    return true;
+}
+
+PassRefPtr<Range> Editor::rangeOfString(const String& target, Range* referenceRange, FindOptions options)
+{
+    if (target.isEmpty())
+        return 0;
+
+    if (m_frame->excludeFromTextSearch())
+        return 0;
+
+    // Start from an edge of the reference range, if there's a reference range that's not in shadow content. Which edge
+    // is used depends on whether we're searching forward or backward, and whether startInSelection is set.
+    RefPtr<Range> searchRange(rangeOfContents(m_frame->document()));
+
+    bool forward = !(options & Backwards);
+    bool startInReferenceRange = referenceRange && (options & StartInSelection);
+    if (referenceRange) {
         if (forward)
-            searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount(), ec);
+            searchRange->setStart(startInReferenceRange ? referenceRange->startPosition() : referenceRange->endPosition());
         else
-            searchRange->setStart(shadowTreeRoot.get(), 0, ec);
+            searchRange->setEnd(startInReferenceRange ? referenceRange->endPosition() : referenceRange->startPosition());
+    }
+
+    RefPtr<Node> shadowTreeRoot = referenceRange && referenceRange->startContainer() ? referenceRange->startContainer()->nonBoundaryShadowTreeRootNode() : 0;
+    if (shadowTreeRoot) {
+        if (forward)
+            searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount());
+        else
+            searchRange->setStart(shadowTreeRoot.get(), 0);
     }
 
     RefPtr<Range> resultRange(findPlainText(searchRange.get(), target, options));
-    // If we started in the selection and the found range exactly matches the existing selection, find again.
+    // If we started in the reference range and the found range exactly matches the reference range, find again.
     // Build a selection with the found range to remove collapsed whitespace.
     // Compare ranges instead of selection objects to ignore the way that the current selection was made.
-    if (startInSelection && areRangesEqual(VisibleSelection(resultRange.get()).toNormalizedRange().get(), selection.toNormalizedRange().get())) {
+    if (startInReferenceRange && areRangesEqual(VisibleSelection(resultRange.get()).toNormalizedRange().get(), referenceRange)) {
         searchRange = rangeOfContents(m_frame->document());
         if (forward)
-            setStart(searchRange.get(), selection.visibleEnd());
+            searchRange->setStart(referenceRange->endPosition());
         else
-            setEnd(searchRange.get(), selection.visibleStart());
+            searchRange->setEnd(referenceRange->startPosition());
 
         if (shadowTreeRoot) {
-            ExceptionCode ec = 0;
             if (forward)
-                searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount(), ec);
+                searchRange->setEnd(shadowTreeRoot.get(), shadowTreeRoot->childNodeCount());
             else
-                searchRange->setStart(shadowTreeRoot.get(), 0, ec);
+                searchRange->setStart(shadowTreeRoot.get(), 0);
         }
 
         resultRange = findPlainText(searchRange.get(), target, options);
     }
 
-    ExceptionCode exception = 0;
-
     // If nothing was found in the shadow tree, search in main content following the shadow tree.
-    if (resultRange->collapsed(exception) && shadowTreeRoot) {
+    if (resultRange->collapsed() && shadowTreeRoot) {
         searchRange = rangeOfContents(m_frame->document());
         if (forward)
-            searchRange->setStartAfter(shadowTreeRoot->shadowAncestorNode(), exception);
+            searchRange->setStartAfter(shadowTreeRoot->shadowAncestorNode());
         else
-            searchRange->setEndBefore(shadowTreeRoot->shadowAncestorNode(), exception);
+            searchRange->setEndBefore(shadowTreeRoot->shadowAncestorNode());
 
         resultRange = findPlainText(searchRange.get(), target, options);
     }
@@ -2987,25 +2991,20 @@ bool Editor::findString(const String& target, FindOptions options)
     if (!insideVisibleArea(resultRange.get())) {
         resultRange = nextVisibleRange(resultRange.get(), target, options);
         if (!resultRange)
-            return false;
+            return 0;
     }
 
     // If we didn't find anything and we're wrapping, search again in the entire document (this will
     // redundantly re-search the area already searched in some cases).
-    if (resultRange->collapsed(exception) && options & WrapAround) {
+    if (resultRange->collapsed() && options & WrapAround) {
         searchRange = rangeOfContents(m_frame->document());
         resultRange = findPlainText(searchRange.get(), target, options);
         // We used to return false here if we ended up with the same range that we started with
-        // (e.g., the selection was already the only instance of this text). But we decided that
+        // (e.g., the reference range was already the only instance of this text). But we decided that
         // this should be a success case instead, so we'll just fall through in that case.
     }
 
-    if (resultRange->collapsed(exception))
-        return false;
-
-    m_frame->selection()->setSelection(VisibleSelection(resultRange.get(), DOWNSTREAM));
-    m_frame->selection()->revealSelection();
-    return true;
+    return resultRange->collapsed() ? 0 : resultRange.release();
 }
 
 static bool isFrameInRange(Frame* frame, Range* range)
@@ -3083,7 +3082,7 @@ unsigned Editor::countMatchesForText(const String& target, Range* range, FindOpt
         // Do a "fake" paint in order to execute the code that computes the rendered rect for each text match.
         if (m_frame->view() && m_frame->contentRenderer()) {
             m_frame->document()->updateLayout(); // Ensure layout is up to date.
-            IntRect visibleRect = m_frame->view()->visibleContentRect();
+            LayoutRect visibleRect = m_frame->view()->visibleContentRect();
             if (!visibleRect.isEmpty()) {
                 GraphicsContext context((PlatformGraphicsContext*)0);
                 context.setPaintingDisabled(true);
@@ -3231,6 +3230,11 @@ TextCheckingTypeMask Editor::resolveTextCheckingTypeMask(TextCheckingTypeMask te
 #endif
 
     return checkingTypes;
+}
+
+void Editor::deviceScaleFactorChanged()
+{
+    m_deleteButtonController->deviceScaleFactorChanged();
 }
 
 } // namespace WebCore

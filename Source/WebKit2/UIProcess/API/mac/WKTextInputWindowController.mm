@@ -33,7 +33,10 @@
 }
 
 - (NSTextInputContext *)_inputContext;
-- (BOOL)_interpretKeyEvent:(NSEvent *)event string:(NSString **)string;
+- (BOOL)_interpretKeyEvent:(NSEvent *)event usingLegacyCocoaTextInput:(BOOL)usingLegacyCocoaTextInput string:(NSString **)string;
+
+- (BOOL)_hasMarkedText;
+- (void)_unmarkText;
 
 @end
 
@@ -75,13 +78,13 @@
     return self;
 }
 
-- (void)_keyboardInputSourceChanged
+- (void)_unmarkText
 {
     [_inputTextView setString:@""];
     [self orderOut:nil];
 }
 
-- (BOOL)_interpretKeyEvent:(NSEvent *)event string:(NSString **)string
+- (BOOL)_interpretKeyEvent:(NSEvent *)event usingLegacyCocoaTextInput:(BOOL)usingLegacyCocoaTextInput string:(NSString **)string
 {
     BOOL hadMarkedText = [_inputTextView hasMarkedText];
  
@@ -104,8 +107,14 @@
 
         return YES;
     }
-    
-    if (hadMarkedText) {
+
+    bool shouldReturnTextString = hadMarkedText;
+
+    // In the updated Cocoa text input model spec, we always want to return the text even if the text view didn't have marked text.
+    if (!usingLegacyCocoaTextInput)
+        shouldReturnTextString = true;
+
+    if (shouldReturnTextString) {
         [self orderOut:nil];
 
         NSString *text = [[_inputTextView textStorage] string];
@@ -120,6 +129,11 @@
 - (NSTextInputContext *)_inputContext
 {
     return [_inputTextView inputContext];
+}
+
+- (BOOL)_hasMarkedText
+{
+    return [_inputTextView hasMarkedText];
 }
 
 @end
@@ -151,14 +165,19 @@
     return [_panel _inputContext];
 }
 
-- (BOOL)interpretKeyEvent:(NSEvent *)event string:(NSString **)string
+- (BOOL)hasMarkedText
 {
-    return [_panel _interpretKeyEvent:event string:string];
+    return [_panel _hasMarkedText];
 }
 
-- (void)keyboardInputSourceChanged
+- (BOOL)interpretKeyEvent:(NSEvent *)event usingLegacyCocoaTextInput:(BOOL)usingLegacyCocoaTextInput string:(NSString **)string
 {
-    [_panel _keyboardInputSourceChanged];
+    return [_panel _interpretKeyEvent:event usingLegacyCocoaTextInput:usingLegacyCocoaTextInput string:string];
+}
+
+- (void)unmarkText
+{
+    [_panel _unmarkText];
 }
 
 @end

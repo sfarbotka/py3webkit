@@ -55,7 +55,7 @@ static EncodedJSValue JSC_HOST_CALL objectConstructorIsExtensible(ExecState*);
 
 namespace JSC {
 
-const ClassInfo ObjectConstructor::s_info = { "Function", &InternalFunction::s_info, 0, ExecState::objectConstructorTable };
+const ClassInfo ObjectConstructor::s_info = { "Function", &InternalFunction::s_info, 0, ExecState::objectConstructorTable, CREATE_METHOD_TABLE(ObjectConstructor) };
 
 /* Source for ObjectConstructor.lut.h
 @begin objectConstructorTable
@@ -75,9 +75,14 @@ const ClassInfo ObjectConstructor::s_info = { "Function", &InternalFunction::s_i
 @end
 */
 
-ObjectConstructor::ObjectConstructor(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, ObjectPrototype* objectPrototype)
-    : InternalFunction(&exec->globalData(), globalObject, structure, Identifier(exec, "Object"))
+ObjectConstructor::ObjectConstructor(JSGlobalObject* globalObject, Structure* structure)
+    : InternalFunction(globalObject, structure)
 {
+}
+
+void ObjectConstructor::finishCreation(ExecState* exec, ObjectPrototype* objectPrototype)
+{
+    Base::finishCreation(exec->globalData(), Identifier(exec, "Object"));
     // ECMA 15.2.3.1
     putDirectWithoutTransition(exec->globalData(), exec->propertyNames().prototype, objectPrototype, DontEnum | DontDelete | ReadOnly);
     // no. of arguments for constructor
@@ -121,7 +126,12 @@ static EncodedJSValue JSC_HOST_CALL callObjectConstructor(ExecState* exec)
     return JSValue::encode(constructObject(exec, asInternalFunction(exec->callee())->globalObject(), args));
 }
 
-CallType ObjectConstructor::getCallData(CallData& callData)
+CallType ObjectConstructor::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType ObjectConstructor::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = callObjectConstructor;
     return CallTypeHost;
@@ -131,7 +141,11 @@ EncodedJSValue JSC_HOST_CALL objectConstructorGetPrototypeOf(ExecState* exec)
 {
     if (!exec->argument(0).isObject())
         return throwVMError(exec, createTypeError(exec, "Requested prototype of a value that is not an object."));
-    return JSValue::encode(asObject(exec->argument(0))->prototype());
+        
+    // This uses JSValue::get() instead of directly accessing the prototype from the object
+    // (using JSObject::prototype()) in order to allow objects to override the behavior, such
+    // as returning jsUndefined() for cross-origin access.
+    return JSValue::encode(exec->argument(0).get(exec, exec->propertyNames().underscoreProto));
 }
 
 EncodedJSValue JSC_HOST_CALL objectConstructorGetOwnPropertyDescriptor(ExecState* exec)

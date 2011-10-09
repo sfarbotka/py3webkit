@@ -23,6 +23,7 @@
 
 #include "FrameLoaderTypes.h"
 #include "FindOptions.h"
+#include "LayoutTypes.h"
 #include "PageVisibilityState.h"
 #include "PlatformString.h"
 #include "ViewportArguments.h"
@@ -75,6 +76,7 @@ namespace WebCore {
     class PageGroup;
     class PluginData;
     class ProgressTracker;
+    class Range;
     class RenderTheme;
     class VisibleSelection;
     class ScrollableArea;
@@ -91,6 +93,8 @@ namespace WebCore {
     typedef uint64_t LinkHash;
 
     enum FindDirection { FindDirectionForward, FindDirectionBackward };
+
+    float deviceScaleFactor(Frame*);
 
     class Page {
         WTF_MAKE_NONCOPYABLE(Page);
@@ -210,6 +214,9 @@ namespace WebCore {
         bool findString(const String&, FindOptions);
         // FIXME: Switch callers over to the FindOptions version and retire this one.
         bool findString(const String&, TextCaseSensitivity, FindDirection, bool shouldWrap);
+
+        PassRefPtr<Range> rangeOfString(const String&, Range*, FindOptions);
+
         unsigned markAllMatchesForText(const String&, FindOptions, bool shouldHighlight, unsigned);
         // FIXME: Switch callers over to the FindOptions version and retire this one.
         unsigned markAllMatchesForText(const String&, TextCaseSensitivity, bool shouldHighlight, unsigned);
@@ -238,6 +245,12 @@ namespace WebCore {
 
         float mediaVolume() const { return m_mediaVolume; }
         void setMediaVolume(float volume);
+
+        void setPageScaleFactor(float scale, const LayoutPoint& origin);
+        float pageScaleFactor() const { return m_pageScaleFactor; }
+
+        float deviceScaleFactor() const { return m_deviceScaleFactor; }
+        void setDeviceScaleFactor(float);
 
         // Notifications when the Page starts and stops being presented via a native window.
         void didMoveOnscreen();
@@ -361,6 +374,9 @@ namespace WebCore {
         bool m_cookieEnabled;
         bool m_areMemoryCacheClientCallsEnabled;
         float m_mediaVolume;
+
+        float m_pageScaleFactor;
+        float m_deviceScaleFactor;
 
         bool m_javaScriptURLsAreAllowed;
 

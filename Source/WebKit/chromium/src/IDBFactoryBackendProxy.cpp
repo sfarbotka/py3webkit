@@ -41,7 +41,7 @@
 #include "WebIDBDatabaseError.h"
 #include "WebIDBFactory.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebPermissionClient.h"
 #include "WebVector.h"
 #include "WebViewImpl.h"
@@ -56,12 +56,26 @@ PassRefPtr<IDBFactoryBackendInterface> IDBFactoryBackendProxy::create()
 }
 
 IDBFactoryBackendProxy::IDBFactoryBackendProxy()
-    : m_webIDBFactory(webKitClient()->idbFactory())
+    : m_webIDBFactory(webKitPlatformSupport()->idbFactory())
 {
 }
 
 IDBFactoryBackendProxy::~IDBFactoryBackendProxy()
 {
+}
+
+void IDBFactoryBackendProxy::getDatabaseNames(PassRefPtr<IDBCallbacks> callbacks, PassRefPtr<SecurityOrigin> prpOrigin, Frame* frame, const String& dataDir, int64_t maximumSize, BackingStoreType backingStoreType)
+{
+    WebSecurityOrigin origin(prpOrigin);
+    WebFrameImpl* webFrame = WebFrameImpl::fromFrame(frame);
+    WebViewImpl* webView = webFrame->viewImpl();
+
+    if (webView->permissionClient() && !webView->permissionClient()->allowIndexedDB(webFrame, "Database Listing", origin)) {
+        callbacks->onError(WebIDBDatabaseError(0, "The user denied permission to access the database."));
+        return;
+    }
+
+    m_webIDBFactory->getDatabaseNames(new WebIDBCallbacksImpl(callbacks), origin, webFrame, dataDir, maximumSize, static_cast<WebIDBFactory::BackingStoreType>(backingStoreType));
 }
 
 void IDBFactoryBackendProxy::open(const String& name, PassRefPtr<IDBCallbacks> callbacks, PassRefPtr<SecurityOrigin> prpOrigin, Frame* frame, const String& dataDir, int64_t maximumSize, BackingStoreType backingStoreType)

@@ -41,9 +41,11 @@
 #import "WebUIDelegate.h"
 #import "WebUIDelegatePrivate.h"
 #import "WebViewInternal.h"
+#import <JavaScriptCore/Completion.h>
 #import <JavaScriptCore/Error.h>
 #import <JavaScriptCore/JSLock.h>
 #import <JavaScriptCore/PropertyNameArray.h>
+#import <JavaScriptCore/StrongInlines.h>
 #import <WebCore/CookieJar.h>
 #import <WebCore/DocumentLoader.h>
 #import <WebCore/Frame.h>
@@ -150,7 +152,7 @@ uint32_t NetscapePluginInstanceProxy::LocalObjectMap::idForObject(JSGlobalData& 
     } while (!m_objectIDCounter || m_objectIDCounter == static_cast<uint32_t>(-1) || m_idToJSObjectMap.contains(objectID));
 
     m_idToJSObjectMap.set(objectID, Strong<JSObject>(globalData, object));
-    m_jsObjectToIDMap.set(object, make_pair<uint32_t, uint32_t>(objectID, 1));
+    m_jsObjectToIDMap.set(object, make_pair(objectID, 1));
 
     return objectID;
 }
@@ -210,9 +212,7 @@ static uint32_t pluginIDCounter;
 
 bool NetscapePluginInstanceProxy::m_inDestroy;
 
-#ifndef NDEBUG
-static WTF::RefCountedLeakCounter netscapePluginInstanceProxyCounter("NetscapePluginInstanceProxy");
-#endif
+DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, netscapePluginInstanceProxyCounter, ("NetscapePluginInstanceProxy"));
 
 NetscapePluginInstanceProxy::NetscapePluginInstanceProxy(NetscapePluginHostProxy* pluginHostProxy, WebHostedNetscapePluginView *pluginView, bool fullFramePlugin)
     : m_pluginHostProxy(pluginHostProxy)
@@ -691,7 +691,9 @@ void NetscapePluginInstanceProxy::evaluateJavaScript(PluginRequest* pluginReques
     NSURL *URL = [pluginRequest->request() URL];
     NSString *JSString = [URL _webkit_scriptIfJavaScriptURL];
     ASSERT(JSString);
-    
+
+    RefPtr<NetscapePluginInstanceProxy> protect(this); // Executing arbitrary JavaScript can destroy the proxy.
+
     NSString *result = [[m_pluginView webFrame] _stringByEvaluatingJavaScriptFromString:JSString forceUserGesture:pluginRequest->allowPopups()];
     
     // Don't continue if stringByEvaluatingJavaScriptFromString caused the plug-in to stop.
@@ -873,17 +875,10 @@ bool NetscapePluginInstanceProxy::evaluate(uint32_t objectID, const String& scri
     globalObject->globalData().timeoutChecker.start();
 
     UserGestureIndicator gestureIndicator(allowPopups ? DefinitelyProcessingUserGesture : PossiblyProcessingUserGesture);
-    Completion completion = JSC::evaluate(exec, globalObject->globalScopeChain(), makeSource(script));
-
-    globalObject->globalData().timeoutChecker.stop();
-    ComplType type = completion.complType();
-
-    JSValue result;
-    if (type == Normal)
-        result = completion.value();
     
-    if (!result)
-        result = jsUndefined();
+    JSValue result = JSC::evaluate(exec, globalObject->globalScopeChain(), makeSource(script));
+    
+    globalObject->globalData().timeoutChecker.stop();
     
     marshalValue(exec, result, resultData, resultLength);
     exec->clearException();
@@ -947,7 +942,7 @@ bool NetscapePluginInstanceProxy::invokeDefault(uint32_t objectID, data_t argume
     ExecState* exec = frame->script()->globalObject(pluginWorld())->globalExec();
     JSLock lock(SilenceAssertionsOnly);    
     CallData callData;
-    CallType callType = object->getCallData(callData);
+    CallType callType = object->getCallDataVirtual(callData);
     if (callType == CallTypeNone)
         return false;
 

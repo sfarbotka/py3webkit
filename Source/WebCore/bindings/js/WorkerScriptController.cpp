@@ -32,18 +32,22 @@
 #include "WorkerScriptController.h"
 
 #include "JSDedicatedWorkerContext.h"
-#include "JSSharedWorkerContext.h"
 #include "ScriptSourceCode.h"
 #include "ScriptValue.h"
 #include "WebCoreJSClientData.h"
 #include "WorkerContext.h"
 #include "WorkerObjectProxy.h"
 #include "WorkerThread.h"
+#include <heap/StrongInlines.h>
 #include <interpreter/Interpreter.h>
 #include <runtime/Completion.h>
-#include <runtime/Completion.h>
+#include <runtime/ExceptionHelpers.h>
 #include <runtime/Error.h>
 #include <runtime/JSLock.h>
+
+#if ENABLE(SHARED_WORKERS)
+#include "JSSharedWorkerContext.h"
+#endif
 
 using namespace JSC;
 
@@ -74,29 +78,35 @@ void WorkerScriptController::initScript()
     // Explicitly protect the global object's prototype so it isn't collected
     // when we allocate the global object. (Once the global object is fully
     // constructed, it can mark its own prototype.)
-    Structure* workerContextPrototypeStructure = JSWorkerContextPrototype::createStructure(*m_globalData, jsNull());
+    Structure* workerContextPrototypeStructure = JSWorkerContextPrototype::createStructure(*m_globalData, 0, jsNull());
     Strong<JSWorkerContextPrototype> workerContextPrototype(*m_globalData, JSWorkerContextPrototype::create(*m_globalData, 0, workerContextPrototypeStructure));
 
     if (m_workerContext->isDedicatedWorkerContext()) {
-        Structure* dedicatedContextPrototypeStructure = JSDedicatedWorkerContextPrototype::createStructure(*m_globalData, workerContextPrototype.get());
+        Structure* dedicatedContextPrototypeStructure = JSDedicatedWorkerContextPrototype::createStructure(*m_globalData, 0, workerContextPrototype.get());
         Strong<JSDedicatedWorkerContextPrototype> dedicatedContextPrototype(*m_globalData, JSDedicatedWorkerContextPrototype::create(*m_globalData, 0, dedicatedContextPrototypeStructure));
-        Structure* structure = JSDedicatedWorkerContext::createStructure(*m_globalData, dedicatedContextPrototype.get());
+        Structure* structure = JSDedicatedWorkerContext::createStructure(*m_globalData, 0, dedicatedContextPrototype.get());
 
         m_workerContextWrapper.set(*m_globalData, JSDedicatedWorkerContext::create(*m_globalData, structure, m_workerContext->toDedicatedWorkerContext()));
-        workerContextPrototype->putAnonymousValue(*m_globalData, 0, m_workerContextWrapper.get());
-        dedicatedContextPrototype->putAnonymousValue(*m_globalData, 0, m_workerContextWrapper.get());
+        workerContextPrototypeStructure->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
+        dedicatedContextPrototypeStructure->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
+        ASSERT(structure->globalObject() == m_workerContextWrapper);
+        ASSERT(m_workerContextWrapper->structure()->globalObject() == m_workerContextWrapper);
+        workerContextPrototype->structure()->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
+        dedicatedContextPrototype->structure()->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
 #if ENABLE(SHARED_WORKERS)
     } else {
         ASSERT(m_workerContext->isSharedWorkerContext());
-        Structure* sharedContextPrototypeStructure = JSSharedWorkerContextPrototype::createStructure(*m_globalData, workerContextPrototype.get());
+        Structure* sharedContextPrototypeStructure = JSSharedWorkerContextPrototype::createStructure(*m_globalData, 0, workerContextPrototype.get());
         Strong<JSSharedWorkerContextPrototype> sharedContextPrototype(*m_globalData, JSSharedWorkerContextPrototype::create(*m_globalData, 0, sharedContextPrototypeStructure));
-        Structure* structure = JSSharedWorkerContext::createStructure(*m_globalData, sharedContextPrototype.get());
+        Structure* structure = JSSharedWorkerContext::createStructure(*m_globalData, 0, sharedContextPrototype.get());
 
         m_workerContextWrapper.set(*m_globalData, JSSharedWorkerContext::create(*m_globalData, structure, m_workerContext->toSharedWorkerContext()));
-        workerContextPrototype->putAnonymousValue(*m_globalData, 0, m_workerContextWrapper.get());
-        sharedContextPrototype->putAnonymousValue(*m_globalData, 0, m_workerContextWrapper.get());
+        workerContextPrototype->structure()->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
+        sharedContextPrototype->structure()->setGlobalObject(*m_globalData, m_workerContextWrapper.get());
 #endif
     }
+    ASSERT(m_workerContextWrapper->globalObject() == m_workerContextWrapper);
+    ASSERT(asObject(m_workerContextWrapper->prototype())->globalObject() == m_workerContextWrapper);
 }
 
 ScriptValue WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode)
@@ -122,31 +132,31 @@ ScriptValue WorkerScriptController::evaluate(const ScriptSourceCode& sourceCode,
     JSLock lock(SilenceAssertionsOnly);
 
     ExecState* exec = m_workerContextWrapper->globalExec();
+
     m_workerContextWrapper->globalData().timeoutChecker.start();
-    Completion comp = JSC::evaluate(exec, exec->dynamicGlobalObject()->globalScopeChain(), sourceCode.jsSourceCode(), m_workerContextWrapper.get());
+
+    JSValue evaluationException;
+    JSValue returnValue = JSC::evaluate(exec, exec->dynamicGlobalObject()->globalScopeChain(), sourceCode.jsSourceCode(), m_workerContextWrapper.get(), &evaluationException);
+
     m_workerContextWrapper->globalData().timeoutChecker.stop();
 
-
-    ComplType completionType = comp.complType();
-
-    if (completionType == Terminated || m_workerContextWrapper->globalData().terminator.shouldTerminate()) {
+    if ((evaluationException && isTerminatedExecutionException(evaluationException)) ||  m_workerContextWrapper->globalData().terminator.shouldTerminate()) {
         forbidExecution();
         return ScriptValue();
     }
 
-    if (completionType == Normal || completionType == ReturnValue)
-        return ScriptValue(*m_globalData, comp.value());
-
-    if (completionType == Throw) {
+    if (evaluationException) {
         String errorMessage;
         int lineNumber = 0;
         String sourceURL = sourceCode.url().string();
         if (m_workerContext->sanitizeScriptError(errorMessage, lineNumber, sourceURL))
             *exception = ScriptValue(*m_globalData, throwError(exec, createError(exec, errorMessage.impl())));
         else
-            *exception = ScriptValue(*m_globalData, comp.value());
+            *exception = ScriptValue(*m_globalData, evaluationException);
     }
-    return ScriptValue();
+
+    return ScriptValue(*m_globalData, returnValue);
+
 }
 
 void WorkerScriptController::setException(ScriptValue exception)
@@ -169,6 +179,14 @@ bool WorkerScriptController::isExecutionForbidden() const
 {
     ASSERT(m_workerContext->isContextThread());
     return m_executionForbidden;
+}
+
+void WorkerScriptController::disableEval()
+{
+    initScriptIfNeeded();
+    JSLock lock(SilenceAssertionsOnly);
+
+    m_workerContextWrapper->setEvalEnabled(false);
 }
 
 } // namespace WebCore

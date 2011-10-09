@@ -32,6 +32,7 @@
 #include "Frame.h"
 #include "FrameLoader.h"
 #include "HTMLNames.h"
+#include "HTMLParserIdioms.h"
 #include "HTMLScriptElement.h"
 #include "IgnoreDestructiveWriteCountIncrementer.h"
 #include "MIMETypeRegistry.h"
@@ -64,6 +65,10 @@ ScriptElement::ScriptElement(Element* element, bool parserInserted, bool already
     , m_willExecuteWhenDocumentFinishedParsing(false)
     , m_forceAsync(!parserInserted)
     , m_willExecuteInOrder(false)
+#if PLATFORM(CHROMIUM)
+    , m_cachedScriptState(NeverSet)
+    , m_backtraceSize(0)
+#endif
 {
     ASSERT(m_element);
 }
@@ -160,7 +165,7 @@ bool ScriptElement::isScriptTypeSupported(LegacyTypeSupport supportLegacyTypes) 
 }
 
 // http://dev.w3.org/html5/spec/Overview.html#prepare-a-script
-bool ScriptElement::prepareScript(const TextPosition1& scriptStartPosition, LegacyTypeSupport supportLegacyTypes)
+bool ScriptElement::prepareScript(const TextPosition& scriptStartPosition, LegacyTypeSupport supportLegacyTypes)
 {
     if (m_alreadyStarted)
         return false;
@@ -253,13 +258,19 @@ bool ScriptElement::requestScript(const String& sourceUrl)
         return false;
 
     ASSERT(!m_cachedScript);
-    // FIXME: If sourceUrl is empty, we should dispatchErrorEvent().
-    ResourceRequest request(m_element->document()->completeURL(sourceUrl));
-    m_cachedScript = m_element->document()->cachedResourceLoader()->requestScript(request, scriptCharset());
-    m_isExternalScript = true;
+    if (!stripLeadingAndTrailingHTMLSpaces(sourceUrl).isEmpty()) {
+        ResourceRequest request(m_element->document()->completeURL(sourceUrl));
+        m_cachedScript = m_element->document()->cachedResourceLoader()->requestScript(request, scriptCharset());
+        m_isExternalScript = true;
+    }
 
-    if (m_cachedScript)
+    if (m_cachedScript) {
+#if PLATFORM(CHROMIUM)      
+        ASSERT(m_cachedScriptState == NeverSet);
+        m_cachedScriptState = Set;
+#endif
         return true;
+    }
 
     dispatchErrorEvent();
     return false;
@@ -295,6 +306,12 @@ void ScriptElement::stopLoadRequest()
     if (m_cachedScript) {
         if (!m_willBeParserExecuted)
             m_cachedScript->removeClient(this);
+#if PLATFORM(CHROMIUM)
+        ASSERT(m_cachedScriptState == Set);
+        m_cachedScriptState = ZeroedInStopLoadRequest;
+        m_backtraceSize = MaxBacktraceSize;
+        WTFGetBacktrace(m_backtrace, &m_backtraceSize);
+#endif
         m_cachedScript = 0;
     }
 }
@@ -320,6 +337,13 @@ void ScriptElement::notifyFinished(CachedResource* o)
         m_element->document()->scriptRunner()->notifyInOrderScriptReady();
     else
         m_element->document()->scriptRunner()->queueScriptForExecution(this, m_cachedScript, ScriptRunner::ASYNC_EXECUTION);
+
+#if PLATFORM(CHROMIUM)
+    ASSERT(m_cachedScriptState == Set);
+    m_cachedScriptState = ZeroedInNotifyFinished;
+    m_backtraceSize = MaxBacktraceSize;
+    WTFGetBacktrace(m_backtrace, &m_backtraceSize);
+#endif
     m_cachedScript = 0;
 }
 

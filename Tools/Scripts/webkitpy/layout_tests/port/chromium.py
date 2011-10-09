@@ -69,9 +69,12 @@ class ChromiumPort(Port):
         ('lucid', 'x86_64'))
 
     ALL_GRAPHICS_TYPES = ('cpu', 'gpu')
+    CORE_GRAPHICS_VERSIONS = ('leopard', 'snowleopard')
+    CORE_GRAPHICS_TYPES = ('cpu-cg', 'gpu-cg')
 
     ALL_BASELINE_VARIANTS = [
         'chromium-mac-snowleopard', 'chromium-mac-leopard',
+        'chromium-cg-mac-snowleopard', 'chromium-cg-mac-leopard',
         'chromium-win-win7', 'chromium-win-vista', 'chromium-win-xp',
         'chromium-linux-x86_64', 'chromium-linux-x86',
         'chromium-gpu-mac-snowleopard', 'chromium-gpu-win-win7', 'chromium-gpu-linux-x86_64',
@@ -162,10 +165,14 @@ class ChromiumPort(Port):
 
     def diff_image(self, expected_contents, actual_contents):
         # FIXME: need unit tests for this.
+
+        # If only one of them exists, return that one.
         if not actual_contents and not expected_contents:
-            return False
-        if not actual_contents or not expected_contents:
-            return True
+            return (None, 0)
+        if not actual_contents:
+            return (expected_contents, 0)
+        if not expected_contents:
+            return (actual_contents, 0)
 
         tempdir = self._filesystem.mkdtemp()
 
@@ -177,8 +184,12 @@ class ChromiumPort(Port):
 
         diff_filename = self._filesystem.join(str(tempdir), "diff.png")
 
+        native_expected_filename = self._convert_path(expected_filename)
+        native_actual_filename = self._convert_path(actual_filename)
+        native_diff_filename = self._convert_path(diff_filename)
+
         executable = self._path_to_image_diff()
-        comand = [executable, '--diff', expected_filename, actual_filename, diff_filename]
+        comand = [executable, '--diff', native_actual_filename, native_expected_filename, native_diff_filename]
 
         result = None
         try:
@@ -188,11 +199,10 @@ class ChromiumPort(Port):
                 result = None
             elif exit_code != 1:
                 _log.error("image diff returned an exit code of %s" % exit_code)
-                # Returning False here causes the script to think that we
-                # successfully created the diff even though we didn't.  If
-                # we return True, we think that the images match but the hashes
-                # don't match.
-                # FIXME: Figure out why image_diff returns other values.
+                # Returning None here causes the script to think that we
+                # successfully created the diff even though we didn't.
+                # FIXME: Consider raising an exception here, so that the error
+                # is not accidentally overlooked while the test passes.
                 result = None
         except OSError, e:
             if e.errno == errno.ENOENT or e.errno == errno.EACCES:
@@ -201,9 +211,9 @@ class ChromiumPort(Port):
                 raise
         finally:
             if exit_code == 1:
-                result = self._filesystem.read_binary_file(diff_filename)
+                result = self._filesystem.read_binary_file(native_diff_filename)
             self._filesystem.rmtree(str(tempdir))
-        return result
+        return (result, 0)  # FIXME: how to get % diff?
 
     def path_from_chromium_base(self, *comps):
         """Returns the full path to path made by joining the top of the
@@ -284,11 +294,10 @@ class ChromiumPort(Port):
         for version, architecture in self.ALL_SYSTEMS:
             for build_type in self.ALL_BUILD_TYPES:
                 for graphics_type in self.ALL_GRAPHICS_TYPES:
-                    test_configurations.append(TestConfiguration(
-                        version=version,
-                        architecture=architecture,
-                        build_type=build_type,
-                        graphics_type=graphics_type))
+                    test_configurations.append(TestConfiguration(version, architecture, build_type, graphics_type))
+                if version in self.CORE_GRAPHICS_VERSIONS:
+                    for graphics_type in self.CORE_GRAPHICS_TYPES:
+                        test_configurations.append(TestConfiguration(version, architecture, build_type, graphics_type))
         return test_configurations
 
     try_builder_names = frozenset([
@@ -385,8 +394,6 @@ class ChromiumPort(Port):
 
 # FIXME: This should inherit from WebKitDriver now that Chromium has a DumpRenderTree process like the rest of WebKit.
 class ChromiumDriver(Driver):
-    KILL_TIMEOUT = 3.0
-
     def __init__(self, port, worker_number):
         Driver.__init__(self, port, worker_number)
         self._proc = None
@@ -414,6 +421,7 @@ class ChromiumDriver(Driver):
             'stress_opt': '--stress-opt',
             'stress_deopt': '--stress-deopt',
             'accelerated_compositing': '--enable-accelerated-compositing',
+            'threaded_compositing': '--enable-threaded-compositing',
             'accelerated_2d_canvas': '--enable-accelerated-2d-canvas',
             'accelerated_drawing': '--enable-accelerated-drawing',
             'enable_hardware_gpu': '----enable-hardware-gpu',
@@ -568,8 +576,15 @@ class ChromiumDriver(Driver):
             if not text:
                 text = None
 
+        error = ''.join(error)
+        # Currently the stacktrace is in the text output, not error, so append the two together so
+        # that we can see stack in the output. See http://webkit.org/b/66806
+        # FIXME: We really should properly handle the stderr output separately.
+        if crash:
+            error = error + str(text)
+
         return DriverOutput(text, output_image, actual_checksum, audio=audio_bytes,
-            crash=crash, test_time=run_time, timeout=timeout, error=''.join(error))
+            crash=crash, test_time=run_time, timeout=timeout, error=error)
 
     def stop(self):
         if not self._proc:
@@ -579,12 +594,21 @@ class ChromiumDriver(Driver):
         self._proc.stdout.close()
         if self._proc.stderr:
             self._proc.stderr.close()
+        # The kill timeout was hard coded to 3 seconds given a default
+        # --time-out-ms of 35 seconds. We divide by 12 to get a close
+        # approximation.
+        time_out_ms = self._port.get_option('time_out_ms')
+        if time_out_ms:
+          kill_timeout_seconds = int(time_out_ms) / 12000
+        else:
+          kill_timeout_seconds = 3.0
+
         # Closing stdin/stdout/stderr hangs sometimes on OS X,
         # (see __init__(), above), and anyway we don't want to hang
         # the harness if DRT is buggy, so we wait a couple
         # seconds to give DRT a chance to clean up, but then
         # force-kill the process if necessary.
-        timeout = time.time() + self.KILL_TIMEOUT
+        timeout = time.time() + kill_timeout_seconds
         while self._proc.poll() is None and time.time() < timeout:
             time.sleep(0.1)
         if self._proc.poll() is None:

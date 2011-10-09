@@ -26,6 +26,7 @@
 
 #include "DOMWindow.h"
 #include "Event.h"
+#include "EventDispatchMediator.h"
 
 namespace WebCore {
 
@@ -68,6 +69,24 @@ namespace WebCore {
     private:
         RefPtr<AbstractView> m_view;
         int m_detail;
+    };
+
+    class FocusInEventDispatchMediator : public EventDispatchMediator {
+    public:
+        static PassRefPtr<FocusInEventDispatchMediator> create(PassRefPtr<Event>, PassRefPtr<Node> oldFocusedNode);
+    private:
+        explicit FocusInEventDispatchMediator(PassRefPtr<Event>, PassRefPtr<Node> oldFocusedNode);
+        virtual bool dispatchEvent(EventDispatcher*) const;
+        RefPtr<Node> m_oldFocusedNode;
+    };
+
+    class FocusOutEventDispatchMediator : public EventDispatchMediator {
+    public:
+        static PassRefPtr<FocusOutEventDispatchMediator> create(PassRefPtr<Event>, PassRefPtr<Node> newFocusedNode);
+    private:
+        explicit FocusOutEventDispatchMediator(PassRefPtr<Event>, PassRefPtr<Node> newFocusedNode);
+        virtual bool dispatchEvent(EventDispatcher*) const;
+        RefPtr<Node> m_newFocusedNode;
     };
 
 } // namespace WebCore

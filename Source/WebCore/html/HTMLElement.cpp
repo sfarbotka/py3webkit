@@ -137,7 +137,7 @@ static inline int unicodeBidiAttributeForDirAuto(HTMLElement* element)
     return CSSValueEmbed;
 }
 
-unsigned HTMLElement::parseBorderWidthAttribute(Attribute* attr)
+static unsigned parseBorderWidthAttribute(Attribute* attr)
 {
     ASSERT(attr && attr->name() == borderAttr);
 
@@ -146,6 +146,15 @@ unsigned HTMLElement::parseBorderWidthAttribute(Attribute* attr)
         parseHTMLNonNegativeInteger(attr->value(), borderWidth);
 
     return borderWidth;
+}
+
+void HTMLElement::applyBorderAttribute(Attribute* attr)
+{
+    addCSSLength(attr, CSSPropertyBorderWidth, String::number(parseBorderWidthAttribute(attr)));
+    addCSSProperty(attr, CSSPropertyBorderTopStyle, CSSValueSolid);
+    addCSSProperty(attr, CSSPropertyBorderRightStyle, CSSValueSolid);
+    addCSSProperty(attr, CSSPropertyBorderBottomStyle, CSSValueSolid);
+    addCSSProperty(attr, CSSPropertyBorderLeftStyle, CSSValueSolid);
 }
 
 void HTMLElement::parseMappedAttribute(Attribute* attr)
@@ -289,20 +298,6 @@ String HTMLElement::innerHTML() const
 String HTMLElement::outerHTML() const
 {
     return createMarkup(this);
-}
-
-// FIXME: This logic should move into Range::createContextualFragment
-PassRefPtr<DocumentFragment> HTMLElement::deprecatedCreateContextualFragment(const String& markup, FragmentScriptingPermission scriptingPermission)
-{
-    // The following is in accordance with the definition as used by IE.
-    if (ieForbidsInsertHTML())
-        return 0;
-
-    if (hasLocalName(colTag) || hasLocalName(colgroupTag) || hasLocalName(framesetTag)
-        || hasLocalName(headTag) || hasLocalName(styleTag) || hasLocalName(titleTag))
-        return 0;
-
-    return Element::deprecatedCreateContextualFragment(markup, scriptingPermission);
 }
 
 static inline bool hasOneChild(ContainerNode* node)

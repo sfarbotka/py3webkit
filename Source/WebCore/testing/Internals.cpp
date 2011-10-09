@@ -29,19 +29,31 @@
 #include "CachedResourceLoader.h"
 #include "ClientRect.h"
 #include "Document.h"
+#include "DocumentMarkerController.h"
 #include "Element.h"
 #include "ExceptionCode.h"
+#include "FrameView.h"
+#include "HTMLInputElement.h"
+#include "HTMLNames.h"
+#include "HTMLTextAreaElement.h"
 #include "InspectorController.h"
-#include "MemoryCache.h"
+#include "IntRect.h"
 #include "NodeRenderingContext.h"
 #include "Page.h"
+#include "Range.h"
 #include "RenderObject.h"
 #include "RenderTreeAsText.h"
 #include "Settings.h"
 #include "ShadowContentElement.h"
 #include "ShadowRoot.h"
 
+#if ENABLE(INPUT_COLOR)
+#include "ColorChooser.h"
+#endif
+
 namespace WebCore {
+
+const char* Internals::internalsId = "internals";
 
 PassRefPtr<Internals> Internals::create()
 {
@@ -53,6 +65,8 @@ Internals::~Internals()
 }
 
 Internals::Internals()
+    : passwordEchoDurationInSecondsBackedUp(false)
+    , passwordEchoEnabledBackedUp(false)
 {
 }
 
@@ -149,10 +163,22 @@ String Internals::shadowPseudoId(Element* element, ExceptionCode& ec)
     return element->shadowPseudoId().string();
 }
 
-void Internals::disableMemoryCache(bool disabled)
+#if ENABLE(INPUT_COLOR)
+bool Internals::connectColorChooserClient(Element* element)
 {
-    WebCore::memoryCache()->setDisabled(disabled);
+    if (!element->hasTagName(HTMLNames::inputTag))
+        return false;
+    HTMLInputElement* inputElement = element->toInputElement();
+    if (!inputElement)
+        return false;
+    return inputElement->connectToColorChooser();
 }
+
+void Internals::selectColorInColorChooser(const String& colorValue)
+{
+    ColorChooser::chooser()->colorSelected(Color(colorValue));
+}
+#endif
 
 #if ENABLE(INSPECTOR)
 void Internals::setInspectorResourcesDataSizeLimits(Document* document, int maximumResourcesContentSize, int maximumSingleResourceContentSize, ExceptionCode& ec)
@@ -176,7 +202,30 @@ PassRefPtr<ClientRect> Internals::boundingBox(Element* element, ExceptionCode& e
     RenderObject* renderer = element->renderer();
     if (!renderer)
         return ClientRect::create();
-    return ClientRect::create(renderer->absoluteBoundingBoxRect());
+    return ClientRect::create(renderer->absoluteBoundingBoxRectIgnoringTransforms());
+}
+
+unsigned Internals::markerCountForNode(Node* node, ExceptionCode& ec)
+{
+    if (!node) {
+        ec = INVALID_ACCESS_ERR;
+        return 0;
+    }
+
+    return node->document()->markers()->markersFor(node).size();
+}
+
+PassRefPtr<Range> Internals::markerRangeForNode(Node* node, unsigned index, ExceptionCode& ec)
+{
+    if (!node) {
+        ec = INVALID_ACCESS_ERR;
+        return 0;
+    }
+    
+    Vector<DocumentMarker*> markers = node->document()->markers()->markersFor(node);
+    if (markers.size() <= index)
+        return 0;
+    return Range::create(node->document(), node, markers[index]->startOffset(), node, markers[index]->endOffset());
 }
 
 void Internals::setForceCompositingMode(Document* document, bool enabled, ExceptionCode& ec)
@@ -187,6 +236,150 @@ void Internals::setForceCompositingMode(Document* document, bool enabled, Except
     }
 
     document->settings()->setForceCompositingMode(enabled);
+}
+
+void Internals::setZoomAnimatorTransform(Document *document, double scale, double tx, double ty, ExceptionCode& ec)
+{
+    if (!document || !document->settings()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    document->settings()->setZoomAnimatorScale(static_cast<float>(scale));
+    document->settings()->setZoomAnimatorPosition(static_cast<float>(tx), static_cast<float>(ty));
+}
+
+void Internals::setPasswordEchoEnabled(Document* document, bool enabled, ExceptionCode& ec)
+{
+    if (!document || !document->settings()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    if (!passwordEchoEnabledBackedUp) {
+        passwordEchoEnabledBackup = document->settings()->passwordEchoEnabled();
+        passwordEchoEnabledBackedUp = true;
+    }
+    document->settings()->setPasswordEchoEnabled(enabled);
+}
+
+void Internals::setPasswordEchoDurationInSeconds(Document* document, double durationInSeconds, ExceptionCode& ec)
+{
+    if (!document || !document->settings()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    if (!passwordEchoDurationInSecondsBackedUp) {
+        passwordEchoDurationInSecondsBackup = document->settings()->passwordEchoDurationInSeconds();
+        passwordEchoDurationInSecondsBackedUp = true;
+    }
+    document->settings()->setPasswordEchoDurationInSeconds(durationInSeconds);
+}
+
+void Internals::setScrollViewPosition(Document* document, long x, long y, ExceptionCode& ec)
+{
+    if (!document || !document->view()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    FrameView* frameView = document->view();
+    bool constrainsScrollingToContentEdgeOldValue = frameView->constrainsScrollingToContentEdge();
+    bool scrollbarsSuppressedOldValue = frameView->scrollbarsSuppressed();
+
+    frameView->setConstrainsScrollingToContentEdge(false);
+    frameView->setScrollbarsSuppressed(false);
+    frameView->setScrollOffsetFromInternals(IntPoint(x, y));
+    frameView->setScrollbarsSuppressed(scrollbarsSuppressedOldValue);
+    frameView->setConstrainsScrollingToContentEdge(constrainsScrollingToContentEdgeOldValue);
+}
+
+void Internals::reset(Document* document)
+{
+    if (!document || !document->settings())
+        return;
+
+    if (passwordEchoDurationInSecondsBackedUp) {
+        document->settings()->setPasswordEchoDurationInSeconds(passwordEchoDurationInSecondsBackup);
+        passwordEchoDurationInSecondsBackedUp = false;
+    }
+
+    if (passwordEchoEnabledBackedUp) {
+        document->settings()->setPasswordEchoEnabled(passwordEchoEnabledBackup);
+        passwordEchoEnabledBackedUp = false;
+    }
+}
+
+bool Internals::wasLastChangeUserEdit(Element* textField, ExceptionCode& ec)
+{
+    if (!textField) {
+        ec = INVALID_ACCESS_ERR;
+        return false;
+    }
+
+    if (HTMLInputElement* inputElement = textField->toInputElement())
+        return inputElement->lastChangeWasUserEdit();
+
+    // FIXME: We should be using hasTagName instead but Windows port doesn't link QualifiedNames properly.
+    if (textField->tagName() == "TEXTAREA")
+        return static_cast<HTMLTextAreaElement*>(textField)->lastChangeWasUserEdit();
+
+    ec = INVALID_NODE_TYPE_ERR;
+    return false;
+}
+
+String Internals::suggestedValue(Element* element, ExceptionCode& ec)
+{
+    if (!element) {
+        ec = INVALID_ACCESS_ERR;
+        return String();
+    }
+
+    HTMLInputElement* inputElement = element->toInputElement();
+    if (!inputElement) {
+        ec = INVALID_NODE_TYPE_ERR;
+        return String();
+    }
+
+    return inputElement->suggestedValue();
+}
+
+void Internals::setSuggestedValue(Element* element, const String& value, ExceptionCode& ec)
+{
+    if (!element) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    HTMLInputElement* inputElement = element->toInputElement();
+    if (!inputElement) {
+        ec = INVALID_NODE_TYPE_ERR;
+        return;
+    }
+
+    inputElement->setSuggestedValue(value);
+}
+
+void Internals::paintControlTints(Document* document, ExceptionCode& ec)
+{
+    if (!document || !document->view()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    FrameView* frameView = document->view();
+    frameView->paintControlTints();
+}
+
+void Internals::scrollElementToRect(Element* element, long x, long y, long w, long h, ExceptionCode& ec)
+{
+    if (!element || !element->document() || !element->document()->view()) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+    FrameView* frameView = element->document()->view();
+    frameView->scrollElementToRect(element, IntRect(x, y, w, h));
 }
 
 }

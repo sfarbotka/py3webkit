@@ -123,7 +123,7 @@ WKBundlePageGroupRef WKBundlePageGetPageGroup(WKBundlePageRef pageRef)
 
 WKBundleFrameRef WKBundlePageGetMainFrame(WKBundlePageRef pageRef)
 {
-    return toAPI(toImpl(pageRef)->mainFrame());
+    return toAPI(toImpl(pageRef)->mainWebFrame());
 }
 
 void WKBundlePageStopLoading(WKBundlePageRef pageRef)
@@ -183,7 +183,7 @@ void WKBundlePageSetPageZoomFactor(WKBundlePageRef pageRef, double zoomFactor)
 
 void WKBundlePageSetScaleAtOrigin(WKBundlePageRef pageRef, double scale, WKPoint origin)
 {
-    toImpl(pageRef)->scaleWebView(scale, toIntPoint(origin));
+    toImpl(pageRef)->scalePage(scale, toIntPoint(origin));
 }
 
 WKBundleBackForwardListRef WKBundlePageGetBackForwardList(WKBundlePageRef pageRef)
@@ -269,4 +269,49 @@ void WKBundlePageSimulateMouseMotion(WKBundlePageRef page, WKPoint position, dou
 uint64_t WKBundlePageGetRenderTreeSize(WKBundlePageRef pageRef)
 {
     return toImpl(pageRef)->renderTreeSize();
+}
+
+void WKBundlePageSetTracksRepaints(WKBundlePageRef pageRef, bool trackRepaints)
+{
+    toImpl(pageRef)->setTracksRepaints(trackRepaints);
+}
+
+bool WKBundlePageIsTrackingRepaints(WKBundlePageRef pageRef)
+{
+    return toImpl(pageRef)->isTrackingRepaints();
+}
+
+void WKBundlePageResetTrackedRepaints(WKBundlePageRef pageRef)
+{
+    toImpl(pageRef)->resetTrackedRepaints();
+}
+
+WKArrayRef WKBundlePageCopyTrackedRepaintRects(WKBundlePageRef pageRef)
+{
+    return toAPI(toImpl(pageRef)->trackedRepaintRects().releaseRef());
+}
+
+WKStringRef WKBundlePageViewportConfigurationAsText(WKBundlePageRef pageRef, int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight)
+{
+    return toCopiedAPI(toImpl(pageRef)->viewportConfigurationAsText(deviceDPI, deviceWidth, deviceHeight, availableWidth, availableHeight));
+}
+
+void WKBundlePageSetComposition(WKBundlePageRef pageRef, WKStringRef text, int from, int length)
+{
+    toImpl(pageRef)->setCompositionForTesting(toImpl(text)->string(), from, length);
+}
+
+bool WKBundlePageHasComposition(WKBundlePageRef pageRef)
+{
+    return toImpl(pageRef)->hasCompositionForTesting();
+}
+
+void WKBundlePageConfirmComposition(WKBundlePageRef pageRef)
+{
+    toImpl(pageRef)->confirmCompositionForTesting(String());
+}
+
+void WKBundlePageConfirmCompositionWithText(WKBundlePageRef pageRef, WKStringRef text)
+{
+    toImpl(pageRef)->confirmCompositionForTesting(toImpl(text)->string());
 }

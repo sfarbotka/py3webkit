@@ -49,6 +49,8 @@ private:
     virtual const char* renderName() const { return "RenderSVGInlineText"; }
 
     virtual void willBeDestroyed();
+    
+    virtual void setStyle(PassRefPtr<RenderStyle>);
     virtual void styleDidChange(StyleDifference, const RenderStyle*);
 
     // FIXME: We need objectBoundingBox for DRT results and filters at the moment.
@@ -60,7 +62,7 @@ private:
 
     virtual VisiblePosition positionForPoint(const LayoutPoint&);
     virtual IntRect localCaretRect(InlineBox*, int caretOffset, int* extraWidthToEndOfLine = 0);
-    virtual IntRect linesBoundingBox() const;
+    virtual LayoutRect linesBoundingBox() const;
     virtual InlineTextBox* createTextBox();
 
     float m_scalingFactor;

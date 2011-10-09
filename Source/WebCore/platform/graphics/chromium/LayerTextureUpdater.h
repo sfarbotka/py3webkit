@@ -30,6 +30,7 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "GraphicsTypes3D.h"
+#include <wtf/RefCounted.h>
 
 namespace WebCore {
 
@@ -37,9 +38,9 @@ class GraphicsContext3D;
 class IntRect;
 class IntSize;
 class ManagedTexture;
+class TextureAllocator;
 
-class LayerTextureUpdater {
-    WTF_MAKE_NONCOPYABLE(LayerTextureUpdater);
+class LayerTextureUpdater : public RefCounted<LayerTextureUpdater> {
 public:
     virtual ~LayerTextureUpdater() { }
 
@@ -61,21 +62,9 @@ public:
     // If the format is TexelFormatBGRA, vec4.x is blue and vec4.z is red.
     virtual SampledTexelFormat sampledTexelFormat(GC3Denum textureFormat) = 0;
     virtual void prepareToUpdate(const IntRect& contentRect, const IntSize& tileSize, int borderTexels) = 0;
-    virtual void updateTextureRect(ManagedTexture*, const IntRect& sourceRect, const IntRect& destRect) = 0;
-
-protected:
-    explicit LayerTextureUpdater(GraphicsContext3D* context) : m_context(context) { }
-
-    GraphicsContext3D* context() const { return m_context; }
-
-private:
-    // The graphics context with which to update textures.
-    // It is assumed that the textures are either created in the same context
-    // or shared with this context.
-    GraphicsContext3D* m_context;
+    virtual void updateTextureRect(GraphicsContext3D*, TextureAllocator*, ManagedTexture*, const IntRect& sourceRect, const IntRect& destRect) = 0;
 };
 
 } // namespace WebCore
 #endif // USE(ACCELERATED_COMPOSITING)
 #endif // LayerTextureUpdater_h
-

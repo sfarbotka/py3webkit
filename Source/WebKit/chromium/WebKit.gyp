@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2010 Google Inc. All rights reserved.
+# Copyright (C) 2011 Google Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -32,6 +32,7 @@
     'includes': [
         '../../WebCore/WebCore.gypi',
         '../../../Tools/DumpRenderTree/DumpRenderTree.gypi',
+        '../../../Tools/TestWebKitAPI/TestWebKitAPI.gypi',
         'WebKit.gypi',
         'features.gypi',
     ],
@@ -69,22 +70,29 @@
             'dependencies': [
                 '../../WebCore/WebCore.gyp/WebCore.gyp:webcore',
                 '<(chromium_src_dir)/skia/skia.gyp:skia',
+                '<(chromium_src_dir)/third_party/icu/icu.gyp:icuuc',
                 '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
                 '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_glsl',
+                '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
             ],
             'export_dependent_settings': [
                 '<(chromium_src_dir)/skia/skia.gyp:skia',
+                '<(chromium_src_dir)/third_party/icu/icu.gyp:icuuc',
                 '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
+                '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
             ],
             'include_dirs': [
                 'public',
                 'src',
                 '<(chromium_src_dir)/third_party/angle/include',
+                '<(chromium_src_dir)/third_party/skia/include/utils',
             ],
             'defines': [
                 'WEBKIT_IMPLEMENTATION=1',
             ],
             'sources': [
+                'public/android/WebSandboxSupport.h',
+                'public/android/WebThemeEngine.h',
                 'public/gtk/WebInputEventFactory.h',
                 'public/linux/WebFontRendering.h',
                 'public/linux/WebFontRenderStyle.h',
@@ -109,6 +117,7 @@
                 'public/WebAudioDevice.h',
                 'public/WebAutofillClient.h',
                 'public/WebBindings.h',
+                'public/WebBlob.h',
                 'public/WebBlobData.h',
                 'public/WebBlobRegistry.h',
                 'public/WebCache.h',
@@ -119,7 +128,11 @@
                 'public/WebCommon.h',
                 'public/WebCommonWorkerClient.h',
                 'public/WebCompositionUnderline.h',
+                'public/WebCompositorClient.h',
+                'public/WebCompositor.h',
                 'public/WebConsoleMessage.h',
+                'public/WebContentLayer.h',
+                'public/WebContentLayerClient.h',
                 'public/WebContextMenuData.h',
                 'public/WebCookie.h',
                 'public/WebCookieJar.h',
@@ -163,6 +176,7 @@
                 'public/WebFileWriterClient.h',
                 'public/WebFindOptions.h',
                 'public/WebFloatPoint.h',
+                'public/WebFloatQuad.h',
                 'public/WebFloatRect.h',
                 'public/WebFont.h',
                 'public/WebFontDescription.h',
@@ -203,8 +217,12 @@
                 'public/WebInputElement.h',
                 'public/WebInputEvent.h',
                 'public/WebKit.h',
-                'public/WebKitClient.h',
+                'public/WebKitPlatformSupport.h',
                 'public/WebLabelElement.h',
+                'public/WebLayer.h',
+                'public/WebLayerClient.h',
+                'public/WebLayerTreeView.h',
+                'public/WebLayerTreeViewClient.h',
                 'public/WebLocalizedString.h',
                 'public/WebMediaElement.h',
                 'public/WebMediaPlayer.h',
@@ -230,9 +248,9 @@
                 'public/WebPageSerializer.h',
                 'public/WebPageSerializerClient.h',
                 'public/WebPageVisibilityState.h',
-                'public/WebPasswordAutocompleteListener.h',
                 'public/WebPasswordFormData.h',
                 'public/WebPerformance.h',
+                'public/WebPermissionClient.h',
                 'public/WebPlugin.h',
                 'public/WebPluginContainer.h',
                 'public/WebPluginDocument.h',
@@ -268,6 +286,7 @@
                 'public/WebSpeechInputControllerMock.h',
                 'public/WebSpeechInputListener.h',
                 'public/WebSpeechInputResult.h',
+                'public/WebSpellCheckClient.h',
                 'public/WebStorageArea.h',
                 'public/WebStorageEventDispatcher.h',
                 'public/WebStorageQuotaCallbacks.h',
@@ -320,6 +339,8 @@
                 'src/BlobRegistryProxy.h',
                 'src/BoundObject.cpp',
                 'src/BoundObject.h',
+                'src/CCThreadImpl.cpp',
+                'src/CCThreadImpl.h',
                 'src/ChromeClientImpl.cpp',
                 'src/ChromeClientImpl.h',
                 'src/ChromiumCurrentTime.cpp',
@@ -356,8 +377,7 @@
                 'src/GeolocationClientProxy.cpp',
                 'src/GeolocationClientProxy.h',
                 'src/GraphicsContext3DChromium.cpp',
-                'src/GraphicsContext3DInternal.h',
-                'src/gtk/WebFontInfo.cpp',
+                'src/GraphicsContext3DPrivate.h',
                 'src/gtk/WebInputEventFactory.cpp',
                 'src/IDBCallbacksProxy.cpp',
                 'src/IDBCallbacksProxy.h',
@@ -381,6 +401,7 @@
                 'src/InspectorClientImpl.h',
                 'src/InspectorFrontendClientImpl.cpp',
                 'src/InspectorFrontendClientImpl.h',
+                'src/linux/WebFontInfo.cpp',
                 'src/linux/WebFontRendering.cpp',
                 'src/linux/WebFontRenderStyle.cpp',
                 'src/linux/WebRenderTheme.cpp',
@@ -396,9 +417,9 @@
                 'src/painting/GraphicsContextBuilder.h',
                 'src/PageOverlay.cpp',
                 'src/PageOverlay.h',
-                'src/PlatformBridge.cpp',
                 'src/PlatformMessagePortChannel.cpp',
                 'src/PlatformMessagePortChannel.h',
+                'src/PlatformSupport.cpp',
                 'src/ResourceHandle.cpp',
                 'src/ScrollbarGroup.cpp',
                 'src/ScrollbarGroup.h',
@@ -428,10 +449,16 @@
                 'src/WebAttribute.cpp',
                 'src/WebAudioBus.cpp',
                 'src/WebBindings.cpp',
+                'src/WebBlob.cpp',
                 'src/WebBlobData.cpp',
                 'src/WebCache.cpp',
                 'src/WebColor.cpp',
                 'src/WebCommon.cpp',
+                'src/WebCompositorImpl.cpp',
+                'src/WebCompositorImpl.h',
+                'src/WebContentLayer.cpp',
+                'src/WebContentLayerImpl.cpp',
+                'src/WebContentLayerImpl.h',
                 'src/WebCrossOriginPreflightResultCache.cpp',
                 'src/WebCString.cpp',
                 'src/WebCursorInfo.cpp',
@@ -463,6 +490,7 @@
                 'src/WebFileChooserCompletionImpl.h',
                 'src/WebFileSystemCallbacksImpl.cpp',
                 'src/WebFileSystemCallbacksImpl.h',
+                'src/WebFloatQuad.cpp',
                 'src/WebFontCache.cpp',
                 'src/WebFontDescription.cpp',
                 'src/WebFontImpl.cpp',
@@ -478,6 +506,7 @@
                 'src/WebGeolocationPermissionRequestManager.cpp',
                 'src/WebGeolocationPosition.cpp',
                 'src/WebGlyphCache.cpp',
+                'src/WebGraphicsContext3D.cpp',
                 'src/WebHistoryItem.cpp',
                 'src/WebHTTPBody.cpp',
                 'src/WebHTTPLoadInfo.cpp',
@@ -514,6 +543,12 @@
                 'src/WebInputEventConversion.h',
                 'src/WebKit.cpp',
                 'src/WebLabelElement.cpp',
+                'src/WebLayer.cpp',
+                'src/WebLayerImpl.cpp',
+                'src/WebLayerImpl.h',
+                'src/WebLayerTreeView.cpp',
+                'src/WebLayerTreeViewImpl.cpp',
+                'src/WebLayerTreeViewImpl.h',
                 'src/WebMediaElement.cpp',
                 'src/WebMediaPlayerClientImpl.cpp',
                 'src/WebMediaPlayerClientImpl.h',
@@ -652,10 +687,13 @@
                                 # These tests depend on webkit_support and
                                 # functions defined only in !WEBKIT_IMPLEMENTATION.
                                 'tests/AssociatedURLLoaderTest.cpp',
+                                'tests/CCLayerTreeHostTest.cpp',
+                                'tests/FrameTestHelpers.cpp',
+                                'tests/PopupMenuTest.cpp',
                                 'tests/WebFrameTest.cpp',
                                 'tests/WebPageNewSerializerTest.cpp',
                                 'tests/WebPageSerializerTest.cpp',
-                                'tests/PopupMenuTest.cpp',
+                                'tests/WebViewTest.cpp',
                             ],
                             'conditions': [
                                 ['OS=="win" or OS=="mac"', {
@@ -663,26 +701,49 @@
                                         '<(chromium_src_dir)/third_party/nss/nss.gyp:*',
                                     ],
                                 }],
-                            ]
+                            ],
+                            'msvs_settings': {
+                              'VCLinkerTool': {
+                                'conditions': [
+                                  ['incremental_chrome_dll==1', {
+                                    'UseLibraryDependencyInputs': "true",
+                                  }],
+                                ],
+                              },
+                            },
                         }],
                     ],
                 }],
-                ['toolkit_uses_gtk == 1', {
+                ['use_x11 == 1', {
                     'dependencies': [
                         '<(chromium_src_dir)/build/linux/system.gyp:fontconfig',
-                        '<(chromium_src_dir)/build/linux/system.gyp:gtk',
                         '<(chromium_src_dir)/build/linux/system.gyp:x11',
                     ],
                     'include_dirs': [
                         'public/x11',
-                        'public/gtk',
                         'public/linux',
+                    ],
+                }, { # else: use_x11 != 1
+                    'sources/': [
+                        ['exclude', '/x11/'],
+                        ['exclude', '/linux/'],
+                    ],
+                }],
+                ['toolkit_uses_gtk == 1', {
+                    'dependencies': [
+                        '<(chromium_src_dir)/build/linux/system.gyp:gtk',
+                    ],
+                    'include_dirs': [
+                        'public/gtk',
                     ],
                 }, { # else: toolkit_uses_gtk != 1
                     'sources/': [
                         ['exclude', '/gtk/'],
-                        ['exclude', '/x11/'],
-                        ['exclude', '/linux/'],
+                    ],
+                }],
+                ['OS=="android"', {
+                    'include_dirs': [
+                        'public/android',
                     ],
                 }],
                 ['OS=="mac"', {
@@ -740,6 +801,7 @@
             'conditions': [
                 ['debug_devtools==0', {
                     'dependencies': ['concatenated_devtools_js',
+                                     'concatenated_heap_snapshot_worker_js',
                                      'concatenated_script_formatter_worker_js',
                                      'concatenated_devtools_css'],
                 }],
@@ -796,10 +858,25 @@
             }],
         },
         {
+            'target_name': 'devtools_extension_api',
+            'type': 'none',
+            'actions': [{
+                'action_name': 'devtools_html',
+                'script_name': 'scripts/generate_devtools_extension_api.py',
+                'inputs': [
+                    '<@(_script_name)',
+                    '<@(webinspector_extension_api_files)',
+                ],
+                'outputs': ['<(PRODUCT_DIR)/resources/inspector/devtools_extension_api.js'],
+                'action': ['python', '<@(_script_name)', '<@(_outputs)', '<@(webinspector_extension_api_files)'],
+            }],
+        },
+        {
             'target_name': 'generate_devtools_grd',
             'type': 'none',
             'dependencies': [
                 'devtools_html',
+                'devtools_extension_api'
             ],
             'conditions': [
                 ['debug_devtools==0', {
@@ -823,6 +900,7 @@
                     '<(PRODUCT_DIR)/resources/inspector/HeapSnapshotWorker.js',
                     '<(PRODUCT_DIR)/resources/inspector/ScriptFormatterWorker.js',
                     '<(PRODUCT_DIR)/resources/inspector/devTools.css',
+                    '<(PRODUCT_DIR)/resources/inspector/devtools_extension_api.js',
                     '<@(webinspector_standalone_css_files)',
                 ],
                 'images': [
@@ -861,6 +939,7 @@
                 'inputs': [
                     '<@(_script_name)',
                     'scripts/generate_devtools_html.py',
+                    'scripts/generate_devtools_extension_api.py',
                     '<@(_inspector_html)',
                     '<@(devtools_files)',
                     '<@(webinspector_files)',
@@ -868,6 +947,7 @@
                     '<@(_workers_files)',
                     '<@(webinspector_image_files)',
                     '<@(devtools_image_files)',
+                    '<@(webinspector_extension_api_files)',
                 ],
                 'search_path': [
                     '../../WebCore/inspector/front-end',
@@ -882,6 +962,7 @@
                 'action': ['python', '<@(_script_name)', '<@(_inspector_html)',
                                      '--devtools-files', '<@(devtools_files)',
                                      '--workers-files', '<@(_workers_files)',
+                                     '--extension-api-files', '<@(webinspector_extension_api_files)',
                                      '--search-path', '<@(_search_path)',
                                      '--image-search-path', '<@(_image_search_path)',
                                      '--output', '<@(_outputs)'],
@@ -965,12 +1046,10 @@
             'dependencies': [
                 'ImageDiff',
                 'inspector_resources',
-                'TestNetscapePlugIn',
-                'copy_TestNetscapePlugIn',
                 'webkit',
                 '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf_config',
+                '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
                 '<(chromium_src_dir)/third_party/icu/icu.gyp:icuuc',
-                '<(chromium_src_dir)/third_party/mesa/mesa.gyp:osmesa',
                 '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
                 '<(chromium_src_dir)/webkit/support/webkit_support.gyp:blob',
                 '<(chromium_src_dir)/webkit/support/webkit_support.gyp:webkit_support',
@@ -1030,7 +1109,7 @@
                         {
                             'action_name': 'repack_locale',
                             'variables': {
-                                'repack_path': '<(chromium_src_dir)/tools/data_pack/repack.py',
+                                'repack_path': '<(chromium_src_dir)/tools/grit/grit/format/repack.py',
                                 'pak_inputs': [
                                     '<(SHARED_INTERMEDIATE_DIR)/net/net_resources.pak',
                                     '<(SHARED_INTERMEDIATE_DIR)/ui/gfx/gfx_resources.pak',
@@ -1074,13 +1153,9 @@
                         ['exclude', 'Mac\\.cpp$'],
                     ],
                 }],
-                ['toolkit_uses_gtk == 1', {
+                ['use_x11 == 1', {
                     'dependencies': [
                         '<(chromium_src_dir)/build/linux/system.gyp:fontconfig',
-                        '<(chromium_src_dir)/build/linux/system.gyp:gtk',
-                    ],
-                    'include_dirs': [
-                        'public/gtk',
                     ],
                     'copies': [{
                         'destination': '<(PRODUCT_DIR)',
@@ -1101,10 +1176,31 @@
                             ],
                         }],
                     ],
+                },{ # use_x11 != 1
+                    'sources/': [
+                        ['exclude', 'Linux\\.cpp$']
+                    ]
+                }],
+                ['toolkit_uses_gtk == 1', {
+                    'dependencies': [
+                        '<(chromium_src_dir)/build/linux/system.gyp:gtk',
+                    ],
+                    'include_dirs': [
+                        'public/gtk',
+                    ],
                 },{ # toolkit_uses_gtk != 1
                     'sources/': [
-                        ['exclude', '(Gtk|Linux)\\.cpp$']
+                        ['exclude', 'Gtk\\.cpp$']
                     ]
+                }],
+                ['OS!="android"', {
+                    'sources/': [
+                        ['exclude', '(Android)\\.cpp$']
+                    ],
+                    'dependencies': [
+                        'copy_TestNetscapePlugIn',
+                        '<(chromium_src_dir)/third_party/mesa/mesa.gyp:osmesa',
+                    ],
                 }],
                 ['inside_chromium_build==1 and component=="shared_library"', {
                     'sources': [
@@ -1123,7 +1219,7 @@
                         '<(chromium_src_dir)/webkit/support/setup_third_party.gyp:third_party_headers',
                     ]
                 }],
-                ['component!="shared_library"', {
+                ['inside_chromium_build==0 or component!="shared_library"', {
                     'dependencies': [
                         '../../WebCore/WebCore.gyp/WebCore.gyp:webcore_test_support',
                     ],
@@ -1211,6 +1307,39 @@
                         'destination': '<(PRODUCT_DIR)/plugins',
                         'files': ['<(PRODUCT_DIR)/libTestNetscapePlugIn.so'],
                     }],
+                }],
+            ],
+        },
+        {
+            'target_name': 'TestWebKitAPI',
+            'type': 'executable',
+            'dependencies': [
+                'webkit',
+                '../../WebCore/WebCore.gyp/WebCore.gyp:webcore',
+                '<(chromium_src_dir)/base/base.gyp:test_support_base',
+                '<(chromium_src_dir)/testing/gtest.gyp:gtest',
+                '<(chromium_src_dir)/testing/gmock.gyp:gmock',
+                '<(chromium_src_dir)/webkit/support/webkit_support.gyp:webkit_support',
+            ],
+            'include_dirs': [
+                '../../../Tools/TestWebKitAPI',
+                # Needed by tests/RunAllTests.cpp, as well as ChromiumCurrentTime.cpp and
+                # ChromiumThreading.cpp in chromium shared library configuration.
+                'public',
+            ],
+            'sources': [
+                # Reuse the same testing driver of Chromium's webkit_unit_tests.
+                'tests/RunAllTests.cpp',
+                '<@(TestWebKitAPI_files)',
+            ],
+            'conditions': [
+                ['inside_chromium_build==1 and component=="shared_library"', {
+                    'sources': [
+                        # To satisfy linking of WTF::currentTime() etc. in shared library configuration,
+                        # as the symbols are not exported from the DLLs.
+                        'src/ChromiumCurrentTime.cpp',
+                        'src/ChromiumThreading.cpp',
+                    ],
                 }],
             ],
         },
@@ -1339,6 +1468,12 @@
                         ],
                         'outputs': ['<(PRODUCT_DIR)/resources/inspector/devTools.css'],
                         'action': ['python', '<@(_script_name)', '<@(_input_page)', '<@(_search_path)', '<@(_outputs)'],
+                    }],
+                    'copies': [{
+                        'destination': '<(PRODUCT_DIR)/resources/inspector',
+                        'files': [
+                            '<@(webinspector_standalone_css_files)',
+                        ],
                     }],
                 },
             ],

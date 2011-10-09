@@ -160,6 +160,7 @@ void WebThemeEngineDRTMac::paintNSScrollerScrollbarThumb(
     const WebRect& rect,
     const WebThemeEngine::ScrollbarInfo& scrollbarInfo)
 {
+    [NSGraphicsContext saveGraphicsState];
     NSScroller* scroller = [[NSScroller alloc] initWithFrame:NSMakeRect(rect.x, rect.y, rect.width, rect.height)];
     [scroller setEnabled:state != WebThemeEngine::StateDisabled];
     if (state == WebThemeEngine::StateInactive)
@@ -175,22 +176,27 @@ void WebThemeEngineDRTMac::paintNSScrollerScrollbarThumb(
     float knobProportion = float(scrollbarInfo.visibleSize) / float(scrollbarInfo.totalSize);
     [scroller setKnobProportion: knobProportion];
 
-    NSGraphicsContext* previousGraphicsContext = [NSGraphicsContext currentContext];
-    NSGraphicsContext* nsGraphicsContext = [NSGraphicsContext graphicsContextWithGraphicsPort:canvas flipped:YES];
+#if WEBKIT_USING_SKIA
+    gfx::SkiaBitLocker bitLocker(canvas);
+    CGContextRef cgContext = bitLocker.cgContext();
+#else
+    CGContextRef cgContext = canvas;
+#endif
+    NSGraphicsContext* nsGraphicsContext = [NSGraphicsContext graphicsContextWithGraphicsPort:cgContext flipped:YES];
     [NSGraphicsContext setCurrentContext:nsGraphicsContext];
 
     // Despite passing in frameRect() to the scroller, it always draws at (0, 0).
     // Force it to draw in the right location by translating the whole graphics
     // context.
-    [nsGraphicsContext saveGraphicsState];
+    CGContextSaveGState(cgContext);
     NSAffineTransform *transform = [NSAffineTransform transform];
     [transform translateXBy:rect.x yBy:rect.y];
     [transform concat];
 
     [scroller drawKnob];
+    CGContextRestoreGState(cgContext);
 
     [scroller release];
 
-    [nsGraphicsContext restoreGraphicsState];
-    [NSGraphicsContext setCurrentContext:previousGraphicsContext];
+    [NSGraphicsContext restoreGraphicsState];
 }

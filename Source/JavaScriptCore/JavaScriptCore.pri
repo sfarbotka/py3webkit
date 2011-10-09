@@ -1,7 +1,5 @@
 # JavaScriptCore - Qt4 build info
 
-include(../common.pri)
-
 VPATH += $$PWD
 
 # Use a config-specific target to prevent parallel builds file clashes on Mac
@@ -35,6 +33,7 @@ JAVASCRIPTCORE_INCLUDEPATH = \
     $$PWD/runtime \
     $$PWD/wtf \
     $$PWD/wtf/gobject \
+    $$PWD/wtf/qt \
     $$PWD/wtf/symbian \
     $$PWD/wtf/unicode \
     $$PWD/yarr \
@@ -51,6 +50,12 @@ symbian {
 symbian {
     LIBS += -lhal
     INCLUDEPATH *= $$MW_LAYER_SYSTEMINCLUDE
+}
+
+win32-g++* {
+    LIBS += -lpthreadGC2
+} else:win32-msvc* {
+    LIBS += -lpthreadVC2
 }
 
 win32-*: DEFINES += _HAS_TR1=0

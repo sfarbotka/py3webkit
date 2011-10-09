@@ -31,9 +31,9 @@
 #include "NPRuntimeUtilities.h"
 #include <JavaScriptCore/JSLock.h>
 #include <JavaScriptCore/JSObject.h>
+#include <JavaScriptCore/StrongInlines.h>
 #include <WebCore/Frame.h>  
 #include <WebCore/IdentifierRep.h>
-#include <WebCore/NotImplemented.h>
 #include <wtf/text/WTFString.h>
 
 using namespace JSC;

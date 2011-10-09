@@ -63,7 +63,7 @@ public:
 
     virtual void setIsActive() { }
 
-    virtual void handleWheelEvent(PlatformWheelEvent&);
+    virtual bool handleWheelEvent(const PlatformWheelEvent&);
 #if ENABLE(GESTURE_EVENTS)
     virtual void handleGestureEvent(const PlatformGestureEvent&);
 #endif
@@ -90,7 +90,7 @@ public:
 protected:
     ScrollAnimator(ScrollableArea*);
 
-    virtual void notityPositionChanged();
+    virtual void notifyPositionChanged();
 
     ScrollableArea* m_scrollableArea;
     float m_currentPosX; // We avoid using a FloatPoint in order to reduce

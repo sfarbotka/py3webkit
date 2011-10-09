@@ -117,15 +117,6 @@ IntRect ScrollView::platformVisibleContentRect(bool includeScrollbars) const
     return IntRect();
 }
 
-IntSize ScrollView::platformContentsSize() const
-{
-    BEGIN_BLOCK_OBJC_EXCEPTIONS;
-    if (NSView* documentView = this->documentView())
-        return enclosingIntRect([documentView bounds]).size();
-    END_BLOCK_OBJC_EXCEPTIONS;
-    return IntSize();
-}
-
 void ScrollView::platformSetContentsSize()
 {
     BEGIN_BLOCK_OBJC_EXCEPTIONS;
@@ -204,7 +195,7 @@ bool ScrollView::platformIsOffscreen() const
     return ![platformWidget() window] || ![[platformWidget() window] isVisible];
 }
 
-#if USE(WK_SCROLLBAR_PAINTER)
+#if USE(SCROLLBAR_PAINTER)
 static inline NSScrollerKnobStyle toNSScrollerKnobStyle(ScrollbarOverlayStyle style)
 {
     switch (style) {
@@ -220,7 +211,7 @@ static inline NSScrollerKnobStyle toNSScrollerKnobStyle(ScrollbarOverlayStyle st
 
 void ScrollView::platformSetScrollbarOverlayStyle(ScrollbarOverlayStyle overlayStyle)
 {
-#if USE(WK_SCROLLBAR_PAINTER)
+#if USE(SCROLLBAR_PAINTER)
     [scrollView() setScrollerKnobStyle:toNSScrollerKnobStyle(overlayStyle)];
 #else
     UNUSED_PARAM(overlayStyle);

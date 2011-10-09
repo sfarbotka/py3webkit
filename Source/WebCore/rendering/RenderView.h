@@ -25,6 +25,7 @@
 #include "FrameView.h"
 #include "LayoutState.h"
 #include "RenderBlock.h"
+#include <wtf/ListHashSet.h>
 #include <wtf/OwnPtr.h>
 
 namespace WebCore {
@@ -35,6 +36,8 @@ class RenderWidget;
 #if USE(ACCELERATED_COMPOSITING)
 class RenderLayerCompositor;
 #endif
+
+typedef ListHashSet<RenderFlowThread*> RenderFlowThreadList;
 
 class RenderView : public RenderBlock {
 public:
@@ -83,8 +86,8 @@ public:
 
     bool printing() const;
 
-    virtual void absoluteRects(Vector<LayoutRect>&, const LayoutPoint& accumulatedOffset);
-    virtual void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed);
+    virtual void absoluteRects(Vector<LayoutRect>&, const LayoutPoint& accumulatedOffset) const;
+    virtual void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const;
 
 #if USE(ACCELERATED_COMPOSITING)
     void setMaximalOutlineSize(int o);
@@ -167,6 +170,19 @@ public:
     IntRect documentRect() const;
 
     RenderFlowThread* renderFlowThreadWithName(const AtomicString& flowThread);
+    bool hasRenderFlowThreads() const { return m_renderFlowThreadList && !m_renderFlowThreadList->isEmpty(); }
+    void layoutRenderFlowThreads();
+    bool isRenderFlowThreadOrderDirty() const { return m_isRenderFlowThreadOrderDirty; }
+    void setIsRenderFlowThreadOrderDirty(bool dirty)
+    {
+        m_isRenderFlowThreadOrderDirty = dirty;
+        if (dirty)
+            setNeedsLayout(true);
+    }
+    const RenderFlowThreadList* renderFlowThreadList() const { return m_renderFlowThreadList.get(); }
+
+    RenderFlowThread* currentRenderFlowThread() const { return m_currentRenderFlowThread; }
+    void setCurrentRenderFlowThread(RenderFlowThread* flowThread) { m_currentRenderFlowThread = flowThread; }
 
     void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
     
@@ -176,14 +192,13 @@ protected:
 
 private:
     bool shouldRepaint(const IntRect& r) const;
-    
-    virtual RenderBlock* containingBlock() const;
 
     // These functions may only be accessed by LayoutStateMaintainer.
+    void pushLayoutState(RenderFlowThread*, bool regionsChanged);
     bool pushLayoutState(RenderBox* renderer, const LayoutSize& offset, LayoutUnit pageHeight = 0, bool pageHeightChanged = false, ColumnInfo* colInfo = 0)
     {
         // We push LayoutState even if layoutState is disabled because it stores layoutDelta too.
-        if (!doingFullRepaint() || renderer->hasColumns() || m_layoutState->isPaginated()) {
+        if (!doingFullRepaint() || m_layoutState->isPaginated() || renderer->hasColumns() || renderer->inRenderFlowThread()) {
             m_layoutState = new (renderArena()) LayoutState(m_layoutState, renderer, offset, pageHeight, pageHeightChanged, colInfo);
             return true;
         }
@@ -245,11 +260,14 @@ protected:
 private:
     unsigned m_pageLogicalHeight;
     bool m_pageLogicalHeightChanged;
+    bool m_isRenderFlowThreadOrderDirty;
     LayoutState* m_layoutState;
     unsigned m_layoutStateDisableCount;
 #if USE(ACCELERATED_COMPOSITING)
     OwnPtr<RenderLayerCompositor> m_compositor;
 #endif
+    OwnPtr<RenderFlowThreadList> m_renderFlowThreadList;
+    RenderFlowThread* m_currentRenderFlowThread;
 };
 
 inline RenderView* toRenderView(RenderObject* object)
@@ -293,6 +311,16 @@ public:
     {
     }
     
+    LayoutStateMaintainer(RenderView* view, RenderFlowThread* flowThread, bool regionsChanged)
+        : m_view(view)
+        , m_disabled(false)
+        , m_didStart(false)
+        , m_didEnd(false)
+        , m_didCreateLayoutState(false)
+    {
+        push(flowThread, regionsChanged);
+    }
+    
     ~LayoutStateMaintainer()
     {
         ASSERT(m_didStart == m_didEnd);   // if this fires, it means that someone did a push(), but forgot to pop().
@@ -305,6 +333,14 @@ public:
         m_didCreateLayoutState = m_view->pushLayoutState(root, offset, pageHeight, pageHeightChanged, colInfo);
         if (m_disabled && m_didCreateLayoutState)
             m_view->disableLayoutState();
+        m_didStart = true;
+    }
+    
+    void push(RenderFlowThread* flowThread, bool regionsChanged)
+    {
+        ASSERT(!m_didStart);
+        m_view->pushLayoutState(flowThread, regionsChanged);
+        m_didCreateLayoutState = true;
         m_didStart = true;
     }
 

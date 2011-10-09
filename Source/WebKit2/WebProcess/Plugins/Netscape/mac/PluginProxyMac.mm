@@ -28,6 +28,7 @@
 
 #if ENABLE(PLUGIN_PROCESS)
 
+#import "PluginController.h"
 #import <WebKitSystemInterface.h>
 
 namespace WebKit {
@@ -52,6 +53,16 @@ PlatformLayer* PluginProxy::pluginLayer()
 bool PluginProxy::needsBackingStore() const
 {
     return !m_remoteLayerClientID;
+}
+
+void PluginProxy::pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus)
+{
+    controller()->pluginFocusOrWindowFocusChanged(pluginHasFocusAndWindowHasFocus);
+}
+
+void PluginProxy::setComplexTextInputState(uint64_t complexTextInputState)
+{
+    controller()->setComplexTextInputState(static_cast<PluginComplexTextInputState>(complexTextInputState));
 }
 
 } // namespace WebKit

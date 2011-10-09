@@ -71,10 +71,11 @@ void CSSFontFaceSource::pruneTable()
 {
     if (m_fontDataTable.isEmpty())
         return;
+
     HashMap<unsigned, SimpleFontData*>::iterator end = m_fontDataTable.end();
     for (HashMap<unsigned, SimpleFontData*>::iterator it = m_fontDataTable.begin(); it != end; ++it)
-        GlyphPageTreeNode::pruneTreeCustomFontData(it->second);
-    deleteAllValues(m_fontDataTable);
+        m_face->retireCustomFont(it->second);
+
     m_fontDataTable.clear();
 }
 
@@ -185,8 +186,10 @@ SimpleFontData* CSSFontFaceSource::getFontData(const FontDescription& fontDescri
         if (!m_loadStartTimer.isActive())
             m_loadStartTimer.startOneShot(0);
 
-        SimpleFontData* tempData = fontCache()->getLastResortFallbackFont(fontDescription);
-        fontData = adoptPtr(new SimpleFontData(tempData->platformData(), true, true));
+        // This temporary font is not retained and should not be returned.
+        FontCachePurgePreventer fontCachePurgePreventer;
+        SimpleFontData* temporaryFont = fontCache()->getNonRetainedLastResortFallbackFont(fontDescription);
+        fontData = adoptPtr(new SimpleFontData(temporaryFont->platformData(), true, true));
     }
 
     SimpleFontData* fontDataRawPtr = fontData.leakPtr();

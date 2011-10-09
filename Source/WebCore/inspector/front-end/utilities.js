@@ -6,13 +6,13 @@
  * are met:
  *
  * 1.  Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer. 
+ *     notice, this list of conditions and the following disclaimer.
  * 2.  Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution. 
+ *     documentation and/or other materials provided with the distribution.
  * 3.  Neither the name of Apple Computer, Inc. ("Apple") nor the names of
  *     its contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission. 
+ *     from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -45,6 +45,9 @@ Function.prototype.bind = function(thisObject)
     return bound;
 }
 
+/**
+ * @param {string=} direction
+ */
 Node.prototype.rangeOfWord = function(offset, stopCharacters, stayWithinNode, direction)
 {
     var startNode;
@@ -156,7 +159,7 @@ Node.prototype.rangeBoundaryForOffset = function(offset)
     return { container: node, offset: offset };
 }
 
-Element.prototype.removeStyleClass = function(className) 
+Element.prototype.removeStyleClass = function(className)
 {
     this.classList.remove(className);
 }
@@ -168,12 +171,12 @@ Element.prototype.removeMatchingStyleClasses = function(classNameRegex)
         this.className = this.className.replace(regex, " ");
 }
 
-Element.prototype.addStyleClass = function(className) 
+Element.prototype.addStyleClass = function(className)
 {
     this.classList.add(className);
 }
 
-Element.prototype.hasStyleClass = function(className) 
+Element.prototype.hasStyleClass = function(className)
 {
     return this.classList.contains(className);
 }
@@ -230,7 +233,7 @@ Node.prototype.enclosingNodeWithClass = function(className)
     return this.parentNode.enclosingNodeOrSelfWithClass(className);
 }
 
-Element.prototype.query = function(query) 
+Element.prototype.query = function(query)
 {
     return this.ownerDocument.evaluate(query, this, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
 }
@@ -250,6 +253,9 @@ Element.prototype.isInsertionCaretInside = function()
     return selectionRange.startContainer === this || selectionRange.startContainer.isDescendant(this);
 }
 
+/**
+ * @param {string=} className
+ */
 Element.prototype.createChild = function(elementName, className)
 {
     var element = this.ownerDocument.createElement(elementName);
@@ -261,21 +267,21 @@ Element.prototype.createChild = function(elementName, className)
 
 DocumentFragment.prototype.createChild = Element.prototype.createChild;
 
-Element.prototype.__defineGetter__("totalOffsetLeft", function()
+Element.prototype.totalOffsetLeft = function()
 {
     var total = 0;
     for (var element = this; element; element = element.offsetParent)
         total += element.offsetLeft + (this !== element ? element.clientLeft : 0);
     return total;
-});
+}
 
-Element.prototype.__defineGetter__("totalOffsetTop", function()
+Element.prototype.totalOffsetTop = function()
 {
     var total = 0;
     for (var element = this; element; element = element.offsetParent)
         total += element.offsetTop + (this !== element ? element.clientTop : 0);
     return total;
-});
+}
 
 Element.prototype.offsetRelativeToWindow = function(targetWindow)
 {
@@ -283,8 +289,8 @@ Element.prototype.offsetRelativeToWindow = function(targetWindow)
     var curElement = this;
     var curWindow = this.ownerDocument.defaultView;
     while (curWindow && curElement) {
-        elementOffset.x += curElement.totalOffsetLeft;
-        elementOffset.y += curElement.totalOffsetTop;
+        elementOffset.x += curElement.totalOffsetLeft();
+        elementOffset.y += curElement.totalOffsetTop();
         if (curWindow === targetWindow)
             break;
 
@@ -468,113 +474,27 @@ String.prototype.removeURLFragment = function()
     return this.substring(0, fragmentIndex);
 }
 
-window.isNodeWhitespace = function()
+Node.prototype.isAncestor = function(node)
 {
-    if (!this || this.nodeType !== Node.TEXT_NODE)
-        return false;
-    if (!this.nodeValue.length)
-        return true;
-    return this.nodeValue.match(/^[\s\xA0]+$/);
-}
-
-function nodeDisplayName()
-{
-    if (!this)
-        return "";
-
-    switch (this.nodeType) {
-        case Node.DOCUMENT_NODE:
-            return "Document";
-
-        case Node.ELEMENT_NODE:
-            var name = "<" + this.nodeName.toLowerCase();
-
-            if (this.hasAttributes()) {
-                var value = this.getAttribute("id");
-                if (value)
-                    name += " id=\"" + value + "\"";
-                value = this.getAttribute("class");
-                if (value)
-                    name += " class=\"" + value + "\"";
-                if (this.nodeName.toLowerCase() === "a") {
-                    value = this.getAttribute("name");
-                    if (value)
-                        name += " name=\"" + value + "\"";
-                    value = this.getAttribute("href");
-                    if (value)
-                        name += " href=\"" + value + "\"";
-                } else if (this.nodeName.toLowerCase() === "img") {
-                    value = this.getAttribute("src");
-                    if (value)
-                        name += " src=\"" + value + "\"";
-                } else if (this.nodeName.toLowerCase() === "iframe") {
-                    value = this.getAttribute("src");
-                    if (value)
-                        name += " src=\"" + value + "\"";
-                } else if (this.nodeName.toLowerCase() === "input") {
-                    value = this.getAttribute("name");
-                    if (value)
-                        name += " name=\"" + value + "\"";
-                    value = this.getAttribute("type");
-                    if (value)
-                        name += " type=\"" + value + "\"";
-                } else if (this.nodeName.toLowerCase() === "form") {
-                    value = this.getAttribute("action");
-                    if (value)
-                        name += " action=\"" + value + "\"";
-                }
-            }
-
-            return name + ">";
-
-        case Node.TEXT_NODE:
-            if (isNodeWhitespace.call(this))
-                return "(whitespace)";
-            return "\"" + this.nodeValue + "\"";
-
-        case Node.COMMENT_NODE:
-            return "<!--" + this.nodeValue + "-->";
-            
-        case Node.DOCUMENT_TYPE_NODE:
-            var docType = "<!DOCTYPE " + this.nodeName;
-            if (this.publicId) {
-                docType += " PUBLIC \"" + this.publicId + "\"";
-                if (this.systemId)
-                    docType += " \"" + this.systemId + "\"";
-            } else if (this.systemId)
-                docType += " SYSTEM \"" + this.systemId + "\"";
-            if (this.internalSubset)
-                docType += " [" + this.internalSubset + "]";
-            return docType + ">";
-    }
-
-    return this.nodeName.toLowerCase().collapseWhitespace();
-}
-
-window.isAncestorNode = function(ancestor, node)
-{
-    if (!node || !ancestor)
+    if (!node)
         return false;
 
     var currentNode = node.parentNode;
     while (currentNode) {
-        if (ancestor === currentNode)
+        if (this === currentNode)
             return true;
         currentNode = currentNode.parentNode;
     }
     return false;
 }
 
-window.isDescendantNode = function(descendant)
+Node.prototype.isDescendant = function(descendant)
 {
-    return isAncestorNode(descendant, this);
+    return !!descendant && descendant.isAncestor(this);
 }
 
-function traverseNextNode(stayWithin)
+Node.prototype.traverseNextNode = function(stayWithin)
 {
-    if (!this)
-        return;
-
     var node = this.firstChild;
     if (node)
         return node;
@@ -595,10 +515,8 @@ function traverseNextNode(stayWithin)
     return node.nextSibling;
 }
 
-function traversePreviousNode(stayWithin)
+Node.prototype.traversePreviousNode = function(stayWithin)
 {
-    if (!this)
-        return;
     if (stayWithin && this === stayWithin)
         return null;
     var node = this.previousSibling;
@@ -607,73 +525,6 @@ function traversePreviousNode(stayWithin)
     if (node)
         return node;
     return this.parentNode;
-}
-
-window.parentNode = function(node)
-{
-    return node.parentNode;
-}
-
-Node.prototype.isWhitespace = isNodeWhitespace;
-Node.prototype.displayName = nodeDisplayName;
-Node.prototype.isAncestor = function(node)
-{
-    return isAncestorNode(this, node);
-};
-Node.prototype.isDescendant = isDescendantNode;
-Node.prototype.traverseNextNode = traverseNextNode;
-Node.prototype.traversePreviousNode = traversePreviousNode;
-
-Number.millisToString = function(ms, higherResolution)
-{
-    return Number.secondsToString(ms / 1000, higherResolution);
-}
-
-Number.secondsToString = function(seconds, higherResolution)
-{
-    if (seconds === 0)
-        return "0";
-
-    var ms = seconds * 1000;
-    if (higherResolution && ms < 1000)
-        return WebInspector.UIString("%.3fms", ms);
-    else if (ms < 1000)
-        return WebInspector.UIString("%.0fms", ms);
-
-    if (seconds < 60)
-        return WebInspector.UIString("%.2fs", seconds);
-
-    var minutes = seconds / 60;
-    if (minutes < 60)
-        return WebInspector.UIString("%.1fmin", minutes);
-
-    var hours = minutes / 60;
-    if (hours < 24)
-        return WebInspector.UIString("%.1fhrs", hours);
-
-    var days = hours / 24;
-    return WebInspector.UIString("%.1f days", days);
-}
-
-Number.bytesToString = function(bytes, higherResolution)
-{
-    if (typeof higherResolution === "undefined")
-        higherResolution = true;
-
-    if (bytes < 1024)
-        return WebInspector.UIString("%.0fB", bytes);
-
-    var kilobytes = bytes / 1024;
-    if (higherResolution && kilobytes < 1024)
-        return WebInspector.UIString("%.2fKB", kilobytes);
-    else if (kilobytes < 1024)
-        return WebInspector.UIString("%.0fKB", kilobytes);
-
-    var megabytes = kilobytes / 1024;
-    if (higherResolution)
-        return WebInspector.UIString("%.2fMB", megabytes);
-    else
-        return WebInspector.UIString("%.0fMB", megabytes);
 }
 
 Number.constrain = function(num, min, max)
@@ -685,21 +536,18 @@ Number.constrain = function(num, min, max)
     return num;
 }
 
-Date.prototype.toRFC3339 = function()
+Date.prototype.toISO8601Compact = function()
 {
     function leadZero(x)
     {
         return x > 9 ? x : '0' + x
     }
-    var offset = Math.abs(this.getTimezoneOffset());
-    var offsetString = Math.floor(offset / 60) + ':' + leadZero(offset % 60);
-    return this.getFullYear() + '-' +
-           leadZero(this.getMonth() + 1) + '-' +
+    return this.getFullYear() +
+           leadZero(this.getMonth() + 1) +
            leadZero(this.getDate()) + 'T' +
-           leadZero(this.getHours()) + ':' +
-           leadZero(this.getMinutes()) + ':' +
-           leadZero(this.getSeconds()) +
-           (!offset ? "Z" : (this.getTimezoneOffset() > 0 ? '-' : '+') + offsetString);
+           leadZero(this.getHours()) +
+           leadZero(this.getMinutes()) +
+           leadZero(this.getSeconds());
 }
 
 HTMLTextAreaElement.prototype.moveCursorToEnd = function()
@@ -708,45 +556,63 @@ HTMLTextAreaElement.prototype.moveCursorToEnd = function()
     this.setSelectionRange(length, length);
 }
 
-Object.defineProperty(Array.prototype, "remove", { value: function(value, onlyFirst)
+Object.defineProperty(Array.prototype, "remove",
 {
-    if (onlyFirst) {
-        var index = this.indexOf(value);
-        if (index !== -1)
-            this.splice(index, 1);
-        return;
-    }
+    /**
+     * @this {Array.<*>}
+     */
+    value: function(value, onlyFirst)
+    {
+        if (onlyFirst) {
+            var index = this.indexOf(value);
+            if (index !== -1)
+                this.splice(index, 1);
+            return;
+        }
 
-    var length = this.length;
-    for (var i = 0; i < length; ++i) {
-        if (this[i] === value)
-            this.splice(i, 1);
+        var length = this.length;
+        for (var i = 0; i < length; ++i) {
+            if (this[i] === value)
+                this.splice(i, 1);
+        }
     }
-}});
+});
 
-Object.defineProperty(Array.prototype, "keySet", { value: function()
+Object.defineProperty(Array.prototype, "keySet",
 {
-    var keys = {};
-    for (var i = 0; i < this.length; ++i)
-        keys[this[i]] = true;
-    return keys;
-}});
-
-Object.defineProperty(Array.prototype, "upperBound", { value: function(value)
-{
-    var first = 0;
-    var count = this.length;
-    while (count > 0) {
-      var step = count >> 1;
-      var middle = first + step;
-      if (value >= this[middle]) {
-          first = middle + 1;
-          count -= step + 1;
-      } else
-          count = step;
+    /**
+     * @this {Array.<*>}
+     */
+    value: function()
+    {
+        var keys = {};
+        for (var i = 0; i < this.length; ++i)
+            keys[this[i]] = true;
+        return keys;
     }
-    return first;
-}});
+});
+
+Object.defineProperty(Array.prototype, "upperBound",
+{
+    /**
+     * @this {Array.<number>}
+     */
+    value: function(value)
+    {
+        var first = 0;
+        var count = this.length;
+        while (count > 0) {
+          var step = count >> 1;
+          var middle = first + step;
+          if (value >= this[middle]) {
+              first = middle + 1;
+              count -= step + 1;
+          } else
+              count = step;
+        }
+        return first;
+    }
+});
 
 Array.diff = function(left, right)
 {
@@ -783,7 +649,7 @@ Array.diff = function(left, right)
     }
 
     for (var i = n.length - 1; i > 0; i--) {
-        if (n[i].text != null && n[i - 1].text == null && n[i].row > 0 && o[n[i].row - 1].text == null && 
+        if (n[i].text != null && n[i - 1].text == null && n[i].row > 0 && o[n[i].row - 1].text == null &&
             n[i - 1] == o[n[i].row - 1]) {
             n[i - 1] = { text: n[i - 1], row: n[i].row - 1 };
             o[n[i].row - 1] = { text: o[n[i].row - 1], row: i - 1 };
@@ -799,7 +665,11 @@ Array.convert = function(list)
     return Array.prototype.slice.call(list);
 }
 
-String.sprintf = function(format)
+/**
+ * @param {string} format
+ * @param {...*} var_arg
+ */
+String.sprintf = function(format, var_arg)
 {
     return String.vsprintf(format, Array.prototype.slice.call(arguments, 1));
 }
@@ -832,7 +702,7 @@ String.tokenizeFormatString = function(format)
 
         if (!isNaN(format[index])) {
             // The first character is a number, it might be a substitution index.
-            var number = parseInt(format.substring(index));
+            var number = parseInt(format.substring(index), 10);
             while (!isNaN(format[index]))
                 ++index;
             // If the number is greater than zero and ends with a "$",
@@ -848,7 +718,7 @@ String.tokenizeFormatString = function(format)
             // This is a precision specifier. If no digit follows the ".",
             // then the precision should be zero.
             ++index;
-            precision = parseInt(format.substring(index));
+            precision = parseInt(format.substring(index), 10);
             if (isNaN(precision))
                 precision = 0;
             while (!isNaN(format[index]))
@@ -869,17 +739,11 @@ String.tokenizeFormatString = function(format)
 String.standardFormatters = {
     d: function(substitution)
     {
-        if (typeof substitution == "object" && WebInspector.RemoteObject.type(substitution) === "number")
-            substitution = substitution.description;
-        substitution = parseInt(substitution);
         return !isNaN(substitution) ? substitution : 0;
     },
 
     f: function(substitution, token)
     {
-        if (typeof substitution == "object" && WebInspector.RemoteObject.type(substitution) === "number")
-            substitution = substitution.description;
-        substitution = parseFloat(substitution);
         if (substitution && token.precision > -1)
             substitution = substitution.toFixed(token.precision);
         return !isNaN(substitution) ? substitution : (token.precision > -1 ? Number(0).toFixed(token.precision) : 0);
@@ -887,11 +751,9 @@ String.standardFormatters = {
 
     s: function(substitution)
     {
-        if (typeof substitution == "object" && WebInspector.RemoteObject.type(substitution) !== "null")
-            substitution = substitution.description;
         return substitution;
-    },
-};
+    }
+}
 
 String.vsprintf = function(format, substitutions)
 {
@@ -974,12 +836,18 @@ function isEnterKey(event) {
     return event.keyCode !== 229 && event.keyIdentifier === "Enter";
 }
 
+/**
+ * @param {Array.<Object>=} domChanges
+ */
 function highlightSearchResult(element, offset, length, domChanges)
 {
     var result = highlightSearchResults(element, [{offset: offset, length: length }], domChanges);
     return result.length ? result[0] : null;
 }
 
+/**
+ * @param {Array.<Object>=} changes
+ */
 function highlightSearchResults(element, resultRanges, changes)
 {
     changes = changes || [];
@@ -1048,7 +916,7 @@ function highlightSearchResults(element, resultRanges, changes)
         while (currentSnapshotItem < snapshotLength) {
             textNode = textNodeSnapshot.snapshotItem(currentSnapshotItem++);
             snapshotNodeOffset += textNode.nodeValue.length;
-            var text = textNode.textContent;
+            text = textNode.textContent;
             if (length < text.length) {
                 textNode.textContent = text.substring(length);
                 changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
@@ -1099,16 +967,19 @@ function revertDomChanges(domChanges)
     }
 }
 
+/**
+ * @param {string=} extraFlags
+ */
 function createSearchRegex(query, extraFlags)
 {
-    // This should be kept the same as the one in InspectorPageAgent.cpp.
-    regexSpecialCharacters = "[](){}+-*.,?\\^$|";
+    // This should be kept the same as the one in ContentSearchUtils.cpp.
+    var regexSpecialCharacters = "[](){}+-*.,?\\^$|";
     var regex = "";
     for (var i = 0; i < query.length; ++i) {
-        var char = query.charAt(i);
-        if (regexSpecialCharacters.indexOf(char) != -1)
+        var c = query.charAt(i);
+        if (regexSpecialCharacters.indexOf(c) != -1)
             regex += "\\";
-        regex += char;
+        regex += c;
     }
     return new RegExp(regex, "i" + (extraFlags || ""));
 }
@@ -1124,4 +995,44 @@ function countRegexMatches(regex, content)
         text = text.substring(match.index + 1);
     }
     return result;
+}
+
+/**
+ * @constructor
+ */
+function TextDiff()
+{
+    this.added = [];
+    this.removed = [];
+    this.changed = [];
+} 
+
+/**
+ * @param {string} baseContent
+ * @param {string} newContent
+ * @return {TextDiff}
+ */
+TextDiff.compute = function(baseContent, newContent)
+{
+    var oldLines = baseContent.split(/\r?\n/);
+    var newLines = newContent.split(/\r?\n/);
+
+    var diff = Array.diff(oldLines, newLines);
+
+    var diffData = new TextDiff();
+
+    var offset = 0;
+    var right = diff.right;
+    for (var i = 0; i < right.length; ++i) {
+        if (typeof right[i] === "string") {
+            if (right.length > i + 1 && right[i + 1].row === i + 1 - offset)
+                diffData.changed.push(i);
+            else {
+                diffData.added.push(i);
+                offset++;
+            }
+        } else
+            offset = i - right[i].row;
+    }
+    return diffData;
 }

@@ -98,6 +98,40 @@ namespace DOMAgentState {
 static const char documentRequested[] = "documentRequested";
 };
 
+static Color parseColor(const RefPtr<InspectorObject>* colorObject)
+{
+    if (!colorObject || !(*colorObject))
+        return Color::transparent;
+
+    int r;
+    int g;
+    int b;
+    bool success = (*colorObject)->getNumber("r", &r);
+    success |= (*colorObject)->getNumber("g", &g);
+    success |= (*colorObject)->getNumber("b", &b);
+    if (!success)
+        return Color::transparent;
+
+    double a;
+    success = (*colorObject)->getNumber("a", &a);
+    if (!success)
+        return Color(r, g, b);
+
+    // Clamp alpha to the [0..1] range.
+    if (a < 0)
+        a = 0;
+    else if (a > 1)
+        a = 1;
+
+    return Color(r, g, b, static_cast<int>(a * 255));
+}
+
+static Color parseConfigColor(const String& fieldName, InspectorObject* configObject)
+{
+    const RefPtr<InspectorObject> colorObject = configObject->getObject(fieldName);
+    return parseColor(&colorObject);
+}
+
 class MatchJob {
 public:
     virtual void match(ListHashSet<Node*>& resultCollector) = 0;
@@ -275,7 +309,7 @@ InspectorDOMAgent::InspectorDOMAgent(InstrumentingAgents* instrumentingAgents, I
 InspectorDOMAgent::~InspectorDOMAgent()
 {
     reset();
-    ASSERT(!m_highlightedNode);
+    ASSERT(!m_highlightData || (!m_highlightData->node && !m_highlightData->rect));
     ASSERT(!m_searchingForNode);
 }
 
@@ -293,7 +327,7 @@ void InspectorDOMAgent::setFrontend(InspectorFrontend* frontend)
 void InspectorDOMAgent::clearFrontend()
 {
     ASSERT(m_frontend);
-    setSearchingForNode(false);
+    setSearchingForNode(false, 0);
 
     ErrorString error;
     hideHighlight(&error);
@@ -321,6 +355,11 @@ Vector<Document*> InspectorDOMAgent::documents()
         result.append(document);
     }
     return result;
+}
+
+Node* InspectorDOMAgent::highlightedNode() const
+{
+    return m_highlightData ? m_highlightData->node.get() : 0;
 }
 
 void InspectorDOMAgent::reset()
@@ -482,7 +521,7 @@ Node* InspectorDOMAgent::nodeForId(int id)
     return 0;
 }
 
-void InspectorDOMAgent::getChildNodes(ErrorString*, int nodeId)
+void InspectorDOMAgent::requestChildNodes(ErrorString*, int nodeId)
 {
     pushChildNodesToFrontend(nodeId);
 }
@@ -585,7 +624,7 @@ void InspectorDOMAgent::setAttributeValue(ErrorString* errorString, int elementI
         *errorString = "Internal error: could not set attribute value.";
 }
 
-void InspectorDOMAgent::setAttributesText(ErrorString* errorString, int elementId, const String* const name, const String& text)
+void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elementId, const String& text, const String* const name)
 {
     Element* element = assertElement(errorString, elementId);
     if (!element)
@@ -776,11 +815,7 @@ void InspectorDOMAgent::getEventListenersForNode(ErrorString*, int nodeId, RefPt
         return;
 
     // Get the list of event types this Node is concerned with
-    Vector<AtomicString> eventTypes;
-    const EventListenerMap& listenerMap = d->eventListenerMap;
-    EventListenerMap::const_iterator end = listenerMap.end();
-    for (EventListenerMap::const_iterator iter = listenerMap.begin(); iter != end; ++iter)
-        eventTypes.append(iter->first);
+    Vector<AtomicString> eventTypes = d->eventListenerMap.eventTypes();
 
     // Quick break if no useful listeners
     size_t eventTypesLength = eventTypes.size();
@@ -934,9 +969,9 @@ bool InspectorDOMAgent::handleMousePress()
     if (!m_searchingForNode)
         return false;
 
-    if (m_highlightedNode) {
-        RefPtr<Node> node = m_highlightedNode;
-        setSearchingForNode(false);
+    if (m_highlightData && m_highlightData->node) {
+        RefPtr<Node> node = m_highlightData->node;
+        setSearchingForNode(false, 0);
         inspect(node.get());
     }
     return true;
@@ -977,65 +1012,108 @@ void InspectorDOMAgent::focusNode()
 
 void InspectorDOMAgent::mouseDidMoveOverElement(const HitTestResult& result, unsigned)
 {
-    if (!m_searchingForNode)
+    if (!m_searchingForNode || !m_highlightData)
         return;
 
     Node* node = result.innerNode();
     while (node && node->nodeType() == Node::TEXT_NODE)
         node = node->parentNode();
     if (node) {
-        ErrorString error;
-        highlight(&error, node, "all");
+        m_highlightData->node = node;
+        highlight();
     }
 }
 
-void InspectorDOMAgent::setSearchingForNode(bool enabled)
+void InspectorDOMAgent::setSearchingForNode(bool enabled, InspectorObject* highlightConfig)
 {
     if (m_searchingForNode == enabled)
         return;
     m_searchingForNode = enabled;
-    if (!enabled) {
+    if (enabled)
+        setHighlightDataFromConfig(highlightConfig);
+    else {
         ErrorString error;
         hideHighlight(&error);
+        m_highlightData.clear();
     }
 }
 
-void InspectorDOMAgent::setInspectModeEnabled(ErrorString*, bool enabled)
+void InspectorDOMAgent::setInspectModeEnabled(ErrorString*, bool enabled, const RefPtr<InspectorObject>* highlightConfig)
 {
-    setSearchingForNode(enabled);
+    setSearchingForNode(enabled, highlightConfig ? highlightConfig->get() : 0);
 }
 
-void InspectorDOMAgent::highlight(ErrorString*, Node* node, const String& mode)
+bool InspectorDOMAgent::setHighlightDataFromConfig(InspectorObject* highlightConfig)
 {
-    ASSERT_ARG(node, node);
-    m_highlightedNode = node;
-    m_highlightMode = mode;
+    if (!highlightConfig) {
+        m_highlightData.clear();
+        return false;
+    }
+
+    m_highlightData = adoptPtr(new HighlightData());
+    bool showInfo = false; // Default: false (do not show a tooltip).
+    highlightConfig->getBoolean("showInfo", &showInfo);
+    m_highlightData->showInfo = showInfo;
+    m_highlightData->content = parseConfigColor("contentColor", highlightConfig);
+    m_highlightData->contentOutline = parseConfigColor("contentOutlineColor", highlightConfig);
+    m_highlightData->padding = parseConfigColor("paddingColor", highlightConfig);
+    m_highlightData->border = parseConfigColor("borderColor", highlightConfig);
+    m_highlightData->margin = parseConfigColor("marginColor", highlightConfig);
+    return true;
+}
+
+void InspectorDOMAgent::highlight()
+{
+    // This method requires m_highlightData to have been filled in by its client.
+    ASSERT(m_highlightData);
     m_client->highlight();
 }
 
-void InspectorDOMAgent::highlightRect(ErrorString*, int x, int y, int width, int height)
+void InspectorDOMAgent::highlightRect(ErrorString*, int x, int y, int width, int height, const RefPtr<InspectorObject>* color, const RefPtr<InspectorObject>* outlineColor)
 {
-    m_highlightedRect = adoptPtr(new IntRect(x, y, width, height));
+    m_highlightData = adoptPtr(new HighlightData());
+    m_highlightData->rect = adoptPtr(new IntRect(x, y, width, height));
+    m_highlightData->content = parseColor(color);
+    m_highlightData->contentOutline = parseColor(outlineColor);
     m_client->highlight();
 }
 
-void InspectorDOMAgent::highlightNode(ErrorString* error, int nodeId, String* mode)
+void InspectorDOMAgent::highlightNode(
+    ErrorString*,
+    int nodeId,
+    const RefPtr<InspectorObject> highlightConfig)
 {
-    if (Node* node = nodeForId(nodeId))
-        highlight(error, node, mode && !mode->isEmpty() ? *mode : "all");
+    if (Node* node = nodeForId(nodeId)) {
+        if (setHighlightDataFromConfig(highlightConfig.get())) {
+            m_highlightData->node = node;
+            highlight();
+        }
+    }
 }
 
-void InspectorDOMAgent::highlightFrame(ErrorString* error, const String& frameId)
+void InspectorDOMAgent::highlightFrame(
+    ErrorString*,
+    const String& frameId,
+    const RefPtr<InspectorObject>* color,
+    const RefPtr<InspectorObject>* outlineColor)
 {
     Frame* frame = m_pageAgent->frameForId(frameId);
-    if (frame && frame->ownerElement())
-        highlight(error, frame->ownerElement(), "all");
+    if (frame && frame->ownerElement()) {
+        m_highlightData = adoptPtr(new HighlightData());
+        m_highlightData->node = frame->ownerElement();
+        m_highlightData->showInfo = true; // Always show tooltips for frames.
+        m_highlightData->content = parseColor(color);
+        m_highlightData->contentOutline = parseColor(outlineColor);
+        highlight();
+    }
 }
 
 void InspectorDOMAgent::hideHighlight(ErrorString*)
 {
-    m_highlightedNode = 0;
-    m_highlightedRect.clear();
+    if (m_highlightData) {
+        m_highlightData->node.clear();
+        m_highlightData->rect.clear();
+    }
     m_client->hideHighlight();
 }
 
@@ -1080,24 +1158,16 @@ void InspectorDOMAgent::resolveNode(ErrorString* error, int nodeId, const String
     *result = resolveNode(node, objectGroupName);
 }
 
-void InspectorDOMAgent::getAttributes(ErrorString*, const RefPtr<InspectorArray>& nodeIds, RefPtr<InspectorArray>* result)
+void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, RefPtr<InspectorArray>* result)
 {
-    for (unsigned i = 0, size = nodeIds->length(); i < size; ++i) {
-        RefPtr<InspectorValue> nodeIdValue = nodeIds->get(i);
-        int nodeId;
-        if (!nodeIdValue->asNumber(&nodeId))
-            continue;
-        Node* node = nodeForId(nodeId);
-        if (node && node->isElementNode()) {
-            RefPtr<InspectorObject> entry = InspectorObject::create();
-            entry->setNumber("id", nodeId);
-            entry->setArray("attributes", buildArrayForElementAttributes(static_cast<Element*>(node)));
-            (*result)->pushObject(entry.release());
-        }
-    }
+    Element* element = assertElement(errorString, nodeId);
+    if (!element)
+        return;
+
+    *result = buildArrayForElementAttributes(element);
 }
 
-void InspectorDOMAgent::pushNodeToFrontend(ErrorString*, const String& objectId, int* nodeId)
+void InspectorDOMAgent::requestNode(ErrorString*, const String& objectId, int* nodeId)
 {
     InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForObjectId(objectId);
     Node* node = injectedScript.nodeForObjectId(objectId);
@@ -1142,7 +1212,7 @@ PassRefPtr<InspectorObject> InspectorDOMAgent::buildObjectForNode(Node* node, in
             break;
     }
 
-    value->setNumber("id", id);
+    value->setNumber("nodeId", id);
     value->setNumber("nodeType", node->nodeType());
     value->setString("nodeName", nodeName);
     value->setString("localName", localName);
@@ -1377,7 +1447,7 @@ void InspectorDOMAgent::didRemoveDOMNode(Node* node)
     unbind(node, &m_documentNodeToIdMap);
 }
 
-void InspectorDOMAgent::didModifyDOMAttr(Element* element)
+void InspectorDOMAgent::didModifyDOMAttr(Element* element, const AtomicString& name, const AtomicString& value)
 {
     int id = boundNodeId(element);
     // If node is not mapped yet -> ignore the event.
@@ -1387,7 +1457,20 @@ void InspectorDOMAgent::didModifyDOMAttr(Element* element)
     if (m_domListener)
         m_domListener->didModifyDOMAttr(element);
 
-    m_frontend->attributesUpdated(id);
+    m_frontend->attributeModified(id, name, value);
+}
+
+void InspectorDOMAgent::didRemoveDOMAttr(Element* element, const AtomicString& name)
+{
+    int id = boundNodeId(element);
+    // If node is not mapped yet -> ignore the event.
+    if (!id)
+        return;
+
+    if (m_domListener)
+        m_domListener->didModifyDOMAttr(element);
+
+    m_frontend->attributeRemoved(id, name);
 }
 
 void InspectorDOMAgent::styleAttributeInvalidated(const Vector<Element*>& elements)
@@ -1519,24 +1602,10 @@ PassRefPtr<InspectorObject> InspectorDOMAgent::resolveNode(Node* node, const Str
 
 void InspectorDOMAgent::drawHighlight(GraphicsContext& context) const
 {
-    if (m_highlightedRect) {
-        DOMNodeHighlighter::drawRectHighlight(context, m_document.get(), m_highlightedRect.get());
-        return;
-    }
-
-    if (!m_highlightedNode)
+    if (!m_highlightData)
         return;
 
-    DOMNodeHighlighter::HighlightMode mode = DOMNodeHighlighter::HighlightAll;
-    if (m_highlightMode == "content")
-        mode = DOMNodeHighlighter::HighlightContent;
-    else if (m_highlightMode == "padding")
-        mode = DOMNodeHighlighter::HighlightPadding;
-    else if (m_highlightMode == "border")
-        mode = DOMNodeHighlighter::HighlightBorder;
-    else if (m_highlightMode == "margin")
-        mode = DOMNodeHighlighter::HighlightMargin;
-    DOMNodeHighlighter::drawNodeHighlight(context, m_highlightedNode.get(), mode);
+    DOMNodeHighlighter::drawHighlight(context, m_highlightData->node ? m_highlightData->node->document() : m_document.get(), m_highlightData.get());
 }
 
 } // namespace WebCore

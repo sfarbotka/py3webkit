@@ -31,6 +31,7 @@
 #include "FindController.h"
 #include "GeolocationPermissionRequestManager.h"
 #include "ImageOptions.h"
+#include "ImmutableArray.h"
 #include "InjectedBundlePageContextMenuClient.h"
 #include "InjectedBundlePageEditorClient.h"
 #include "InjectedBundlePageFormClient.h"
@@ -67,9 +68,9 @@
 #if PLATFORM(MAC)
 #include "DictionaryPopupInfo.h"
 #include <wtf/RetainPtr.h>
-OBJC_CLASS AccessibilityWebPageObject;
 OBJC_CLASS NSDictionary;
 OBJC_CLASS NSObject;
+OBJC_CLASS WKAccessibilityWebPageObject;
 #endif
 
 namespace CoreIPC {
@@ -80,6 +81,8 @@ namespace CoreIPC {
 
 namespace WebCore {
     class GraphicsContext;
+    class Frame;
+    class FrameView;
     class KeyboardEvent;
     class Page;
     class PrintContext;
@@ -222,13 +225,22 @@ public:
 
     bool findStringFromInjectedBundle(const String&, FindOptions);
 
-    WebFrame* mainFrame() const { return m_mainFrame.get(); }
+    WebFrame* mainWebFrame() const { return m_mainFrame.get(); }
+
+    WebCore::Frame* mainFrame() const; // May return 0.
+    WebCore::FrameView* mainFrameView() const; // May return 0.
+
     PassRefPtr<Plugin> createPlugin(const Plugin::Parameters&);
 
     EditorState editorState() const;
 
     String renderTreeExternalRepresentation() const;
     uint64_t renderTreeSize() const;
+
+    void setTracksRepaints(bool);
+    bool isTrackingRepaints() const;
+    void resetTrackedRepaints();
+    PassRefPtr<ImmutableArray> trackedRepaintRects();
 
     void executeEditingCommand(const String& commandName, const String& argument);
     bool isEditingCommandEnabled(const String& commandName);
@@ -241,8 +253,8 @@ public:
     void setPageZoomFactor(double);
     void setPageAndTextZoomFactors(double pageZoomFactor, double textZoomFactor);
 
-    void scaleWebView(double scale, const WebCore::IntPoint& origin);
-    double viewScaleFactor() const;
+    void scalePage(double scale, const WebCore::IntPoint& origin);
+    double pageScaleFactor() const;
 
     void setUseFixedLayout(bool);
     void setFixedLayoutSize(const WebCore::IntSize&);
@@ -280,7 +292,6 @@ public:
     PassRefPtr<WebImage> snapshotInViewCoordinates(const WebCore::IntRect&, ImageOptions);
     PassRefPtr<WebImage> snapshotInDocumentCoordinates(const WebCore::IntRect&, ImageOptions);
     PassRefPtr<WebImage> scaledSnapshotInDocumentCoordinates(const WebCore::IntRect&, double scaleFactor, ImageOptions);
-    void createSnapshotOfVisibleContent(ShareableBitmap::Handle&);
 
     static const WebEvent* currentEvent();
 
@@ -331,14 +342,14 @@ public:
 
 #if PLATFORM(MAC)
     void registerUIProcessAccessibilityTokens(const CoreIPC::DataReference& elemenToken, const CoreIPC::DataReference& windowToken);
-    AccessibilityWebPageObject* accessibilityRemoteObject();
+    WKAccessibilityWebPageObject* accessibilityRemoteObject();
     WebCore::IntPoint accessibilityPosition() const { return m_accessibilityPosition; }    
     
     void sendComplexTextInputToPlugin(uint64_t pluginComplexTextInputIdentifier, const String& textInput);
 
     void setComposition(const String& text, Vector<WebCore::CompositionUnderline> underlines, uint64_t selectionStart, uint64_t selectionEnd, uint64_t replacementRangeStart, uint64_t replacementRangeEnd, EditorState& newState);
     void confirmComposition(EditorState& newState);
-    void confirmCompositionWithoutDisturbingSelection(EditorState& newState);
+    void cancelComposition(EditorState& newState);
     void insertText(const String& text, uint64_t replacementRangeStart, uint64_t replacementRangeEnd, bool& handled, EditorState& newState);
     void getMarkedRange(uint64_t& location, uint64_t& length);
     void getSelectedRange(uint64_t& location, uint64_t& length);
@@ -351,6 +362,7 @@ public:
     void shouldDelayWindowOrderingEvent(const WebKit::WebMouseEvent&, bool& result);
     void acceptsFirstMouse(int eventNumber, const WebKit::WebMouseEvent&, bool& result);
     bool performNonEditingBehaviorForSelector(const String&);
+
 #elif PLATFORM(WIN)
     void confirmComposition(const String& compositionString);
     void setComposition(const WTF::String& compositionString, const WTF::Vector<WebCore::CompositionUnderline>& underlines, uint64_t cursorPosition);
@@ -361,6 +373,10 @@ public:
     void gestureDidScroll(const WebCore::IntSize&);
     void gestureDidEnd();
 #endif
+
+    void setCompositionForTesting(const String& compositionString, uint64_t from, uint64_t length);
+    bool hasCompositionForTesting();
+    void confirmCompositionForTesting(const String& compositionString);
 
     // FIXME: This a dummy message, to avoid breaking the build for platforms that don't require
     // any synchronous messages, and should be removed when <rdar://problem/8775115> is fixed.
@@ -409,7 +425,7 @@ public:
 
     void runModal();
 
-    float userSpaceScaleFactor() const { return m_userSpaceScaleFactor; }
+    void setDeviceScaleFactor(float);
 
     void setMemoryCacheMessagesEnabled(bool);
 
@@ -422,9 +438,11 @@ public:
     void handleCorrectionPanelResult(const String&);
 #endif
 
+    // For testing purpose.
     void simulateMouseDown(int button, WebCore::IntPoint, int clickCount, WKEventModifiers, double time);
     void simulateMouseUp(int button, WebCore::IntPoint, int clickCount, WKEventModifiers, double time);
     void simulateMouseMotion(WebCore::IntPoint, double time);
+    String viewportConfigurationAsText(int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight);
 
     void contextMenuShowing() { m_isShowingContextMenu = true; }
 
@@ -468,15 +486,18 @@ private:
     void tryRestoreScrollPosition();
     void setActive(bool);
     void setFocused(bool);
-    void setInitialFocus(bool);
+    void setInitialFocus(bool forward, bool isKeyboardEventValid, const WebKeyboardEvent&);
     void setWindowResizerSize(const WebCore::IntSize&);
     void setIsInWindow(bool);
     void validateCommand(const String&, uint64_t);
     void executeEditCommand(const String&);
 
     void mouseEvent(const WebMouseEvent&);
+    void mouseEventSyncForTesting(const WebMouseEvent&, bool&);
     void wheelEvent(const WebWheelEvent&);
+    void wheelEventSyncForTesting(const WebWheelEvent&, bool&);
     void keyEvent(const WebKeyboardEvent&);
+    void keyEventSyncForTesting(const WebKeyboardEvent&, bool&);
 #if ENABLE(GESTURE_EVENTS)
     void gestureEvent(const WebGestureEvent&);
 #endif
@@ -604,7 +625,7 @@ private:
     // All plug-in views on this web page.
     HashSet<PluginView*> m_pluginViews;
 
-    RetainPtr<AccessibilityWebPageObject> m_mockAccessibilityElement;
+    RetainPtr<WKAccessibilityWebPageObject> m_mockAccessibilityElement;
 
     WebCore::KeyboardEvent* m_keyboardEventBeingInterpreted;
 
@@ -663,8 +684,6 @@ private:
 
     bool m_canRunModal;
     bool m_isRunningModal;
-
-    float m_userSpaceScaleFactor;
 
     bool m_cachedMainFrameIsPinnedToLeftSide;
     bool m_cachedMainFrameIsPinnedToRightSide;

@@ -141,6 +141,7 @@ private:
     void setDomainRelaxationForbiddenForURLScheme(const String&) const;
     void setDefaultRequestTimeoutInterval(double);
     void setAlwaysUsesComplexTextCodePath(bool);
+    void setShouldUseFontSmoothing(bool);
     void languageChanged(const String&) const;
 #if PLATFORM(WIN)
     void setShouldPaintNativeControls(bool);
@@ -176,6 +177,9 @@ private:
     void cancelDownload(uint64_t downloadID);
 
     void setTextCheckerState(const TextCheckerState&);
+    
+    void getWebCoreStatistics(uint64_t callbackID);
+    void garbageCollectJavaScriptObjects();
 
     // ChildProcess
     virtual bool shouldTerminate();
@@ -235,9 +239,7 @@ private:
     
     String m_localStorageDirectory;
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     RefPtr<SandboxExtension> m_applicationCachePathExtension;
-#endif
 
 #if ENABLE(PLUGIN_PROCESS)
     PluginProcessConnectionManager m_pluginProcessConnectionManager;

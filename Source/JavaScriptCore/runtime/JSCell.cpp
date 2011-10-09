@@ -26,14 +26,10 @@
 #include "JSFunction.h"
 #include "JSString.h"
 #include "JSObject.h"
+#include "NumberObject.h"
 #include <wtf/MathExtras.h>
 
 namespace JSC {
-
-bool JSCell::getUInt32(uint32_t&) const
-{
-    return false;
-}
 
 bool JSCell::getString(ExecState* exec, UString&stringValue) const
 {
@@ -58,7 +54,12 @@ const JSObject* JSCell::getObject() const
     return isObject() ? static_cast<const JSObject*>(this) : 0;
 }
 
-CallType JSCell::getCallData(CallData&)
+CallType JSCell::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType JSCell::getCallData(JSCell*, CallData&)
 {
     return CallTypeNone;
 }
@@ -94,22 +95,42 @@ bool JSCell::getOwnPropertySlot(ExecState* exec, unsigned identifier, PropertySl
 
 void JSCell::put(ExecState* exec, const Identifier& identifier, JSValue value, PutPropertySlot& slot)
 {
-    toObject(exec, exec->lexicalGlobalObject())->put(exec, identifier, value, slot);
+    put(this, exec, identifier, value, slot);
+}
+
+void JSCell::put(JSCell* cell, ExecState* exec, const Identifier& identifier, JSValue value, PutPropertySlot& slot)
+{
+    cell->toObject(exec, exec->lexicalGlobalObject())->put(exec, identifier, value, slot);
 }
 
 void JSCell::put(ExecState* exec, unsigned identifier, JSValue value)
 {
-    toObject(exec, exec->lexicalGlobalObject())->put(exec, identifier, value);
+    put(this, exec, identifier, value);
+}
+
+void JSCell::put(JSCell* cell, ExecState* exec, unsigned identifier, JSValue value)
+{
+    cell->toObject(exec, exec->lexicalGlobalObject())->put(exec, identifier, value);
 }
 
 bool JSCell::deleteProperty(ExecState* exec, const Identifier& identifier)
 {
-    return toObject(exec, exec->lexicalGlobalObject())->deleteProperty(exec, identifier);
+    return deleteProperty(this, exec, identifier);
+}
+
+bool JSCell::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& identifier)
+{
+    return cell->toObject(exec, exec->lexicalGlobalObject())->deleteProperty(exec, identifier);
 }
 
 bool JSCell::deleteProperty(ExecState* exec, unsigned identifier)
 {
-    return toObject(exec, exec->lexicalGlobalObject())->deleteProperty(exec, identifier);
+    return deleteProperty(this, exec, identifier);
+}
+
+bool JSCell::deleteProperty(JSCell* cell, ExecState* exec, unsigned identifier)
+{
+    return cell->toObject(exec, exec->lexicalGlobalObject())->deleteProperty(exec, identifier);
 }
 
 JSObject* JSCell::toThisObject(ExecState* exec) const
@@ -117,32 +138,18 @@ JSObject* JSCell::toThisObject(ExecState* exec) const
     return toObject(exec, exec->lexicalGlobalObject());
 }
 
-JSValue JSCell::getJSNumber()
+JSValue JSCell::toPrimitive(ExecState* exec, PreferredPrimitiveType preferredType) const
 {
-    return JSValue();
+    if (isString())
+        return static_cast<const JSString*>(this)->toPrimitive(exec, preferredType);
+    return static_cast<const JSObject*>(this)->toPrimitive(exec, preferredType);
 }
 
-bool JSCell::isGetterSetter() const
+bool JSCell::getPrimitiveNumber(ExecState* exec, double& number, JSValue& value) const
 {
-    return false;
-}
-
-JSValue JSCell::toPrimitive(ExecState*, PreferredPrimitiveType) const
-{
-    ASSERT_NOT_REACHED();
-    return JSValue();
-}
-
-bool JSCell::getPrimitiveNumber(ExecState*, double&, JSValue&)
-{
-    ASSERT_NOT_REACHED();
-    return false;
-}
-
-bool JSCell::toBoolean(ExecState*) const
-{
-    ASSERT_NOT_REACHED();
-    return false;
+    if (isString())
+        return static_cast<const JSString*>(this)->getPrimitiveNumber(exec, number, value);
+    return static_cast<const JSObject*>(this)->getPrimitiveNumber(exec, number, value);
 }
 
 double JSCell::toNumber(ExecState*) const
@@ -157,16 +164,12 @@ UString JSCell::toString(ExecState*) const
     return UString();
 }
 
-JSObject* JSCell::toObject(ExecState*, JSGlobalObject*) const
+JSObject* JSCell::toObject(ExecState* exec, JSGlobalObject* globalObject) const
 {
-    ASSERT_NOT_REACHED();
-    return 0;
-}
-
-bool isZombie(const JSCell* cell)
-{
-    UNUSED_PARAM(cell);
-    return false;
+    if (isString())
+        return static_cast<const JSString*>(this)->toObject(exec, globalObject);
+    ASSERT(isObject());
+    return static_cast<JSObject*>(const_cast<JSCell*>(this));
 }
 
 void slowValidateCell(JSCell* cell)

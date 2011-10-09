@@ -101,7 +101,9 @@ static inline bool isAppKitFontWeightBold(NSInteger appKitFontWeight)
 
 const SimpleFontData* FontCache::getFontDataForCharacters(const Font& font, const UChar* characters, int length)
 {
-    const FontPlatformData& platformData = font.fontDataAt(0)->fontDataForCharacter(characters[0])->platformData();
+    UChar32 character;
+    U16_GET(characters, 0, 0, length, character);
+    const FontPlatformData& platformData = font.fontDataAt(0)->fontDataForCharacter(character)->platformData();
     NSFont *nsFont = platformData.font();
 
     NSString *string = [[NSString alloc] initWithCharactersNoCopy:const_cast<UChar*>(characters) length:length freeWhenDone:NO];
@@ -140,13 +142,21 @@ const SimpleFontData* FontCache::getFontDataForCharacters(const Font& font, cons
         size = font.pixelSize();
     }
 
-    if (NSFont *bestVariation = [fontManager fontWithFamily:[substituteFont familyName] traits:traits weight:weight size:size])
-        substituteFont = bestVariation;
+    NSFontTraitMask substituteFontTraits = [fontManager traitsOfFont:substituteFont];
+    NSInteger substituteFontWeight = [fontManager weightOfFont:substituteFont];
+
+    if (traits != substituteFontTraits || weight != substituteFontWeight || !nsFont) {
+        if (NSFont *bestVariation = [fontManager fontWithFamily:[substituteFont familyName] traits:traits weight:weight size:size]) {
+            if (!nsFont || (([fontManager traitsOfFont:bestVariation] != substituteFontTraits || [fontManager weightOfFont:bestVariation] != substituteFontWeight)
+                && [[bestVariation coveredCharacterSet] longCharacterIsMember:character]))
+                substituteFont = bestVariation;
+        }
+    }
 
     substituteFont = font.fontDescription().usePrinterFont() ? [substituteFont printerFont] : [substituteFont screenFont];
 
-    NSFontTraitMask substituteFontTraits = [fontManager traitsOfFont:substituteFont];
-    NSInteger substituteFontWeight = [fontManager weightOfFont:substituteFont];
+    substituteFontTraits = [fontManager traitsOfFont:substituteFont];
+    substituteFontWeight = [fontManager weightOfFont:substituteFont];
 
     FontPlatformData alternateFont(substituteFont, platformData.size(),
         !font.isPlatformFont() && isAppKitFontWeightBold(weight) && !isAppKitFontWeightBold(substituteFontWeight),
@@ -177,13 +187,13 @@ SimpleFontData* FontCache::getSimilarFontPlatformData(const Font& font)
     return simpleFontData;
 }
 
-SimpleFontData* FontCache::getLastResortFallbackFont(const FontDescription& fontDescription)
+SimpleFontData* FontCache::getLastResortFallbackFont(const FontDescription& fontDescription, ShouldRetain shouldRetain)
 {
     DEFINE_STATIC_LOCAL(AtomicString, timesStr, ("Times"));
 
     // FIXME: Would be even better to somehow get the user's default font here.  For now we'll pick
     // the default that the user would get without changing any prefs.
-    SimpleFontData* simpleFontData = getCachedFontData(fontDescription, timesStr);
+    SimpleFontData* simpleFontData = getCachedFontData(fontDescription, timesStr, false, shouldRetain);
     if (simpleFontData)
         return simpleFontData;
 
@@ -192,7 +202,7 @@ SimpleFontData* FontCache::getLastResortFallbackFont(const FontDescription& font
     // guaranteed to be there, according to Nathan Taylor. This is good enough
     // to avoid a crash at least.
     DEFINE_STATIC_LOCAL(AtomicString, lucidaGrandeStr, ("Lucida Grande"));
-    return getCachedFontData(fontDescription, lucidaGrandeStr);
+    return getCachedFontData(fontDescription, lucidaGrandeStr, false, shouldRetain);
 }
 
 void FontCache::getTraitsInFamily(const AtomicString& familyName, Vector<unsigned>& traitsMasks)

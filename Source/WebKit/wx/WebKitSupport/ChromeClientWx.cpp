@@ -29,7 +29,7 @@
 #include "config.h"
 #include "ChromeClientWx.h"
 #include "Console.h"
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 #include "DatabaseTracker.h"
 #endif
 #include "FileChooser.h"
@@ -105,12 +105,6 @@ FloatRect ChromeClientWx::pageRect()
 {
     notImplemented();
     return FloatRect();
-}
-
-float ChromeClientWx::scaleFactor()
-{
-    notImplemented();
-    return 1.0;
 }
 
 void ChromeClientWx::focus()
@@ -426,7 +420,7 @@ void ChromeClientWx::print(Frame* frame)
     }
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void ChromeClientWx::exceededDatabaseQuota(Frame*, const String&)
 {
     unsigned long long quota = 5 * 1024 * 1024;
@@ -439,7 +433,6 @@ void ChromeClientWx::exceededDatabaseQuota(Frame*, const String&)
 }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClientWx::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     notImplemented();
@@ -449,7 +442,6 @@ void ChromeClientWx::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_t
 {
     notImplemented();
 }
-#endif
 
 void ChromeClientWx::scroll(const IntSize&, const IntRect&, const IntRect&)
 {

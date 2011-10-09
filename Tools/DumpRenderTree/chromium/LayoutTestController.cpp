@@ -59,6 +59,8 @@
 #include "WebViewHost.h"
 #include "webkit/support/webkit_support.h"
 #include <algorithm>
+#include <cctype>
+#include <clocale>
 #include <cstdlib>
 #include <limits>
 #include <wtf/text/WTFString.h>
@@ -102,12 +104,14 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("dumpDatabaseCallbacks", &LayoutTestController::dumpDatabaseCallbacks);
     bindMethod("dumpEditingCallbacks", &LayoutTestController::dumpEditingCallbacks);
     bindMethod("dumpFrameLoadCallbacks", &LayoutTestController::dumpFrameLoadCallbacks);
+    bindMethod("dumpProgressFinishedCallback", &LayoutTestController::dumpProgressFinishedCallback);
     bindMethod("dumpUserGestureInFrameLoadCallbacks", &LayoutTestController::dumpUserGestureInFrameLoadCallbacks);
     bindMethod("dumpResourceLoadCallbacks", &LayoutTestController::dumpResourceLoadCallbacks);
     bindMethod("dumpResourceResponseMIMETypes", &LayoutTestController::dumpResourceResponseMIMETypes);
     bindMethod("dumpSelectionRect", &LayoutTestController::dumpSelectionRect);
     bindMethod("dumpStatusCallbacks", &LayoutTestController::dumpWindowStatusChanges);
     bindMethod("dumpTitleChanges", &LayoutTestController::dumpTitleChanges);
+    bindMethod("dumpPermissionClientCallbacks", &LayoutTestController::dumpPermissionClientCallbacks);
     bindMethod("elementDoesAutoCompleteForElementWithId", &LayoutTestController::elementDoesAutoCompleteForElementWithId);
     bindMethod("evaluateInWebInspector", &LayoutTestController::evaluateInWebInspector);
     bindMethod("evaluateScriptInIsolatedWorld", &LayoutTestController::evaluateScriptInIsolatedWorld);
@@ -118,6 +122,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("hasSpellingMarker", &LayoutTestController::hasSpellingMarker);
     bindMethod("isCommandEnabled", &LayoutTestController::isCommandEnabled);
     bindMethod("layerTreeAsText", &LayoutTestController::layerTreeAsText);
+    bindMethod("loseCompositorContext", &LayoutTestController::loseCompositorContext);
     bindMethod("markerTextForListItem", &LayoutTestController::markerTextForListItem);
     bindMethod("notifyDone", &LayoutTestController::notifyDone);
     bindMethod("numberOfActiveAnimations", &LayoutTestController::numberOfActiveAnimations);
@@ -165,7 +170,6 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("setMockDeviceOrientation", &LayoutTestController::setMockDeviceOrientation);
     bindMethod("setMockGeolocationError", &LayoutTestController::setMockGeolocationError);
     bindMethod("setMockGeolocationPosition", &LayoutTestController::setMockGeolocationPosition);
-    bindMethod("setOverrideIndexedDBBackingStore", &LayoutTestController::setOverrideIndexedDBBackingStore);
     bindMethod("setPageVisibility", &LayoutTestController::setPageVisibility);
     bindMethod("setPluginsEnabled", &LayoutTestController::setPluginsEnabled);
     bindMethod("setPopupBlockingEnabled", &LayoutTestController::setPopupBlockingEnabled);
@@ -186,6 +190,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("setAsynchronousSpellCheckingEnabled", &LayoutTestController::setAsynchronousSpellCheckingEnabled);
     bindMethod("showWebInspector", &LayoutTestController::showWebInspector);
     bindMethod("simulateDesktopNotificationClick", &LayoutTestController::simulateDesktopNotificationClick);
+    bindMethod("startSpeechInput", &LayoutTestController::startSpeechInput);
     bindMethod("suspendAnimations", &LayoutTestController::suspendAnimations);
     bindMethod("testRepaint", &LayoutTestController::testRepaint);
     bindMethod("waitForPolicyDelegate", &LayoutTestController::waitForPolicyDelegate);
@@ -221,6 +226,8 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("observeStorageTrackerNotifications", &LayoutTestController::observeStorageTrackerNotifications);
     bindMethod("syncLocalStorage", &LayoutTestController::syncLocalStorage);
     bindMethod("setShouldStayOnPageAfterHandlingBeforeUnload", &LayoutTestController::setShouldStayOnPageAfterHandlingBeforeUnload);
+    bindMethod("enableFixedLayoutMode", &LayoutTestController::enableFixedLayoutMode);
+    bindMethod("setFixedLayoutSize", &LayoutTestController::setFixedLayoutSize);
     
     // The fallback method is called when an unknown method is invoked.
     bindFallbackMethod(&LayoutTestController::fallbackMethod);
@@ -322,6 +329,12 @@ void LayoutTestController::dumpFrameLoadCallbacks(const CppArgumentList&, CppVar
     result->setNull();
 }
 
+void LayoutTestController::dumpProgressFinishedCallback(const CppArgumentList&, CppVariant* result)
+{
+    m_dumpProgressFinishedCallback = true;
+    result->setNull();
+}
+
 void LayoutTestController::dumpUserGestureInFrameLoadCallbacks(const CppArgumentList&, CppVariant* result)
 {
     m_dumpUserGestureInFrameLoadCallbacks = true;
@@ -361,6 +374,12 @@ void LayoutTestController::dumpWindowStatusChanges(const CppArgumentList&, CppVa
 void LayoutTestController::dumpTitleChanges(const CppArgumentList&, CppVariant* result)
 {
     m_dumpTitleChanges = true;
+    result->setNull();
+}
+
+void LayoutTestController::dumpPermissionClientCallbacks(const CppArgumentList&, CppVariant* result)
+{
+    m_dumpPermissionClientCallbacks = true;
     result->setNull();
 }
 
@@ -576,6 +595,7 @@ void LayoutTestController::reset()
     m_dumpAsAudio = false;
     m_dumpEditingCallbacks = false;
     m_dumpFrameLoadCallbacks = false;
+    m_dumpProgressFinishedCallback = false;
     m_dumpUserGestureInFrameLoadCallbacks = false;
     m_dumpResourceLoadCallbacks = false;
     m_dumpResourceResponseMIMETypes = false;
@@ -585,6 +605,7 @@ void LayoutTestController::reset()
     m_dumpWindowStatusChanges = false;
     m_dumpSelectionRect = false;
     m_dumpTitleChanges = false;
+    m_dumpPermissionClientCallbacks = false;
     m_generatePixelResults = true;
     m_acceptsEditing = true;
     m_waitUntilDone = false;
@@ -1089,22 +1110,6 @@ void LayoutTestController::setIconDatabaseEnabled(const CppArgumentList&, CppVar
 {
     // We don't use the WebKit icon database.
     result->setNull();
-}
-
-void LayoutTestController::setOverrideIndexedDBBackingStore(const CppArgumentList& arguments, CppVariant* result)
-{
-    result->setNull();
-#if ENABLE(INDEXED_DATABASE)
-    if (arguments.size() < 1 || !arguments[0].isString())
-        return;
-    string name = arguments[0].toString();
-    if (name == "default")
-        WebIDBFactory::setOverrideBackingStoreType(WebIDBFactory::DefaultBackingStore);
-    else if (name == "sqlite")
-        WebIDBFactory::setOverrideBackingStoreType(WebIDBFactory::SQLiteBackingStore);
-    else if (name == "leveldb")
-        WebIDBFactory::setOverrideBackingStoreType(WebIDBFactory::LevelDBBackingStore);
-#endif
 }
 
 void LayoutTestController::callShouldCloseOnWebView(const CppArgumentList&, CppVariant* result)
@@ -1716,9 +1721,39 @@ void LayoutTestController::addMockSpeechInputResult(const CppArgumentList& argum
     m_shell->webViewHost()->speechInputControllerMock()->addMockRecognitionResult(cppVariantToWebString(arguments[0]), arguments[1].toDouble(), cppVariantToWebString(arguments[2]));
 }
 
+void LayoutTestController::startSpeechInput(const CppArgumentList& arguments, CppVariant* result)
+{
+    result->setNull();
+    if (arguments.size() != 1)
+        return;
+
+    WebElement element;
+    if (!WebBindings::getElement(arguments[0].value.objectValue, &element))
+        return;
+
+    WebInputElement* input = toWebInputElement(&element);
+    if (!input)
+        return;
+
+    if (!input->isSpeechInputEnabled())
+        return;
+
+    input->startSpeechInput();
+}
+
 void LayoutTestController::layerTreeAsText(const CppArgumentList& args, CppVariant* result)
 {
     result->set(m_shell->webView()->mainFrame()->layerTreeAsText(m_showDebugLayerTree).utf8());
+}
+
+void LayoutTestController::loseCompositorContext(const CppArgumentList& args, CppVariant*)
+{
+    int numTimes;
+    if (args.size() == 1 || !args[0].isNumber())
+        numTimes = 1;
+    else
+        numTimes = args[0].toInt32();
+    m_shell->webView()->loseCompositorContext(numTimes);
 }
 
 void LayoutTestController::markerTextForListItem(const CppArgumentList& args, CppVariant* result)
@@ -1814,6 +1849,25 @@ void LayoutTestController::setShouldStayOnPageAfterHandlingBeforeUnload(const Cp
     if (arguments.size() == 1 && arguments[0].isBool())
         m_shouldStayOnPageAfterHandlingBeforeUnload = arguments[0].toBoolean();
 
+    result->setNull();
+}
+
+void LayoutTestController::enableFixedLayoutMode(const CppArgumentList& arguments, CppVariant* result)
+{
+    if (arguments.size() <  1 || !arguments[0].isBool())
+        return;
+    bool enableFixedLayout = arguments[0].toBoolean();
+    m_shell->webView()->enableFixedLayoutMode(enableFixedLayout);
+    result->setNull();
+}
+
+void LayoutTestController::setFixedLayoutSize(const CppArgumentList& arguments, CppVariant* result)
+{
+    if (arguments.size() <  2 || !arguments[0].isNumber() || !arguments[1].isNumber())
+        return;
+    int width = arguments[0].toInt32();
+    int height = arguments[1].toInt32();
+    m_shell->webView()->setFixedLayoutSize(WebSize(width, height));
     result->setNull();
 }
 

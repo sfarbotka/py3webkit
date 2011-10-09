@@ -46,9 +46,8 @@
 
 namespace WebCore {
 
-LayerTextureUpdaterCanvas::LayerTextureUpdaterCanvas(GraphicsContext3D* context, PassOwnPtr<LayerPainterChromium> painter)
-    : LayerTextureUpdater(context)
-    , m_painter(painter)
+LayerTextureUpdaterCanvas::LayerTextureUpdaterCanvas(PassOwnPtr<LayerPainterChromium> painter)
+    : m_painter(painter)
 {
 }
 
@@ -62,13 +61,13 @@ void LayerTextureUpdaterCanvas::paintContents(GraphicsContext& context, const In
     m_contentRect = contentRect;
 }
 
-PassOwnPtr<LayerTextureUpdaterBitmap> LayerTextureUpdaterBitmap::create(GraphicsContext3D* context, PassOwnPtr<LayerPainterChromium> painter, bool useMapTexSubImage)
+PassRefPtr<LayerTextureUpdaterBitmap> LayerTextureUpdaterBitmap::create(PassOwnPtr<LayerPainterChromium> painter, bool useMapTexSubImage)
 {
-    return adoptPtr(new LayerTextureUpdaterBitmap(context, painter, useMapTexSubImage));
+    return adoptRef(new LayerTextureUpdaterBitmap(painter, useMapTexSubImage));
 }
 
-LayerTextureUpdaterBitmap::LayerTextureUpdaterBitmap(GraphicsContext3D* context, PassOwnPtr<LayerPainterChromium> painter, bool useMapTexSubImage)
-    : LayerTextureUpdaterCanvas(context, painter)
+LayerTextureUpdaterBitmap::LayerTextureUpdaterBitmap(PassOwnPtr<LayerPainterChromium> painter, bool useMapTexSubImage)
+    : LayerTextureUpdaterCanvas(painter)
     , m_texSubImage(useMapTexSubImage)
 {
 }
@@ -94,23 +93,23 @@ void LayerTextureUpdaterBitmap::prepareToUpdate(const IntRect& contentRect, cons
     paintContents(*canvasPainter.context(), contentRect);
 }
 
-void LayerTextureUpdaterBitmap::updateTextureRect(ManagedTexture* texture, const IntRect& sourceRect, const IntRect& destRect)
+void LayerTextureUpdaterBitmap::updateTextureRect(GraphicsContext3D* context, TextureAllocator* allocator, ManagedTexture* texture, const IntRect& sourceRect, const IntRect& destRect)
 {
     PlatformCanvas::AutoLocker locker(&m_canvas);
 
-    texture->bindTexture(context());
-    m_texSubImage.upload(locker.pixels(), contentRect(), sourceRect, destRect, texture->format(), context());
+    texture->bindTexture(context, allocator);
+    m_texSubImage.upload(locker.pixels(), contentRect(), sourceRect, destRect, texture->format(), context);
 }
 
-#if USE(SKIA)
-PassOwnPtr<LayerTextureUpdaterSkPicture> LayerTextureUpdaterSkPicture::create(GraphicsContext3D* context, PassOwnPtr<LayerPainterChromium> painter, GrContext* skiaContext)
+#if USE(SKIA) && USE(ACCELERATED_DRAWING)
+PassRefPtr<LayerTextureUpdaterSkPicture> LayerTextureUpdaterSkPicture::create(PassOwnPtr<LayerPainterChromium> painter)
 {
-    return adoptPtr(new LayerTextureUpdaterSkPicture(context, painter, skiaContext));
+    return adoptRef(new LayerTextureUpdaterSkPicture(painter));
 }
 
-LayerTextureUpdaterSkPicture::LayerTextureUpdaterSkPicture(GraphicsContext3D* context, PassOwnPtr<LayerPainterChromium> painter, GrContext* skiaContext)
-    : LayerTextureUpdaterCanvas(context, painter)
-    , m_skiaContext(skiaContext)
+LayerTextureUpdaterSkPicture::LayerTextureUpdaterSkPicture(PassOwnPtr<LayerPainterChromium> painter)
+    : LayerTextureUpdaterCanvas(painter)
+    , m_context(0)
     , m_createFrameBuffer(false)
     , m_fbo(0)
     , m_depthStencilBuffer(0)
@@ -145,8 +144,11 @@ void LayerTextureUpdaterSkPicture::prepareToUpdate(const IntRect& contentRect, c
     m_picture.endRecording();
 }
 
-void LayerTextureUpdaterSkPicture::updateTextureRect(ManagedTexture* texture, const IntRect& sourceRect, const IntRect& destRect)
+void LayerTextureUpdaterSkPicture::updateTextureRect(GraphicsContext3D* compositorContext, TextureAllocator* allocator, ManagedTexture* texture, const IntRect& sourceRect, const IntRect& destRect)
 {
+    ASSERT(!m_context || m_context == compositorContext);
+    m_context = compositorContext;
+
     if (m_createFrameBuffer) {
         deleteFrameBuffer();
         createFrameBuffer();
@@ -157,14 +159,15 @@ void LayerTextureUpdaterSkPicture::updateTextureRect(ManagedTexture* texture, co
 
     // Bind texture.
     context()->bindFramebuffer(GraphicsContext3D::FRAMEBUFFER, m_fbo);
-    texture->framebufferTexture2D(context());
+    texture->framebufferTexture2D(context(), allocator);
     ASSERT(context()->checkFramebufferStatus(GraphicsContext3D::FRAMEBUFFER) == GraphicsContext3D::FRAMEBUFFER_COMPLETE);
 
     // Make sure SKIA uses the correct GL context.
     context()->makeContextCurrent();
 
+    GrContext* skiaContext = m_context->grContext();
     // Notify SKIA to sync its internal GL state.
-    m_skiaContext->resetContext();
+    skiaContext->resetContext();
     m_canvas->save();
     m_canvas->clipRect(SkRect(destRect));
     // Translate the origin of contentRect to that of destRect.
@@ -174,7 +177,7 @@ void LayerTextureUpdaterSkPicture::updateTextureRect(ManagedTexture* texture, co
     m_canvas->drawPicture(m_picture);
     m_canvas->restore();
     // Flush SKIA context so that all the rendered stuff appears on the texture.
-    m_skiaContext->flush(GrContext::kForceCurrentRenderTarget_FlushBit);
+    skiaContext->flush();
 
     // Unbind texture.
     context()->framebufferTexture2D(GraphicsContext3D::FRAMEBUFFER, GraphicsContext3D::COLOR_ATTACHMENT0, GraphicsContext3D::TEXTURE_2D, 0, 0);
@@ -233,6 +236,7 @@ bool LayerTextureUpdaterSkPicture::createFrameBuffer()
     context()->framebufferRenderbuffer(GraphicsContext3D::FRAMEBUFFER, GraphicsContext3D::STENCIL_ATTACHMENT, GraphicsContext3D::RENDERBUFFER, m_depthStencilBuffer);
 
     // Create a skia gpu canvas.
+    GrContext* skiaContext = m_context->grContext();
     GrPlatformSurfaceDesc targetDesc;
     targetDesc.reset();
     targetDesc.fSurfaceType = kRenderTarget_GrPlatformSurfaceType;
@@ -242,15 +246,14 @@ bool LayerTextureUpdaterSkPicture::createFrameBuffer()
     targetDesc.fConfig = kRGBA_8888_GrPixelConfig;
     targetDesc.fStencilBits = 8;
     targetDesc.fPlatformRenderTarget = m_fbo;
-    SkAutoTUnref<GrRenderTarget> target(static_cast<GrRenderTarget*>(m_skiaContext->createPlatformSurface(targetDesc)));
-    SkAutoTUnref<SkDevice> device(new SkGpuDevice(m_skiaContext, target.get()));
+    SkAutoTUnref<GrRenderTarget> target(static_cast<GrRenderTarget*>(skiaContext->createPlatformSurface(targetDesc)));
+    SkAutoTUnref<SkDevice> device(new SkGpuDevice(skiaContext, target.get()));
     m_canvas = adoptPtr(new SkCanvas(device.get()));
 
     context()->bindFramebuffer(GraphicsContext3D::FRAMEBUFFER, 0);
     return true;
 }
-#endif // SKIA
+#endif // USE(SKIA) && USE(ACCELERATED_DRAWING)
 
 } // namespace WebCore
 #endif // USE(ACCELERATED_COMPOSITING)
-

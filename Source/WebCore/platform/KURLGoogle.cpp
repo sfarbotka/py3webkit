@@ -284,6 +284,7 @@ void KURLGooglePrivate::copyTo(KURLGooglePrivate* dest) const
     dest->m_utf8 = CString(m_utf8.data(), m_utf8.length());
     dest->m_utf8IsASCII = m_utf8IsASCII;
     dest->m_stringIsValid = false;
+    dest->m_string = String(); // Clear the invalid string to avoid cross thread ref counting.
 }
 
 String KURLGooglePrivate::componentString(const url_parse::Component& comp) const
@@ -593,7 +594,6 @@ String KURL::query() const
 
 String KURL::path() const
 {
-    // Note: KURL.cpp unescapes here.
     return m_url.componentString(m_url.m_parsed.path);
 }
 
@@ -670,16 +670,12 @@ void KURL::setPort(unsigned short i)
 {
     KURLGooglePrivate::Replacements replacements;
     String portStr;
-    if (i) {
-        portStr = String::number(i);
-        replacements.SetPort(
-            reinterpret_cast<const url_parse::UTF16Char*>(portStr.characters()),
-            url_parse::Component(0, portStr.length()));
 
-    } else {
-        // Clear any existing port when it is set to 0.
-        replacements.ClearPort();
-    }
+    portStr = String::number(i);
+    replacements.SetPort(
+        reinterpret_cast<const url_parse::UTF16Char*>(portStr.characters()),
+        url_parse::Component(0, portStr.length()));
+
     m_url.replaceComponents(replacements);
 }
 
@@ -834,15 +830,6 @@ bool KURL::protocolIs(const char* protocol) const
         protocol);
 }
 
-// This is called to escape a URL string. It is only used externally when
-// constructing mailto: links to set the query section. Since our query setter
-// will automatically do the correct escaping, this function does not have to
-// do any work.
-//
-// There is a possibility that a future caller may use this function in other
-// ways, and may expect to get a valid URL string. The dangerous thing we want
-// to protect against here is accidentally getting '\0' characters in a string
-// that is not supposed to have them. Therefore, we escape these characters.
 String encodeWithURLEscapeSequences(const String& notEncodedString)
 {
     CString utf8 = UTF8Encoding().encode(
@@ -851,15 +838,12 @@ String encodeWithURLEscapeSequences(const String& notEncodedString)
         URLEncodedEntitiesForUnencodables);
     const char* input = utf8.data();
     int inputLength = utf8.length();
+    url_canon::RawCanonOutputT<char> buffer;
+    if (buffer.length() < inputLength * 3)
+        buffer.Resize(inputLength * 3);
 
-    Vector<char, 2048> buffer;
-    for (int i = 0; i < inputLength; i++) {
-        if (!input[i])
-            buffer.append("%00", 3);
-        else
-            buffer.append(input[i]);
-    }
-    return String(buffer.data(), buffer.size());
+    url_util::EncodeURIComponent(input, inputLength, &buffer);
+    return String(buffer.data(), buffer.length());
 }
 
 bool KURL::isHierarchical() const

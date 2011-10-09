@@ -147,6 +147,9 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
                 if result_type != retry_result_type:
                     actual.append(keywords[retry_result_type])
                     num_flaky += 1
+                # FIXME: break MISSING results into a different category
+                elif 'MISSING' in actual:
+                    num_flaky += 1
                 else:
                     num_regressions += 1
 
@@ -167,6 +170,8 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
         for f in result.failures:
             if 'is_reftest' in result.failures:
                 test_dict['is_reftest'] = True
+            if type(f) is test_failures.FailureImageHashMismatch:
+                test_dict['image_diff_percent'] = f.diff_percent
 
         if test_failures.FailureReftestMismatchDidNotOccur in failure_types:
             test_dict['is_mismatch_reftest'] = True
@@ -817,7 +822,7 @@ class Manager(object):
         return (thread_timings, test_timings, individual_test_timings)
 
     def needs_servers(self):
-        return any(self._test_requires_lock(test_name) for test_name in self._test_files)
+        return any(self._test_requires_lock(test_name) for test_name in self._test_files) and self._options.http
 
     def set_up_run(self):
         """Configures the system to be ready to run tests.

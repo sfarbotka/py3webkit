@@ -76,12 +76,21 @@ class WinPortTest(port_testcase.PortTestCase):
         self.assertEquals(port.baseline_search_path(), absolute_search_paths)
 
     def test_baseline_search_path(self):
-        self._assert_search_path(['win-xp', 'win-vista', 'win-7sp0', 'win', 'mac-snowleopard', 'mac'], 'xp')
-        self._assert_search_path(['win-vista', 'win-7sp0', 'win', 'mac-snowleopard', 'mac'], 'vista')
-        self._assert_search_path(['win-7sp0', 'win', 'mac-snowleopard', 'mac'], '7sp0')
-        self._assert_search_path(['win', 'mac-snowleopard', 'mac'], 'bogus')
+        self._assert_search_path(['win-xp', 'win-vista', 'win-7sp0', 'win', 'mac-lion', 'mac'], 'xp')
+        self._assert_search_path(['win-vista', 'win-7sp0', 'win', 'mac-lion', 'mac'], 'vista')
+        self._assert_search_path(['win-7sp0', 'win', 'mac-lion', 'mac'], '7sp0')
+        self._assert_search_path(['win', 'mac-lion', 'mac'], 'bogus')
 
-        self._assert_search_path(['win-wk2', 'win-xp', 'win-vista', 'win-7sp0', 'win', 'mac-wk2', 'mac-snowleopard', 'mac'], 'xp', use_webkit2=True)
-        self._assert_search_path(['win-wk2', 'win-vista', 'win-7sp0', 'win', 'mac-wk2', 'mac-snowleopard', 'mac'], 'vista', use_webkit2=True)
-        self._assert_search_path(['win-wk2', 'win-7sp0', 'win', 'mac-wk2', 'mac-snowleopard', 'mac'], '7sp0', use_webkit2=True)
-        self._assert_search_path(['win-wk2', 'win', 'mac-wk2', 'mac-snowleopard', 'mac'], 'bogus', use_webkit2=True)
+        self._assert_search_path(['win-wk2', 'win-xp', 'win-vista', 'win-7sp0', 'win', 'mac-wk2', 'mac-lion', 'mac'], 'xp', use_webkit2=True)
+        self._assert_search_path(['win-wk2', 'win-vista', 'win-7sp0', 'win', 'mac-wk2', 'mac-lion', 'mac'], 'vista', use_webkit2=True)
+        self._assert_search_path(['win-wk2', 'win-7sp0', 'win', 'mac-wk2', 'mac-lion', 'mac'], '7sp0', use_webkit2=True)
+        self._assert_search_path(['win-wk2', 'win', 'mac-wk2', 'mac-lion', 'mac'], 'bogus', use_webkit2=True)
+
+    def _assert_version(self, port_name, expected_version):
+        port = WinPort(port_name=port_name, filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        self.assertEquals(port.version(), expected_version)
+
+    def test_versions(self):
+        self._assert_version('win-xp', 'xp')
+        self._assert_version('win-vista', 'vista')
+        self._assert_version('win-7sp0', '7sp0')

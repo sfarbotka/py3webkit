@@ -48,8 +48,6 @@ namespace WebKit {
 
         virtual WebCore::FloatRect pageRect();
 
-        virtual float scaleFactor();
-
         virtual void focus();
         virtual void unfocus();
 
@@ -117,13 +115,11 @@ namespace WebKit {
         virtual void dispatchViewportDataDidChange(const WebCore::ViewportArguments& arguments) const;
 
         virtual void print(WebCore::Frame*);
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         virtual void exceededDatabaseQuota(WebCore::Frame*, const WTF::String&);
 #endif
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         virtual void reachedMaxAppCacheSize(int64_t spaceNeeded);
         virtual void reachedApplicationCacheOriginQuota(WebCore::SecurityOrigin*, int64_t totalSpaceNeeded);
-#endif
 #if ENABLE(CONTEXT_MENUS)
         virtual void showContextMenu() { }
 #endif
@@ -135,7 +131,7 @@ namespace WebKit {
         virtual void setCursor(const WebCore::Cursor&);
         virtual void setCursorHiddenUntilMouseMoves(bool);
 
-        virtual void scrollRectIntoView(const WebCore::IntRect&, const WebCore::ScrollView*) const {}
+        virtual void scrollRectIntoView(const WebCore::IntRect&) const { }
         virtual void requestGeolocationPermissionForFrame(WebCore::Frame*, WebCore::Geolocation*);
         virtual void cancelGeolocationPermissionRequestForFrame(WebCore::Frame*, WebCore::Geolocation*);
 

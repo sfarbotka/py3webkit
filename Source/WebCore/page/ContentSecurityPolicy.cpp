@@ -27,12 +27,12 @@
 #include "ContentSecurityPolicy.h"
 
 #include "Console.h"
-#include "DOMWindow.h"
 #include "Document.h"
 #include "FormData.h"
 #include "FormDataList.h"
 #include "Frame.h"
 #include "PingLoader.h"
+#include "ScriptCallStack.h"
 #include "SecurityOrigin.h"
 #include "TextEncoding.h"
 #include <wtf/text/WTFString.h>
@@ -147,8 +147,19 @@ private:
     {
         if (m_portHasWildcard)
             return true;
+
         int port = url.port();
-        return port ? port == m_port : isDefaultPortForProtocol(m_port, url.protocol());
+
+        if (port == m_port)
+            return true;
+
+        if (!port)
+            return isDefaultPortForProtocol(m_port, m_scheme);
+
+        if (!m_port)
+            return isDefaultPortForProtocol(port, m_scheme);
+
+        return false;
     }
 
     bool isSchemeOnly() const { return m_host.isEmpty(); }
@@ -452,9 +463,9 @@ private:
     String m_text;
 };
 
-ContentSecurityPolicy::ContentSecurityPolicy(Document* document)
+ContentSecurityPolicy::ContentSecurityPolicy(ScriptExecutionContext* scriptExecutionContext)
     : m_havePolicy(false)
-    , m_document(document)
+    , m_scriptExecutionContext(scriptExecutionContext)
     , m_reportOnly(false)
 {
 }
@@ -480,22 +491,25 @@ void ContentSecurityPolicy::didReceiveHeader(const String& header, HeaderType ty
         break;
     }
 
-    if (!checkEval(operativeDirective(m_scriptSrc.get()))) {
-        if (Frame* frame = m_document->frame())
-            frame->script()->disableEval();
-    }
+    if (!checkEval(operativeDirective(m_scriptSrc.get())))
+        m_scriptExecutionContext->disableEval();
 }
 
 void ContentSecurityPolicy::reportViolation(const String& directiveText, const String& consoleMessage) const
 {
-    Frame* frame = m_document->frame();
-    if (!frame)
-        return;
-
     String message = m_reportOnly ? "[Report Only] " + consoleMessage : consoleMessage;
-    frame->domWindow()->console()->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message, 1, String());
+    m_scriptExecutionContext->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message, 1, String(), 0);
 
     if (m_reportURLs.isEmpty())
+        return;
+
+    // FIXME: Support sending reports from worker.
+    if (!m_scriptExecutionContext->isDocument())
+        return;
+
+    Document* document = static_cast<Document*>(m_scriptExecutionContext);
+    Frame* frame = document->frame();
+    if (!frame)
         return;
 
     // We need to be careful here when deciding what information to send to the
@@ -509,7 +523,7 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
     // harmless information.
 
     FormDataList reportList(UTF8Encoding());
-    reportList.appendData("document-url", m_document->url());
+    reportList.appendData("document-url", document->url());
     if (!directiveText.isEmpty())
         reportList.appendData("violated-directive", directiveText);
 
@@ -625,6 +639,12 @@ bool ContentSecurityPolicy::allowMediaFromSource(const KURL& url) const
     return checkSourceAndReportViolation(operativeDirective(m_mediaSrc.get()), url, type);
 }
 
+bool ContentSecurityPolicy::allowConnectFromSource(const KURL& url) const
+{
+    DEFINE_STATIC_LOCAL(String, type, ("connect"));
+    return checkSourceAndReportViolation(operativeDirective(m_connectSrc.get()), url, type);
+}
+
 // policy            = directive-list
 // directive-list    = [ directive *( ";" [ directive ] ) ]
 //
@@ -709,14 +729,14 @@ void ContentSecurityPolicy::parseReportURI(const String& value)
 
         if (urlBegin < position) {
             String url = String(urlBegin, position - urlBegin);
-            m_reportURLs.append(m_document->completeURL(url));
+            m_reportURLs.append(m_scriptExecutionContext->completeURL(url));
         }
     }
 }
 
 PassOwnPtr<CSPDirective> ContentSecurityPolicy::createCSPDirective(const String& name, const String& value)
 {
-    return adoptPtr(new CSPDirective(name, value, m_document->securityOrigin()));
+    return adoptPtr(new CSPDirective(name, value, m_scriptExecutionContext->securityOrigin()));
 }
 
 void ContentSecurityPolicy::addDirective(const String& name, const String& value)
@@ -729,6 +749,7 @@ void ContentSecurityPolicy::addDirective(const String& name, const String& value
     DEFINE_STATIC_LOCAL(String, styleSrc, ("style-src"));
     DEFINE_STATIC_LOCAL(String, fontSrc, ("font-src"));
     DEFINE_STATIC_LOCAL(String, mediaSrc, ("media-src"));
+    DEFINE_STATIC_LOCAL(String, connectSrc, ("connect-src"));
     DEFINE_STATIC_LOCAL(String, reportURI, ("report-uri"));
 
     ASSERT(!name.isEmpty());
@@ -749,6 +770,8 @@ void ContentSecurityPolicy::addDirective(const String& name, const String& value
         m_fontSrc = createCSPDirective(name, value);
     else if (!m_mediaSrc && equalIgnoringCase(name, mediaSrc))
         m_mediaSrc = createCSPDirective(name, value);
+    else if (!m_connectSrc && equalIgnoringCase(name, connectSrc))
+        m_connectSrc = createCSPDirective(name, value);
     else if (m_reportURLs.isEmpty() && equalIgnoringCase(name, reportURI))
         parseReportURI(value);
 }

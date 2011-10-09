@@ -36,7 +36,7 @@
 #include <qtouchwebpage.h>
 #include <qwebnavigationcontroller.h>
 
-BrowserView::BrowserView(bool useTouchWebView, QWidget* parent)
+BrowserView::BrowserView(bool useTouchWebView, QWindow* parent)
     : QSGCanvas(parent)
     , m_item(0)
 {
@@ -57,8 +57,7 @@ void BrowserView::resizeEvent(QResizeEvent* event)
     QSGCanvas::resizeEvent(event);
     m_item->setX(0);
     m_item->setY(0);
-    m_item->setWidth(event->size().width());
-    m_item->setHeight(event->size().height());
+    m_item->setSize(event->size());
 }
 
 void BrowserView::load(const QString& urlString)

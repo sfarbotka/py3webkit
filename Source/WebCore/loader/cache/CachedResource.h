@@ -27,6 +27,7 @@
 #include "FrameLoaderTypes.h"
 #include "PlatformString.h"
 #include "PurgePriority.h"
+#include "ResourceLoaderOptions.h"
 #include "ResourceLoadPriority.h"
 #include "ResourceRequest.h"
 #include "ResourceResponse.h"
@@ -62,7 +63,8 @@ public:
         ImageResource,
         CSSStyleSheet,
         Script,
-        FontResource
+        FontResource,
+        RawResource
 #if ENABLE(XSLT)
         , XSLStyleSheet
 #endif
@@ -84,9 +86,8 @@ public:
 
     CachedResource(const ResourceRequest&, Type);
     virtual ~CachedResource();
-    
-    virtual void load(CachedResourceLoader* cachedResourceLoader)  { load(cachedResourceLoader, false, DoSecurityCheck, true); }
-    void load(CachedResourceLoader*, bool incremental, SecurityCheckPolicy, bool sendResourceLoadCallbacks);
+
+    virtual void load(CachedResourceLoader*, const ResourceLoaderOptions&);
 
     virtual void setEncoding(const String&) { }
     virtual String encoding() const { return String(); }
@@ -135,13 +136,15 @@ public:
     void setLoading(bool b) { m_loading = b; }
 
     virtual bool isImage() const { return false; }
-    bool isLinkResource() const
+    bool ignoreForRequestCount() const
     {
+        return false
 #if ENABLE(LINK_PREFETCH)
-        return type() == LinkPrefetch || type() == LinkPrerender || type() == LinkSubresource;
-#else
-        return false;
+            || type() == LinkPrefetch
+            || type() == LinkPrerender
+            || type() == LinkSubresource
 #endif
+            || type() == RawResource;
     }
 
     unsigned accessCount() const { return m_accessCount; }
@@ -194,7 +197,7 @@ public:
     bool wasCanceled() const { return m_status == Canceled; }
     bool errorOccurred() const { return (m_status == LoadError || m_status == DecodeError); }
 
-    bool sendResourceLoadCallbacks() const { return m_sendResourceLoadCallbacks; }
+    bool sendResourceLoadCallbacks() const { return m_options.sendLoadCallbacks == SendCallbacks; }
     
     virtual void destroyDecodedData() { }
 
@@ -240,6 +243,7 @@ protected:
     ResourceRequest m_resourceRequest;
     String m_accept;
     OwnPtr<CachedResourceRequest> m_request;
+    ResourceLoaderOptions m_options;
     ResourceLoadPriority m_loadPriority;
 
     ResourceResponse m_response;
@@ -270,7 +274,6 @@ private:
 
     bool m_inLiveDecodedResourcesList : 1;
     bool m_requestedFromNetworkingLayer : 1;
-    bool m_sendResourceLoadCallbacks : 1;
 
     bool m_inCache : 1;
     bool m_loading : 1;

@@ -32,6 +32,7 @@
 #include "FloatConversion.h"
 #include "FloatQuad.h"
 #include "GraphicsContext.h"
+#include "LayoutRepainter.h"
 #include "PointerEventsHitRules.h"
 #include "RenderImageResource.h"
 #include "RenderLayer.h"
@@ -103,7 +104,7 @@ void RenderSVGImage::updateFromElement()
     RenderSVGModelObject::updateFromElement();
 }
 
-void RenderSVGImage::paint(PaintInfo& paintInfo, const IntPoint&)
+void RenderSVGImage::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     if (paintInfo.context->paintingDisabled() || style()->visibility() == HIDDEN || !m_imageResource->hasImage())
         return;

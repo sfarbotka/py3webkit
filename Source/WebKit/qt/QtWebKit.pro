@@ -41,6 +41,7 @@ webkit2:prependWebKit2Lib(../../WebKit2)
 # the generated includes are containing the dependencies.
 # It used to be in WebCore.pro but now that this is the main pro file it has to be here.
 QT += network
+qt5: QT += widgets printsupport
 
 isEmpty(OUTPUT_DIR): OUTPUT_DIR = ../..
 
@@ -50,10 +51,6 @@ win32*:!win32-msvc* {
     # Make sure OpenGL libs are after the webcore lib so MinGW can resolve symbols
     contains(DEFINES, ENABLE_WEBGL=1)|contains(CONFIG, texmap): LIBS += $$QMAKE_LIBS_OPENGL
 }
-
-moduleFile=$$PWD/qt_webkit_version.pri
-isEmpty(QT_BUILD_TREE):include($$moduleFile)
-VERSION = $${QT_WEBKIT_MAJOR_VERSION}.$${QT_WEBKIT_MINOR_VERSION}.$${QT_WEBKIT_PATCH_VERSION}
 
 include_webinspector: RESOURCES += $$SOURCE_DIR/WebCore/inspector/front-end/WebKit.qrc $$WC_GENERATED_SOURCES_DIR/InspectorBackendStub.qrc
 
@@ -96,6 +93,9 @@ CONFIG(QTDIR_build) {
     symbian: TARGET =$$TARGET$${QT_LIBINFIX}
 }
 
+moduleFile=$$PWD/qt_webkit_version.pri
+isEmpty(QT_BUILD_TREE):include($$moduleFile)
+VERSION = $${QT_WEBKIT_MAJOR_VERSION}.$${QT_WEBKIT_MINOR_VERSION}.$${QT_WEBKIT_PATCH_VERSION}
 
 symbian {
     TARGET.EPOCALLOWDLLDATA=1
@@ -178,6 +178,7 @@ SOURCES += \
     $$PWD/Api/qwebkitversion.cpp \
     \
     $$PWD/WebCoreSupport/QtFallbackWebPopup.cpp \
+    $$PWD/WebCoreSupport/QtWebComboBox.cpp \
     $$PWD/WebCoreSupport/ChromeClientQt.cpp \
     $$PWD/WebCoreSupport/ContextMenuClientQt.cpp \
     $$PWD/WebCoreSupport/DragClientQt.cpp \
@@ -194,6 +195,7 @@ SOURCES += \
     $$PWD/WebCoreSupport/PopupMenuQt.cpp \
     $$PWD/WebCoreSupport/QtPlatformPlugin.cpp \
     $$PWD/WebCoreSupport/SearchPopupMenuQt.cpp \
+    $$PWD/WebCoreSupport/TextCheckerClientQt.cpp \
     $$PWD/WebCoreSupport/WebPlatformStrategies.cpp
 
 HEADERS += \
@@ -202,6 +204,7 @@ HEADERS += \
     \
     $$PWD/WebCoreSupport/InspectorServerQt.h \
     $$PWD/WebCoreSupport/QtFallbackWebPopup.h \
+    $$PWD/WebCoreSupport/QtWebComboBox.h \
     $$PWD/WebCoreSupport/FrameLoaderClientQt.h \
     $$PWD/WebCoreSupport/FrameNetworkingContextQt.h \
     $$PWD/WebCoreSupport/GeolocationPermissionClientQt.h \
@@ -210,6 +213,7 @@ HEADERS += \
     $$PWD/WebCoreSupport/QtPlatformPlugin.h \
     $$PWD/WebCoreSupport/PopupMenuQt.h \
     $$PWD/WebCoreSupport/SearchPopupMenuQt.h \
+    $$PWD/WebCoreSupport/TextCheckerClientQt.h \
     $$PWD/WebCoreSupport/WebPlatformStrategies.h
 
 webkit2 {
@@ -254,12 +258,12 @@ contains(DEFINES, ENABLE_VIDEO=1) {
         # We can know the Mac OS version by using the Darwin major version
         DARWIN_VERSION = $$split(QMAKE_HOST.version, ".")
         DARWIN_MAJOR_VERSION = $$first(DARWIN_VERSION)
-        equals(DARWIN_MAJOR_VERSION, "10") {
-            LIBS+= $$SOURCE_DIR/../WebKitLibraries/libWebKitSystemInterfaceSnowLeopard.a
-        } else {
-            equals(DARWIN_MAJOR_VERSION, "9") {
-                LIBS+= $$SOURCE_DIR/../WebKitLibraries/libWebKitSystemInterfaceLeopard.a
-            }
+        equals(DARWIN_MAJOR_VERSION, "11") {
+            LIBS += $$SOURCE_DIR/../WebKitLibraries/libWebKitSystemInterfaceLion.a
+        } else:equals(DARWIN_MAJOR_VERSION, "10") {
+            LIBS += $$SOURCE_DIR/../WebKitLibraries/libWebKitSystemInterfaceSnowLeopard.a
+        } else:equals(DARWIN_MAJOR_VERSION, "9") {
+            LIBS += $$SOURCE_DIR/../WebKitLibraries/libWebKitSystemInterfaceLeopard.a
         }
     }
 }

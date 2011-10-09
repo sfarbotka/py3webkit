@@ -35,6 +35,7 @@
 
 #include "InspectorFrontend.h"
 #include "InspectorValues.h"
+#include "LayoutTypes.h"
 #include "ScriptGCEvent.h"
 #include "ScriptGCEventListener.h"
 #include <wtf/PassOwnPtr.h>
@@ -86,7 +87,7 @@ public:
     void willRecalculateStyle();
     void didRecalculateStyle();
 
-    void willPaint(const IntRect&);
+    void willPaint(const LayoutRect&);
     void didPaint();
 
     // FIXME: |length| should be passed in didWrite instead willWrite
@@ -118,7 +119,12 @@ public:
     void didFinishLoadingResource(unsigned long, bool didFail, double finishTime);
     void willReceiveResourceData(unsigned long identifier);
     void didReceiveResourceData();
-        
+
+    void didRegisterAnimationFrameCallback(int callbackId);
+    void didCancelAnimationFrameCallback(int callbackId);
+    void willFireAnimationFrameEvent(int callbackId);
+    void didFireAnimationFrameEvent();
+
     virtual void didGC(double, double, size_t);
 
 private:

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -47,7 +48,6 @@
 #include "JSUint8Array.h"
 #include "JSWebKitCSSMatrix.h"
 #include "JSWebKitPoint.h"
-#include "JSWorker.h"
 #include "JSXMLHttpRequest.h"
 #include "JSXSLTProcessor.h"
 #include "Location.h"
@@ -56,6 +56,10 @@
 #include "Settings.h"
 #include "SharedWorkerRepository.h"
 #include <runtime/JSFunction.h>
+
+#if ENABLE(WORKERS)
+#include "JSWorker.h"
+#endif
 
 #if ENABLE(SHARED_WORKERS)
 #include "JSSharedWorker.h"
@@ -73,22 +77,23 @@ using namespace JSC;
 
 namespace WebCore {
 
-void JSDOMWindow::visitChildren(SlotVisitor& visitor)
+void JSDOMWindow::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    JSDOMWindow* thisObject = static_cast<JSDOMWindow*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    Base::visitChildren(visitor);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    Base::visitChildren(thisObject, visitor);
 
-    impl()->visitJSEventListeners(visitor);
-    if (Frame* frame = impl()->frame())
+    thisObject->impl()->visitJSEventListeners(visitor);
+    if (Frame* frame = thisObject->impl()->frame())
         visitor.addOpaqueRoot(frame);
 }
 
 template<NativeFunction nativeFunction, int length>
 JSValue nonCachingStaticFunctionGetter(ExecState* exec, JSValue, const Identifier& propertyName)
 {
-    return JSFunction::create(exec, exec->lexicalGlobalObject(), exec->lexicalGlobalObject()->functionStructure(), length, propertyName, nativeFunction);
+    return JSFunction::create(exec, exec->lexicalGlobalObject(), length, propertyName, nativeFunction);
 }
 
 static JSValue childFrameGetter(ExecState* exec, JSValue slotBase, const Identifier& propertyName)
@@ -124,7 +129,9 @@ bool JSDOMWindow::getOwnPropertySlot(ExecState* exec, const Identifier& property
 
     const HashEntry* entry;
 
-    // We don't want any properties other than "close" and "closed" on a closed window.
+    // We don't want any properties other than "close" and "closed" on a frameless window (i.e. one whose page got closed,
+    // or whose iframe got removed).
+    // FIXME: This doesn't fully match Firefox, which allows at least toString in addition to those.
     if (!impl()->frame()) {
         // The following code is safe for cross-domain and same domain use.
         // It ignores any custom properties that might be set on the DOMWindow (including a custom prototype).
@@ -476,12 +483,10 @@ JSValue JSDOMWindow::event(ExecState* exec) const
     return toJS(exec, const_cast<JSDOMWindow*>(this), event);
 }
 
-#if ENABLE(EVENTSOURCE)
 JSValue JSDOMWindow::eventSource(ExecState* exec) const
 {
     return getDOMConstructor<JSEventSourceConstructor>(exec, this);
 }
-#endif
 
 JSValue JSDOMWindow::image(ExecState* exec) const
 {
@@ -597,21 +602,30 @@ JSValue JSDOMWindow::sharedWorker(ExecState* exec) const
 }
 #endif
 
+#if ENABLE(WEB_AUDIO) || ENABLE(WEB_SOCKETS)
+static Settings* settingsForWindow(const JSDOMWindow* window)
+{
+    ASSERT(window);
+    if (Frame* frame = window->impl()->frame())
+        return frame->settings();
+    return 0;
+}
+#endif
+
 #if ENABLE(WEB_AUDIO)
 JSValue JSDOMWindow::webkitAudioContext(ExecState* exec) const
 {
-    return getDOMConstructor<JSAudioContextConstructor>(exec, this);
+    Settings* settings = settingsForWindow(this);
+    if (settings && settings->webAudioEnabled())
+        return getDOMConstructor<JSAudioContextConstructor>(exec, this);
+    return jsUndefined();
 }
 #endif
 
 #if ENABLE(WEB_SOCKETS)
 JSValue JSDOMWindow::webSocket(ExecState* exec) const
 {
-    Frame* frame = impl()->frame();
-    if (!frame)
-        return jsUndefined();
-    Settings* settings = frame->settings();
-    if (!settings)
+    if (!settingsForWindow(this))
         return jsUndefined();
     return getDOMConstructor<JSWebSocketConstructor>(exec, this);
 }
@@ -641,7 +655,6 @@ class DialogHandler {
 public:
     explicit DialogHandler(ExecState* exec)
         : m_exec(exec)
-        , m_globalObject(0)
     {
     }
 
@@ -650,25 +663,27 @@ public:
 
 private:
     ExecState* m_exec;
-    JSDOMWindow* m_globalObject;
+    RefPtr<Frame> m_frame;
 };
 
 inline void DialogHandler::dialogCreated(DOMWindow* dialog)
 {
+    m_frame = dialog->frame();
     // FIXME: This looks like a leak between the normal world and an isolated
     //        world if dialogArguments comes from an isolated world.
-    m_globalObject = toJSDOMWindow(dialog->frame(), normalWorld(m_exec->globalData()));
+    JSDOMWindow* globalObject = toJSDOMWindow(m_frame.get(), normalWorld(m_exec->globalData()));
     if (JSValue dialogArguments = m_exec->argument(1))
-        m_globalObject->putDirect(m_exec->globalData(), Identifier(m_exec, "dialogArguments"), dialogArguments);
+        globalObject->putDirect(m_exec->globalData(), Identifier(m_exec, "dialogArguments"), dialogArguments);
 }
 
 inline JSValue DialogHandler::returnValue() const
 {
-    if (!m_globalObject)
+    JSDOMWindow* globalObject = toJSDOMWindow(m_frame.get(), normalWorld(m_exec->globalData()));
+    if (!globalObject)
         return jsUndefined();
     Identifier identifier(m_exec, "returnValue");
     PropertySlot slot;
-    if (!m_globalObject->JSGlobalObject::getOwnPropertySlot(m_exec, identifier, slot))
+    if (!globalObject->getOwnPropertySlot(m_exec, identifier, slot))
         return jsUndefined();
     return slot.getValue(m_exec, identifier);
 }
@@ -696,7 +711,7 @@ JSValue JSDOMWindow::showModalDialog(ExecState* exec)
 
 JSValue JSDOMWindow::postMessage(ExecState* exec)
 {
-    PassRefPtr<SerializedScriptValue> message = SerializedScriptValue::create(exec, exec->argument(0));
+    RefPtr<SerializedScriptValue> message = SerializedScriptValue::create(exec, exec->argument(0));
 
     if (exec->hadException())
         return jsUndefined();
@@ -712,10 +727,15 @@ JSValue JSDOMWindow::postMessage(ExecState* exec)
         return jsUndefined();
 
     ExceptionCode ec = 0;
-    impl()->postMessage(message, &messagePorts, targetOrigin, activeDOMWindow(exec), ec);
+    impl()->postMessage(message.release(), &messagePorts, targetOrigin, activeDOMWindow(exec), ec);
     setDOMException(exec, ec);
 
     return jsUndefined();
+}
+
+JSValue JSDOMWindow::webkitPostMessage(ExecState* exec)
+{
+    return postMessage(exec);
 }
 
 JSValue JSDOMWindow::setTimeout(ExecState* exec)

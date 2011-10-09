@@ -102,6 +102,9 @@ private:
 
     virtual void privateBrowsingStateChanged(bool);
     virtual bool getFormValue(String& formValue);
+    virtual bool handleScroll(WebCore::ScrollDirection, WebCore::ScrollGranularity);
+    virtual WebCore::Scrollbar* horizontalScrollbar();
+    virtual WebCore::Scrollbar* verticalScrollbar();
 
     bool needsBackingStore() const;
     uint64_t windowNPObjectID();
@@ -119,7 +122,8 @@ private:
     void cancelManualStreamLoad();
     void setStatusbarText(const String& statusbarText);
 #if PLATFORM(MAC)
-    void setComplexTextInputEnabled(bool);
+    void pluginFocusOrWindowFocusChanged(bool);
+    void setComplexTextInputState(uint64_t);
 #endif
 
     String m_pluginPath;

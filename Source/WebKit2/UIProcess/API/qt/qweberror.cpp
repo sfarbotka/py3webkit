@@ -65,8 +65,8 @@ QWebError::Type QWebError::type() const
         return QWebError::NetworkError;
     if (errorDomain == "HTTP")
         return QWebError::HttpError;
-    // FIXME: Redirection overflow currently puts the URL hostname in the errorDomain field.
-    //        We should expose that error somehow. Source is QNetworkReplyHandler::redirect().
+    if (errorDomain == "Download")
+        return QWebError::DownloadError;
     return QWebError::EngineError;
 }
 

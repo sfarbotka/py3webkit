@@ -98,9 +98,12 @@ private slots:
     void acceptNavigationRequest();
     void geolocationRequestJS();
     void loadFinished();
+    void actionStates();
     void popupFormSubmission();
     void acceptNavigationRequestWithNewWindow();
     void userStyleSheet();
+    void userStyleSheetFromLocalFileUrl();
+    void userStyleSheetFromQrcUrl();
     void loadHtml5Video();
     void modified();
     void contextMenuCrash();
@@ -343,6 +346,19 @@ void tst_QWebPage::loadFinished()
     QCOMPARE(spyLoadFinished.count(), 1);
 }
 
+void tst_QWebPage::actionStates()
+{
+    QWebPage* page = m_view->page();
+
+    page->mainFrame()->load(QUrl("qrc:///resources/script.html"));
+
+    QAction* reloadAction = page->action(QWebPage::Reload);
+    QAction* stopAction = page->action(QWebPage::Stop);
+
+    QTRY_VERIFY(reloadAction->isEnabled());
+    QTRY_VERIFY(!stopAction->isEnabled());
+}
+
 class ConsolePage : public QWebPage
 {
 public:
@@ -374,7 +390,7 @@ public:
     TestPage(QObject* parent = 0) : QWebPage(parent) {}
 
     struct Navigation {
-        QPointer<QWebFrame> frame;
+        QWeakPointer<QWebFrame> frame;
         QNetworkRequest request;
         NavigationType type;
     };
@@ -465,10 +481,36 @@ void tst_QWebPage::userStyleSheet()
 {
     TestNetworkManager* networkManager = new TestNetworkManager(m_page);
     m_page->setNetworkAccessManager(networkManager);
-    networkManager->requestedUrls.clear();
 
     m_page->settings()->setUserStyleSheetUrl(QUrl("data:text/css;charset=utf-8;base64,"
             + QByteArray("p { background-image: url('http://does.not/exist.png');}").toBase64()));
+    m_view->setHtml("<p>hello world</p>");
+    QVERIFY(::waitForSignal(m_view, SIGNAL(loadFinished(bool))));
+
+    QVERIFY(networkManager->requestedUrls.count() >= 1);
+    QCOMPARE(networkManager->requestedUrls.at(0), QUrl("http://does.not/exist.png"));
+}
+
+void tst_QWebPage::userStyleSheetFromLocalFileUrl()
+{
+    TestNetworkManager* networkManager = new TestNetworkManager(m_page);
+    m_page->setNetworkAccessManager(networkManager);
+
+    QUrl styleSheetUrl = QUrl::fromLocalFile(TESTS_SOURCE_DIR + QLatin1String("qwebpage/resources/user.css"));
+    m_page->settings()->setUserStyleSheetUrl(styleSheetUrl);
+    m_view->setHtml("<p>hello world</p>");
+    QVERIFY(::waitForSignal(m_view, SIGNAL(loadFinished(bool))));
+
+    QVERIFY(networkManager->requestedUrls.count() >= 1);
+    QCOMPARE(networkManager->requestedUrls.at(0), QUrl("http://does.not/exist.png"));
+}
+
+void tst_QWebPage::userStyleSheetFromQrcUrl()
+{
+    TestNetworkManager* networkManager = new TestNetworkManager(m_page);
+    m_page->setNetworkAccessManager(networkManager);
+
+    m_page->settings()->setUserStyleSheetUrl(QUrl("qrc:///resources/user.css"));
     m_view->setHtml("<p>hello world</p>");
     QVERIFY(::waitForSignal(m_view, SIGNAL(loadFinished(bool))));
 
@@ -846,12 +888,11 @@ void tst_QWebPage::createPluginWithPluginsDisabled()
 class PluginCounterPage : public QWebPage {
 public:
     int m_count;
-    QPointer<QObject> m_widget;
+    QWeakPointer<QObject> m_widget;
     QObject* m_pluginParent;
     PluginCounterPage(QObject* parent = 0)
         : QWebPage(parent)
         , m_count(0)
-        , m_widget(0)
         , m_pluginParent(0)
     {
        settings()->setAttribute(QWebSettings::PluginsEnabled, true);
@@ -881,7 +922,7 @@ public:
         // which also takes a QWidget* instead of a QObject*. Therefore we need to
         // upcast to T*, which is a QWidget.
         static_cast<T*>(m_widget.data())->setParent(static_cast<T*>(m_pluginParent));
-        return m_widget;
+        return m_widget.data();
     }
 };
 
@@ -948,7 +989,7 @@ void tst_QWebPage::createViewlessPlugin()
     QCOMPARE(page->m_count, 1);
     QVERIFY(page->m_widget);
     QVERIFY(page->m_pluginParent);
-    QVERIFY(page->m_widget->parent() == page->m_pluginParent);
+    QVERIFY(page->m_widget.data()->parent() == page->m_pluginParent);
     delete page;
 
 }
@@ -1037,7 +1078,7 @@ void tst_QWebPage::cursorMovements()
 
     QRegExp regExp(" style=\".*\"");
     regExp.setMinimal(true);
-    QCOMPARE(page->selectedHtml().trimmed().replace(regExp, ""), QString::fromLatin1("<span class=\"Apple-style-span\"><p id=\"one\">The quick brown fox</p></span>"));
+    QCOMPARE(page->selectedHtml().trimmed().replace(regExp, ""), QString::fromLatin1("<p id=\"one\">The quick brown fox</p>"));
 
     // these actions must exist
     QVERIFY(page->action(QWebPage::MoveToNextChar) != 0);
@@ -1270,7 +1311,7 @@ void tst_QWebPage::textSelection()
     QCOMPARE(page->selectedText().trimmed(), QString::fromLatin1("The quick brown fox"));
     QRegExp regExp(" style=\".*\"");
     regExp.setMinimal(true);
-    QCOMPARE(page->selectedHtml().trimmed().replace(regExp, ""), QString::fromLatin1("<span class=\"Apple-style-span\"><p id=\"one\">The quick brown fox</p></span>"));
+    QCOMPARE(page->selectedHtml().trimmed().replace(regExp, ""), QString::fromLatin1("<p id=\"one\">The quick brown fox</p>"));
 
     // Make sure hasSelection returns true, since there is selected text now...
     QCOMPARE(page->hasSelection(), true);
@@ -2880,7 +2921,7 @@ void tst_QWebPage::findText()
     foreach (QString subString, words) {
         m_page->findText(subString, QWebPage::FindWrapsAroundDocument);
         QCOMPARE(m_page->selectedText(), subString);
-        QCOMPARE(m_page->selectedHtml().trimmed().replace(regExp, ""), QString("<span class=\"Apple-style-span\">%1</span>").arg(subString));
+        QCOMPARE(m_page->selectedHtml().trimmed().replace(regExp, ""), QString("<span>%1</span>").arg(subString));
         m_page->findText("");
         QVERIFY(m_page->selectedText().isEmpty());
         QVERIFY(m_page->selectedHtml().isEmpty());
@@ -3188,8 +3229,6 @@ void tst_QWebPage::loadSignalsOrder_data()
 
 void tst_QWebPage::loadSignalsOrder()
 {
-    QSKIP("https://bugs.webkit.org/show_bug.cgi?id=28851", SkipAll);
-
     QFETCH(QUrl, url);
     QWebPage page;
     SpyForLoadSignalsOrder loadSpy(&page);

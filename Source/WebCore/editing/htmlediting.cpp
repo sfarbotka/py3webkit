@@ -176,7 +176,7 @@ bool isRichlyEditablePosition(const Position& p)
 
 Element* editableRootForPosition(const Position& p)
 {
-    Node* node = p.deprecatedNode();
+    Node* node = p.containerNode();
     if (!node)
         return 0;
         
@@ -623,6 +623,34 @@ Node* highestEnclosingNodeOfType(const Position& p, bool (*nodeIsOfType)(const N
     return highest;
 }
 
+static bool hasARenderedDescendant(Node* node, Node* excludedNode)
+{
+    for (Node* n = node->firstChild(); n;) {
+        if (n == excludedNode) {
+            n = n->traverseNextSibling(node);
+            continue;
+        }
+        if (n->renderer())
+            return true;
+        n = n->traverseNextNode(node);
+    }
+    return false;
+}
+
+Node* highestNodeToRemoveInPruning(Node* node)
+{
+    Node* previousNode = 0;
+    Node* rootEditableElement = node ? node->rootEditableElement() : 0;
+    for (; node; node = node->parentNode()) {
+        if (RenderObject* renderer = node->renderer()) {
+            if (!renderer->canHaveChildren() || hasARenderedDescendant(node, previousNode) || rootEditableElement == node)
+                return previousNode;
+        }
+        previousNode = node;
+    }
+    return 0;
+}
+
 Node* enclosingTableCell(const Position& p)
 {
     return static_cast<Element*>(enclosingNodeOfType(p, isTableCell));
@@ -666,7 +694,7 @@ Node* enclosingListChild(Node *node)
     
     // FIXME: This function is inappropriately named if it starts with node instead of node->parentNode()
     for (Node* n = node; n && n->parentNode(); n = n->parentNode()) {
-        if (n->hasTagName(liTag) || isListElement(n->parentNode()))
+        if (n->hasTagName(liTag) || (isListElement(n->parentNode()) && n != root))
             return n;
         if (n == root || isTableCell(n))
             return 0;
@@ -923,6 +951,36 @@ unsigned numEnclosingMailBlockquotes(const Position& p)
     return num;
 }
 
+void updatePositionForNodeRemoval(Position& position, Node* node)
+{
+    if (position.isNull())
+        return;
+    switch (position.anchorType()) {
+    case Position::PositionIsBeforeChildren:
+        if (position.containerNode() == node)
+            position = positionInParentBeforeNode(node);
+        break;
+    case Position::PositionIsAfterChildren:
+        if (position.containerNode() == node)
+            position = positionInParentAfterNode(node);
+        break;
+    case Position::PositionIsOffsetInAnchor:
+        if (position.containerNode() == node->parentNode() && static_cast<unsigned>(position.offsetInContainerNode()) > node->nodeIndex())
+            position.moveToOffset(position.offsetInContainerNode() - 1);
+        else if (node->contains(position.containerNode()) || node->contains(position.containerNode()->shadowAncestorNode()))
+            position = positionInParentBeforeNode(node);
+        break;
+    case Position::PositionIsAfterAnchor:
+        if (node->contains(position.anchorNode()) || node->contains(position.anchorNode()->shadowAncestorNode()))
+            position = positionInParentAfterNode(node);
+        break;
+    case Position::PositionIsBeforeAnchor:
+        if (node->contains(position.anchorNode()) || node->contains(position.anchorNode()->shadowAncestorNode()))
+            position = positionInParentBeforeNode(node);
+        break;
+    }
+}
+
 bool isMailBlockquote(const Node *node)
 {
     if (!node || !node->hasTagName(blockquoteTag))
@@ -1135,23 +1193,6 @@ VisibleSelection avoidIntersectionWithNode(const VisibleSelection& selection, No
     }
 
     return updatedSelection;
-}
-
-Position createPositionAvoidingIgnoredNode(Node* node, int offset)
-{
-    if (!node)
-        return Position();
-    if (!node->isTextNode()) {
-        // FIXME: the pass-in offset is the caretMinOffset() or caretMaxOffset() of box.
-        // caretMaxOffset could be 1 for replacedElement, br, and hr. 
-        // We should get rid of this offset checking code after we get rid of legacy editing
-        // position in rendering code.
-        if (!offset)
-            return positionBeforeNode(node);
-        ASSERT(offset == 1);
-        return positionAfterNode(node);
-    }
-    return Position(static_cast<Text*>(node), offset);
 }
 
 } // namespace WebCore

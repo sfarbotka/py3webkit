@@ -33,7 +33,7 @@ use warnings;
 use Config;
 use FindBin;
 use File::Basename;
-use File::Path;
+use File::Path qw(mkpath rmtree);
 use File::Spec;
 use POSIX;
 use VCSUtils;
@@ -43,10 +43,26 @@ BEGIN {
    our ($VERSION, @ISA, @EXPORT, @EXPORT_OK, %EXPORT_TAGS);
    $VERSION     = 1.00;
    @ISA         = qw(Exporter);
-   @EXPORT      = qw(&chdirWebKit &baseProductDir &productDir &XcodeOptions &XcodeOptionString &XcodeOptionStringNoConfig &passedConfiguration &setConfiguration &safariPath &checkFrameworks &currentSVNRevision);
+   @EXPORT      = qw(
+       &XcodeOptionString
+       &XcodeOptionStringNoConfig
+       &XcodeOptions
+       &baseProductDir
+       &chdirWebKit
+       &checkFrameworks
+       &currentSVNRevision
+       &passedConfiguration
+       &productDir
+       &runMacWebKitApp
+       &safariPath
+       &setConfiguration
+       USE_OPEN_COMMAND
+   );
    %EXPORT_TAGS = ( );
    @EXPORT_OK   = ();
 }
+
+use constant USE_OPEN_COMMAND => 1; # Used in runMacWebKitApp().
 
 our @EXPORT_OK;
 
@@ -72,6 +88,7 @@ my $isWx;
 my $isEfl;
 my @wxArgs;
 my $isChromium;
+my $isChromiumAndroid;
 my $isInspectorFrontend;
 my $isWK2;
 
@@ -154,6 +171,14 @@ sub determineBaseProductDir
     } elsif (isSymbian()) {
         # Shadow builds are not supported on Symbian
         $baseProductDir = $sourceDir;
+    } elsif (isChromium()) {
+        if (isLinux() || isChromiumAndroid()) {
+            $baseProductDir = "$sourceDir/out";
+        } elsif (isDarwin()) {
+            $baseProductDir = "$sourceDir/Source/WebKit/chromium/xcodebuild";
+        } elsif (isWindows() || isCygwin()) {
+            $baseProductDir = "$sourceDir/Source/WebKit/chromium/build";
+        }
     }
 
     if (!defined($baseProductDir)) { # Port-spesific checks failed, use default
@@ -207,7 +232,9 @@ sub determineConfiguration
     }
 
     if ($configuration && isWinCairo()) {
-        $configuration .= "_Cairo_CFLite";
+        unless ($configuration =~ /_Cairo_CFLite$/) {
+            $configuration .= "_Cairo_CFLite";
+        }
     }
 }
 
@@ -282,9 +309,11 @@ sub argumentsForConfiguration()
     push(@args, '--symbian') if isSymbian();
     push(@args, '--gtk') if isGtk();
     push(@args, '--efl') if isEfl();
+    push(@args, '--wincairo') if isWinCairo();
     push(@args, '--wince') if isWinCE();
     push(@args, '--wx') if isWx();
-    push(@args, '--chromium') if isChromium();
+    push(@args, '--chromium') if isChromium() && !isChromiumAndroid();
+    push(@args, '--chromium-android') if isChromiumAndroid();
     push(@args, '--inspector-frontend') if isInspectorFrontend();
     return @args;
 }
@@ -555,7 +584,7 @@ sub installedSafariPath
     if (isAppleMacWebKit()) {
         $safariBundle = "/Applications/Safari.app";
     } elsif (isAppleWinWebKit()) {
-        $safariBundle = `"$configurationProductDir/FindSafari.exe"`;
+        $safariBundle = readRegistryString("/HKLM/SOFTWARE/Apple Computer, Inc./Safari/InstallDir");
         $safariBundle =~ s/[\r\n]+$//;
         $safariBundle = `cygpath -u '$safariBundle'` if isCygwin();
         $safariBundle =~ s/[\r\n]+$//;
@@ -871,13 +900,26 @@ sub isFedoraBased()
 sub isChromium()
 {
     determineIsChromium();
-    return $isChromium;
+    determineIsChromiumAndroid();
+    return $isChromium || $isChromiumAndroid;
 }
 
 sub determineIsChromium()
 {
     return if defined($isChromium);
     $isChromium = checkForArgumentAndRemoveFromARGV("--chromium");
+}
+
+sub isChromiumAndroid()
+{
+    determineIsChromiumAndroid();
+    return $isChromiumAndroid;
+}
+
+sub determineIsChromiumAndroid()
+{
+    return if defined($isChromiumAndroid);
+    $isChromiumAndroid = checkForArgumentAndRemoveFromARGV("--chromium-android");
 }
 
 sub isWinCairo()
@@ -1225,7 +1267,7 @@ sub setupCygwinEnv()
     
     unless ($ENV{WEBKITLIBRARIESDIR}) {
         $ENV{'WEBKITLIBRARIESDIR'} = File::Spec->catdir($sourceDir, "WebKitLibraries", "win");
-        chomp($ENV{WEBKITLIBRARIESDIR} = `cygpath -wa $ENV{WEBKITLIBRARIESDIR}`) if isCygwin();
+        chomp($ENV{WEBKITLIBRARIESDIR} = `cygpath -wa '$ENV{WEBKITLIBRARIESDIR}'`) if isCygwin();
     }
 
     print "Building results into: ", baseProductDir(), "\n";
@@ -1473,7 +1515,7 @@ sub autogenArgumentsHaveChanged($@)
 
 sub buildAutotoolsProject($@)
 {
-    my ($project, $clean, @buildParams) = @_;
+    my ($project, $clean, $enableWebKit2, @buildParams) = @_;
 
     my $make = 'make';
     my $dir = productDir();
@@ -1502,6 +1544,12 @@ sub buildAutotoolsProject($@)
     # WebKit is the default target, so we don't need to specify anything.
     if ($project eq "JavaScriptCore") {
         $makeArgs .= " jsc";
+    }
+
+    # This is a temporary work-around to enable building WebKit2 on the bots,
+    # but ensuring that it does not ship until the API is stable.
+    if ($project eq "WebKit" and isGtk() and $enableWebKit2) {
+        push @buildArgs, "--enable-webkit2";
     }
 
     $prefix = $ENV{"WebKitInstallationPrefix"} if !defined($prefix);
@@ -1656,6 +1704,10 @@ sub buildQMakeProject($@)
     push @buildArgs, "INSTALL_LIBS=" . $installLibs if defined($installLibs);
     my $dir = File::Spec->canonpath(productDir());
 
+    my $originalCwd = getcwd();
+    chdir File::Spec->catfile(sourceDir(), "Source", "WebCore");
+    my $defaults = `$qmakebin CONFIG+=compute_defaults 2>&1`;
+    chdir $originalCwd;
 
     # On Symbian qmake needs to run in the same directory where the pro file is located.
     if (isSymbian()) {
@@ -1664,6 +1716,26 @@ sub buildQMakeProject($@)
 
     File::Path::mkpath($dir);
     chdir $dir or die "Failed to cd into " . $dir . "\n";
+
+    my $pathToDefaultsTxt = File::Spec->catfile( $dir, "defaults.txt" );
+    my $defaultsTxt = "";
+    if(open DEFAULTS, "$pathToDefaultsTxt"){
+        while (<DEFAULTS>) {
+            $defaultsTxt .= $_;
+        }
+        close (DEFAULTS);
+    }
+    # Automatic clean build isn't supported on Symbian yet, see https://bugs.webkit.org/show_bug.cgi?id=67706 for details.
+    if (($defaults ne $defaultsTxt) and !isSymbian()){
+        print "Make clean build because the Defines are changed.\n";
+        chdir $originalCwd;
+        File::Path::rmtree($dir);
+        File::Path::mkpath($dir);
+        chdir $dir or die "Failed to cd into " . $dir . "\n";
+        open DEFAULTS, ">$pathToDefaultsTxt";
+        print DEFAULTS $defaults;
+        close (DEFAULTS);
+    }
 
     print "Generating derived sources\n\n";
 
@@ -1814,26 +1886,31 @@ sub buildQMakeQtProject($$@)
 
 sub buildGtkProject
 {
-    my ($project, $clean, @buildArgs) = @_;
+    my ($project, $clean, $enableWebKit2, @buildArgs) = @_;
 
     if ($project ne "WebKit" and $project ne "JavaScriptCore") {
         die "Unsupported project: $project. Supported projects: WebKit, JavaScriptCore\n";
     }
 
-    return buildAutotoolsProject($project, $clean, @buildArgs);
+    return buildAutotoolsProject($project, $clean, $enableWebKit2, @buildArgs);
 }
 
-sub buildChromiumMakefile($$)
+sub buildChromiumMakefile($$@)
 {
-    my ($target, $clean) = @_;
+    my ($target, $clean, @options) = @_;
     if ($clean) {
         return system qw(rm -rf out);
     }
     my $config = configuration();
     my $numCpus = numberOfCPUs();
-    my @command = ("make", "-fMakefile.chromium", "-j$numCpus", "BUILDTYPE=$config", $target);
-    print join(" ", @command) . "\n";
-    return system @command;
+    my $makeArgs;
+    for (@options) {
+        $makeArgs = $1 if /^--makeargs=(.*)/i;
+    }
+    $makeArgs = "-j$numCpus" if not $makeArgs;
+    my $command = "make -fMakefile.chromium $makeArgs BUILDTYPE=$config $target";
+    print "$command\n";
+    return system $command;
 }
 
 sub buildChromiumVisualStudioProject($$)
@@ -1886,7 +1963,23 @@ sub buildChromium($@)
     }
 
     my $result = 1;
-    if (isDarwin()) {
+    if (isChromiumAndroid()) {
+        # Building Chromium for Android needs to cross-compile using the
+        # Toolchains supplied by the Android NDK.
+        my $ndkBaseDir = sourceDir() . "/Source/WebKit/chromium/third_party/android-ndk-r6";
+        my $platform = isDarwin() ? "darwin-x86" : "linux-x86";
+
+        my $toolchainBase = $ndkBaseDir . "/toolchains/arm-linux-androideabi-4.4.3/prebuilt/" . $platform . "/bin/arm-linux-androideabi-";
+
+        $ENV{AR} = $toolchainBase . "ar";
+        $ENV{CC} = $toolchainBase . "gcc";
+        $ENV{CXX} = $toolchainBase . "g++";
+        $ENV{LINK} = $toolchainBase . "gcc";
+        $ENV{RANLIB} = $toolchainBase . "ranlib";
+        $ENV{STRIP} = $toolchainBase . "strip";
+
+        $result = buildChromiumMakefile("all", $clean);
+    } elsif (isDarwin()) {
         # Mac build - builds the root xcode project.
         $result = buildXCodeProject("Source/WebKit/chromium/WebKit", $clean, "-configuration", configuration(), @options);
     } elsif (isCygwin() || isWindows()) {
@@ -1894,7 +1987,7 @@ sub buildChromium($@)
         $result = buildChromiumVisualStudioProject("Source/WebKit/chromium/WebKit.sln", $clean);
     } elsif (isLinux()) {
         # Linux build - build using make.
-        $ result = buildChromiumMakefile("all", $clean);
+        $result = buildChromiumMakefile("all", $clean, @options);
     } else {
         print STDERR "This platform is not supported by chromium.\n";
     }
@@ -1926,22 +2019,31 @@ sub setPathForRunningWebKitApp
     }
 }
 
+sub runMacWebKitApp($;$)
+{
+    my ($appPath, $useOpenCommand) = @_;
+    my $productDir = productDir();
+    print "Starting @{[basename($appPath)]} with DYLD_FRAMEWORK_PATH set to point to built WebKit in $productDir.\n";
+    $ENV{DYLD_FRAMEWORK_PATH} = $productDir;
+    $ENV{WEBKIT_UNSET_DYLD_FRAMEWORK_PATH} = "YES";
+    if (defined($useOpenCommand) && $useOpenCommand == USE_OPEN_COMMAND) {
+        return system("open", "-W", "-a", $appPath, "--args", @ARGV);
+    }
+    if (architecture()) {
+        return system "arch", "-" . architecture(), $appPath, @ARGV;
+    }
+    return system { $appPath } $appPath, @ARGV;
+}
+
 sub runSafari
 {
     my ($debugger) = @_;
 
     if (isAppleMacWebKit()) {
-        return system "$FindBin::Bin/gdb-safari", argumentsForConfiguration() if $debugger;
-
-        my $productDir = productDir();
-        print "Starting Safari with DYLD_FRAMEWORK_PATH set to point to built WebKit in $productDir.\n";
-        $ENV{DYLD_FRAMEWORK_PATH} = $productDir;
-        $ENV{WEBKIT_UNSET_DYLD_FRAMEWORK_PATH} = "YES";
-        if (architecture()) {
-            return system "arch", "-" . architecture(), safariPath(), @ARGV;
-        } else {
-            return system safariPath(), @ARGV;
+        if ($debugger) {
+            return system "$FindBin::Bin/gdb-safari", argumentsForConfiguration();
         }
+        return runMacWebKitApp(safariPath());
     }
 
     if (isAppleWinWebKit()) {
@@ -1954,7 +2056,8 @@ sub runSafari
             chomp($safariPath = `cygpath -wa "$safariPath"`);
             $result = system $vcBuildPath, "/debugexe", "\"$safariPath\"", @ARGV;
         } else {
-            $result = system File::Spec->catfile(productDir(), "WebKit.exe"), @ARGV;
+            my $webKitLauncherPath = File::Spec->catfile(productDir(), "WebKit.exe");
+            $result = system { $webKitLauncherPath } $webKitLauncherPath, @ARGV;
         }
         return $result if $result;
     }
@@ -1965,16 +2068,7 @@ sub runSafari
 sub runMiniBrowser
 {
     if (isAppleMacWebKit()) {
-        my $productDir = productDir();
-        print "Starting MiniBrowser with DYLD_FRAMEWORK_PATH set to point to $productDir.\n";
-        $ENV{DYLD_FRAMEWORK_PATH} = $productDir;
-        $ENV{WEBKIT_UNSET_DYLD_FRAMEWORK_PATH} = "YES";
-        my $miniBrowserPath = "$productDir/MiniBrowser.app/Contents/MacOS/MiniBrowser";
-        if (architecture()) {
-            return system "arch", "-" . architecture(), $miniBrowserPath, @ARGV;
-        } else {
-            return system $miniBrowserPath, @ARGV;
-        }
+        return runMacWebKitApp(File::Spec->catfile(productDir(), "MiniBrowser.app", "Contents", "MacOS", "MiniBrowser"));
     }
 
     return 1;
@@ -2005,16 +2099,7 @@ sub debugMiniBrowser
 sub runWebKitTestRunner
 {
     if (isAppleMacWebKit()) {
-        my $productDir = productDir();
-        print "Starting WebKitTestRunner with DYLD_FRAMEWORK_PATH set to point to $productDir.\n";
-        $ENV{DYLD_FRAMEWORK_PATH} = $productDir;
-        $ENV{WEBKIT_UNSET_DYLD_FRAMEWORK_PATH} = "YES";
-        my $webKitTestRunnerPath = "$productDir/WebKitTestRunner";
-        if (architecture()) {
-            return system "arch", "-" . architecture(), $webKitTestRunnerPath, @ARGV;
-        } else {
-            return system $webKitTestRunnerPath, @ARGV;
-        }
+        return runMacWebKitApp(File::Spec->catfile(productDir(), "WebKitTestRunner"));
     } elsif (isGtk()) {
         my $productDir = productDir();
         my $injectedBundlePath = "$productDir/Libraries/.libs/libTestRunnerInjectedBundle";
@@ -2051,19 +2136,29 @@ sub debugWebKitTestRunner
 sub runTestWebKitAPI
 {
     if (isAppleMacWebKit()) {
-        my $productDir = productDir();
-        print "Starting TestWebKitAPI with DYLD_FRAMEWORK_PATH set to point to $productDir.\n";
-        $ENV{DYLD_FRAMEWORK_PATH} = $productDir;
-        $ENV{WEBKIT_UNSET_DYLD_FRAMEWORK_PATH} = "YES";
-        my $testWebKitAPIPath = "$productDir/TestWebKitAPI";
-        if (architecture()) {
-            return system "arch", "-" . architecture(), $testWebKitAPIPath, @ARGV;
-        } else {
-            return system $testWebKitAPIPath, @ARGV;
-        }
+        return runMacWebKitApp(File::Spec->catfile(productDir(), "TestWebKitAPI"));
     }
 
     return 1;
+}
+
+sub readRegistryString
+{
+    my ($valueName) = @_;
+    chomp(my $string = `regtool --wow32 get "$valueName"`);
+    return $string;
+}
+
+sub writeRegistryString
+{
+    my ($valueName, $string) = @_;
+
+    my $error = system "regtool", "--wow32", "set", "-s", $valueName, $string;
+
+    # On Windows Vista/7 with UAC enabled, regtool will fail to modify the registry, but will still
+    # return a successful exit code. So we double-check here that the value we tried to write to the
+    # registry was really written.
+    return !$error && readRegistryString($valueName) eq $string;
 }
 
 1;

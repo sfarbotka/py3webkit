@@ -37,6 +37,10 @@
 
 #define USE_WGC3D_TYPES
 
+#if WEBKIT_USING_SKIA
+struct GrGLInterface;
+#endif
+
 namespace WebKit {
 
 // WGC3D types match the corresponding GL types as defined in OpenGL ES 2.0
@@ -66,7 +70,12 @@ class WebView;
 // GraphicsContext3D in order to implement WebGL. Nearly all of the
 // methods exposed on this interface map directly to entry points in
 // the OpenGL ES 2.0 API.
-
+//
+// Creating a WebGraphicsContext does not make it current, or guarantee
+// that the context has been created successfully. Use
+// makeContextCurrent() to complete initialization of the context, treating
+// a false return value as indication that the context could not be created
+// successfully.
 class WebGraphicsContext3D : public WebNonCopyable {
 public:
     // Return value from getActiveUniform and getActiveAttrib.
@@ -86,6 +95,7 @@ public:
             , premultipliedAlpha(true)
             , canRecoverFromContextLoss(true)
             , noExtensions(false)
+            , shareResources(true)
         {
         }
 
@@ -96,6 +106,7 @@ public:
         bool premultipliedAlpha;
         bool canRecoverFromContextLoss;
         bool noExtensions;
+        bool shareResources;
     };
 
     class WebGraphicsContextLostCallback {
@@ -353,6 +364,16 @@ public:
     // the GL_ARB_robustness extension; specifically, the lost context
     // state is sticky, rather than reported only once.
     virtual WGC3Denum getGraphicsResetStatusARB() { return 0; /* GL_NO_ERROR */ }
+
+#if WEBKIT_USING_SKIA
+    GrGLInterface* createGrGLInterface();
+#endif
+
+protected:
+#if WEBKIT_USING_SKIA
+    virtual GrGLInterface* onCreateGrGLInterface() { return 0; }
+#endif
+
 };
 
 } // namespace WebKit

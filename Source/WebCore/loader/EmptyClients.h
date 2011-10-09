@@ -46,6 +46,10 @@
 #include "ResourceError.h"
 #include "SearchPopupMenu.h"
 
+#if USE(V8)
+#include <v8.h>
+#endif
+
 /*
  This file holds empty Client stubs for use by WebCore.
  Viewless element needs to create a dummy Page->Frame->FrameView tree for use in parsing or executing JavaScript.
@@ -92,8 +96,6 @@ public:
     virtual FloatRect windowRect() { return FloatRect(); }
 
     virtual FloatRect pageRect() { return FloatRect(); }
-
-    virtual float scaleFactor() { return 1.f; }
 
     virtual void focus() { }
     virtual void unfocus() { }
@@ -162,7 +164,7 @@ public:
 #if ENABLE(TILED_BACKING_STORE)
     virtual void delegatedScrollRequested(const IntPoint&) { }
 #endif
-#if ENABLE(REQUEST_ANIMATION_FRAME)
+#if ENABLE(REQUEST_ANIMATION_FRAME) && !USE(REQUEST_ANIMATION_FRAME_TIMER)
     virtual void scheduleAnimation() { }
 #endif
 
@@ -178,14 +180,12 @@ public:
 
     virtual void print(Frame*) { }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     virtual void exceededDatabaseQuota(Frame*, const String&) { }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     virtual void reachedMaxAppCacheSize(int64_t) { }
     virtual void reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_t) { }
-#endif
 
 #if ENABLE(NOTIFICATIONS)
     virtual NotificationPresenter* notificationPresenter() const { return 0; }
@@ -197,7 +197,7 @@ public:
 
 #if ENABLE(INPUT_COLOR)
     void openColorChooser(ColorChooser*, const Color&) { }
-    void closeColorChooser() { }
+    void cleanupColorChooser() { }
     void setSelectedColorInColorChooser(const Color&) { }
 #endif
 
@@ -212,7 +212,7 @@ public:
     virtual void setCursor(const Cursor&) { }
     virtual void setCursorHiddenUntilMouseMoves(bool) { }
 
-    virtual void scrollRectIntoView(const IntRect&, const ScrollView*) const {}
+    virtual void scrollRectIntoView(const IntRect&) const { }
 
     virtual void requestGeolocationPermissionForFrame(Frame*, Geolocation*) {}
     virtual void cancelGeolocationPermissionRequestForFrame(Frame*, Geolocation*) {}
@@ -365,9 +365,6 @@ public:
     virtual void updateGlobalHistoryRedirectLinks() { }
     virtual bool shouldGoToHistoryItem(HistoryItem*) const { return false; }
     virtual bool shouldStopLoadingForHistoryItem(HistoryItem*) const { return false; }
-    virtual void dispatchDidAddBackForwardItem(HistoryItem*) const { }
-    virtual void dispatchDidRemoveBackForwardItem(HistoryItem*) const { }
-    virtual void dispatchDidChangeBackForwardIndex() const { }
     virtual void updateGlobalHistoryItemForPage() { }
     virtual void saveViewStateToItem(HistoryItem*) { }
     virtual bool canCachePage() const { return false; }
@@ -375,7 +372,7 @@ public:
     virtual void didRunInsecureContent(SecurityOrigin*, const KURL&) { }
     virtual PassRefPtr<Frame> createFrame(const KURL&, const String&, HTMLFrameOwnerElement*, const String&, bool, int, int) { return 0; }
     virtual void didTransferChildFrameToNewDocument(Page*) { }
-    virtual void transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*) { }
+    virtual void transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*) { }
     virtual PassRefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool) { return 0; }
     virtual PassRefPtr<Widget> createJavaAppletWidget(const IntSize&, HTMLAppletElement*, const KURL&, const Vector<String>&, const Vector<String>&) { return 0; }
 #if ENABLE(PLUGIN_PROXY_FOR_VIDEO)
@@ -395,9 +392,8 @@ public:
     virtual void registerForIconNotification(bool) { }
 
 #if USE(V8)
-    virtual void didCreateScriptContextForFrame() { }
-    virtual void didDestroyScriptContextForFrame() { }
-    virtual void didCreateIsolatedScriptContext() { }
+    virtual void didCreateScriptContext(v8::Handle<v8::Context>, int worldId) { }
+    virtual void willReleaseScriptContext(v8::Handle<v8::Context>, int worldId) { }
     virtual bool allowScriptExtension(const String& extensionName, int extensionGroup) { return false; }
 #endif
 

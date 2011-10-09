@@ -154,7 +154,7 @@ namespace WebCore {
         inline PixelData* getAddr(int x, int y)
         {
 #if USE(SKIA)
-            return m_bitmap.getAddr32(x, y);
+            return m_bitmap.bitmap().getAddr32(x, y);
 #elif PLATFORM(QT)
             m_image = m_pixmap.toImage();
             m_pixmap = QPixmap();
@@ -188,6 +188,9 @@ namespace WebCore {
 
 #if USE(SKIA)
         NativeImageSkia m_bitmap;
+#if PLATFORM(CHROMIUM) && OS(DARWIN)
+        ColorProfile m_colorProfile;
+#endif
 #elif PLATFORM(QT)
         mutable QPixmap m_pixmap;
         mutable QImage m_image;

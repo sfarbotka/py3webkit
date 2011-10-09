@@ -44,8 +44,6 @@ public:
 
     String innerHTML() const;
     String outerHTML() const;
-    // deprecatedCreateContextualFragment logic should be moved into Range::createContextualFragment
-    PassRefPtr<DocumentFragment> deprecatedCreateContextualFragment(const String&, FragmentScriptingPermission = FragmentScriptingAllowed);
     void setInnerHTML(const String&, ExceptionCode&);
     void setOuterHTML(const String&, ExceptionCode&);
     void setInnerText(const String&, ExceptionCode&);
@@ -90,7 +88,7 @@ protected:
 
     virtual bool mapToEntry(const QualifiedName& attrName, MappedAttributeEntry& result) const;
     virtual void parseMappedAttribute(Attribute*);
-    unsigned parseBorderWidthAttribute(Attribute*);
+    void applyBorderAttribute(Attribute*);
 
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
     void calculateAndAdjustDirectionality();

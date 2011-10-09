@@ -575,6 +575,31 @@ void DumpRenderTreeSupportGtk::confirmComposition(WebKitWebView* webView, const 
     editor->confirmComposition();
 }
 
+void DumpRenderTreeSupportGtk::doCommand(WebKitWebView* webView, const char* command)
+{
+    g_return_if_fail(WEBKIT_IS_WEB_VIEW(webView));
+    Frame* frame = core(webView)->focusController()->focusedOrMainFrame();
+    if (!frame)
+        return;
+
+    Editor* editor = frame->editor();
+    if (!editor)
+        return;
+
+    String commandString(command);
+    // Remove ending : here.
+    if (commandString.endsWith(":", true))
+        commandString = commandString.left(commandString.length() - 1);
+
+    // Make the first char in upper case.
+    String firstChar = commandString.left(1);
+    commandString = commandString.right(commandString.length() - 1);
+    firstChar.makeUpper();
+    commandString.insert(firstChar, 0);
+
+    editor->command(commandString).execute();
+}
+
 bool DumpRenderTreeSupportGtk::firstRectForCharacterRange(WebKitWebView* webView, int location, int length, cairo_rectangle_int_t* rect)
 {
     g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(webView), false);
@@ -803,9 +828,5 @@ bool DumpRenderTreeSupportGtk::shouldClose(WebKitWebFrame* frame)
 
 void DumpRenderTreeSupportGtk::scalePageBy(WebKitWebView* webView, float scaleFactor, float x, float y)
 {
-    Frame* coreFrame = core(webView)->mainFrame();
-    if (!coreFrame)
-        return;
-
-    coreFrame->scalePage(scaleFactor, IntPoint(x, y));
+    core(webView)->setPageScaleFactor(scaleFactor, IntPoint(x, y));
 }

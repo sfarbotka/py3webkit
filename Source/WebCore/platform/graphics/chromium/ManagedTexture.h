@@ -36,7 +36,6 @@
 namespace WebCore {
 
 class GraphicsContext3D;
-class TextureManager;
 
 class ManagedTexture {
     WTF_MAKE_NONCOPYABLE(ManagedTexture);
@@ -47,7 +46,6 @@ public:
     }
     ~ManagedTexture();
 
-    unsigned format() const { return m_format; }
     bool isValid(const IntSize&, unsigned format);
     bool reserve(const IntSize&, unsigned format);
     void unreserve();
@@ -57,8 +55,12 @@ public:
         return m_textureManager->isProtected(m_token);
     }
 
-    void bindTexture(GraphicsContext3D*);
-    void framebufferTexture2D(GraphicsContext3D*);
+    void bindTexture(GraphicsContext3D*, TextureAllocator*);
+    void framebufferTexture2D(GraphicsContext3D*, TextureAllocator*);
+
+    IntSize size() const { return m_size; }
+    unsigned format() const { return m_format; }
+    unsigned textureId() const { return m_textureId; }
 
 private:
     explicit ManagedTexture(TextureManager*);
@@ -73,4 +75,3 @@ private:
 }
 
 #endif // ManagedTexture_h
-

@@ -22,14 +22,14 @@
 
 messages -> WebPageProxy {
     # UI messages
-    CreateNewPage(WebCore::WindowFeatures windowFeatures, uint32_t modifiers, int32_t mouseButton) -> (uint64_t newPageID, WebKit::WebPageCreationParameters newPageParameters)
+    CreateNewPage(WebCore::ResourceRequest request, WebCore::WindowFeatures windowFeatures, uint32_t modifiers, int32_t mouseButton) -> (uint64_t newPageID, WebKit::WebPageCreationParameters newPageParameters)
     ShowPage()
     ClosePage(bool stopResponsivenessTimer)
     RunJavaScriptAlert(uint64_t frameID, WTF::String message) -> ()
     RunJavaScriptConfirm(uint64_t frameID, WTF::String message) -> (bool result)
     RunJavaScriptPrompt(uint64_t frameID, WTF::String message, WTF::String defaultValue) -> (WTF::String result)
     ShouldInterruptJavaScript() -> (bool shouldInterupt)
-    MouseDidMoveOverElement(uint32_t modifiers, WebKit::InjectedBundleUserMessageEncoder userData);
+    MouseDidMoveOverElement(WebKit::WebHitTestResult::Data hitTestResultData, uint32_t modifiers, WebKit::InjectedBundleUserMessageEncoder userData);
     MissingPluginButtonClicked(WTF::String mimeType, WTF::String url, WTF::String pluginsPageURL)
     DidChangeViewportData(WebCore::ViewportArguments arguments)
     DidReceiveEvent(uint32_t type, bool handled)
@@ -60,7 +60,6 @@ messages -> WebPageProxy {
     RunOpenPanel(uint64_t frameID, WebKit::WebOpenPanelParameters::Data parameters)
     PrintFrame(uint64_t frameID) -> ()
     RunModal()
-    DidCompleteRubberBandForMainFrame(WebCore::IntSize initialOverhang)
     NotifyScrollerThumbIsVisibleInRect(WebCore::IntRect scrollerThumb)
     DidChangeScrollbarsForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar)
     DidChangeScrollOffsetPinningForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar)
@@ -135,7 +134,7 @@ messages -> WebPageProxy {
     ComputedPagesCallback(Vector<WebCore::IntRect> pageRects, double totalScaleFactorForPrinting, uint64_t callbackID)
     ValidateCommandCallback(WTF::String command, bool isEnabled, int32_t state, uint64_t callbackID)
 
-    ViewScaleFactorDidChange(double scaleFactor)
+    PageScaleFactorDidChange(double scaleFactor)
 
 #if PLATFORM(GTK)
     # Support for GTK+ platform keybindings
@@ -229,7 +228,8 @@ messages -> WebPageProxy {
     RegisterWebProcessAccessibilityToken(CoreIPC::DataReference data)
 
     # Plug-in complex text input support messages
-    SetComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled)
+    PluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus)
+    SetPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, uint64_t complexTextInputState)
 
     # Speech messages
     GetIsSpeaking() -> (bool isSpeaking)

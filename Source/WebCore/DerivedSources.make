@@ -54,12 +54,14 @@ VPATH = \
 DOM_CLASSES = \
     AbstractView \
     AbstractWorker \
+    ArrayBuffer \
+    ArrayBufferView \
     Attr \
     AudioBuffer \
     AudioBufferCallback \
     AudioBufferSourceNode \
-    AudioChannelSplitter \
     AudioChannelMerger \
+    AudioChannelSplitter \
     AudioContext \
     AudioDestinationNode \
     AudioGain \
@@ -70,21 +72,10 @@ DOM_CLASSES = \
     AudioParam \
     AudioProcessingEvent \
     AudioSourceNode \
-    BiquadFilterNode \
-    ConvolverNode \
-    DelayNode \
-    DynamicsCompressorNode \
-    HighPass2FilterNode \
-    JavaScriptAudioNode \
-    LowPass2FilterNode \
-    OfflineAudioCompletionEvent \
-    RealtimeAnalyserNode \
-    WaveShaperNode \
     BarInfo \
     BeforeLoadEvent \
-    BeforeProcessEvent \
+    BiquadFilterNode \
     Blob \
-    WebKitBlobBuilder \
     CDATASection \
     CSSCharsetRule \
     CSSFontFaceRule \
@@ -100,31 +91,10 @@ DOM_CLASSES = \
     CSSUnknownRule \
     CSSValue \
     CSSValueList \
-    WebGLActiveInfo \
-    ArrayBufferView \
-    ArrayBuffer \
-    DataView \
-    WebGLBuffer \
-    Int8Array \
-    WebGLContextAttributes \
-    Float32Array \
-    Float64Array \
-    WebGLFramebuffer \
     CanvasGradient \
-    Int32Array \
     CanvasPattern \
-    WebGLProgram \
-    WebGLRenderbuffer \
     CanvasRenderingContext \
     CanvasRenderingContext2D \
-    WebGLRenderingContext \
-    WebGLShader \
-    Int16Array \
-    WebGLTexture \
-    WebGLUniformLocation \
-    Uint8Array \
-    Uint32Array \
-    Uint16Array \
     CharacterData \
     ClientRect \
     ClientRectList \
@@ -133,13 +103,11 @@ DOM_CLASSES = \
     Comment \
     CompositionEvent \
     Console \
+    ConvolverNode \
     Coordinates \
     Counter \
     Crypto \
     CustomEvent \
-    DataTransferItem \
-    DataTransferItems \
-    DedicatedWorkerContext \
     DOMApplicationCache \
     DOMCoreException \
     DOMFileSystem \
@@ -152,17 +120,22 @@ DOM_CLASSES = \
     DOMPlugin \
     DOMPluginArray \
     DOMSelection \
+    DOMSettableTokenList \
     DOMStringList \
     DOMStringMap \
-    DOMSettableTokenList \
     DOMTokenList \
     DOMURL \
     DOMWindow \
     DataTransferItem \
+    DataTransferItem \
     DataTransferItems \
+    DataTransferItems \
+    DataView \
     Database \
     DatabaseCallback \
     DatabaseSync \
+    DedicatedWorkerContext \
+    DelayNode \
     DeviceMotionEvent \
     DeviceOrientationEvent \
     DirectoryEntry \
@@ -172,16 +145,17 @@ DOM_CLASSES = \
     Document \
     DocumentFragment \
     DocumentType \
+    DynamicsCompressorNode \
     Element \
     ElementTimeControl \
     Entity \
     EntityReference \
     EntriesCallback \
     Entry \
-    EntrySync \
     EntryArray \
     EntryArraySync \
     EntryCallback \
+    EntrySync \
     ErrorCallback \
     ErrorEvent \
     Event \
@@ -193,20 +167,19 @@ DOM_CLASSES = \
     FileCallback \
     FileEntry \
     FileEntrySync \
-    FileException \
     FileError \
+    FileException \
     FileList \
     FileReader \
     FileReaderSync \
+    FileSystemCallback \
     FileWriter \
     FileWriterCallback \
     FileWriterSync \
-    FileSystemCallback \
-    WebKitFlags \
+    Float32Array \
+    Float64Array \
     Geolocation \
     Geoposition \
-    HashChangeEvent \
-    History \
     HTMLAllCollection \
     HTMLAnchorElement \
     HTMLAppletElement \
@@ -215,14 +188,13 @@ DOM_CLASSES = \
     HTMLBRElement \
     HTMLBaseElement \
     HTMLBaseFontElement \
-    HTMLBlockquoteElement \
     HTMLBodyElement \
     HTMLButtonElement \
     HTMLCanvasElement \
     HTMLCollection \
+    HTMLDListElement \
     HTMLDataListElement \
     HTMLDetailsElement \
-    HTMLDListElement \
     HTMLDirectoryElement \
     HTMLDivElement \
     HTMLDocument \
@@ -267,6 +239,7 @@ DOM_CLASSES = \
     HTMLScriptElement \
     HTMLSelectElement \
     HTMLSourceElement \
+    HTMLSpanElement \
     HTMLStyleElement \
     HTMLTableCaptionElement \
     HTMLTableCellElement \
@@ -280,11 +253,14 @@ DOM_CLASSES = \
     HTMLUListElement \
     HTMLUnknownElement \
     HTMLVideoElement \
+    HashChangeEvent \
+    HighPass2FilterNode \
+    History \
     IDBAny \
     IDBCursor \
+    IDBDatabase \
     IDBDatabaseError \
     IDBDatabaseException \
-    IDBDatabase \
     IDBFactory \
     IDBIndex \
     IDBKey \
@@ -295,10 +271,16 @@ DOM_CLASSES = \
     ImageData \
     InjectedScriptHost \
     InspectorFrontendHost \
+    Int16Array \
+    Int32Array \
+    Int8Array \
     Internals \
+    JavaScriptAudioNode \
     KeyboardEvent \
     LocalMediaStream \
     Location \
+    LowPass2FilterNode \
+    MediaElementAudioSourceNode \
     MediaError \
     MediaList \
     MediaQueryList \
@@ -316,6 +298,7 @@ DOM_CLASSES = \
     MetadataCallback \
     MouseEvent \
     MutationEvent \
+    MutationRecord \
     NamedNodeMap \
     Navigator \
     NavigatorUserMediaError \
@@ -330,8 +313,8 @@ DOM_CLASSES = \
     NotificationCenter \
     OESStandardDerivatives \
     OESTextureFloat \
-     OESVertexArrayObject \
-     WebGLVertexArrayObjectOES \
+    OESVertexArrayObject \
+    OfflineAudioCompletionEvent \
     OperationNotAllowedException \
     OverflowEvent \
     PageTransitionEvent \
@@ -348,15 +331,9 @@ DOM_CLASSES = \
     RGBColor \
     Range \
     RangeException \
+    RealtimeAnalyserNode \
     Rect \
-    SharedWorker \
-    SharedWorkerContext \
-    ScriptProfile \
-    ScriptProfileNode \
-    SignalingCallback \
-    SpeechInputEvent \
-    SpeechInputResult \
-    SpeechInputResultList \
+    RequestAnimationFrameCallback \
     SQLError \
     SQLException \
     SQLResultSet \
@@ -368,13 +345,6 @@ DOM_CLASSES = \
     SQLTransactionErrorCallback \
     SQLTransactionSync \
     SQLTransactionSyncCallback \
-    Storage \
-    StorageEvent \
-    StorageInfo \
-    StorageInfoErrorCallback \
-    StorageInfoQuotaCallback \
-    StorageInfoUsageCallback \
-    StringCallback \
     SVGAElement \
     SVGAltGlyphDefElement \
     SVGAltGlyphElement \
@@ -458,12 +428,12 @@ DOM_CLASSES = \
     SVGLineElement \
     SVGLinearGradientElement \
     SVGLocatable \
+    SVGMPathElement \
     SVGMarkerElement \
     SVGMaskElement \
     SVGMatrix \
     SVGMetadataElement \
     SVGMissingGlyphElement \
-    SVGMPathElement \
     SVGNumber \
     SVGNumberList \
     SVGPaint \
@@ -522,11 +492,26 @@ DOM_CLASSES = \
     SVGURIReference \
     SVGUnitTypes \
     SVGUseElement \
-    SVGViewElement \
     SVGVKernElement \
+    SVGViewElement \
     SVGZoomAndPan \
     SVGZoomEvent \
     Screen \
+    ScriptProfile \
+    ScriptProfileNode \
+    SharedWorker \
+    SharedWorkerContext \
+    SignalingCallback \
+    SpeechInputEvent \
+    SpeechInputResult \
+    SpeechInputResultList \
+    Storage \
+    StorageEvent \
+    StorageInfo \
+    StorageInfoErrorCallback \
+    StorageInfoQuotaCallback \
+    StorageInfoUsageCallback \
+    StringCallback \
     StringCallback \
     StyleMedia \
     StyleSheet \
@@ -540,14 +525,33 @@ DOM_CLASSES = \
     TouchList \
     TreeWalker \
     UIEvent \
+    Uint16Array \
+    Uint32Array \
+    Uint8Array \
     ValidityState \
+    WaveShaperNode \
+    WebGLActiveInfo \
+    WebGLBuffer \
+    WebGLContextAttributes \
+    WebGLContextEvent \
+    WebGLFramebuffer \
+    WebGLProgram \
+    WebGLRenderbuffer \
+    WebGLRenderingContext \
+    WebGLShader \
+    WebGLTexture \
+    WebGLUniformLocation \
+    WebGLVertexArrayObjectOES \
     WebKitAnimation \
     WebKitAnimationEvent \
     WebKitAnimationList \
+    WebKitBlobBuilder \
+    WebKitCSSFilterValue \
     WebKitCSSKeyframeRule \
     WebKitCSSKeyframesRule \
     WebKitCSSMatrix \
     WebKitCSSTransformValue \
+    WebKitFlags \
     WebKitLoseContext \
     WebKitPoint \
     WebKitTransitionEvent \
@@ -589,7 +593,6 @@ all : \
     CSSPropertyNames.h \
     CSSValueKeywords.h \
     ColorData.cpp \
-    DocTypeStrings.cpp \
     HTMLElementFactory.cpp \
     HTMLEntityTable.cpp \
     HTMLNames.cpp \
@@ -597,6 +600,8 @@ all : \
     SVGElementFactory.cpp \
     SVGNames.cpp \
     UserAgentStyleSheets.h \
+    WebKitFontFamilyNames.cpp \
+    WebKitFontFamilyNames.h \
     XLinkNames.cpp \
     XMLNSNames.cpp \
     XMLNames.cpp \
@@ -665,13 +670,6 @@ CSSPropertyNames.h : $(WEBCORE_CSS_PROPERTY_NAMES) css/makeprop.pl
 CSSValueKeywords.h : $(WEBCORE_CSS_VALUE_KEYWORDS) css/makevalues.pl
 	cat $(WEBCORE_CSS_VALUE_KEYWORDS) > CSSValueKeywords.in
 	perl -I$(WebCore)/bindings/scripts "$(WebCore)/css/makevalues.pl" --defines "$(FEATURE_DEFINES)"
-
-# --------
-
-# DOCTYPE strings
-
-DocTypeStrings.cpp : html/DocTypeStrings.gperf $(WebCore)/make-hash-tools.pl
-	perl $(WebCore)/make-hash-tools.pl . $(WebCore)/html/DocTypeStrings.gperf
 
 # --------
 
@@ -770,6 +768,9 @@ UserAgentStyleSheets.h : css/make-css-file-arrays.pl bindings/scripts/preprocess
 
 # --------
 
+WebKitFontFamilyNames.cpp WebKitFontFamilyNames.h : dom/make_names.pl css/WebKitFontFamilyNames.in
+	perl -I $(WebCore)/bindings/scripts $< --fonts $(WebCore)/css/WebKitFontFamilyNames.in
+
 # HTML tag and attribute names
 
 ifeq ($(findstring ENABLE_DATALIST,$(FEATURE_DEFINES)), ENABLE_DATALIST)
@@ -820,28 +821,12 @@ XMLNames.cpp : dom/make_names.pl xml/xmlattrs.in
 
 # SVG tag and attribute names, and element factory
 
-ifeq ($(findstring ENABLE_SVG_USE,$(FEATURE_DEFINES)), ENABLE_SVG_USE)
-    SVG_FLAGS := $(SVG_FLAGS) ENABLE_SVG_USE=1
-endif
-
 ifeq ($(findstring ENABLE_SVG_FONTS,$(FEATURE_DEFINES)), ENABLE_SVG_FONTS)
     SVG_FLAGS := $(SVG_FLAGS) ENABLE_SVG_FONTS=1
 endif
 
 ifeq ($(findstring ENABLE_FILTERS,$(FEATURE_DEFINES)), ENABLE_FILTERS)
     SVG_FLAGS := $(SVG_FLAGS) ENABLE_FILTERS=1
-endif
-
-ifeq ($(findstring ENABLE_SVG_AS_IMAGE,$(FEATURE_DEFINES)), ENABLE_SVG_AS_IMAGE)
-    SVG_FLAGS := $(SVG_FLAGS) ENABLE_SVG_AS_IMAGE=1
-endif
-
-ifeq ($(findstring ENABLE_SVG_ANIMATION,$(FEATURE_DEFINES)), ENABLE_SVG_ANIMATION)
-    SVG_FLAGS := $(SVG_FLAGS) ENABLE_SVG_ANIMATION=1
-endif
-
-ifeq ($(findstring ENABLE_SVG_FOREIGN_OBJECT,$(FEATURE_DEFINES)), ENABLE_SVG_FOREIGN_OBJECT)
-    SVG_FLAGS := $(SVG_FLAGS) ENABLE_SVG_FOREIGN_OBJECT=1
 endif
 
 # SVG tag and attribute names (need to pass an extra flag if svg experimental features are enabled)
@@ -903,6 +888,11 @@ JS%.h : %.idl $(JS_BINDINGS_SCRIPTS)
 	$(call generator_script, $(JS_BINDINGS_SCRIPTS)) $(IDL_COMMON_ARGS) --defines "$(FEATURE_DEFINES) $(ADDITIONAL_IDL_DEFINES) LANGUAGE_JAVASCRIPT" --generator JS $<
 
 # Inspector interfaces generator
+
+all : InspectorProtocolVersion.h
+
+InspectorProtocolVersion.h : Inspector.json inspector/generate-inspector-protocol-version
+	python $(WebCore)/inspector/generate-inspector-protocol-version -o InspectorProtocolVersion.h $(WebCore)/inspector/Inspector.json
 
 Inspector.idl : Inspector.json inspector/generate-inspector-idl
 	python $(WebCore)/inspector/generate-inspector-idl -o Inspector.idl $(WebCore)/inspector/Inspector.json

@@ -41,13 +41,18 @@ using namespace JSC;
 
 namespace WebCore {
 
-const ClassInfo JSDOMWindowBase::s_info = { "Window", &JSDOMGlobalObject::s_info, 0, 0 };
+const ClassInfo JSDOMWindowBase::s_info = { "Window", &JSDOMGlobalObject::s_info, 0, 0, CREATE_METHOD_TABLE(JSDOMWindowBase) };
 
 JSDOMWindowBase::JSDOMWindowBase(JSGlobalData& globalData, Structure* structure, PassRefPtr<DOMWindow> window, JSDOMWindowShell* shell)
-    : JSDOMGlobalObject(globalData, structure, shell->world(), shell)
+    : JSDOMGlobalObject(globalData, structure, shell->world())
     , m_impl(window)
     , m_shell(shell)
 {
+}
+
+void JSDOMWindowBase::finishCreation(JSGlobalData& globalData, JSDOMWindowShell* shell)
+{
+    Base::finishCreation(globalData, shell);
     ASSERT(inherits(&s_info));
 
     GlobalPropertyInfo staticGlobals[] = {
@@ -80,15 +85,6 @@ void JSDOMWindowBase::printErrorMessage(const String& message) const
     printErrorMessageForFrame(impl()->frame(), message);
 }
 
-ExecState* JSDOMWindowBase::globalExec()
-{
-    // We need to make sure that any script execution happening in this
-    // frame does not destroy it
-    if (Frame *frame = impl()->frame())
-        frame->keepAlive();
-    return Base::globalExec();
-}
-
 bool JSDOMWindowBase::supportsProfiling() const
 {
 #if !ENABLE(JAVASCRIPT_DEBUGGER) || !ENABLE(INSPECTOR)
@@ -108,9 +104,7 @@ bool JSDOMWindowBase::supportsProfiling() const
 
 bool JSDOMWindowBase::supportsRichSourceInfo() const
 {
-#if PLATFORM(ANDROID)
-    return true;
-#elif !ENABLE(JAVASCRIPT_DEBUGGER) || !ENABLE(INSPECTOR)
+#if !ENABLE(JAVASCRIPT_DEBUGGER) || !ENABLE(INSPECTOR)
     return false;
 #else
     Frame* frame = impl()->frame();
@@ -156,11 +150,6 @@ JSObject* JSDOMWindowBase::toThisObject(ExecState*) const
     return shell();
 }
 
-JSValue JSDOMWindowBase::toStrictThisObject(ExecState*) const
-{
-    return shell();
-}
-
 JSDOMWindowShell* JSDOMWindowBase::shell() const
 {
     return m_shell;
@@ -172,7 +161,7 @@ JSGlobalData* JSDOMWindowBase::commonJSGlobalData()
 
     static JSGlobalData* globalData = 0;
     if (!globalData) {
-        globalData = JSGlobalData::createLeaked(ThreadStackTypeLarge, LargeHeap).releaseRef();
+        globalData = JSGlobalData::createLeaked(ThreadStackTypeLarge, LargeHeap).leakRef();
         globalData->timeoutChecker.setTimeoutInterval(10000); // 10 seconds
 #ifndef NDEBUG
         globalData->exclusiveThread = currentThread();

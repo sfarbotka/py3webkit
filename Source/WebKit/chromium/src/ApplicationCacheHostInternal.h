@@ -31,14 +31,12 @@
 #include "config.h"
 #include "ApplicationCacheHost.h"
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
-
 #include "DocumentLoader.h"
 #include "WebApplicationCacheHostClient.h"
 #include "WebFrameClient.h"
 #include "WebFrameImpl.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebURL.h"
 
 namespace WebCore {
@@ -82,5 +80,3 @@ private:
 };
 
 }
-
-#endif  // ENABLE(OFFLINE_WEB_APPLICATIONS)

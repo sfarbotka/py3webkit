@@ -147,6 +147,7 @@ void DrawingAreaImpl::scroll(const IntRect& scrollRect, const IntSize& scrollOff
     Region scrollRepaintRegion = subtract(scrollRect, translate(scrollRect, scrollOffset));
 
     m_dirtyRegion.unite(scrollRepaintRegion);
+    scheduleDisplay();
 
     m_scrollRect = scrollRect;
     m_scrollOffset += scrollOffset;
@@ -233,7 +234,7 @@ void DrawingAreaImpl::layerHostDidFlushLayers()
 
     m_layerTreeHost->forceRepaint();
 
-    if (m_shouldSendDidUpdateBackingStoreState) {
+    if (m_shouldSendDidUpdateBackingStoreState && !exitAcceleratedCompositingModePending()) {
         sendDidUpdateBackingStoreState();
         return;
     }
@@ -301,7 +302,7 @@ void DrawingAreaImpl::syncCompositingLayers()
 {
 }
 
-void DrawingAreaImpl::updateBackingStoreState(uint64_t stateID, bool respondImmediately, const WebCore::IntSize& size, const WebCore::IntSize& scrollOffset)
+void DrawingAreaImpl::updateBackingStoreState(uint64_t stateID, bool respondImmediately, float deviceScaleFactor, const WebCore::IntSize& size, const WebCore::IntSize& scrollOffset)
 {
     ASSERT(!m_inUpdateBackingStoreState);
     m_inUpdateBackingStoreState = true;
@@ -311,13 +312,15 @@ void DrawingAreaImpl::updateBackingStoreState(uint64_t stateID, bool respondImme
         m_backingStoreStateID = stateID;
         m_shouldSendDidUpdateBackingStoreState = true;
 
+        m_webPage->setDeviceScaleFactor(deviceScaleFactor);
         m_webPage->setSize(size);
         m_webPage->layoutIfNeeded();
         m_webPage->scrollMainFrameIfNotAtMaxScrollPosition(scrollOffset);
 
-        if (m_layerTreeHost)
+        if (m_layerTreeHost) {
+            m_layerTreeHost->deviceScaleFactorDidChange();
             m_layerTreeHost->sizeDidChange(size);
-        else
+        } else
             m_dirtyRegion = m_webPage->bounds();
     } else {
         ASSERT(size == m_webPage->size());
@@ -335,8 +338,14 @@ void DrawingAreaImpl::updateBackingStoreState(uint64_t stateID, bool respondImme
     // sendDidUpdateBackingStoreState; otherwise we shouldn't do one right now.
     m_isWaitingForDidUpdate = false;
 
-    if (respondImmediately)
+    if (respondImmediately) {
+        // Make sure to resume painting if we're supposed to respond immediately, otherwise we'll just
+        // send back an empty UpdateInfo struct.
+        if (m_isPaintingSuspended)
+            resumePainting();
+
         sendDidUpdateBackingStoreState();
+    }
 
     m_inUpdateBackingStoreState = false;
 }
@@ -357,7 +366,7 @@ void DrawingAreaImpl::sendDidUpdateBackingStoreState()
 
     if (m_isPaintingSuspended || m_layerTreeHost) {
         updateInfo.viewSize = m_webPage->size();
-        updateInfo.scaleFactor = m_webPage->userSpaceScaleFactor();
+        updateInfo.deviceScaleFactor = m_webPage->corePage()->deviceScaleFactor();
 
         if (m_layerTreeHost) {
             layerTreeContext = m_layerTreeHost->layerTreeContext();
@@ -464,7 +473,7 @@ void DrawingAreaImpl::exitAcceleratedCompositingMode()
     UpdateInfo updateInfo;
     if (m_isPaintingSuspended) {
         updateInfo.viewSize = m_webPage->size();
-        updateInfo.scaleFactor = m_webPage->userSpaceScaleFactor();
+        updateInfo.deviceScaleFactor = m_webPage->corePage()->deviceScaleFactor();
     } else
         display(updateInfo);
 
@@ -615,13 +624,13 @@ void DrawingAreaImpl::display(UpdateInfo& updateInfo)
         return;
 
     updateInfo.viewSize = m_webPage->size();
-    updateInfo.scaleFactor = m_webPage->userSpaceScaleFactor();
+    updateInfo.deviceScaleFactor = m_webPage->corePage()->deviceScaleFactor();
 
     IntRect bounds = m_dirtyRegion.bounds();
     ASSERT(m_webPage->bounds().contains(bounds));
 
     IntSize bitmapSize = bounds.size();
-    bitmapSize.scale(m_webPage->userSpaceScaleFactor());
+    bitmapSize.scale(m_webPage->corePage()->deviceScaleFactor());
     RefPtr<ShareableBitmap> bitmap = ShareableBitmap::createShareable(bitmapSize, ShareableBitmap::SupportsAlpha);
     if (!bitmap)
         return;
@@ -644,7 +653,7 @@ void DrawingAreaImpl::display(UpdateInfo& updateInfo)
     m_scrollOffset = IntSize();
 
     OwnPtr<GraphicsContext> graphicsContext = createGraphicsContext(bitmap.get());
-    graphicsContext->scale(FloatSize(m_webPage->userSpaceScaleFactor(), m_webPage->userSpaceScaleFactor()));
+    graphicsContext->scale(FloatSize(m_webPage->corePage()->deviceScaleFactor(), m_webPage->corePage()->deviceScaleFactor()));
 
     updateInfo.updateRectBounds = bounds;
 

@@ -2,6 +2,7 @@
  * Copyright (C) 2006, 2007, 2008, 2009, 2011 Apple Inc. All rights reserved.
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  * Copyright (C) Research In Motion Limited 2009. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,9 +39,9 @@
 #include "IconController.h"
 #include "IconURL.h"
 #include "PolicyChecker.h"
+#include "ResourceHandle.h"
 #include "ResourceLoadNotifier.h"
 #include "SubframeLoader.h"
-#include "ThreadableLoader.h"
 #include "Timer.h"
 #include <wtf/Forward.h>
 #include <wtf/HashSet.h>
@@ -91,6 +92,7 @@ public:
     SubframeLoader* subframeLoader() const { return &m_subframeLoader; }
     IconController* icon() const { return &m_icon; }
 
+    void prepareForHistoryNavigation();
     void prepareForLoadStart();
     void setupForReplace();
 
@@ -132,7 +134,7 @@ public:
     bool isLoading() const;
     bool frameHasLoaded() const;
     void transferLoadingResourcesFromPage(Page*);
-    void dispatchTransferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*);
+    void dispatchTransferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*);
 
     int numPendingOrLoadingRequests(bool recurse) const;
     String referrer() const;
@@ -168,7 +170,7 @@ public:
     bool subframeIsLoading() const;
     void willChangeTitle(DocumentLoader*);
     void didChangeTitle(DocumentLoader*);
-    void didChangeIcons(DocumentLoader*, IconType);
+    void didChangeIcons(IconType);
 
     FrameLoadType loadType() const;
 

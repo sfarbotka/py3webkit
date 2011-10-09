@@ -33,20 +33,14 @@ using namespace WTF;
 
 namespace JSC {
 
-const ClassInfo JSByteArray::s_defaultInfo = { "ByteArray", &Base::s_info, 0, 0 };
+const ClassInfo JSByteArray::s_info = { "ByteArray", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(JSByteArray) };
 
 JSByteArray::JSByteArray(ExecState* exec, Structure* structure, ByteArray* storage)
     : JSNonFinalObject(exec->globalData(), structure)
     , m_storage(storage)
 {
-    putDirect(exec->globalData(), exec->globalData().propertyNames->length, jsNumber(m_storage->length()), ReadOnly | DontDelete);
 }
         
-JSByteArray* JSByteArray::create(ExecState* exec, Structure* structure, ByteArray* storage)
-{
-    return new (allocateCell<JSByteArray>(*exec->heap())) JSByteArray(exec, structure, storage);
-}
-
 #if !ASSERT_DISABLED
 JSByteArray::~JSByteArray()
 {
@@ -55,9 +49,9 @@ JSByteArray::~JSByteArray()
 #endif
 
 
-Structure* JSByteArray::createStructure(JSGlobalData& globalData, JSValue prototype, const JSC::ClassInfo* classInfo)
+Structure* JSByteArray::createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype, const JSC::ClassInfo* classInfo)
 {
-    return Structure::create(globalData, prototype, TypeInfo(ObjectType, StructureFlags), AnonymousSlotCount, classInfo);
+    return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), classInfo);
 }
 
 bool JSByteArray::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
@@ -93,18 +87,29 @@ bool JSByteArray::getOwnPropertySlot(ExecState* exec, unsigned propertyName, Pro
 
 void JSByteArray::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
+    put(this, exec, propertyName, value, slot);
+}
+
+void JSByteArray::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    JSByteArray* thisObject = static_cast<JSByteArray*>(cell);
     bool ok;
     unsigned index = propertyName.toUInt32(ok);
     if (ok) {
-        setIndex(exec, index, value);
+        thisObject->setIndex(exec, index, value);
         return;
     }
-    JSObject::put(exec, propertyName, value, slot);
+    JSObject::put(thisObject, exec, propertyName, value, slot);
 }
 
 void JSByteArray::put(ExecState* exec, unsigned propertyName, JSValue value)
 {
-    setIndex(exec, propertyName, value);
+    put(this, exec, propertyName, value);
+}
+
+void JSByteArray::put(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue value)
+{
+    static_cast<JSByteArray*>(cell)->setIndex(exec, propertyName, value);
 }
 
 void JSByteArray::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)

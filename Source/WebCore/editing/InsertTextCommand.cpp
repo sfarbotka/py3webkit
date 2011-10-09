@@ -86,10 +86,11 @@ bool InsertTextCommand::performTrivialReplace(const String& text, bool selectIns
     // <http://bugs.webkit.org/show_bug.cgi?id=15781>
     VisibleSelection forcedEndingSelection;
     forcedEndingSelection.setWithoutValidation(start, endPosition);
+    forcedEndingSelection.setIsDirectional(endingSelection().isDirectional());
     setEndingSelection(forcedEndingSelection);
 
     if (!selectInsertedText)
-        setEndingSelection(VisibleSelection(endingSelection().visibleEnd()));
+        setEndingSelection(VisibleSelection(endingSelection().visibleEnd(), endingSelection().isDirectional()));
     
     return true;
 }
@@ -107,6 +108,11 @@ void InsertTextCommand::doApply()
         if (performTrivialReplace(m_text, m_selectInsertedText))
             return;
         deleteSelection(false, true, true, false);
+        // deleteSelection eventually makes a new endingSelection out of a Position. If that Position doesn't have
+        // a renderer (e.g. it is on a <frameset> in the DOM), the VisibleSelection cannot be canonicalized to 
+        // anything other than NoSelection. The rest of this function requires a real endingSelection, so bail out.
+        if (endingSelection().isNone())
+            return;
     }
 
     Position startPosition(endingSelection().start());
@@ -180,6 +186,7 @@ void InsertTextCommand::doApply()
     // <http://bugs.webkit.org/show_bug.cgi?id=15781>
     VisibleSelection forcedEndingSelection;
     forcedEndingSelection.setWithoutValidation(startPosition, endPosition);
+    forcedEndingSelection.setIsDirectional(endingSelection().isDirectional());
     setEndingSelection(forcedEndingSelection);
 
     // Handle the case where there is a typing style.
@@ -190,15 +197,15 @@ void InsertTextCommand::doApply()
     }
 
     if (!m_selectInsertedText)
-        setEndingSelection(VisibleSelection(endingSelection().end(), endingSelection().affinity()));
+        setEndingSelection(VisibleSelection(endingSelection().end(), endingSelection().affinity(), endingSelection().isDirectional()));
 }
 
 Position InsertTextCommand::insertTab(const Position& pos)
 {
     Position insertPos = VisiblePosition(pos, DOWNSTREAM).deepEquivalent();
-        
-    Node* node = insertPos.deprecatedNode();
-    unsigned int offset = insertPos.deprecatedEditingOffset();
+
+    Node* node = insertPos.containerNode();
+    unsigned int offset = node->isTextNode() ? insertPos.offsetInContainerNode() : 0;
 
     // keep tabs coalesced in tab span
     if (isTabSpanTextNode(node)) {

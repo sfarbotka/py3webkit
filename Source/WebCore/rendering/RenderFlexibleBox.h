@@ -49,11 +49,47 @@ public:
     virtual void layoutBlock(bool relayoutChildren, int pageLogicalHeight = 0, BlockLayoutPass = NormalLayoutPass);
 
 private:
-    class FlexibleBoxIterator;
+    class TreeOrderIterator;
+    class FlexOrderIterator;
+    typedef WTF::HashMap<const RenderBox*, LayoutUnit> InflexibleFlexItemSize;
 
-    void layoutHorizontalBlock(bool relayoutChildren);
+    bool hasOrthogonalFlow(RenderBox* child) const;
+    bool isHorizontalFlow() const;
+    bool isLeftToRightFlow() const;
+    void setFlowAwareLogicalHeight(LayoutUnit);
+    LayoutUnit flowAwareLogicalHeightForChild(RenderBox* child);
+    LayoutUnit flowAwareLogicalWidthForChild(RenderBox* child);
+    LayoutUnit flowAwareLogicalHeight() const;
+    LayoutUnit flowAwareLogicalWidth() const;
+    LayoutUnit flowAwareContentLogicalWidth() const;
+    LayoutUnit flowAwareBorderStart() const;
+    LayoutUnit flowAwareBorderBefore() const;
+    LayoutUnit flowAwareBorderAfter() const;
+    LayoutUnit flowAwarePaddingStart() const;
+    LayoutUnit flowAwarePaddingBefore() const;
+    LayoutUnit flowAwarePaddingAfter() const;
+    LayoutUnit flowAwareMarginStartForChild(RenderBox* child) const;
+    LayoutUnit flowAwareMarginBeforeForChild(RenderBox* child) const;
+    LayoutUnit flowAwareMarginAfterForChild(RenderBox* child) const;
+    void setFlowAwareMarginStartForChild(RenderBox* child, LayoutUnit);
+    void setFlowAwareMarginEndForChild(RenderBox* child, LayoutUnit);
+    // FIXME: Supporting layout deltas.
+    void setFlowAwareLogicalLocationForChild(RenderBox* child, const LayoutPoint&);
+    LayoutUnit logicalBorderAndPaddingWidthForChild(RenderBox* child) const;
+    LayoutUnit logicalScrollbarHeightForChild(RenderBox* child) const;
+    Length marginStartStyleForChild(RenderBox* child) const;
+    Length marginEndStyleForChild(RenderBox* child) const;
+    LayoutUnit preferredLogicalContentWidthForFlexItem(RenderBox* child) const;
 
-    void computePreferredSize(bool relayoutChildren, FlexibleBoxIterator&, LayoutUnit&, float& totalPositiveFlexibility, float& totalNegativeFlexibility);
+    void layoutInlineDirection(bool relayoutChildren);
+
+    float logicalPositiveFlexForChild(RenderBox* child) const;
+    float logicalNegativeFlexForChild(RenderBox* child) const;
+
+    void computePreferredLogicalWidth(bool relayoutChildren, TreeOrderIterator&, LayoutUnit&, float& totalPositiveFlexibility, float& totalNegativeFlexibility);
+    bool runFreeSpaceAllocationAlgorithmInlineDirection(FlexOrderIterator&, LayoutUnit& availableFreeSpace, float& totalPositiveFlexibility, float& totalNegativeFlexibility, InflexibleFlexItemSize&, WTF::Vector<LayoutUnit>& childSizes);
+    void setLogicalOverrideSize(RenderBox* child, LayoutUnit childPreferredSize);
+    void layoutAndPlaceChildrenInlineDirection(FlexOrderIterator&, const WTF::Vector<LayoutUnit>& childSizes, LayoutUnit availableFreeSpace, float totalPositiveFlexibility);
 };
 
 } // namespace WebCore

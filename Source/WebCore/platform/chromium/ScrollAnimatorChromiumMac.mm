@@ -506,7 +506,7 @@ bool ScrollAnimatorChromiumMac::scroll(ScrollbarOrientation orientation, ScrollG
     return ScrollAnimator::scroll(orientation, granularity, step, multiplier);
 #endif
 
-    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"AppleScrollAnimationEnabled"])
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"AppleScrollAnimationEnabled"] || !m_scrollableArea->scrollAnimatorEnabled())
         return ScrollAnimator::scroll(orientation, granularity, step, multiplier);
 
     if (granularity == ScrollByPixel)
@@ -571,7 +571,7 @@ void ScrollAnimatorChromiumMac::immediateScrollToPoint(const FloatPoint& newPosi
     
     m_currentPosX = adjustedPosition.x();
     m_currentPosY = adjustedPosition.y();
-    notityPositionChanged();
+    notifyPositionChanged();
 }
 
 void ScrollAnimatorChromiumMac::immediateScrollByDeltaX(float deltaX)
@@ -582,7 +582,7 @@ void ScrollAnimatorChromiumMac::immediateScrollByDeltaX(float deltaX)
         return;
     
     m_currentPosX = newPosX;
-    notityPositionChanged();
+    notifyPositionChanged();
 }
 
 void ScrollAnimatorChromiumMac::immediateScrollByDeltaY(float deltaY)
@@ -593,7 +593,7 @@ void ScrollAnimatorChromiumMac::immediateScrollByDeltaY(float deltaY)
         return;
     
     m_currentPosY = newPosY;
-    notityPositionChanged();
+    notifyPositionChanged();
 }
 
 void ScrollAnimatorChromiumMac::immediateScrollToPointForScrollAnimation(const FloatPoint& newPosition)
@@ -607,11 +607,11 @@ void ScrollAnimatorChromiumMac::immediateScrollToPointForScrollAnimation(const F
         m_scrollableArea->didCompleteAnimatedScroll();
 }
 
-void ScrollAnimatorChromiumMac::notityPositionChanged()
+void ScrollAnimatorChromiumMac::notifyPositionChanged()
 {
     if (isScrollbarOverlayAPIAvailable())
         wkContentAreaScrolled(m_scrollbarPainterController.get());
-    ScrollAnimator::notityPositionChanged();
+    ScrollAnimator::notifyPositionChanged();
 }
 
 void ScrollAnimatorChromiumMac::contentAreaWillPaint() const
@@ -771,39 +771,33 @@ static float scrollWheelMultiplier()
     return multiplier;
 }
 
-static inline bool isScrollingLeftAndShouldNotRubberBand(PlatformWheelEvent& wheelEvent, ScrollableArea* scrollableArea)
+static inline bool isScrollingLeftAndShouldNotRubberBand(const PlatformWheelEvent& wheelEvent, ScrollableArea* scrollableArea)
 {
     return wheelEvent.deltaX() > 0 && !scrollableArea->shouldRubberBandInDirection(ScrollLeft);
 }
 
-static inline bool isScrollingRightAndShouldNotRubberBand(PlatformWheelEvent& wheelEvent, ScrollableArea* scrollableArea)
+static inline bool isScrollingRightAndShouldNotRubberBand(const PlatformWheelEvent& wheelEvent, ScrollableArea* scrollableArea)
 {
     return wheelEvent.deltaX() < 0 && !scrollableArea->shouldRubberBandInDirection(ScrollRight);
 }
 
-void ScrollAnimatorChromiumMac::handleWheelEvent(PlatformWheelEvent& wheelEvent)
+bool ScrollAnimatorChromiumMac::handleWheelEvent(const PlatformWheelEvent& wheelEvent)
 {
     m_haveScrolledSincePageLoad = true;
 
-    if (!wheelEvent.hasPreciseScrollingDeltas()) {
-        ScrollAnimator::handleWheelEvent(wheelEvent);
-        return;
-    }
+    if (!wheelEvent.hasPreciseScrollingDeltas())
+        return ScrollAnimator::handleWheelEvent(wheelEvent);
 
     // FIXME: This is somewhat roundabout hack to allow forwarding wheel events
     // up to the parent scrollable area. It takes advantage of the fact that
     // the base class implemenatation of handleWheelEvent will not accept the
     // wheel event if there is nowhere to scroll.
     if (fabsf(wheelEvent.deltaY()) >= fabsf(wheelEvent.deltaX())) {
-        if (!allowsVerticalStretching()) {
-            ScrollAnimator::handleWheelEvent(wheelEvent);
-            return;
-        }
+        if (!allowsVerticalStretching())
+            return ScrollAnimator::handleWheelEvent(wheelEvent);
     } else {
-        if (!allowsHorizontalStretching()) {
-            ScrollAnimator::handleWheelEvent(wheelEvent);
-            return;
-        }
+        if (!allowsHorizontalStretching())
+            return ScrollAnimator::handleWheelEvent(wheelEvent);
         
         if (m_scrollableArea->horizontalScrollbar()) {
             // If there is a scrollbar, we aggregate the wheel events to get an
@@ -829,8 +823,7 @@ void ScrollAnimatorChromiumMac::handleWheelEvent(PlatformWheelEvent& wheelEvent)
                 (isScrollingRightAndShouldNotRubberBand(wheelEvent, m_scrollableArea) &&
                 m_scrollerInitiallyPinnedOnRight &&
                 m_scrollableArea->isHorizontalScrollerPinnedToMaximumPosition())) {
-                ScrollAnimator::handleWheelEvent(wheelEvent);
-                return;
+                return ScrollAnimator::handleWheelEvent(wheelEvent);
             }
         }
     }
@@ -839,13 +832,13 @@ void ScrollAnimatorChromiumMac::handleWheelEvent(PlatformWheelEvent& wheelEvent)
     if (m_ignoreMomentumScrolls && (isMomentumScrollEvent || m_snapRubberBandTimer.isActive())) {
         if (wheelEvent.momentumPhase() == PlatformWheelEventPhaseEnded) {
             m_ignoreMomentumScrolls = false;
-            wheelEvent.accept();
+            return true;
         }
-        return;
+        return false;
     }
 
-    wheelEvent.accept();
     smoothScrollWithEvent(wheelEvent);
+    return true;
 }
 
 void ScrollAnimatorChromiumMac::handleGestureEvent(const PlatformGestureEvent& gestureEvent)
@@ -918,7 +911,7 @@ bool ScrollAnimatorChromiumMac::allowsHorizontalStretching() const
     return false;
 }
 
-void ScrollAnimatorChromiumMac::smoothScrollWithEvent(PlatformWheelEvent& wheelEvent)
+void ScrollAnimatorChromiumMac::smoothScrollWithEvent(const PlatformWheelEvent& wheelEvent)
 {
     m_haveScrolledSincePageLoad = true;
 
@@ -1289,10 +1282,7 @@ void ScrollAnimatorChromiumMac::stopScrollbarPaintTimer()
 
 void ScrollAnimatorChromiumMac::initialScrollbarPaintTimerFired(Timer<ScrollAnimatorChromiumMac>*)
 {
-    if (scrollableArea()->shouldSuspendScrollAnimations())
-        startScrollbarPaintTimer();
-    else
-        wkScrollbarPainterForceFlashScrollers(m_scrollbarPainterController.get());
+    wkScrollbarPainterForceFlashScrollers(m_scrollbarPainterController.get());
 }
 #endif
 

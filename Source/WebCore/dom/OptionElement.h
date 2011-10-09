@@ -27,8 +27,8 @@ namespace WebCore {
 
 class Element;
 class Document;
+class HTMLSelectElement;
 class OptionElementData;
-class SelectElement;
 
 class OptionElement {
 public:
@@ -44,12 +44,12 @@ public:
 
 protected:
     static void setSelectedState(OptionElementData&, Element*, bool selected);
-    static int optionIndex(SelectElement*, const Element*);
+    static int optionIndex(HTMLSelectElement*, const Element*);
     static String collectOptionLabelOrText(const OptionElementData&, const Element*);
     static String collectOptionTextRespectingGroupLabel(const OptionElementData&, const Element*);
     static String collectOptionValue(const OptionElementData&, const Element*);
-private:
     static String collectOptionInnerText(const Element*);
+private:
     static String normalizeText(const Document*, const String&);
 };
 

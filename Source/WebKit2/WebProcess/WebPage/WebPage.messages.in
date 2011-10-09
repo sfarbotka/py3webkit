@@ -23,7 +23,7 @@
 messages -> WebPage {
     SetActive(bool active)
     SetFocused(bool focused)
-    SetInitialFocus(bool forward)
+    SetInitialFocus(bool forward, bool isKeyboardEventValid, WebKit::WebKeyboardEvent event)
     SetIsInWindow(bool isInWindow)
 
     SetDrawsBackground(bool drawsBackground)
@@ -33,8 +33,11 @@ messages -> WebPage {
     ViewWillEndLiveResize()
 
     KeyEvent(WebKit::WebKeyboardEvent event)
+    KeyEventSyncForTesting(WebKit::WebKeyboardEvent event) -> (bool handled)
     MouseEvent(WebKit::WebMouseEvent event)
+    MouseEventSyncForTesting(WebKit::WebMouseEvent event) -> (bool handled)
     WheelEvent(WebKit::WebWheelEvent event)
+    WheelEventSyncForTesting(WebKit::WebWheelEvent event) -> (bool handled)
 #if ENABLE(GESTURE_EVENTS)
     GestureEvent(WebKit::WebGestureEvent event)
 #endif
@@ -111,7 +114,7 @@ messages -> WebPage {
     SetPageZoomFactor(double zoomFactor)
     SetTextZoomFactor(double zoomFactor)
 
-    ScaleWebView(double scale, WebCore::IntPoint origin)
+    ScalePage(double scale, WebCore::IntPoint origin)
 
     SetUseFixedLayout(bool fixed)
     SetFixedLayoutSize(WebCore::IntSize size)
@@ -194,7 +197,7 @@ messages -> WebPage {
     # Text input.
     SetComposition(WTF::String text, WTF::Vector<WebCore::CompositionUnderline> underlines, uint64_t selectionStart, uint64_t selectionEnd, uint64_t replacementRangeStart, uint64_t replacementRangeEnd) -> (WebKit::EditorState newState)
     ConfirmComposition() -> (WebKit::EditorState newState)
-    ConfirmCompositionWithoutDisturbingSelection() -> (WebKit::EditorState newState)
+    CancelComposition() -> (WebKit::EditorState newState)
     InsertText(WTF::String text, uint64_t replacementRangeStart, uint64_t replacementRangeEnd) -> (bool handled, WebKit::EditorState newState)
     GetMarkedRange() -> (uint64_t location, uint64_t length)
     GetSelectedRange() -> (uint64_t location, uint64_t length)
@@ -223,6 +226,4 @@ messages -> WebPage {
 #if PLATFORM(MAC) && !defined(BUILDING_ON_SNOW_LEOPARD)
     HandleCorrectionPanelResult(String result)
 #endif
-
-    CreateSnapshotOfVisibleContent() -> (WebKit::ShareableBitmap::Handle snapshotHandle)
 }

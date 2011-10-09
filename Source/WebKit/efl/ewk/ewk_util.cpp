@@ -21,7 +21,9 @@
 #include "config.h"
 #include "ewk_util.h"
 
+#include "bindings/js/GCController.h"
 #include "ewk_private.h"
+#include "workers/WorkerThread.h"
 #include <eina_safety_checks.h>
 
 #ifdef HAVE_ECORE_X
@@ -35,15 +37,15 @@
  * @param surface cairo representation of an image
  * @return converted cairo_surface object to the Evas_Object
  */
-Evas_Object *ewk_util_image_from_cairo_surface_add(Evas *canvas, cairo_surface_t *surface)
+Evas_Object* ewk_util_image_from_cairo_surface_add(Evas* canvas, cairo_surface_t* surface)
 {
     cairo_status_t status;
     cairo_surface_type_t type;
     cairo_format_t format;
     int w, h, stride;
-    Evas_Object *image;
-    const void *src;
-    void *dst;
+    Evas_Object* image;
+    const void* src;
+    void* dst;
 
     EINA_SAFETY_ON_NULL_RETURN_VAL(canvas, 0);
     EINA_SAFETY_ON_NULL_RETURN_VAL(surface, 0);
@@ -110,16 +112,62 @@ Evas_Object *ewk_util_image_from_cairo_surface_add(Evas *canvas, cairo_surface_t
 
 /**
  * @internal
+ *
+ * Performs garbage collection of JavaScript objects.
+ */
+void ewk_util_javascript_gc_collect()
+{
+    WebCore::gcController().garbageCollectNow();
+}
+
+/**
+ * @internal
+ *
+ * Performs garbage collection of JavaScript objects in a separate thread.
+ *
+ * @param waitUntilDone If @c TRUE, wait the garbage collection thread to finish; if @c FALSE,
+ * return as soon as the thread has been created.
+ */
+void ewk_util_javascript_gc_alternate_thread_collect(Eina_Bool waitUntilDone)
+{
+    WebCore::gcController().garbageCollectOnAlternateThreadForDebugging(waitUntilDone);
+}
+
+/**
+ * @internal
+ *
+ * Returns the number of current JavaScript objects.
+ */
+unsigned ewk_util_javascript_gc_object_count_get()
+{
+    return WebCore::JSDOMWindow::commonJSGlobalData()->heap.objectCount();
+}
+
+/**
+ * @internal
+ *
+ * Returns the number of current worked threads.
+ */
+unsigned ewk_util_worker_thread_count()
+{
+#if ENABLE(WORKERS)
+    return WebCore::WorkerThread::workerThreadCount();
+#else
+    return 0;
+#endif
+}
+
+/**
+ * @internal
  * Gets dpi value.
  *
  * @return device's dpi value.
  */
-int ewk_util_dpi_get(void)
+int ewk_util_dpi_get()
 {
 #ifdef HAVE_ECORE_X
-     return ecore_x_dpi_get();
+    return ecore_x_dpi_get();
 #else
-     return 160;
+    return 160;
 #endif
 }
-

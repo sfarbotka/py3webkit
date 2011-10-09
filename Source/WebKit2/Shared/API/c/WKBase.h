@@ -60,6 +60,9 @@ typedef const struct OpaqueWKSecurityOrigin* WKSecurityOriginRef;
 typedef const struct OpaqueWKSerializedScriptValue* WKSerializedScriptValueRef;
 typedef const struct OpaqueWKString* WKStringRef;
 typedef const struct OpaqueWKUInt64* WKUInt64Ref;
+typedef const struct OpaqueWKSizeRef* WKSizeRef;
+typedef const struct OpaqueWKPointRef* WKPointRef;
+typedef const struct OpaqueWKRectRef* WKRectRef;
 typedef const struct OpaqueWKURL* WKURLRef;
 typedef const struct OpaqueWKURLRequest* WKURLRequestRef;
 typedef const struct OpaqueWKURLResponse* WKURLResponseRef;
@@ -84,6 +87,8 @@ typedef const struct OpaqueWKFramePolicyListener* WKFramePolicyListenerRef;
 typedef const struct OpaqueWKGeolocationManager* WKGeolocationManagerRef;
 typedef const struct OpaqueWKGeolocationPermissionRequest* WKGeolocationPermissionRequestRef;
 typedef const struct OpaqueWKGeolocationPosition* WKGeolocationPositionRef;
+typedef const struct OpaqueWKGrammarDetail* WKGrammarDetailRef;
+typedef const struct OpaqueWKHitTestResult* WKHitTestResultRef;
 typedef const struct OpaqueWKIconDatabase* WKIconDatabaseRef;
 typedef const struct OpaqueWKInspector* WKInspectorRef;
 typedef const struct OpaqueWKKeyValueStorageManager* WKKeyValueStorageManagerRef;
@@ -96,6 +101,7 @@ typedef const struct OpaqueWKPageGroup* WKPageGroupRef;
 typedef const struct OpaqueWKPluginSiteDataManager* WKPluginSiteDataManagerRef;
 typedef const struct OpaqueWKPreferences* WKPreferencesRef;
 typedef const struct OpaqueWKProtectionSpace* WKProtectionSpaceRef;
+typedef const struct OpaqueWKTextChecker* WKTextCheckerRef;
 
 /* WebKit2 Bundle types */
 
@@ -128,5 +134,17 @@ typedef const struct OpaqueWKBundleScriptWorld* WKBundleScriptWorldRef;
 #else /* !defined(WK_NO_EXPORT) */
 #define WK_EXPORT
 #endif /* defined(WK_NO_EXPORT) */
+
+#if !defined(WK_INLINE)
+#if defined(__cplusplus)
+#define WK_INLINE static inline
+#elif defined(__GNUC__)
+#define WK_INLINE static __inline__
+#elif defined(__WIN32__)
+#define WK_INLINE static __inline
+#else
+#define WK_INLINE static    
+#endif
+#endif /* !defined(WK_INLINE) */
 
 #endif /* WKBase_h */

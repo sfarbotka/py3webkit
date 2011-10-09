@@ -83,9 +83,9 @@ bool AccessibilityListBoxOption::isSelected() const
     return static_cast<HTMLOptionElement*>(m_optionElement)->selected();
 }
 
-IntRect AccessibilityListBoxOption::elementRect() const
+LayoutRect AccessibilityListBoxOption::elementRect() const
 {
-    IntRect rect;
+    LayoutRect rect;
     if (!m_optionElement)
         return rect;
     
@@ -97,7 +97,7 @@ IntRect AccessibilityListBoxOption::elementRect() const
     if (!listBoxRenderer)
         return rect;
     
-    IntRect parentRect = listBoxRenderer->document()->axObjectCache()->getOrCreate(listBoxRenderer)->boundingBoxRect();
+    LayoutRect parentRect = listBoxRenderer->document()->axObjectCache()->getOrCreate(listBoxRenderer)->boundingBoxRect();
     int index = listBoxOptionIndex();
     if (index != -1)
         rect = toRenderListBox(listBoxRenderer)->itemBoundingBoxRect(parentRect.location(), index);
@@ -180,7 +180,7 @@ void AccessibilityListBoxOption::setSelected(bool selected)
         return;
     
     // Convert from the entire list index to the option index.
-    int optionIndex = static_cast<SelectElement*>(selectElement)->listToOptionIndex(listBoxOptionIndex());
+    int optionIndex = selectElement->listToOptionIndex(listBoxOptionIndex());
     selectElement->accessKeySetSelectedIndex(optionIndex);
 }
 

@@ -169,7 +169,7 @@ String WebPageSerializerImpl::preActionBeforeSerializeOpenTag(
             // Get encoding info.
             String xmlEncoding = param->document->xmlEncoding();
             if (xmlEncoding.isEmpty())
-                xmlEncoding = param->document->loader()->writer()->encoding();
+                xmlEncoding = param->document->encoding();
             if (xmlEncoding.isEmpty())
                 xmlEncoding = UTF8Encoding().name();
             result.append("<?xml version=\"");
@@ -509,7 +509,7 @@ bool WebPageSerializerImpl::serialize()
 
         didSerialization = true;
 
-        String encoding = document->loader()->writer()->encoding();
+        String encoding = document->encoding();
         const TextEncoding& textEncoding = encoding.isEmpty() ? UTF8Encoding() : TextEncoding(encoding);
         String directoryName = url == mainURL ? m_localDirectoryName : "";
 

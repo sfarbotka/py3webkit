@@ -129,6 +129,7 @@ public:
     void setAllowExternalPages(bool allowExternalPages) { m_allowExternalPages = allowExternalPages; }
 
     void setAcceleratedCompositingEnabled(bool enabled) { m_acceleratedCompositingEnabled = enabled; }
+    void setThreadedCompositingEnabled(bool enabled) { m_threadedCompositingEnabled = enabled; }
     void setCompositeToTexture(bool enabled) { m_compositeToTexture = enabled; }
     void setForceCompositingMode(bool enabled) { m_forceCompositingMode = enabled; }
     void setAccelerated2dCanvasEnabled(bool enabled) { m_accelerated2dCanvasEnabled = enabled; }
@@ -176,6 +177,10 @@ public:
     typedef Vector<WebViewHost*> WindowList;
     WindowList windowList() const { return m_windowList; }
 
+    // Returns a string representation of an URL's spec that does not depend on
+    // the location of the layout test in the file system.
+    std::string normalizeLayoutTestURL(const std::string&);
+
 private:
     WebViewHost* createNewWindow(const WebKit::WebURL&, DRTDevToolsAgent*);
     void createMainWindow();
@@ -211,6 +216,7 @@ private:
     int m_timeout; // timeout value in millisecond
     bool m_allowExternalPages;
     bool m_acceleratedCompositingEnabled;
+    bool m_threadedCompositingEnabled;
     bool m_compositeToTexture;
     bool m_forceCompositingMode;
     bool m_accelerated2dCanvasEnabled;
@@ -231,9 +237,6 @@ private:
     // Used by the watchdog to know when it's finished.
     HANDLE m_finishedEvent;
 #endif
-
-    // Temporary directory for IndexedDB (LevelDB doesn't support in-memory databases.)
-    OwnPtr<webkit_support::ScopedTempDirectory> m_tempIndexedDBDirectory;
 };
 
 void platformInit(int*, char***);

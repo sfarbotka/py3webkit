@@ -53,7 +53,7 @@ using namespace std;
 
 namespace WebCore {
 
-typedef WTF::HashMap<const InlineTextBox*, IntRect> InlineTextBoxOverflowMap;
+typedef WTF::HashMap<const InlineTextBox*, LayoutRect> InlineTextBoxOverflowMap;
 static InlineTextBoxOverflowMap* gTextBoxesWithOverflow;
 
 void InlineTextBox::destroy(RenderArena* arena)
@@ -63,14 +63,14 @@ void InlineTextBox::destroy(RenderArena* arena)
     InlineBox::destroy(arena);
 }
 
-IntRect InlineTextBox::logicalOverflowRect() const
+LayoutRect InlineTextBox::logicalOverflowRect() const
 {
     if (m_knownToHaveNoOverflow || !gTextBoxesWithOverflow)
         return enclosingIntRect(logicalFrameRect());
     return gTextBoxesWithOverflow->get(this);
 }
 
-void InlineTextBox::setLogicalOverflowRect(const IntRect& rect)
+void InlineTextBox::setLogicalOverflowRect(const LayoutRect& rect)
 {
     ASSERT(!m_knownToHaveNoOverflow);
     if (!gTextBoxesWithOverflow)
@@ -78,7 +78,7 @@ void InlineTextBox::setLogicalOverflowRect(const IntRect& rect)
     gTextBoxesWithOverflow->add(this, rect);
 }
 
-int InlineTextBox::baselinePosition(FontBaseline baselineType) const
+LayoutUnit InlineTextBox::baselinePosition(FontBaseline baselineType) const
 {
     if (!isText() || !parent())
         return 0;
@@ -86,8 +86,8 @@ int InlineTextBox::baselinePosition(FontBaseline baselineType) const
         return parent()->baselinePosition(baselineType);
     return toRenderBoxModelObject(renderer()->parent())->baselinePosition(baselineType, m_firstLine, isHorizontal() ? HorizontalLine : VerticalLine, PositionOnContainingLine);
 }
-    
-int InlineTextBox::lineHeight() const
+
+LayoutUnit InlineTextBox::lineHeight() const
 {
     if (!isText() || !renderer()->parent())
         return 0;
@@ -168,8 +168,8 @@ static void adjustCharactersAndLengthForHyphen(BufferForAppendingHyphen& charact
     const AtomicString& hyphenString = style->hyphenString();
     charactersWithHyphen.reserveCapacity(length + hyphenString.length());
     charactersWithHyphen.append(characters, length);
-    charactersWithHyphen.append(hyphenString.characters(), hyphenString.length());
-    characters = charactersWithHyphen.data();
+    charactersWithHyphen.append(hyphenString);
+    characters = charactersWithHyphen.characters();
     length += hyphenString.length();
 }
 
@@ -1209,11 +1209,6 @@ int InlineTextBox::caretMaxOffset() const
     return m_start + m_len;
 }
 
-unsigned InlineTextBox::caretMaxRenderedOffset() const
-{
-    return m_start + m_len;
-}
-
 float InlineTextBox::textPos() const
 {
     // When computing the width of a text run, RenderBlock::computeInlineDirectionPositionsForLine() doesn't include the actual offset
@@ -1228,26 +1223,17 @@ int InlineTextBox::offsetForPosition(float lineOffset, bool includePartialGlyphs
     if (isLineBreak())
         return 0;
 
-    int leftOffset = isLeftToRightDirection() ? 0 : m_len;
-    int rightOffset = isLeftToRightDirection() ? m_len : 0;
-    bool blockIsInOppositeDirection = renderer()->containingBlock()->style()->isLeftToRightDirection() != isLeftToRightDirection();
-    if (blockIsInOppositeDirection)
-        swap(leftOffset, rightOffset);
-
     if (lineOffset - logicalLeft() > logicalWidth())
-        return rightOffset;
+        return isLeftToRightDirection() ? len() : 0;
     if (lineOffset - logicalLeft() < 0)
-        return leftOffset;
+        return isLeftToRightDirection() ? 0 : len();
 
     FontCachePurgePreventer fontCachePurgePreventer;
 
     RenderText* text = toRenderText(renderer());
     RenderStyle* style = text->style(m_firstLine);
     const Font& font = style->font();
-    int offset = font.offsetForPosition(constructTextRun(style, font), lineOffset - logicalLeft(), includePartialGlyphs);
-    if (blockIsInOppositeDirection && (!offset || offset == m_len))
-        return !offset ? m_len : 0;
-    return offset;
+    return font.offsetForPosition(constructTextRun(style, font), lineOffset - logicalLeft(), includePartialGlyphs);
 }
 
 float InlineTextBox::positionForOffset(int offset) const

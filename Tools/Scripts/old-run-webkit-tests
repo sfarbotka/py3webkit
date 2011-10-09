@@ -249,6 +249,8 @@ if (isAppleMacWebKit()) {
     $platform = "gtk";
 } elsif (isWx()) {
     $platform = "wx";
+} elsif (isWinCairo()) {
+    $platform = "wincairo";
 } elsif (isCygwin() || isWindows()) {
     if (isWindowsXP()) {
         $platform = "win-xp";
@@ -618,10 +620,6 @@ if (!checkWebCoreFeatureSupport("3D Canvas", 0)) {
     $ignoredDirectories{'http/tests/canvas/webgl'} = 1;
 }
 
-if (!checkWebCoreFeatureSupport("WCSS", 0)) {
-    $ignoredDirectories{'fast/wcss'} = 1;
-}
-
 if (!checkWebCoreFeatureSupport("XHTMLMP", 0)) {
     $ignoredDirectories{'fast/xhtmlmp'} = 1;
 }
@@ -954,8 +952,13 @@ for my $test (@tests) {
         }
 
         if ($resetResults || !-f $expectedPNGPath) {
-            mkpath catfile($expectedPixelDir, dirname($base)) if $testDirectory ne $expectedPixelDir;
-            writeToFile($expectedPNGPath, $actualPNG);
+            if (!$addPlatformExceptions) {
+                mkpath catfile($expectedPixelDir, dirname($base)) if $testDirectory ne $expectedPixelDir;
+                writeToFile($expectedPNGPath, $actualPNG);
+            } else {
+                mkpath catfile($platformTestDirectory, dirname($base));
+                writeToFile("$platformTestDirectory/$base-$expectedTag.png", $actualPNG);
+            }
         }
     }
 
@@ -969,8 +972,13 @@ for my $test (@tests) {
         $result = "new";
 
         if ($generateNewResults || $resetResults) {
-            mkpath catfile($expectedDir, dirname($base)) if $testDirectory ne $expectedDir;
-            writeToFile("$expectedDir/$expectedFileName", $actual);
+            if (!$addPlatformExceptions) {
+                mkpath catfile($expectedDir, dirname($base)) if $testDirectory ne $expectedDir;
+                writeToFile("$expectedDir/$expectedFileName", $actual);
+            } else {
+                mkpath catfile($platformTestDirectory, dirname($base));
+                writeToFile("$platformTestDirectory/$expectedFileName", $actual);
+            }
         }
         deleteExpectedAndActualResults($base);
         recordActualResultsAndDiff($base, $actual);
@@ -1711,7 +1719,7 @@ sub expectedDirectoryForTest($;$;$)
     my @extraPlatforms = ();
     if (isAppleWinWebKit()) {
         push @extraPlatforms, "mac-wk2" if $platform eq "win-wk2";
-        push @extraPlatforms, qw(mac-snowleopard mac);
+        push @extraPlatforms, qw(mac-lion mac);
     }
   
     push @directories, map { catdir($platformBaseDirectory, $_) } @extraPlatforms;
@@ -2174,6 +2182,10 @@ sub buildPlatformResultHierarchy()
         for (; $i < @platformList; $i++) {
             push @platforms, $platformList[$i];
         }
+
+        if ($platform eq "wincairo") {
+            @platforms = $platform;
+        }
     } elsif ($platform =~ /^qt-/) {
         push @platforms, $platform;
         push @platforms, "qt";
@@ -2463,8 +2475,7 @@ sub readSkippedFiles($)
     # Because nearly all of the skipped tests for WebKit 2 on Mac are due to
     # cross-platform issues, the Windows and Qt ports use the Mac skipped list
     # additionally to their own to avoid maintaining separate lists.
-    push(@skippedFileDirectories, catdir($platformBaseDirectory, "wk2")) if ($platform eq "win-wk2" || $platform eq "qt-wk2" || $platform eq "mac-wk2");
-
+    push(@skippedFileDirectories, catdir($platformBaseDirectory, "wk2")) if ($platform eq "win-wk2" || $platform eq "qt-wk2" || $platform eq "mac-wk2" || $platform eq "gtk-wk2");
     foreach my $level (@skippedFileDirectories) {
         if (open SKIPPED, "<", "$level/Skipped") {
             if ($verbose) {
@@ -2700,25 +2711,6 @@ sub createDebuggerCommandFile()
     }
 
     return $commandFile;
-}
-
-sub readRegistryString($)
-{
-    my ($valueName) = @_;
-    chomp(my $string = `regtool --wow32 get "$valueName"`);
-    return $string;
-}
-
-sub writeRegistryString($$)
-{
-    my ($valueName, $string) = @_;
-
-    my $error = system "regtool", "--wow32", "set", "-s", $valueName, $string;
-
-    # On Windows Vista/7 with UAC enabled, regtool will fail to modify the registry, but will still
-    # return a successful exit code. So we double-check here that the value we tried to write to the
-    # registry was really written.
-    return !$error && readRegistryString($valueName) eq $string;
 }
 
 sub setUpWindowsCrashLogSaving()

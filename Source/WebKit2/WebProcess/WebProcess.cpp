@@ -33,6 +33,7 @@
 #include "InjectedBundleUserMessageCoders.h"
 #include "RunLoop.h"
 #include "SandboxExtension.h"
+#include "StatisticsData.h"
 #include "WebApplicationCacheManager.h"
 #include "WebContextMessages.h"
 #include "WebCookieManager.h"
@@ -51,10 +52,17 @@
 #include "WebProcessMessages.h"
 #include "WebProcessProxyMessages.h"
 #include "WebResourceCacheManager.h"
+#include <JavaScriptCore/JSLock.h>
+#include <JavaScriptCore/MemoryStatistics.h>
 #include <WebCore/AXObjectCache.h>
 #include <WebCore/ApplicationCacheStorage.h>
 #include <WebCore/CrossOriginPreflightResultCache.h>
 #include <WebCore/Font.h>
+#include <WebCore/FontCache.h>
+#include <WebCore/GCController.h>
+#include <WebCore/GlyphPageTreeNode.h>
+#include <WebCore/IconDatabase.h>
+#include <WebCore/JSDOMWindow.h>
 #include <WebCore/Language.h>
 #include <WebCore/Logging.h>
 #include <WebCore/MemoryCache.h>
@@ -67,12 +75,9 @@
 #include <WebCore/SecurityOrigin.h>
 #include <WebCore/Settings.h>
 #include <WebCore/StorageTracker.h>
+#include <wtf/HashCountedSet.h>
 #include <wtf/PassRefPtr.h>
 #include <wtf/RandomNumber.h>
-
-#ifndef NDEBUG
-#include <WebCore/GCController.h>
-#endif
 
 #if !OS(WINDOWS)
 #include <unistd.h>
@@ -82,6 +87,7 @@
 #include "NetscapePluginModule.h"
 #endif
 
+using namespace JSC;
 using namespace WebCore;
 
 namespace WebKit {
@@ -185,7 +191,7 @@ void WebProcess::initializeWebProcess(const WebProcessCreationParameters& parame
         }
     }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     // Make sure the WebDatabaseManager is initialized so that the Database directory is set.
     WebDatabaseManager::initialize(parameters.databaseDirectory);
 #endif
@@ -198,11 +204,9 @@ void WebProcess::initializeWebProcess(const WebProcessCreationParameters& parame
     StorageTracker::initializeTracker(parameters.localStorageDirectory, 0);
     m_localStorageDirectory = parameters.localStorageDirectory;
 #endif
-    
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+
     if (!parameters.applicationCacheDirectory.isEmpty())
         cacheStorage().setCacheDirectory(parameters.applicationCacheDirectory);
-#endif
 
     setShouldTrackVisitedLinks(parameters.shouldTrackVisitedLinks);
     setCacheModel(static_cast<uint32_t>(parameters.cacheModel));
@@ -232,6 +236,9 @@ void WebProcess::initializeWebProcess(const WebProcessCreationParameters& parame
 
     if (parameters.shouldAlwaysUseComplexTextCodePath)
         setAlwaysUsesComplexTextCodePath(true);
+
+    if (parameters.shouldUseFontSmoothing)
+        setShouldUseFontSmoothing(true);
 
 #if USE(CFURLSTORAGESESSIONS)
     WebCore::ResourceHandle::setPrivateBrowsingStorageSessionIdentifierBase(parameters.uiProcessBundleIdentifier);
@@ -270,6 +277,11 @@ void WebProcess::setDefaultRequestTimeoutInterval(double timeoutInterval)
 void WebProcess::setAlwaysUsesComplexTextCodePath(bool alwaysUseComplexText)
 {
     WebCore::Font::setCodePath(alwaysUseComplexText ? WebCore::Font::Complex : WebCore::Font::Auto);
+}
+
+void WebProcess::setShouldUseFontSmoothing(bool useFontSmoothing)
+{
+    WebCore::Font::setShouldUseSmoothing(useFontSmoothing);
 }
 
 void WebProcess::languageChanged(const String& language) const
@@ -765,10 +777,8 @@ void WebProcess::clearResourceCaches(ResourceCachesToClear resourceCachesToClear
 
 void WebProcess::clearApplicationCache()
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     // Empty the application cache.
     cacheStorage().empty();
-#endif
 }
 
 #if !ENABLE(PLUGIN_PROCESS)
@@ -816,6 +826,119 @@ void WebProcess::clearPluginSiteData(const Vector<String>& pluginPaths, const Ve
     m_connection->send(Messages::WebContext::DidClearPluginSiteData(callbackID), 0);
 }
 #endif
+    
+static void fromCountedSetToHashMap(TypeCountSet* countedSet, HashMap<String, uint64_t>& map)
+{
+    TypeCountSet::const_iterator end = countedSet->end();
+    for (TypeCountSet::const_iterator it = countedSet->begin(); it != end; ++it)
+        map.set(it->first, it->second);
+}
+
+static void getWebCoreMemoryCacheStatistics(Vector<HashMap<String, uint64_t> >& result)
+{
+    DEFINE_STATIC_LOCAL(String, imagesString, ("Images"));
+    DEFINE_STATIC_LOCAL(String, cssString, ("CSS"));
+    DEFINE_STATIC_LOCAL(String, xslString, ("XSL"));
+    DEFINE_STATIC_LOCAL(String, javaScriptString, ("JavaScript"));
+    
+    MemoryCache::Statistics memoryCacheStatistics = memoryCache()->getStatistics();
+    
+    HashMap<String, uint64_t> counts;
+    counts.set(imagesString, memoryCacheStatistics.images.count);
+    counts.set(cssString, memoryCacheStatistics.cssStyleSheets.count);
+    counts.set(xslString, memoryCacheStatistics.xslStyleSheets.count);
+    counts.set(javaScriptString, memoryCacheStatistics.scripts.count);
+    result.append(counts);
+    
+    HashMap<String, uint64_t> sizes;
+    sizes.set(imagesString, memoryCacheStatistics.images.size);
+    sizes.set(cssString, memoryCacheStatistics.cssStyleSheets.size);
+    sizes.set(xslString, memoryCacheStatistics.xslStyleSheets.size);
+    sizes.set(javaScriptString, memoryCacheStatistics.scripts.size);
+    result.append(sizes);
+    
+    HashMap<String, uint64_t> liveSizes;
+    liveSizes.set(imagesString, memoryCacheStatistics.images.liveSize);
+    liveSizes.set(cssString, memoryCacheStatistics.cssStyleSheets.liveSize);
+    liveSizes.set(xslString, memoryCacheStatistics.xslStyleSheets.liveSize);
+    liveSizes.set(javaScriptString, memoryCacheStatistics.scripts.liveSize);
+    result.append(liveSizes);
+    
+    HashMap<String, uint64_t> decodedSizes;
+    decodedSizes.set(imagesString, memoryCacheStatistics.images.decodedSize);
+    decodedSizes.set(cssString, memoryCacheStatistics.cssStyleSheets.decodedSize);
+    decodedSizes.set(xslString, memoryCacheStatistics.xslStyleSheets.decodedSize);
+    decodedSizes.set(javaScriptString, memoryCacheStatistics.scripts.decodedSize);
+    result.append(decodedSizes);
+    
+    HashMap<String, uint64_t> purgeableSizes;
+    purgeableSizes.set(imagesString, memoryCacheStatistics.images.purgeableSize);
+    purgeableSizes.set(cssString, memoryCacheStatistics.cssStyleSheets.purgeableSize);
+    purgeableSizes.set(xslString, memoryCacheStatistics.xslStyleSheets.purgeableSize);
+    purgeableSizes.set(javaScriptString, memoryCacheStatistics.scripts.purgeableSize);
+    result.append(purgeableSizes);
+    
+    HashMap<String, uint64_t> purgedSizes;
+    purgedSizes.set(imagesString, memoryCacheStatistics.images.purgedSize);
+    purgedSizes.set(cssString, memoryCacheStatistics.cssStyleSheets.purgedSize);
+    purgedSizes.set(xslString, memoryCacheStatistics.xslStyleSheets.purgedSize);
+    purgedSizes.set(javaScriptString, memoryCacheStatistics.scripts.purgedSize);
+    result.append(purgedSizes);
+}
+
+void WebProcess::getWebCoreStatistics(uint64_t callbackID)
+{
+    StatisticsData data;
+    
+    // Gather JavaScript statistics.
+    {
+        JSLock lock(SilenceAssertionsOnly);
+        data.statisticsNumbers.set("JavaScriptObjectsCount", JSDOMWindow::commonJSGlobalData()->heap.objectCount());
+        data.statisticsNumbers.set("JavaScriptGlobalObjectsCount", JSDOMWindow::commonJSGlobalData()->heap.globalObjectCount());
+        data.statisticsNumbers.set("JavaScriptProtectedObjectsCount", JSDOMWindow::commonJSGlobalData()->heap.protectedObjectCount());
+        data.statisticsNumbers.set("JavaScriptProtectedGlobalObjectsCount", JSDOMWindow::commonJSGlobalData()->heap.protectedGlobalObjectCount());
+        
+        OwnPtr<TypeCountSet> protectedObjectTypeCounts(JSDOMWindow::commonJSGlobalData()->heap.protectedObjectTypeCounts());
+        fromCountedSetToHashMap(protectedObjectTypeCounts.get(), data.javaScriptProtectedObjectTypeCounts);
+        
+        OwnPtr<TypeCountSet> objectTypeCounts(JSDOMWindow::commonJSGlobalData()->heap.objectTypeCounts());
+        fromCountedSetToHashMap(objectTypeCounts.get(), data.javaScriptObjectTypeCounts);
+        
+        uint64_t javaScriptHeapSize = JSDOMWindow::commonJSGlobalData()->heap.size();
+        data.statisticsNumbers.set("JavaScriptHeapSize", javaScriptHeapSize);
+        data.statisticsNumbers.set("JavaScriptFreeSize", JSDOMWindow::commonJSGlobalData()->heap.capacity() - javaScriptHeapSize);
+    }
+
+    WTF::FastMallocStatistics fastMallocStatistics = WTF::fastMallocStatistics();
+    data.statisticsNumbers.set("FastMallocReservedVMBytes", fastMallocStatistics.reservedVMBytes);
+    data.statisticsNumbers.set("FastMallocCommittedVMBytes", fastMallocStatistics.committedVMBytes);
+    data.statisticsNumbers.set("FastMallocFreeListBytes", fastMallocStatistics.freeListBytes);
+    
+    // Gather icon statistics.
+    data.statisticsNumbers.set("IconPageURLMappingCount", iconDatabase().pageURLMappingCount());
+    data.statisticsNumbers.set("IconRetainedPageURLCount", iconDatabase().retainedPageURLCount());
+    data.statisticsNumbers.set("IconRecordCount", iconDatabase().iconRecordCount());
+    data.statisticsNumbers.set("IconsWithDataCount", iconDatabase().iconRecordCountWithData());
+    
+    // Gather font statistics.
+    data.statisticsNumbers.set("CachedFontDataCount", fontCache()->fontDataCount());
+    data.statisticsNumbers.set("CachedFontDataInactiveCount", fontCache()->inactiveFontDataCount());
+    
+    // Gather glyph page statistics.
+#if !(PLATFORM(QT) && !HAVE(QRAWFONT)) // Qt doesn't use the glyph page tree currently. See: bug 63467.
+    data.statisticsNumbers.set("GlyphPageCount", GlyphPageTreeNode::treeGlyphPageCount());
+#endif
+    
+    // Get WebCore memory cache statistics
+    getWebCoreMemoryCacheStatistics(data.webCoreCacheStatistics);
+    
+    m_connection->send(Messages::WebContext::DidGetWebCoreStatistics(data, callbackID), 0);
+}
+
+void WebProcess::garbageCollectJavaScriptObjects()
+{
+    gcController().garbageCollectNow();
+}
 
 #if ENABLE(PLUGIN_PROCESS)
 void WebProcess::pluginProcessCrashed(const String& pluginPath)

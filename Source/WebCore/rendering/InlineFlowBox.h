@@ -248,7 +248,7 @@ public:
         return result;
     }
 
-    void setOverflowFromLogicalRects(const LayoutRect& logicalLayoutOverflow, const IntRect& logicalVisualOverflow, LayoutUnit lineTop, LayoutUnit lineBottom);
+    void setOverflowFromLogicalRects(const LayoutRect& logicalLayoutOverflow, const LayoutRect& logicalVisualOverflow, LayoutUnit lineTop, LayoutUnit lineBottom);
     void setLayoutOverflow(const LayoutRect&, LayoutUnit lineTop, LayoutUnit lineBottom);
     void setVisualOverflow(const LayoutRect&, LayoutUnit lineTop, LayoutUnit lineBottom);
 
@@ -274,6 +274,7 @@ public:
 
 private:
     void addBoxShadowVisualOverflow(LayoutRect& logicalVisualOverflow);
+    void addBorderOutsetVisualOverflow(LayoutRect& logicalVisualOverflow);
     void addTextBoxVisualOverflow(InlineTextBox*, GlyphOverflowAndFallbackFontsMap&, LayoutRect& logicalVisualOverflow);
     void addReplacedChildOverflow(const InlineBox*, LayoutRect& logicalLayoutOverflow, LayoutRect& logicalVisualOverflow);
     void constrainToLineTopAndBottomIfNeeded(LayoutRect&) const;

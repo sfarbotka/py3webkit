@@ -73,6 +73,8 @@ WK_EXPORT void WKBundleSetPrivateBrowsingEnabled(WKBundleRef bundle, WKBundlePag
 WK_EXPORT void WKBundleSetAuthorAndUserStylesEnabled(WKBundleRef bundle, WKBundlePageGroupRef pageGroup, bool enabled);
 WK_EXPORT void WKBundleClearAllDatabases(WKBundleRef bundle);
 WK_EXPORT void WKBundleSetDatabaseQuota(WKBundleRef bundle, uint64_t);
+WK_EXPORT void WKBundleClearApplicationCache(WKBundleRef bundle);
+WK_EXPORT void WKBundleSetAppCacheMaximumSize(WKBundleRef bundle, uint64_t size);
 WK_EXPORT int WKBundleNumberOfPages(WKBundleRef bundle, WKBundleFrameRef frameRef, double pageWidthInPixels, double pageHeightInPixels);
 WK_EXPORT int WKBundlePageNumberForElementById(WKBundleRef bundle, WKBundleFrameRef frameRef, WKStringRef idRef, double pageWidthInPixels, double pageHeightInPixels);
 WK_EXPORT WKStringRef WKBundlePageSizeAndMarginsInPixels(WKBundleRef bundle, WKBundleFrameRef frameRef, int, int, int, int, int, int, int);
@@ -82,6 +84,8 @@ WK_EXPORT void WKBundleRemoveOriginAccessWhitelistEntry(WKBundleRef bundle, WKSt
 WK_EXPORT void WKBundleResetOriginAccessWhitelists(WKBundleRef bundle);
 
 WK_EXPORT bool WKBundleIsProcessingUserGesture(WKBundleRef bundle);
+
+WK_EXPORT void WKBundleSwitchNetworkLoaderToNewTestingSession(WKBundleRef bundle);
 
 #ifdef __cplusplus
 }

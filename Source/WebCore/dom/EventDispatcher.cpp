@@ -27,6 +27,7 @@
 #include "EventDispatcher.h"
 
 #include "EventContext.h"
+#include "EventDispatchMediator.h"
 #include "FrameView.h"
 #include "HTMLMediaElement.h"
 #include "InspectorInstrumentation.h"
@@ -165,8 +166,9 @@ PassRefPtr<EventTarget> EventDispatcher::adjustToShadowBoundaries(PassRefPtr<Nod
         // The relatedTarget is an ancestor or shadowHost of the target.
         // FIXME: Remove the first check once conversion to new shadow DOM is complete <http://webkit.org/b/48698>
         if (m_node->shadowHost() == relatedTarget.get() || isShadowHost(relatedTarget.get())) {
-            ASSERT(targetAncestor - 1 >= m_ancestors.begin());
-            lowestCommonBoundary = targetAncestor - 1;
+            Vector<EventContext>::const_iterator relatedTargetChild = targetAncestor - 1;
+            if (relatedTargetChild >= m_ancestors.begin() && isShadowRootOrSVGShadowRoot(relatedTargetChild->node()))
+                lowestCommonBoundary = relatedTargetChild;
         }
     } else if ((*firstDivergentBoundary) == m_node.get()) {
         // Since ancestors does not contain target itself, we must account

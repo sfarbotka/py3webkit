@@ -23,6 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#import "PluginComplexTextInputState.h"
 #import "WKView.h"
 #import "WebFindOptions.h"
 #import <wtf/Forward.h>
@@ -55,7 +56,7 @@ namespace WebKit {
 - (void)_setCursor:(NSCursor *)cursor;
 - (void)_setUserInterfaceItemState:(NSString *)commandName enabled:(BOOL)isEnabled state:(int)newState;
 - (BOOL)_interpretKeyEvent:(NSEvent *)theEvent savingCommandsTo:(Vector<WebCore::KeypressCommand>&)commands;
-- (void)_resendKeyDownEvent:(NSEvent *)event;
+- (void)_doneWithKeyEvent:(NSEvent *)event eventWasHandled:(BOOL)eventWasHandled;
 - (bool)_executeSavedCommandBySelector:(SEL)selector;
 - (NSRect)_convertToDeviceSpace:(NSRect)rect;
 - (NSRect)_convertToUserSpace:(NSRect)rect;
@@ -65,7 +66,9 @@ namespace WebKit {
 - (void)_exitAcceleratedCompositingMode;
 
 - (void)_setAccessibilityWebProcessToken:(NSData *)data;
-- (void)_setComplexTextInputEnabled:(BOOL)complexTextInputEnabled pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier;
+
+- (void)_pluginFocusOrWindowFocusChanged:(BOOL)pluginHasFocusAndWindowHasFocus pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier;
+- (void)_setPluginComplexTextInputState:(WebKit::PluginComplexTextInputState)pluginComplexTextInputState pluginComplexTextInputIdentifier:(uint64_t)pluginComplexTextInputIdentifier;
 
 - (void)_setPageHasCustomRepresentation:(BOOL)pageHasCustomRepresentation;
 - (void)_didFinishLoadingDataForCustomRepresentationWithSuggestedFilename:(const String&)suggestedFilename dataReference:(const CoreIPC::DataReference&)dataReference;
@@ -77,8 +80,6 @@ namespace WebKit {
 - (void)_updateSecureInputState;
 - (void)_updateTextInputStateIncludingSecureInputState:(BOOL)updateSecureInputState;
 - (void)_resetTextInputState;
-
-- (void)_setDrawingAreaSize:(NSSize)size;
 
 - (void)_didChangeScrollbarsForMainFrame;
 

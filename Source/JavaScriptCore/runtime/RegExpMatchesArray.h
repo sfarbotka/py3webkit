@@ -26,16 +26,21 @@ namespace JSC {
 
     class RegExpMatchesArray : public JSArray {
     private:
-        RegExpMatchesArray(ExecState*, RegExpConstructorPrivate*);
+        RegExpMatchesArray(ExecState*);
 
     public:
         typedef JSArray Base;
 
         static RegExpMatchesArray* create(ExecState* exec, RegExpConstructorPrivate* ctorPrivate)
         {
-            return new (allocateCell<RegExpMatchesArray>(*exec->heap())) RegExpMatchesArray(exec, ctorPrivate);
+            RegExpMatchesArray* regExp = new (allocateCell<RegExpMatchesArray>(*exec->heap())) RegExpMatchesArray(exec);
+            regExp->finishCreation(exec->globalData(), ctorPrivate);
+            return regExp;
         }
         virtual ~RegExpMatchesArray();
+
+    protected:
+        void finishCreation(JSGlobalData&, RegExpConstructorPrivate* data);
 
     private:
         virtual bool getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
@@ -61,30 +66,54 @@ namespace JSC {
 
         virtual void put(ExecState* exec, const Identifier& propertyName, JSValue v, PutPropertySlot& slot)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            JSArray::put(exec, propertyName, v, slot);
+            put(this, exec, propertyName, v, slot);
         }
 
+        static void put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue v, PutPropertySlot& slot)
+        {
+            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            JSArray::put(thisObject, exec, propertyName, v, slot);
+        }
+        
         virtual void put(ExecState* exec, unsigned propertyName, JSValue v)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            JSArray::put(exec, propertyName, v);
+            put(this, exec, propertyName, v);
+        }
+        
+        static void put(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue v)
+        {
+            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            JSArray::put(thisObject, exec, propertyName, v);
         }
 
         virtual bool deleteProperty(ExecState* exec, const Identifier& propertyName)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            return JSArray::deleteProperty(exec, propertyName);
+            return deleteProperty(this, exec, propertyName);
+        }
+
+        static bool deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
+        {
+            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            return JSArray::deleteProperty(thisObject, exec, propertyName);
         }
 
         virtual bool deleteProperty(ExecState* exec, unsigned propertyName)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            return JSArray::deleteProperty(exec, propertyName);
+            return deleteProperty(this, exec, propertyName);
+        }
+
+        static bool deleteProperty(JSCell* cell, ExecState* exec, unsigned propertyName)
+        {
+            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            return JSArray::deleteProperty(thisObject, exec, propertyName);
         }
 
         virtual void getOwnPropertyNames(ExecState* exec, PropertyNameArray& arr, EnumerationMode mode = ExcludeDontEnumProperties)

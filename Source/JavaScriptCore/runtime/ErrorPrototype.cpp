@@ -40,7 +40,7 @@ static EncodedJSValue JSC_HOST_CALL errorProtoFuncToString(ExecState*);
 
 namespace JSC {
 
-const ClassInfo ErrorPrototype::s_info = { "Error", &ErrorInstance::s_info, 0, ExecState::errorPrototypeTable };
+const ClassInfo ErrorPrototype::s_info = { "Error", &ErrorInstance::s_info, 0, ExecState::errorPrototypeTable, CREATE_METHOD_TABLE(ErrorPrototype) };
 
 /* Source for ErrorPrototype.lut.h
 @begin errorPrototypeTable
@@ -50,13 +50,16 @@ const ClassInfo ErrorPrototype::s_info = { "Error", &ErrorInstance::s_info, 0, E
 
 ASSERT_CLASS_FITS_IN_CELL(ErrorPrototype);
 
-ErrorPrototype::ErrorPrototype(ExecState* exec, JSGlobalObject* globalObject, Structure* structure)
+ErrorPrototype::ErrorPrototype(ExecState* exec, Structure* structure)
     : ErrorInstance(exec->globalData(), structure)
 {
-    putDirect(exec->globalData(), exec->propertyNames().name, jsNontrivialString(exec, "Error"), DontEnum);
+}
 
+void ErrorPrototype::finishCreation(ExecState* exec, JSGlobalObject*)
+{
+    Base::finishCreation(exec->globalData(), "");
     ASSERT(inherits(&s_info));
-    putAnonymousValue(globalObject->globalData(), 0, globalObject);
+    putDirect(exec->globalData(), exec->propertyNames().name, jsNontrivialString(exec, "Error"), DontEnum);
 }
 
 bool ErrorPrototype::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
@@ -76,8 +79,8 @@ EncodedJSValue JSC_HOST_CALL errorProtoFuncToString(ExecState* exec)
     JSObject* thisObj = exec->hostThisValue().toThisObject(exec);
 
     StringRecursionChecker checker(exec, thisObj);
-    if (EncodedJSValue earlyReturnValue = checker.earlyReturnValue())
-        return earlyReturnValue;
+    if (JSValue earlyReturnValue = checker.earlyReturnValue())
+        return JSValue::encode(earlyReturnValue);
 
     JSValue name = thisObj->get(exec, exec->propertyNames().name);
     JSValue message = thisObj->get(exec, exec->propertyNames().message);

@@ -39,7 +39,7 @@
 #include "WebFileSystemCallbacksImpl.h"
 #include "WebFileWriter.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 
 #include <wtf/text/CString.h>
 
@@ -52,7 +52,7 @@ bool AsyncFileSystem::isAvailable()
 
 AsyncFileSystemChromium::AsyncFileSystemChromium(AsyncFileSystem::Type type, const KURL& rootURL)
     : AsyncFileSystem(type)
-    , m_webFileSystem(WebKit::webKitClient()->fileSystem())
+    , m_webFileSystem(WebKit::webKitPlatformSupport()->fileSystem())
     , m_filesystemRootURL(rootURL)
 {
     ASSERT(m_webFileSystem);
@@ -177,7 +177,7 @@ KURL AsyncFileSystemChromium::virtualPathToFileSystemURL(const String& virtualPa
     ASSERT(!m_filesystemRootURL.isEmpty());
     KURL url = m_filesystemRootURL;
     // Remove the extra leading slash.
-    url.setPath(url.path() + virtualPath.substring(1));
+    url.setPath(url.path() + encodeWithURLEscapeSequences(virtualPath.substring(1)));
     return url;
 }
 

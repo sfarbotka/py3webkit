@@ -50,14 +50,17 @@
                     { "name": "szeged-windows-1", "platform": "qt"},
                     { "name": "szeged-windows-2", "platform": "qt"},
 
+                    { "name": "indt-snowleopard", "platform": "qt"},
+
                     { "name": "google-windows-1", "platform": "chromium-win" },
                     { "name": "google-windows-2", "platform": "chromium-win" },
-                    { "name": "google-mac-1", "platform": "chromium-mac" },
-                    { "name": "google-mac-2", "platform": "chromium-mac" },
-                    { "name": "google-mac-3", "platform": "chromium-mac" },
-                    { "name": "google-mac-4", "platform": "chromium-mac" },
+                    { "name": "google-mac-1", "platform": "chromium-cg-mac" },
+                    { "name": "google-mac-2", "platform": "chromium-cg-mac" },
+                    { "name": "google-mac-3", "platform": "chromium-cg-mac" },
+                    { "name": "google-mac-4", "platform": "chromium-cg-mac" },
                     { "name": "google-linux-1", "platform": "chromium-linux" },
                     { "name": "google-linux-2", "platform": "chromium-linux" },
+                    { "name": "google-linux-android", "platform": "chromium-android" },
                     { "name": "google-linux-flexbox", "platform": "chromium-linux" },
 
                     { "name": "wincairo-1", "platform": "wincairo" },
@@ -201,6 +204,11 @@
                       "slavenames": ["szeged-windows-2"]
                     },
                     {
+                      "name": "Qt SnowLeopard Release", "type": "Build", "builddir": "qt-snowleopard-release",
+                      "platform": "qt", "configuration": "release", "architectures": ["x86_64"],
+                      "slavenames": ["indt-snowleopard"]
+                    },
+                    {
                       "name": "Qt Linux MIPS Release", "type": "Build", "builddir": "qt-linux-mips-release",
                       "platform": "qt", "configuration": "release", "architectures": ["mipsel"],
                       "slavenames": ["hfreyther-mipsel-linux1"]
@@ -216,13 +224,13 @@
                       "slavenames": ["google-windows-2"]
                     },
                     {
-                      "name": "Chromium Mac Release", "type": "Build", "builddir": "chromium-mac-release",
-                      "platform": "chromium-mac", "configuration": "release", "architectures": ["i386"],
+                      "name": "Chromium Mac Release", "type": "Build", "builddir": "chromium-cg-mac-release",
+                      "platform": "chromium-cg-mac", "configuration": "release", "architectures": ["i386"],
                       "slavenames": ["google-mac-1", "google-mac-3"]
                     },
                     {
-                      "name": "Chromium Mac Release (Tests)", "type": "NewBuildAndTest", "builddir": "chromium-mac-release-tests",
-                      "platform": "chromium-mac", "configuration": "release", "architectures": ["i386"],
+                      "name": "Chromium Mac Release (Tests)", "type": "NewBuildAndTest", "builddir": "chromium-cg-mac-release-tests",
+                      "platform": "chromium-cg-mac", "configuration": "release", "architectures": ["i386"],
                       "slavenames": ["google-mac-2", "google-mac-4"]
                     },
                     {
@@ -241,8 +249,13 @@
                       "slavenames": ["google-linux-flexbox"]
                     },
                     {
-                      "name": "WinCairo Debug (Build)", "type": "Build", "builddir": "win-cairo-debug",
-                      "platform": "wincairo", "configuration": "debug", "architectures": ["i386"],
+                      "name": "Chromium Android Release", "type": "Build", "builddir": "chromium-linux-android",
+                      "platform": "chromium-android", "configuration": "release", "architectures": ["i386"],
+                      "slavenames": ["google-linux-android"]
+                    },
+                    {
+                      "name": "WinCairo Release", "type": "BuildAndTest", "builddir": "win-cairo-release",
+                      "platform": "wincairo", "configuration": "release", "architectures": ["i386"],
                       "slavenames": ["wincairo-1"]
                     },
                     {
@@ -260,10 +273,10 @@
     "schedulers": [ { "type": "AnyBranchScheduler", "name": "trunk", "change_filter": "trunk_filter", "treeStableTimer": 45.0,
                       "builderNames": ["GTK Linux 32-bit Release", "GTK Linux 32-bit Debug", "GTK Linux 64-bit Debug",
                                        "Qt Linux Release", "Qt Linux Release minimal", "Qt Linux ARMv7 Release",
-                                       "Qt Windows 32-bit Release", "Qt Windows 32-bit Debug", "Qt Linux MIPS Release",
+                                       "Qt Windows 32-bit Release", "Qt Windows 32-bit Debug", "Qt SnowLeopard Release", "Qt Linux MIPS Release",
                                        "Chromium Win Release", "Chromium Win Release (Tests)", "Chromium Mac Release", "Chromium Mac Release (Tests)",
                                        "Chromium Linux Release", "Chromium Linux Release (Tests)", "Chromium Linux Release (Flexbox)",
-                                       "WinCairo Debug (Build)", "WinCE Release (Build)", "EFL Linux Release (Build)"]
+                                       "Chromium Android Release", "WinCairo Release", "WinCE Release (Build)", "EFL Linux Release (Build)"]
                     },
                     { "type": "PlatformSpecificScheduler", "platform": "mac-leopard", "branch": "trunk", "treeStableTimer": 45.0,
                       "builderNames": ["Leopard Intel Debug (Build)"]

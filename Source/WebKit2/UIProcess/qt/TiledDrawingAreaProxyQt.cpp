@@ -26,8 +26,10 @@
 #include "config.h"
 #include "TiledDrawingAreaProxy.h"
 
+#include "SGUpdateQueue.h"
 #include "ShareableBitmap.h"
 #include "TouchViewInterface.h"
+#include "UpdateInfo.h"
 #include "WKAPICast.h"
 #include "WebPageProxy.h"
 
@@ -39,12 +41,43 @@ namespace WebKit {
 
 void TiledDrawingAreaProxy::updateWebView(const Vector<IntRect>& paintedArea)
 {
-    // SG updates are triggered through SGAgent.
+    // SG updates are triggered through SGUpdateQueue.
 }
 
 WebPageProxy* TiledDrawingAreaProxy::page()
 {
     return m_webPageProxy;
+}
+
+void TiledDrawingAreaProxy::createTile(int tileID, const UpdateInfo& updateInfo)
+{
+    int nodeID = m_webView->sceneGraphUpdateQueue()->createTileNode(updateInfo.updateScaleFactor);
+    m_tileNodeMap.set(tileID, nodeID);
+    updateTile(tileID, updateInfo);
+}
+
+void TiledDrawingAreaProxy::updateTile(int tileID, const UpdateInfo& updateInfo)
+{
+    int nodeID = m_tileNodeMap.get(tileID);
+    ASSERT(nodeID);
+
+    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::create(updateInfo.bitmapHandle);
+    // FIXME: We could avoid this copy by carying the ShareableBitmap all the way up to texture uploading.
+    // Currently won't work since the SharedMemory handle is owned by updateInfo.
+    QImage image(bitmap->createQImage().copy());
+    QRect sourceRect(0, 0, updateInfo.updateRectBounds.width(), updateInfo.updateRectBounds.height());
+    m_webView->sceneGraphUpdateQueue()->setNodeBackBuffer(nodeID, image, sourceRect, updateInfo.updateRectBounds);
+}
+
+void TiledDrawingAreaProxy::didRenderFrame()
+{
+    m_webView->sceneGraphUpdateQueue()->swapTileBuffers();
+}
+
+void TiledDrawingAreaProxy::removeTile(int tileID)
+{
+    int nodeID = m_tileNodeMap.take(tileID);
+    m_webView->sceneGraphUpdateQueue()->removeTileNode(nodeID);
 }
 
 } // namespace WebKit

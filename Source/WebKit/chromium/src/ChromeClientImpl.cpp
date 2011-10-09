@@ -56,7 +56,7 @@
 #include "Node.h"
 #include "NotificationPresenterImpl.h"
 #include "Page.h"
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
 #include "PopupContainer.h"
 #include "PopupMenuChromium.h"
 #include "RenderWidget.h"
@@ -203,18 +203,6 @@ FloatRect ChromeClientImpl::pageRect()
     // simple re-using the window position here.  So, from the point-of-view of
     // the web page, the window has no border.
     return windowRect();
-}
-
-float ChromeClientImpl::scaleFactor()
-{
-    // This is supposed to return the scale factor of the web page. It looks like
-    // the implementor of the graphics layer is responsible for doing most of the
-    // operations associated with scaling. However, this value is used ins some
-    // cases by WebCore. For example, this is used as a scaling factor in canvas
-    // so that things drawn in it are scaled just like the web page is.
-    //
-    // We don't currently implement scaling, so just return 1.0 (no scaling).
-    return 1.0;
 }
 
 void ChromeClientImpl::focus()
@@ -657,7 +645,6 @@ void ChromeClientImpl::exceededDatabaseQuota(Frame* frame, const String& databas
     // Chromium users cannot currently change the default quota
 }
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClientImpl::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     ASSERT_NOT_REACHED();
@@ -667,7 +654,6 @@ void ChromeClientImpl::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64
 {
     ASSERT_NOT_REACHED();
 }
-#endif
 
 void ChromeClientImpl::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> fileChooser)
 {
@@ -836,6 +822,15 @@ NotificationPresenter* ChromeClientImpl::notificationPresenter() const
 }
 #endif
 
+bool ChromeClientImpl::paintCustomOverhangArea(GraphicsContext* context, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect)
+{
+    Frame* frame = m_webView->mainFrameImpl()->frame();
+    WebPluginContainerImpl* pluginContainer = WebFrameImpl::pluginContainerFromFrame(frame);
+    if (pluginContainer)
+        return pluginContainer->paintCustomOverhangArea(context, horizontalOverhangArea, verticalOverhangArea, dirtyRect);
+    return false;
+}
+
 // FIXME: Remove ChromeClientImpl::requestGeolocationPermissionForFrame and ChromeClientImpl::cancelGeolocationPermissionRequestForFrame
 // once all ports have moved to client-based geolocation (see https://bugs.webkit.org/show_bug.cgi?id=40373 ).
 // For client-based geolocation, these methods are now implemented as WebGeolocationClient::requestPermission and WebGeolocationClient::cancelPermissionRequest.
@@ -911,8 +906,12 @@ bool ChromeClientImpl::supportsFullScreenForElement(const WebCore::Element* elem
 
 void ChromeClientImpl::enterFullScreenForElement(WebCore::Element* element)
 {
+    // FIXME: Make this code support asynchronous embedder implementations of
+    // enterFullscreenForElement() by restructuring this code to wait for an
+    // ACK.
     // FIXME: We may need to call these someplace else when window resizes.
     element->document()->webkitWillEnterFullScreenForElement(element);
+    m_webView->client()->enterFullscreen();
     element->document()->webkitDidEnterFullScreenForElement(element);
 }
 
@@ -920,6 +919,7 @@ void ChromeClientImpl::exitFullScreenForElement(WebCore::Element* element)
 {
     // FIXME: We may need to call these someplace else when window resizes.
     element->document()->webkitWillExitFullScreenForElement(element);
+    m_webView->client()->exitFullscreen();
     element->document()->webkitDidExitFullScreenForElement(element);
 }
 
@@ -962,11 +962,27 @@ bool ChromeClientImpl::shouldRunModalDialogDuringPageDismissal(const DialogType&
     int dismissal = static_cast<int>(dismissalType) - 1; // Exclude NoDismissal.
     ASSERT(0 <= dismissal && dismissal < static_cast<int>(arraysize(kDismissals)));
 
-    PlatformBridge::histogramEnumeration("Renderer.ModalDialogsDuringPageDismissal", dismissal * arraysize(kDialogs) + dialog, arraysize(kDialogs) * arraysize(kDismissals));
+    PlatformSupport::histogramEnumeration("Renderer.ModalDialogsDuringPageDismissal", dismissal * arraysize(kDialogs) + dialog, arraysize(kDialogs) * arraysize(kDismissals));
 
     m_webView->mainFrame()->addMessageToConsole(WebConsoleMessage(WebConsoleMessage::LevelError, makeString("Blocked ", kDialogs[dialog], "('", dialogMessage, "') during ", kDismissals[dismissal], ".")));
 
     return false;
+}
+
+bool ChromeClientImpl::shouldRubberBandInDirection(WebCore::ScrollDirection direction) const
+{
+    ASSERT(direction != WebCore::ScrollUp && direction != WebCore::ScrollDown);
+
+    if (!m_webView->client())
+        return false;
+
+    if (direction == WebCore::ScrollLeft)
+        return !m_webView->client()->historyBackListCount();
+    if (direction == WebCore::ScrollRight)
+        return !m_webView->client()->historyForwardListCount();
+
+    ASSERT_NOT_REACHED();
+    return true;
 }
 
 void ChromeClientImpl::numWheelEventHandlersChanged(unsigned numberOfWheelHandlers)

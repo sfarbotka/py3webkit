@@ -64,13 +64,12 @@
 #include <JavaScriptCore/InitializeThreading.h>
 #include <JavaScriptCore/JSLock.h>
 #include <JavaScriptCore/JSValue.h>
-#include <WebCore/AbstractDatabase.h>
 #include <WebCore/AXObjectCache.h>
+#include <WebCore/AbstractDatabase.h>
 #include <WebCore/ApplicationCacheStorage.h>
 #include <WebCore/BString.h>
 #include <WebCore/BackForwardListImpl.h>
 #include <WebCore/BitmapInfo.h>
-#include <WebCore/MemoryCache.h>
 #include <WebCore/Chrome.h>
 #include <WebCore/ContextMenu.h>
 #include <WebCore/ContextMenuController.h>
@@ -103,6 +102,7 @@
 #include <WebCore/KeyboardEvent.h>
 #include <WebCore/Logging.h>
 #include <WebCore/MIMETypeRegistry.h>
+#include <WebCore/MemoryCache.h>
 #include <WebCore/Page.h>
 #include <WebCore/PageCache.h>
 #include <WebCore/PageGroup.h>
@@ -2619,7 +2619,7 @@ HRESULT STDMETHODCALLTYPE WebView::initWithFrame(
     static bool didOneTimeInitialization;
     if (!didOneTimeInitialization) {
         InitializeLoggingChannelsIfNecessary();
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         WebKitInitializeWebDatabasesIfNecessary();
 #endif
         WebKitSetApplicationCachePathIfNecessary();
@@ -4705,11 +4705,6 @@ HRESULT WebView::notifyPreferencesChanged(IWebNotification* notification)
         return hr;
     settings->setDOMPasteAllowed(!!enabled);
 
-    hr = preferences->shouldPaintCustomScrollbars(&enabled);
-    if (FAILED(hr))
-        return hr;
-    settings->setShouldPaintCustomScrollbars(!!enabled);
-
     hr = preferences->zoomsTextOnly(&enabled);
     if (FAILED(hr))
         return hr;
@@ -4754,7 +4749,7 @@ HRESULT WebView::notifyPreferencesChanged(IWebNotification* notification)
         return hr;
     settings->setOfflineWebApplicationCacheEnabled(enabled);
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     hr = prefsPrivate->databasesEnabled(&enabled);
     if (FAILED(hr))
         return hr;
@@ -4910,8 +4905,8 @@ HRESULT updateSharedSettingsFromPreferencesIfNeeded(IWebPreferences* preferences
 
 #if USE(CFNETWORK)
     // Set cookie storage accept policy
-    if (CFHTTPCookieStorageRef cookieStorage = currentCookieStorage())
-        CFHTTPCookieStorageSetCookieAcceptPolicy(cookieStorage, acceptPolicy);
+    if (RetainPtr<CFHTTPCookieStorageRef> cookieStorage = currentCFHTTPCookieStorage())
+        CFHTTPCookieStorageSetCookieAcceptPolicy(cookieStorage.get(), acceptPolicy);
 #endif
 
     return S_OK;
@@ -5412,7 +5407,7 @@ void WebView::prepareCandidateWindow(Frame* targetFrame, HIMC hInputContext)
 void WebView::resetIME(Frame* targetFrame)
 {
     if (targetFrame)
-        targetFrame->editor()->confirmCompositionWithoutDisturbingSelection();
+        targetFrame->editor()->cancelComposition();
 
     if (HIMC hInputContext = getIMMContext()) {
         IMMDict::dict().notifyIME(hInputContext, NI_COMPOSITIONSTR, CPS_CANCEL, 0);

@@ -43,9 +43,12 @@ using namespace WebCore;
 
 namespace WebKit {
 
-PassRefPtr<WebPageProxy> WebUIClient::createNewPage(WebPageProxy* page, const WindowFeatures& windowFeatures, WebEvent::Modifiers modifiers, WebMouseEvent::Button button)
+PassRefPtr<WebPageProxy> WebUIClient::createNewPage(WebPageProxy* page, const ResourceRequest& resourceRequest, const WindowFeatures& windowFeatures, WebEvent::Modifiers modifiers, WebMouseEvent::Button button)
 {
-    if (!m_client.createNewPage)
+    if (!m_client.version && !m_client.createNewPage_deprecatedForUseWithV0)
+        return 0;
+    
+    if (m_client.version == kWKPageUIClientCurrentVersion && !m_client.createNewPage)
         return 0;
 
     ImmutableDictionary::MapType map;
@@ -66,7 +69,11 @@ PassRefPtr<WebPageProxy> WebUIClient::createNewPage(WebPageProxy* page, const Wi
     map.set("dialog", WebBoolean::create(windowFeatures.dialog));
     RefPtr<ImmutableDictionary> featuresMap = ImmutableDictionary::adopt(map);
 
-    return adoptRef(toImpl(m_client.createNewPage(toAPI(page), toAPI(featuresMap.get()), toAPI(modifiers), toAPI(button), m_client.clientInfo)));
+    if (!m_client.version)
+        return adoptRef(toImpl(m_client.createNewPage_deprecatedForUseWithV0(toAPI(page), toAPI(featuresMap.get()), toAPI(modifiers), toAPI(button), m_client.clientInfo)));
+
+    RefPtr<WebURLRequest> request = WebURLRequest::create(resourceRequest);    
+    return adoptRef(toImpl(m_client.createNewPage(toAPI(page), toAPI(request.get()), toAPI(featuresMap.get()), toAPI(modifiers), toAPI(button), m_client.clientInfo)));
 } 
 
 void WebUIClient::showPage(WebPageProxy* page)
@@ -148,12 +155,21 @@ void WebUIClient::setStatusText(WebPageProxy* page, const String& text)
     m_client.setStatusText(toAPI(page), toAPI(text.impl()), m_client.clientInfo);
 }
 
-void WebUIClient::mouseDidMoveOverElement(WebPageProxy* page, WebEvent::Modifiers modifiers, APIObject* userData)
+void WebUIClient::mouseDidMoveOverElement(WebPageProxy* page, const WebHitTestResult::Data& data, WebEvent::Modifiers modifiers, APIObject* userData)
 {
-    if (!m_client.mouseDidMoveOverElement)
+    if (!m_client.mouseDidMoveOverElement && !m_client.mouseDidMoveOverElement_deprecatedForUseWithV0)
         return;
 
-    m_client.mouseDidMoveOverElement(toAPI(page), toAPI(modifiers), toAPI(userData), m_client.clientInfo);
+    if (m_client.version == kWKPageUIClientCurrentVersion && !m_client.mouseDidMoveOverElement)
+        return;
+
+    if (!m_client.version) {
+        m_client.mouseDidMoveOverElement_deprecatedForUseWithV0(toAPI(page), toAPI(modifiers), toAPI(userData), m_client.clientInfo);
+        return;
+    }
+
+    RefPtr<WebHitTestResult> webHitTestResult = WebHitTestResult::create(data);
+    m_client.mouseDidMoveOverElement(toAPI(page), toAPI(webHitTestResult.get()), toAPI(modifiers), toAPI(userData), m_client.clientInfo);
 }
 
 void WebUIClient::missingPluginButtonClicked(WebPageProxy* page, const String& mimeType, const String& url, const String& pluginsPageURL)
@@ -367,14 +383,6 @@ void WebUIClient::runModal(WebPageProxy* page)
         return;
 
     m_client.runModal(toAPI(page), m_client.clientInfo);
-}
-
-void WebUIClient::didCompleteRubberBandForMainFrame(WebPageProxy* page, const IntSize& initialOverhang)
-{
-    if (!m_client.didCompleteRubberBandForMainFrame)
-        return;
-
-    m_client.didCompleteRubberBandForMainFrame(toAPI(page), toAPI(initialOverhang), m_client.clientInfo);
 }
 
 void WebUIClient::saveDataToFileInDownloadsFolder(WebPageProxy* page, const String& suggestedFilename, const String& mimeType, const String& originatingURLString, WebData* data)

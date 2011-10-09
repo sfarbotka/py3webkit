@@ -211,6 +211,8 @@ void WebPage::resetSettings()
 
     DumpRenderTreeSupportQt::setMinimumTimerInterval(this, DumpRenderTreeSupportQt::defaultMinimumTimerInterval());
 
+    DumpRenderTreeSupportQt::resetInternalsObject(mainFrame());
+
     m_pendingGeolocationRequests.clear();
 }
 
@@ -829,7 +831,7 @@ static QString dumpHistoryItem(const QWebHistoryItem& item, int indent, bool cur
     for (int i = start; i < indent; i++)
         result.append(' ');
 
-    QString url = item.url().toEncoded();
+    QString url = item.url().toString();
     if (url.contains("file://")) {
         static QString layoutTestsString("/LayoutTests/");
         static QString fileTestString("(file test):");

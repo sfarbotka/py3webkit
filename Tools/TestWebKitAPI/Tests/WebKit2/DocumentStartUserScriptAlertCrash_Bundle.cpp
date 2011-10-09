@@ -23,12 +23,12 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
 #include "InjectedBundleTest.h"
 #include <WebKit2/WKBundlePageGroup.h>
 #include <WebKit2/WKBundlePrivate.h>
 #include <WebKit2/WKBundleScriptWorld.h>
 #include <WebKit2/WKRetainPtr.h>
-#include <WebKit2/WebKit2.h>
 #include <assert.h>
 
 namespace TestWebKitAPI {

@@ -49,7 +49,7 @@ class ImageLayerTextureUpdater;
 // A Layer that contains only an Image element.
 class ImageLayerChromium : public TiledLayerChromium {
 public:
-    static PassRefPtr<ImageLayerChromium> create(GraphicsLayerChromium* owner = 0);
+    static PassRefPtr<ImageLayerChromium> create(CCLayerDelegate*);
     virtual ~ImageLayerChromium();
 
     virtual bool drawsContent() const;
@@ -57,14 +57,11 @@ public:
 
     void setContents(Image* image);
 
-protected:
-    virtual const char* layerTypeAsString() const { return "ImageLayer"; }
-
 private:
-    ImageLayerChromium(GraphicsLayerChromium* owner);
+    explicit ImageLayerChromium(CCLayerDelegate*);
 
     virtual void cleanupResources();
-    virtual void createTextureUpdaterIfNeeded();
+    virtual void createTextureUpdater(const CCLayerTreeHost*);
     void setTilingOption(TilingOption);
 
     virtual LayerTextureUpdater* textureUpdater() const;
@@ -73,7 +70,7 @@ private:
     NativeImagePtr m_imageForCurrentFrame;
     RefPtr<Image> m_contents;
 
-    OwnPtr<ImageLayerTextureUpdater> m_textureUpdater;
+    RefPtr<ImageLayerTextureUpdater> m_textureUpdater;
 };
 
 }

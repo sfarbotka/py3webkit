@@ -37,15 +37,12 @@
 #include "CachedResourceLoader.h"
 #include "Document.h"
 #include "DocumentLoader.h"
-#include "EventsCollector.h"
 #include "Frame.h"
 #include "FrameLoader.h"
 #include "HTTPHeaderMap.h"
 #include "IdentifiersFactory.h"
 #include "InspectorClient.h"
 #include "InspectorFrontend.h"
-#include "InspectorFrontendChannel.h"
-#include "InspectorFrontendProxy.h"
 #include "InspectorPageAgent.h"
 #include "InspectorState.h"
 #include "InspectorValues.h"
@@ -75,33 +72,19 @@ namespace WebCore {
 namespace ResourceAgentState {
 static const char resourceAgentEnabled[] = "resourceAgentEnabled";
 static const char extraRequestHeaders[] = "extraRequestHeaders";
-static const char backgroundEventsCollectionEnabled[] = "backgroundEventsCollectionEnabled";
 static const char cacheDisabled[] = "cacheDisabled";
 }
 
 void InspectorResourceAgent::setFrontend(InspectorFrontend* frontend)
 {
     m_frontend = frontend->network();
-    if (isBackgroundEventsCollectionEnabled()) {
-        // Insert Message Proxy in receiver chain.
-        InspectorFrontendChannel* client = m_frontend->getInspectorFrontendChannel();
-        m_inspectorFrontendProxy->setInspectorFrontendChannel(client);
-        m_frontend->setInspectorFrontendChannel(m_inspectorFrontendProxy.get());
-        m_eventsCollector->sendCollectedEvents(client);
-    }
 }
 
 void InspectorResourceAgent::clearFrontend()
 {
-    if (isBackgroundEventsCollectionEnabled()) {
-        m_frontend = m_mockFrontend.get();
-        m_inspectorFrontendProxy->setInspectorFrontendChannel(0);
-        m_frontend->setInspectorFrontendChannel(m_inspectorFrontendProxy.get());
-    } else {
-        m_frontend = 0;
-        ErrorString error;
-        disable(&error);
-    }
+    m_frontend = 0;
+    ErrorString error;
+    disable(&error);
     m_userAgentOverride = "";
 }
 
@@ -156,8 +139,13 @@ static PassRefPtr<InspectorObject> buildObjectForResourceResponse(const Resource
 
     RefPtr<InspectorObject> responseObject = InspectorObject::create();
     responseObject->setString("url", response.url().string());
-    responseObject->setNumber("status", response.resourceLoadInfo() ? response.resourceLoadInfo()->httpStatusCode : response.httpStatusCode());
-    responseObject->setString("statusText", response.resourceLoadInfo() ? response.resourceLoadInfo()->httpStatusText : response.httpStatusText());
+    if (response.resourceLoadInfo() && response.resourceLoadInfo()->httpStatusCode) {
+        responseObject->setNumber("status", response.resourceLoadInfo()->httpStatusCode);
+        responseObject->setString("statusText", response.resourceLoadInfo()->httpStatusText);
+    } else {
+        responseObject->setNumber("status", response.httpStatusCode());
+        responseObject->setString("statusText", response.httpStatusText());
+    }
 
     responseObject->setString("mimeType", response.mimeType());
     responseObject->setBoolean("connectionReused", response.connectionReused());
@@ -238,7 +226,7 @@ void InspectorResourceAgent::willSendRequest(unsigned long identifier, DocumentL
 
 void InspectorResourceAgent::markResourceAsCached(unsigned long identifier)
 {
-    m_frontend->resourceMarkedAsCached(IdentifiersFactory::requestId(identifier));
+    m_frontend->requestServedFromCache(IdentifiersFactory::requestId(identifier));
 }
 
 void InspectorResourceAgent::didReceiveResponse(unsigned long identifier, DocumentLoader* loader, const ResourceResponse& response)
@@ -259,14 +247,14 @@ void InspectorResourceAgent::didReceiveResponse(unsigned long identifier, Docume
 
             m_resourcesData->addCachedResource(requestId, cachedResource);
         }
-        if (equalIgnoringFragmentIdentifier(response.url(), loader->frameLoader()->icon()->url()))
-            type = InspectorPageAgent::ImageResource;
-        else if (equalIgnoringFragmentIdentifier(response.url(), loader->url()) && type == InspectorPageAgent::OtherResource)
-            type = InspectorPageAgent::DocumentResource;
-        else if (m_loadingXHRSynchronously || m_resourcesData->resourceType(requestId) == InspectorPageAgent::XHRResource)
+        if (m_loadingXHRSynchronously || m_resourcesData->resourceType(requestId) == InspectorPageAgent::XHRResource)
             type = InspectorPageAgent::XHRResource;
         else if (m_resourcesData->resourceType(requestId) == InspectorPageAgent::ScriptResource)
             type = InspectorPageAgent::ScriptResource;
+        else if (equalIgnoringFragmentIdentifier(response.url(), loader->frameLoader()->icon()->url()))
+            type = InspectorPageAgent::ImageResource;
+        else if (equalIgnoringFragmentIdentifier(response.url(), loader->url()) && type == InspectorPageAgent::OtherResource)
+            type = InspectorPageAgent::DocumentResource;
 
         m_resourcesData->responseReceived(requestId, m_pageAgent->frameId(loader->frame()), response);
     }
@@ -304,10 +292,15 @@ void InspectorResourceAgent::didFinishLoading(unsigned long identifier, Document
 void InspectorResourceAgent::didFailLoading(unsigned long identifier, DocumentLoader* loader, const ResourceError& error)
 {
     String requestId = IdentifiersFactory::requestId(identifier);
-    if (m_resourcesData->resourceType(requestId) == InspectorPageAgent::DocumentResource)
-        m_resourcesData->addResourceSharedBuffer(requestId, loader->frameLoader()->documentLoader()->mainResourceData(), loader->frame()->document()->inputEncoding());
 
-    m_frontend->loadingFailed(requestId, currentTime(), error.localizedDescription(), error.isCancellation());
+    if (m_resourcesData->resourceType(requestId) == InspectorPageAgent::DocumentResource) {
+        Frame* frame = loader ? loader->frame() : 0;
+        if (frame && frame->loader()->documentLoader() && frame->document())
+            m_resourcesData->addResourceSharedBuffer(requestId, frame->loader()->documentLoader()->mainResourceData(), frame->document()->inputEncoding());
+    }
+
+    bool canceled = error.isCancellation();
+    m_frontend->loadingFailed(requestId, currentTime(), error.localizedDescription(), canceled ? &canceled : 0);
 }
 
 void InspectorResourceAgent::didLoadResourceFromMemoryCache(DocumentLoader* loader, CachedResource* resource)
@@ -320,7 +313,7 @@ void InspectorResourceAgent::didLoadResourceFromMemoryCache(DocumentLoader* load
     m_resourcesData->addCachedResource(requestId, resource);
     RefPtr<InspectorObject> initiatorObject = buildInitiatorObject(loader->frame() ? loader->frame()->document() : 0);
 
-    m_frontend->resourceLoadedFromMemoryCache(requestId, frameId, loaderId, loader->url().string(), currentTime(), initiatorObject, buildObjectForCachedResource(*resource));
+    m_frontend->requestServedFromMemoryCache(requestId, frameId, loaderId, loader->url().string(), currentTime(), initiatorObject, buildObjectForCachedResource(*resource));
 }
 
 void InspectorResourceAgent::setInitialScriptContent(unsigned long identifier, const String& sourceString)
@@ -390,7 +383,7 @@ PassRefPtr<InspectorObject> InspectorResourceAgent::buildInitiatorObject(Documen
         RefPtr<InspectorObject> initiatorObject = InspectorObject::create();
         initiatorObject->setString("type", "parser");
         initiatorObject->setString("url", document->url().string());
-        initiatorObject->setNumber("lineNumber", document->scriptableDocumentParser()->lineNumber() + 1);
+        initiatorObject->setNumber("lineNumber", document->scriptableDocumentParser()->lineNumber().oneBasedInt());
         return initiatorObject;
     }
 
@@ -448,37 +441,6 @@ void InspectorResourceAgent::didCloseWebSocket(unsigned long identifier)
 }
 #endif // ENABLE(WEB_SOCKETS)
 
-void InspectorResourceAgent::isBackgroundEventsCollectionEnabled(ErrorString*, bool* enabled)
-{
-    (*enabled) = isBackgroundEventsCollectionEnabled();
-}
-
-bool InspectorResourceAgent::isBackgroundEventsCollectionEnabled()
-{
-    return m_state->getBoolean(ResourceAgentState::backgroundEventsCollectionEnabled);
-}
-
-void InspectorResourceAgent::setBackgroundEventsCollectionEnabled(ErrorString*, bool enabled)
-{
-    if (enabled == isBackgroundEventsCollectionEnabled())
-        return;
-    if (enabled) {
-        if (!m_eventsCollector)
-            initializeBackgroundCollection();
-        // Insert Message Proxy in receiver chain.
-        ASSERT(m_frontend);
-        InspectorFrontendChannel* client = m_frontend->getInspectorFrontendChannel();
-        m_inspectorFrontendProxy->setInspectorFrontendChannel(client);
-        m_frontend->setInspectorFrontendChannel(m_inspectorFrontendProxy.get());
-    } else {
-        // Take out Message Proxy from receiver chain.
-        m_frontend->setInspectorFrontendChannel(m_inspectorFrontendProxy->inspectorFrontendChannel());
-        m_inspectorFrontendProxy->setInspectorFrontendChannel(0);
-        m_eventsCollector->clear();
-    }
-    return m_state->setBoolean(ResourceAgentState::backgroundEventsCollectionEnabled, enabled);
-}
-
 // called from Internals for layout test purposes.
 void InspectorResourceAgent::setResourcesDataSizeLimitsFromInternals(int maximumResourcesContentSize, int maximumSingleResourceContentSize)
 {
@@ -502,6 +464,7 @@ void InspectorResourceAgent::disable(ErrorString*)
 {
     m_state->setBoolean(ResourceAgentState::resourceAgentEnabled, false);
     m_instrumentingAgents->setInspectorResourceAgent(0);
+    m_resourcesData->clear();
 }
 
 void InspectorResourceAgent::setUserAgentOverride(ErrorString*, const String& userAgent)
@@ -509,20 +472,12 @@ void InspectorResourceAgent::setUserAgentOverride(ErrorString*, const String& us
     m_userAgentOverride = userAgent;
 }
 
-void InspectorResourceAgent::setExtraHeaders(ErrorString*, PassRefPtr<InspectorObject> headers)
+void InspectorResourceAgent::setExtraHTTPHeaders(ErrorString*, PassRefPtr<InspectorObject> headers)
 {
     m_state->setObject(ResourceAgentState::extraRequestHeaders, headers);
 }
 
-void InspectorResourceAgent::initializeBackgroundCollection()
-{
-    m_eventsCollector = adoptPtr(new EventsCollector());
-    m_inspectorFrontendProxy = adoptPtr(new InspectorFrontendProxy(m_eventsCollector.get()));
-    // Create mock frontend, so we can collect network events.
-    m_mockFrontend = adoptPtr(new InspectorFrontend::Network(m_inspectorFrontendProxy.get()));
-}
-
-void InspectorResourceAgent::getResourceContent(ErrorString* errorString, const String& requestId, String* content, bool* base64Encoded)
+void InspectorResourceAgent::getResponseBody(ErrorString* errorString, const String& requestId, String* content, bool* base64Encoded)
 {
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
     if (!resourceData) {
@@ -578,17 +533,11 @@ InspectorResourceAgent::InspectorResourceAgent(InstrumentingAgents* instrumentin
     , m_pageAgent(pageAgent)
     , m_client(client)
     , m_state(state)
+    , m_frontend(0)
     , m_resourcesData(adoptPtr(new NetworkResourcesData()))
     , m_loadingXHRSynchronously(false)
     , m_isRecalculatingStyle(false)
 {
-    if (isBackgroundEventsCollectionEnabled()) {
-        initializeBackgroundCollection();
-        // Create mock frontend, so we can collect network events.
-        m_frontend = m_mockFrontend.get();
-        enable();
-    } else
-        m_frontend = 0;
 }
 
 } // namespace WebCore

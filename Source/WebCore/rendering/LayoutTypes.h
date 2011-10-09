@@ -71,6 +71,11 @@ inline LayoutPoint flooredLayoutPoint(const FloatSize& s)
     return flooredIntPoint(s);
 }
 
+inline LayoutSize flooredLayoutSize(const FloatPoint& p)
+{
+    return LayoutSize(static_cast<int>(p.x()), static_cast<int>(p.y()));
+}
+
 inline LayoutUnit roundedLayoutUnit(float value)
 {
     return lroundf(value);
@@ -89,6 +94,11 @@ inline LayoutSize toLayoutSize(const LayoutPoint& p)
 inline LayoutPoint toLayoutPoint(const LayoutSize& p)
 {
     return LayoutPoint(p.width(), p.height());
+}
+
+inline LayoutUnit layoutMod(const LayoutUnit& numerator, const LayoutUnit& denominator)
+{
+    return numerator % denominator;
 }
 
 } // namespace WebCore

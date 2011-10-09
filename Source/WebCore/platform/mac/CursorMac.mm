@@ -79,27 +79,42 @@ void Cursor::ensurePlatformCursor() const
     case Cursor::Pointer:
         m_platformCursor = [NSCursor arrowCursor];
         break;
+
     case Cursor::Cross:
         m_platformCursor = [NSCursor crosshairCursor];
         break;
+
     case Cursor::Hand:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = [NSCursor pointingHandCursor];
 #else
         // The pointingHandCursor from NSCursor does not have a shadow on
-        // older versions of Mac OS X, so use our own custom cursor.
+        // older versions of OS X, so use our own custom cursor.
         m_platformCursor = createNamedCursor("linkCursor", 6, 1);
 #endif
         break;
+
     case Cursor::IBeam:
         m_platformCursor = [NSCursor IBeamCursor];
         break;
+
     case Cursor::Wait:
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+        m_platformCursor = wkCursor("BusyButClickable");
+#else
         m_platformCursor = createNamedCursor("waitCursor", 7, 7);
+#endif
         break;
+
     case Cursor::Help:
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+        m_platformCursor = wkCursor("Help");
+        if (m_platformCursor)
+            break;
+#endif
         m_platformCursor = createNamedCursor("helpCursor", 8, 8);
         break;
+
     case Cursor::Move:
     case Cursor::MiddlePanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -108,6 +123,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("moveCursor", 7, 7);
 #endif
         break;
+
     case Cursor::EastResize:
     case Cursor::EastPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -116,6 +132,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("eastResizeCursor", 14, 7);
 #endif
         break;
+
     case Cursor::NorthResize:
     case Cursor::NorthPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -124,6 +141,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northResizeCursor", 7, 1);
 #endif
         break;
+
     case Cursor::NorthEastResize:
     case Cursor::NorthEastPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -132,6 +150,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northEastResizeCursor", 14, 1);
 #endif
         break;
+
     case Cursor::NorthWestResize:
     case Cursor::NorthWestPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -140,6 +159,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northWestResizeCursor", 0, 0);
 #endif
         break;
+
     case Cursor::SouthResize:
     case Cursor::SouthPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -148,6 +168,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("southResizeCursor", 7, 14);
 #endif
         break;
+
     case Cursor::SouthEastResize:
     case Cursor::SouthEastPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -156,6 +177,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("southEastResizeCursor", 14, 14);
 #endif
         break;
+
     case Cursor::SouthWestResize:
     case Cursor::SouthWestPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -164,6 +186,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("southWestResizeCursor", 1, 14);
 #endif
         break;
+
     case Cursor::WestResize:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("ResizeWest");
@@ -171,6 +194,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("westResizeCursor", 1, 7);
 #endif
         break;
+
     case Cursor::NorthSouthResize:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("ResizeNorthSouth");
@@ -178,6 +202,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northSouthResizeCursor", 7, 7);
 #endif
         break;
+
     case Cursor::EastWestResize:
     case Cursor::WestPanning:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
@@ -186,6 +211,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("eastWestResizeCursor", 7, 7);
 #endif
         break;
+
     case Cursor::NorthEastSouthWestResize:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("ResizeNortheastSouthwest");
@@ -193,6 +219,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northEastSouthWestResizeCursor", 7, 7);
 #endif
         break;
+
     case Cursor::NorthWestSouthEastResize:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("ResizeNorthwestSoutheast");
@@ -200,12 +227,15 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("northWestSouthEastResizeCursor", 7, 7);
 #endif
         break;
+
     case Cursor::ColumnResize:
         m_platformCursor = [NSCursor resizeLeftRightCursor];
         break;
+
     case Cursor::RowResize:
         m_platformCursor = [NSCursor resizeUpDownCursor];
         break;
+
     case Cursor::VerticalText:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = [NSCursor IBeamCursorForVerticalLayout];
@@ -213,9 +243,16 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("verticalTextCursor", 7, 7);
 #endif
         break;
+
     case Cursor::Cell:
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+        m_platformCursor = wkCursor("Cell");
+        if (m_platformCursor)
+            break;
+#endif
         m_platformCursor = createNamedCursor("cellCursor", 7, 7);
         break;
+
     case Cursor::ContextMenu:
 #if !defined(BUILDING_ON_LEOPARD)
         m_platformCursor = [NSCursor contextualMenuCursor];
@@ -223,6 +260,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("contextMenuCursor", 3, 2);
 #endif
         break;
+
     case Cursor::Alias:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("MakeAlias");
@@ -230,6 +268,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("aliasCursor", 11, 3);
 #endif
         break;
+
     case Cursor::Progress:
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
         m_platformCursor = wkCursor("BusyButClickable");
@@ -237,6 +276,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("progressCursor", 3, 2);
 #endif
         break;
+
     case Cursor::NoDrop:
 #if !defined(BUILDING_ON_LEOPARD)
         m_platformCursor = [NSCursor operationNotAllowedCursor];
@@ -244,6 +284,7 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("noDropCursor", 3, 1);
 #endif
         break;
+
     case Cursor::Copy:
 #if !defined(BUILDING_ON_LEOPARD)
         m_platformCursor = [NSCursor dragCopyCursor];
@@ -251,9 +292,11 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("copyCursor", 3, 2);
 #endif
         break;
+
     case Cursor::None:
         m_platformCursor = createNamedCursor("noneCursor", 7, 7);
         break;
+
     case Cursor::NotAllowed:
 #if !defined(BUILDING_ON_LEOPARD)
         m_platformCursor = [NSCursor operationNotAllowedCursor];
@@ -261,18 +304,33 @@ void Cursor::ensurePlatformCursor() const
         m_platformCursor = createNamedCursor("notAllowedCursor", 11, 11);
 #endif
         break;
+
     case Cursor::ZoomIn:
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+        m_platformCursor = wkCursor("ZoomIn");
+        if (m_platformCursor)
+            break;
+#endif
         m_platformCursor = createNamedCursor("zoomInCursor", 7, 7);
         break;
+
     case Cursor::ZoomOut:
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+        m_platformCursor = wkCursor("ZoomOut");
+        if (m_platformCursor)
+            break;
+#endif
         m_platformCursor = createNamedCursor("zoomOutCursor", 7, 7);
         break;
+
     case Cursor::Grab:
         m_platformCursor = [NSCursor openHandCursor];
         break;
+
     case Cursor::Grabbing:
         m_platformCursor = [NSCursor closedHandCursor];
         break;
+
     case Cursor::Custom:
         m_platformCursor = createCustomCursor(m_image.get(), m_hotSpot);
         break;

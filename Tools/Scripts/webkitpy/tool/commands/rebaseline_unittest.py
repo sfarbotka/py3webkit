@@ -52,7 +52,14 @@ class TestRebaseline(unittest.TestCase):
         tool = MockTool()
         tool.executive = MockExecutive(should_log=True)
         command.bind_to_tool(tool)
-        expected_stdout = """Retrieving results for chromium-gpu-mac-leopard from Webkit Mac10.5 - GPU.
+        expected_stdout = """Retrieving results for chromium-cg-mac-leopard from Webkit Mac10.5 (CG).
+    userscripts/another-test.html
+    userscripts/images.svg
+Retrieving results for chromium-cg-mac-snowleopard from Webkit Mac10.6 (CG).
+    userscripts/another-test.html
+    userscripts/images.svg
+Retrieving results for chromium-gpu-cg-mac-leopard from Webkit Mac10.5 (CG) - GPU.
+Retrieving results for chromium-gpu-cg-mac-snowleopard from Webkit Mac10.6 (CG) - GPU.
 Retrieving results for chromium-gpu-mac-snowleopard from Webkit Mac10.6 - GPU.
 Retrieving results for chromium-gpu-win-win7 from Webkit Win7 - GPU.
 Retrieving results for chromium-gpu-win-xp from Webkit Win - GPU.
@@ -80,7 +87,11 @@ Retrieving results for chromium-win-xp from Webkit Win.
 Optimizing baselines for userscripts/another-test.html.
 Optimizing baselines for userscripts/images.svg.
 """
-        expected_stderr = """MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Linux 32', 'userscripts/another-test.html'], cwd=/mock-checkout
+        expected_stderr = """MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Mac10.5 (CG)', 'userscripts/another-test.html'], cwd=/mock-checkout
+MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Mac10.5 (CG)', 'userscripts/images.svg'], cwd=/mock-checkout
+MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Mac10.6 (CG)', 'userscripts/another-test.html'], cwd=/mock-checkout
+MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Mac10.6 (CG)', 'userscripts/images.svg'], cwd=/mock-checkout
+MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Linux 32', 'userscripts/another-test.html'], cwd=/mock-checkout
 MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Linux 32', 'userscripts/images.svg'], cwd=/mock-checkout
 MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Linux', 'userscripts/another-test.html'], cwd=/mock-checkout
 MOCK run_command: ['echo', 'rebaseline-test', 'Webkit Linux', 'userscripts/images.svg'], cwd=/mock-checkout

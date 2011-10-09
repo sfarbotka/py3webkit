@@ -915,7 +915,7 @@ JSValue convertQVariantToValue(ExecState* exec, PassRefPtr<RootObject> root, con
         QByteArray qtByteArray = variant.value<QByteArray>();
         WTF::RefPtr<WTF::ByteArray> wtfByteArray = WTF::ByteArray::create(qtByteArray.length());
         memcpy(wtfByteArray->data(), qtByteArray.constData(), qtByteArray.length());
-        return JSC::JSByteArray::create(exec, JSC::JSByteArray::createStructure(exec->globalData(), jsNull()), wtfByteArray.get());
+        return JSC::JSByteArray::create(exec, JSC::JSByteArray::createStructure(exec->globalData(), exec->lexicalGlobalObject(), jsNull()), wtfByteArray.get());
     }
 
     if (type == QMetaType::QObjectStar || type == QMetaType::QWidgetStar) {
@@ -1004,14 +1004,19 @@ JSValue convertQVariantToValue(ExecState* exec, PassRefPtr<RootObject> root, con
 #define QW_D(Class) Class##Data* d = d_func()
 #define QW_DS(Class,Instance) Class##Data* d = Instance->d_func()
 
-const ClassInfo QtRuntimeMethod::s_info = { "QtRuntimeMethod", &InternalFunction::s_info, 0, 0 };
+const ClassInfo QtRuntimeMethod::s_info = { "QtRuntimeMethod", &InternalFunction::s_info, 0, 0, CREATE_METHOD_TABLE(QtRuntimeMethod) };
 
-QtRuntimeMethod::QtRuntimeMethod(QtRuntimeMethodData* dd, ExecState* exec, const Identifier& ident, PassRefPtr<QtInstance> inst)
-    : InternalFunction(&exec->globalData(), exec->lexicalGlobalObject(), deprecatedGetDOMStructure<QtRuntimeMethod>(exec), ident)
+QtRuntimeMethod::QtRuntimeMethod(QtRuntimeMethodData* dd, ExecState* exec, Structure* structure, const Identifier& identifier)
+    : InternalFunction(exec->lexicalGlobalObject(), structure)
     , d_ptr(dd)
 {
+}
+
+void QtRuntimeMethod::finishCreation(ExecState* exec, const Identifier& identifier, PassRefPtr<QtInstance> instance)
+{
+    Base::finishCreation(exec->globalData(), identifier);
     QW_D(QtRuntimeMethod);
-    d->m_instance = inst;
+    d->m_instance = instance;
     d->m_finalizer.set(exec->globalData(), this, d);
 }
 
@@ -1420,19 +1425,27 @@ static int findSignalIndex(const QMetaObject* meta, int initialIndex, QByteArray
     return index;
 }
 
-QtRuntimeMetaMethod::QtRuntimeMetaMethod(ExecState* exec, const Identifier& ident, PassRefPtr<QtInstance> inst, int index, const QByteArray& signature, bool allowPrivate)
-    : QtRuntimeMethod (new QtRuntimeMetaMethodData(), exec, ident, inst)
+const ClassInfo QtRuntimeMetaMethod::s_info = { "QtRuntimeMethod", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(QtRuntimeMetaMethod) };
+
+QtRuntimeMetaMethod::QtRuntimeMetaMethod(ExecState* exec, Structure* structure, const Identifier& identifier)
+    : QtRuntimeMethod (new QtRuntimeMetaMethodData(), exec, structure, identifier)
 {
+}
+
+void QtRuntimeMetaMethod::finishCreation(ExecState* exec, const Identifier& identifier, PassRefPtr<QtInstance> instance, int index, const QByteArray& signature, bool allowPrivate)
+{
+    Base::finishCreation(exec, identifier, instance);
     QW_D(QtRuntimeMetaMethod);
     d->m_signature = signature;
     d->m_index = index;
     d->m_allowPrivate = allowPrivate;
 }
 
-void QtRuntimeMetaMethod::visitChildren(SlotVisitor& visitor)
+void QtRuntimeMetaMethod::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    QtRuntimeMethod::visitChildren(visitor);
-    QW_D(QtRuntimeMetaMethod);
+    QtRuntimeMetaMethod* thisObject = static_cast<QtRuntimeMetaMethod*>(cell);
+    QtRuntimeMethod::visitChildren(thisObject, visitor);
+    QtRuntimeMetaMethodData* d = thisObject->d_func();
     if (d->m_connect)
         visitor.append(&d->m_connect);
     if (d->m_disconnect)
@@ -1475,7 +1488,12 @@ EncodedJSValue QtRuntimeMetaMethod::call(ExecState* exec)
     return JSValue::encode(jsUndefined());
 }
 
-CallType QtRuntimeMetaMethod::getCallData(CallData& callData)
+CallType QtRuntimeMetaMethod::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType QtRuntimeMetaMethod::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = call;
     return CallTypeHost;
@@ -1564,9 +1582,16 @@ JSValue QtRuntimeMetaMethod::disconnectGetter(ExecState* exec, JSValue slotBase,
 
 QMultiMap<QObject*, QtConnectionObject*> QtRuntimeConnectionMethod::connections;
 
-QtRuntimeConnectionMethod::QtRuntimeConnectionMethod(ExecState* exec, const Identifier& ident, bool isConnect, PassRefPtr<QtInstance> inst, int index, const QByteArray& signature)
-    : QtRuntimeMethod (new QtRuntimeConnectionMethodData(), exec, ident, inst)
+const ClassInfo QtRuntimeConnectionMethod::s_info = { "QtRuntimeMethod", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(QtRuntimeConnectionMethod) };
+
+QtRuntimeConnectionMethod::QtRuntimeConnectionMethod(ExecState* exec, Structure* structure, const Identifier& identifier)
+    : QtRuntimeMethod (new QtRuntimeConnectionMethodData(), exec, structure, identifier)
 {
+}
+
+void QtRuntimeConnectionMethod::finishCreation(ExecState* exec, const Identifier& identifier, bool isConnect, PassRefPtr<QtInstance> instance, int index, const QByteArray& signature)
+{
+    Base::finishCreation(exec, identifier, instance);
     QW_D(QtRuntimeConnectionMethod);
 
     d->m_signature = signature;
@@ -1599,7 +1624,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
             if (exec->argumentCount() == 1) {
                 funcObject = exec->argument(0).toObject(exec);
                 CallData callData;
-                if (funcObject->getCallData(callData) == CallTypeNone) {
+                if (funcObject->getCallDataVirtual(callData) == CallTypeNone) {
                     if (d->m_isConnect)
                         return throwVMError(exec, createTypeError(exec, "QtMetaMethod.connect: target is not a function"));
                     else
@@ -1612,7 +1637,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
                     // Get the actual function to call
                     JSObject *asObj = exec->argument(1).toObject(exec);
                     CallData callData;
-                    if (asObj->getCallData(callData) != CallTypeNone) {
+                    if (asObj->getCallDataVirtual(callData) != CallTypeNone) {
                         // Function version
                         funcObject = asObj;
                     } else {
@@ -1625,7 +1650,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
                         JSValue val = thisObject->get(exec, funcIdent);
                         JSObject* asFuncObj = val.toObject(exec);
 
-                        if (asFuncObj->getCallData(callData) != CallTypeNone) {
+                        if (asFuncObj->getCallDataVirtual(callData) != CallTypeNone) {
                             funcObject = asFuncObj;
                         } else {
                             if (d->m_isConnect)
@@ -1709,7 +1734,12 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
     return JSValue::encode(jsUndefined());
 }
 
-CallType QtRuntimeConnectionMethod::getCallData(CallData& callData)
+CallType QtRuntimeConnectionMethod::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType QtRuntimeConnectionMethod::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = call;
     return CallTypeHost;
@@ -1832,7 +1862,7 @@ int QtConnectionObject::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 static bool isJavaScriptFunction(JSObjectRef object)
 {
     CallData callData;
-    return toJS(object)->getCallData(callData) == CallTypeJS;
+    return toJS(object)->getCallDataVirtual(callData) == CallTypeJS;
 }
 
 void QtConnectionObject::execute(void** argv)

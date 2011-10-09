@@ -106,6 +106,7 @@ LayoutTestController::LayoutTestController()
     , m_willSendRequestReturnsNull(false)
     , m_policyDelegateEnabled(false)
     , m_policyDelegatePermissive(false)
+    , m_globalFlag(false)
 {
     platformInitialize();
 }
@@ -121,7 +122,10 @@ JSClassRef LayoutTestController::wrapperClass()
 
 void LayoutTestController::display()
 {
-    // FIXME: actually implement, once we want pixel tests
+    WKBundlePageRef page = InjectedBundle::shared().page()->page();
+    WKBundlePageForceRepaint(page);
+    WKBundlePageSetTracksRepaints(page, true);
+    WKBundlePageResetTrackedRepaints(page);
 }
 
 void LayoutTestController::dumpAsText(bool dumpPixels)
@@ -323,6 +327,16 @@ void LayoutTestController::setDatabaseQuota(uint64_t quota)
     return WKBundleSetDatabaseQuota(InjectedBundle::shared().bundle(), quota);
 }
 
+void LayoutTestController::clearAllApplicationCaches()
+{
+    WKBundleClearApplicationCache(InjectedBundle::shared().bundle());
+}
+
+void LayoutTestController::setAppCacheMaximumSize(uint64_t size)
+{
+    WKBundleSetAppCacheMaximumSize(InjectedBundle::shared().bundle(), size);
+}
+
 bool LayoutTestController::isCommandEnabled(JSStringRef name)
 {
     return WKBundlePageIsEditingCommandEnabled(InjectedBundle::shared().page()->page(), toWK(name).get());
@@ -497,6 +511,70 @@ void LayoutTestController::setTextDirection(JSStringRef direction)
 void LayoutTestController::setShouldStayOnPageAfterHandlingBeforeUnload(bool shouldStayOnPage)
 {
     InjectedBundle::shared().postNewBeforeUnloadReturnValue(!shouldStayOnPage);
+}
+
+void LayoutTestController::dumpConfigurationForViewport(int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight)
+{
+    InjectedBundle::shared().os() << toSTD(adoptWK(WKBundlePageViewportConfigurationAsText(InjectedBundle::shared().page()->page(), deviceDPI, deviceWidth, deviceHeight, availableWidth, availableHeight)));
+}
+
+typedef WTF::HashMap<unsigned, JSValueRef> CallbackMap;
+static CallbackMap& callbackMap()
+{
+    static CallbackMap& map = *new CallbackMap;
+    return map;
+}
+
+static void cacheLayoutTestControllerCallback(unsigned index, JSValueRef callback)
+{
+    WKBundleFrameRef mainFrame = WKBundlePageGetMainFrame(InjectedBundle::shared().page()->page());
+    JSContextRef context = WKBundleFrameGetJavaScriptContext(mainFrame);
+    JSValueProtect(context, callback);
+    callbackMap().add(index, callback);
+}
+
+static void callLayoutTestControllerCallback(unsigned index)
+{
+    if (!callbackMap().contains(index))
+        return;
+    WKBundleFrameRef mainFrame = WKBundlePageGetMainFrame(InjectedBundle::shared().page()->page());
+    JSContextRef context = WKBundleFrameGetJavaScriptContext(mainFrame);
+    JSObjectRef callback = JSValueToObject(context, callbackMap().take(index), 0);
+    JSObjectCallAsFunction(context, callback, JSContextGetGlobalObject(context), 0, 0, 0);
+    JSValueUnprotect(context, callback);
+}
+
+void LayoutTestController::addChromeInputField(JSValueRef callback)
+{
+    cacheLayoutTestControllerCallback(1, callback);
+    InjectedBundle::shared().postAddChromeInputField();
+}
+
+void LayoutTestController::removeChromeInputField(JSValueRef callback)
+{
+    cacheLayoutTestControllerCallback(2, callback);
+    InjectedBundle::shared().postRemoveChromeInputField();
+}
+
+void LayoutTestController::focusWebView(JSValueRef callback)
+{
+    cacheLayoutTestControllerCallback(3, callback);
+    InjectedBundle::shared().postFocusWebView();
+}
+
+void LayoutTestController::callAddChromeInputFieldCallback()
+{
+    callLayoutTestControllerCallback(1);
+}
+
+void LayoutTestController::callRemoveChromeInputFieldCallback()
+{
+    callLayoutTestControllerCallback(2);
+}
+
+void LayoutTestController::callFocusWebViewCallback()
+{
+    callLayoutTestControllerCallback(3);
 }
 
 } // namespace WTR

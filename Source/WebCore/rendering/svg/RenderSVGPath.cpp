@@ -32,6 +32,7 @@
 #include "FloatQuad.h"
 #include "GraphicsContext.h"
 #include "HitTestRequest.h"
+#include "LayoutRepainter.h"
 #include "PointerEventsHitRules.h"
 #include "RenderSVGContainer.h"
 #include "RenderSVGResourceMarker.h"
@@ -246,7 +247,7 @@ void RenderSVGPath::fillAndStrokePath(GraphicsContext* context)
     }
 }
 
-void RenderSVGPath::paint(PaintInfo& paintInfo, const IntPoint&)
+void RenderSVGPath::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     if (paintInfo.context->paintingDisabled() || style()->visibility() == HIDDEN || m_path.isEmpty())
         return;

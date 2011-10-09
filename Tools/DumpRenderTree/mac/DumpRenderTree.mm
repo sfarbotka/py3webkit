@@ -51,6 +51,7 @@
 #import "StorageTrackerDelegate.h"
 #import "UIDelegate.h"
 #import "WebArchiveDumpSupport.h"
+#import "WebCoreTestSupport.h"
 #import "WorkQueue.h"
 #import "WorkQueueItem.h"
 #import <Carbon/Carbon.h>
@@ -220,41 +221,187 @@ static bool shouldIgnoreWebCoreNodeLeaks(const string& URLString)
     return false;
 }
 
-static void activateFonts()
+static NSSet *allowedFontFamilySet()
 {
-#ifdef BUILDING_ON_LEOPARD
-    static const char* fontSectionNames[] = {
-        "Ahem",
-        "WeightWatcher100",
-        "WeightWatcher200",
-        "WeightWatcher300",
-        "WeightWatcher400",
-        "WeightWatcher500",
-        "WeightWatcher600",
-        "WeightWatcher700",
-        "WeightWatcher800",
-        "WeightWatcher900",
-        0
-    };
+    static NSSet *fontFamiliySet = [[NSSet setWithObjects:
+        @"Ahem",
+        @"Al Bayan",
+        @"American Typewriter",
+        @"Andale Mono",
+        @"Apple Braille",
+        @"Apple Color Emoji",
+        @"Apple Chancery",
+        @"Apple Garamond BT",
+        @"Apple LiGothic",
+        @"Apple LiSung",
+        @"Apple Symbols",
+        @"AppleGothic",
+        @"AppleMyungjo",
+        @"Arial Black",
+        @"Arial Hebrew",
+        @"Arial Narrow",
+        @"Arial Rounded MT Bold",
+        @"Arial Unicode MS",
+        @"Arial",
+        @"Ayuthaya",
+        @"Baghdad",
+        @"Baskerville",
+        @"BiauKai",
+        @"Big Caslon",
+        @"Brush Script MT",
+        @"Chalkboard",
+        @"Chalkduster",
+        @"Charcoal CY",
+        @"Cochin",
+        @"ColorBits",
+        @"Comic Sans MS",
+        @"Copperplate",
+        @"Corsiva Hebrew",
+        @"Courier New",
+        @"Courier",
+        @"DecoType Naskh",
+        @"Devanagari MT",
+        @"Didot",
+        @"Euphemia UCAS",
+        @"Futura",
+        @"GB18030 Bitmap",
+        @"Geeza Pro",
+        @"Geneva CY",
+        @"Geneva",
+        @"Georgia",
+        @"Gill Sans",
+        @"Gujarati MT",
+        @"GungSeo",
+        @"Gurmukhi MT",
+        @"HeadLineA",
+        @"Hei",
+        @"Heiti SC",
+        @"Heiti TC",
+        @"Helvetica CY",
+        @"Helvetica Neue",
+        @"Helvetica",
+        @"Herculanum",
+        @"Hiragino Kaku Gothic Pro",
+        @"Hiragino Kaku Gothic ProN",
+        @"Hiragino Kaku Gothic Std",
+        @"Hiragino Kaku Gothic StdN",
+        @"Hiragino Maru Gothic Pro",
+        @"Hiragino Maru Gothic ProN",
+        @"Hiragino Mincho Pro",
+        @"Hiragino Mincho ProN",
+        @"Hiragino Sans GB",
+        @"Hoefler Text",
+        @"Impact",
+        @"InaiMathi",
+        @"Kai",
+        @"Kailasa",
+        @"Kokonor",
+        @"Krungthep",
+        @"KufiStandardGK",
+        @"LiHei Pro",
+        @"LiSong Pro",
+        @"Lucida Grande",
+        @"Marker Felt",
+        @"Menlo",
+        @"Microsoft Sans Serif",
+        @"Monaco",
+        @"Mshtakan",
+        @"Nadeem",
+        @"New Peninim MT",
+        @"Optima",
+        @"Osaka",
+        @"Papyrus",
+        @"PCMyungjo",
+        @"PilGi",
+        @"Plantagenet Cherokee",
+        @"Raanana",
+        @"Sathu",
+        @"Silom",
+        @"Skia",
+        @"STFangsong",
+        @"STHeiti",
+        @"STKaiti",
+        @"STSong",
+        @"Symbol",
+        @"Tahoma",
+        @"Thonburi",
+        @"Times New Roman",
+        @"Times",
+        @"Trebuchet MS",
+        @"Verdana",
+        @"Webdings",
+        @"WebKit WeightWatcher",
+        @"Wingdings 2",
+        @"Wingdings 3",
+        @"Wingdings",
+        @"Zapf Dingbats",
+        @"Zapfino",
+        nil] retain];
+    
+    return fontFamiliySet;
+}
 
-    for (unsigned i = 0; fontSectionNames[i]; ++i) {
-        unsigned long fontDataLength;
-        char* fontData = getsectdata("__DATA", fontSectionNames[i], &fontDataLength);
-        if (!fontData) {
-            fprintf(stderr, "Failed to locate the %s font.\n", fontSectionNames[i]);
-            exit(1);
-        }
+static IMP appKitAvailableFontFamiliesIMP;
+static IMP appKitAvailableFontsIMP;
 
-        ATSFontContainerRef fontContainer;
-        OSStatus status = ATSFontActivateFromMemory(fontData, fontDataLength, kATSFontContextLocal, kATSFontFormatUnspecified, NULL, kATSOptionFlagsDefault, &fontContainer);
+static NSArray *drt_NSFontManager_availableFontFamilies(id self, SEL _cmd)
+{
+    static NSArray *availableFontFamilies;
+    if (availableFontFamilies)
+        return availableFontFamilies;
+    
+    NSArray *availableFamilies = appKitAvailableFontFamiliesIMP(self, _cmd);
 
-        if (status != noErr) {
-            fprintf(stderr, "Failed to activate the %s font.\n", fontSectionNames[i]);
-            exit(1);
+    NSMutableSet *prunedFamiliesSet = [NSMutableSet setWithArray:availableFamilies];
+    [prunedFamiliesSet intersectSet:allowedFontFamilySet()];
+
+    availableFontFamilies = [[prunedFamiliesSet allObjects] retain];
+    return availableFontFamilies;
+}
+
+static NSArray *drt_NSFontManager_availableFonts(id self, SEL _cmd)
+{
+    static NSArray *availableFonts;
+    if (availableFonts)
+        return availableFonts;
+    
+    NSSet *allowedFamilies = allowedFontFamilySet();
+    NSMutableArray *availableFontList = [[NSMutableArray alloc] initWithCapacity:[allowedFamilies count] * 2];
+    for (NSString *fontFamily in allowedFontFamilySet()) {
+        NSArray* fontsForFamily = [[NSFontManager sharedFontManager] availableMembersOfFontFamily:fontFamily];
+        for (NSArray* fontInfo in fontsForFamily) {
+            // Font name is the first entry in the array.
+            [availableFontList addObject:[fontInfo objectAtIndex:0]];
         }
     }
-#else
+    
+    availableFonts = availableFontList;
+    return availableFonts;
+}
 
+static void swizzleNSFontManagerMethods()
+{
+    Method availableFontFamiliesMethod = class_getInstanceMethod(objc_getClass("NSFontManager"), @selector(availableFontFamilies));
+    ASSERT(availableFontFamiliesMethod);
+    if (!availableFontFamiliesMethod) {
+        NSLog(@"Failed to swizzle the \"availableFontFamilies\" method on NSFontManager");
+        return;
+    }
+    
+    appKitAvailableFontFamiliesIMP = method_setImplementation(availableFontFamiliesMethod, (IMP)drt_NSFontManager_availableFontFamilies);
+
+    Method availableFontsMethod = class_getInstanceMethod(objc_getClass("NSFontManager"), @selector(availableFonts));
+    ASSERT(availableFontsMethod);
+    if (!availableFontsMethod) {
+        NSLog(@"Failed to swizzle the \"availableFonts\" method on NSFontManager");
+        return;
+    }
+    
+    appKitAvailableFontsIMP = method_setImplementation(availableFontsMethod, (IMP)drt_NSFontManager_availableFonts);
+}
+
+static void activateTestingFonts()
+{
     // Work around <rdar://problem/6698023> by activating fonts from disk
     // FIXME: This code can be removed once <rdar://problem/6698023> is addressed.
 
@@ -286,7 +433,12 @@ static void activateFonts()
         CFRelease(errors);
         exit(1);
     }
-#endif
+}
+
+static void adjustFonts()
+{
+    swizzleNSFontManagerMethods();
+    activateTestingFonts();
 }
 
 WebView *createWebViewAndOffscreenWindow()
@@ -316,10 +468,7 @@ WebView *createWebViewAndOffscreenWindow()
     NSRect windowRect = NSOffsetRect(rect, -10000, [(NSScreen *)[[NSScreen screens] objectAtIndex:0] frame].size.height - rect.size.height + 10000);
     DumpRenderTreeWindow *window = [[DumpRenderTreeWindow alloc] initWithContentRect:windowRect styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
 
-#ifndef BUILDING_ON_LEOPARD
     [window setColorSpace:[[NSScreen mainScreen] colorSpace]];
-#endif
-
     [[window contentView] addSubview:webView];
     [window orderBack:nil];
     [window setAutodisplay:NO];
@@ -332,46 +481,6 @@ WebView *createWebViewAndOffscreenWindow()
     [webView cacheDisplayInRect:[webView bounds] toBitmapImageRep:imageRep];
         
     return webView;
-}
-
-void testStringByEvaluatingJavaScriptFromString()
-{
-    // maps expected result <= JavaScript expression
-    NSDictionary *expressions = [NSDictionary dictionaryWithObjectsAndKeys:
-        @"0", @"0", 
-        @"0", @"'0'", 
-        @"", @"",
-        @"", @"''", 
-        @"", @"new String()", 
-        @"", @"new String('0')", 
-        @"", @"throw 1", 
-        @"", @"{ }", 
-        @"", @"[ ]", 
-        @"", @"//", 
-        @"", @"a.b.c", 
-        @"", @"(function() { throw 'error'; })()", 
-        @"", @"null",
-        @"", @"undefined",
-        @"true", @"true",
-        @"false", @"false",
-        @"", @"alert('Should not be result')",
-        nil
-    ];
-
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    WebView *webView = [[WebView alloc] initWithFrame:NSZeroRect frameName:@"" groupName:@""];
-
-    NSEnumerator *enumerator = [expressions keyEnumerator];
-    id expression;
-    while ((expression = [enumerator nextObject])) {
-        NSString *expectedResult = [expressions objectForKey:expression];
-        NSString *result = [webView stringByEvaluatingJavaScriptFromString:expression];
-        assert([result isEqualToString:expectedResult]);
-    }
-
-    [webView close];
-    [webView release];
-    [pool release];
 }
 
 static NSString *libraryPathForDumpRenderTree()
@@ -389,7 +498,6 @@ static NSString *libraryPathForDumpRenderTree()
 // Called before each test.
 static void resetDefaultsToConsistentValues()
 {
-    // Give some clear to undocumented defaults values
     static const int NoFontSmoothing = 0;
     static const int BlueTintedAppearance = 1;
 
@@ -480,7 +588,7 @@ static void resetDefaultsToConsistentValues()
     [preferences setAsynchronousSpellCheckingEnabled:NO];
     [preferences setHixie76WebSocketProtocolEnabled:YES];
 
-    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookieAcceptPolicy:NSHTTPCookieAcceptPolicyOnlyFromMainDocumentDomain];
+    [WebPreferences _setCurrentNetworkLoaderSessionCookieAcceptPolicy:NSHTTPCookieAcceptPolicyOnlyFromMainDocumentDomain];
     
     LayoutTestController::setSerializeHTTPLoads(false);
 
@@ -500,6 +608,7 @@ static void setDefaultsToConsistentValuesForTesting()
     [NSURLCache setSharedURLCache:sharedCache];
     [sharedCache release];
 
+    [WebPreferences _switchNetworkLoaderToNewTestingSession];
 }
 
 static void* runThread(void* arg)
@@ -640,7 +749,7 @@ static void prepareConsistentTestingEnvironment()
     poseAsClass("DumpRenderTreeEvent", "NSEvent");
 
     setDefaultsToConsistentValuesForTesting();
-    activateFonts();
+    adjustFonts();
     
     if (dumpPixels)
         setupMainDisplayColorProfile();
@@ -670,9 +779,6 @@ void dumpRenderTree(int argc, const char *argv[])
     // is set to log frame load delegate calls we ignore SSL certificate errors on localhost and 127.0.0.1.
     [NSURLRequest setAllowsAnyHTTPSCertificate:YES forHost:@"localhost"];
     [NSURLRequest setAllowsAnyHTTPSCertificate:YES forHost:@"127.0.0.1"];
-
-    // <rdar://problem/5222911>
-    testStringByEvaluatingJavaScriptFromString();
 
     // http://webkit.org/b/32689
     testThreadIdentifierMap();
@@ -1053,8 +1159,15 @@ static void resetWebViewToConsistentStateBeforeTesting()
     [WebView _removeAllUserContentFromGroup:[webView groupName]];
     [[webView window] setAutodisplay:NO];
     [webView _setMinimumTimerInterval:[WebView _defaultMinimumTimerInterval]];
-
+    [webView setTracksRepaints:NO];
+    
     resetDefaultsToConsistentValues();
+
+    if (gLayoutTestController) {
+        WebCoreTestSupport::resetInternalsObject([mainFrame globalContext]);
+        // in the case that a test using the chrome input field failed, be sure to clean up for the next test
+        gLayoutTestController->removeChromeInputField();
+    }
 
     [[mainFrame webView] setSmartInsertDeleteEnabled:YES];
     [[[mainFrame webView] inspector] setJavaScriptProfilingEnabled:NO];
@@ -1210,12 +1323,11 @@ static void runTest(const string& testPathOrURL)
 
 void displayWebView()
 {
-    NSView *webView = [mainFrame webView];
+    WebView *webView = [mainFrame webView];
     [webView display];
-    [webView lockFocus];
-    [[[NSColor blackColor] colorWithAlphaComponent:0.66] set];
-    NSRectFillUsingOperation([webView frame], NSCompositeSourceOver);
-    [webView unlockFocus];
+    
+    [webView setTracksRepaints:YES];
+    [webView resetTrackedRepaints];
 }
 
 @implementation DumpRenderTreeEvent

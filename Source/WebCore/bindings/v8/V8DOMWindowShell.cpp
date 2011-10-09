@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2008, 2009 Google Inc. All rights reserved.
- * 
+ * Copyright (C) 2008, 2009, 2011 Google Inc. All rights reserved.
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  * notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above
@@ -14,7 +14,7 @@
  *     * Neither the name of Google Inc. nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -31,7 +31,7 @@
 #include "config.h"
 #include "V8DOMWindowShell.h"
 
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
 #include "CSSMutableStyleDeclaration.h"
 #include "DateExtension.h"
 #include "DocumentLoader.h"
@@ -66,7 +66,7 @@
 #include <v8.h>
 
 #if ENABLE(JAVASCRIPT_I18N_API)
-#include <v8/src/extensions/experimental/i18n-extension.h>
+#include <v8-i18n/include/extension.h>
 #endif
 
 #include <wtf/Assertions.h>
@@ -77,6 +77,10 @@
 #include <wtf/text/CString.h>
 
 namespace WebCore {
+
+// FIXME: Temporary diagnostics as to why V8 sometimes crashes with a null context in namedItemAdded().
+// See https://bugs.webkit.org/show_bug.cgi?id=68099.
+static int s_contextFailureReason = -1;
 
 static void handleFatalErrorInV8()
 {
@@ -92,7 +96,7 @@ static void reportFatalErrorInV8(const char* location, const char* message)
     // FIXME: clean up V8Proxy and disable JavaScript.
     int memoryUsageMB = -1;
 #if PLATFORM(CHROMIUM)
-    memoryUsageMB = PlatformBridge::actualMemoryUsageMB();
+    memoryUsageMB = PlatformSupport::actualMemoryUsageMB();
 #endif
     printf("V8 error: %s (%s).  Current memory usage: %d MB\n", message, location, memoryUsageMB);
     handleFatalErrorInV8();
@@ -173,7 +177,7 @@ bool V8DOMWindowShell::isContextInitialized()
 void V8DOMWindowShell::disposeContextHandles()
 {
     if (!m_context.IsEmpty()) {
-        m_frame->loader()->client()->didDestroyScriptContextForFrame();
+        m_frame->loader()->client()->willReleaseScriptContext(m_context, 0);
         m_context.Dispose();
         m_context.Clear();
 
@@ -318,6 +322,7 @@ bool V8DOMWindowShell::initContextIfNeeded()
         // Bail out if allocation of the first global objects fails.
         if (m_global.IsEmpty()) {
             disposeContextHandles();
+            s_contextFailureReason = 3;
             return false;
         }
 #ifndef NDEBUG
@@ -339,7 +344,7 @@ bool V8DOMWindowShell::initContextIfNeeded()
 
     setSecurityToken();
 
-    m_frame->loader()->client()->didCreateScriptContextForFrame();
+    m_frame->loader()->client()->didCreateScriptContext(m_context, 0);
 
     // FIXME: This is wrong. We should actually do this for the proper world once
     // we do isolated worlds the WebCore way.
@@ -353,14 +358,18 @@ v8::Persistent<v8::Context> V8DOMWindowShell::createNewContext(v8::Handle<v8::Ob
     v8::Persistent<v8::Context> result;
 
     // The activeDocumentLoader pointer could be 0 during frame shutdown.
-    if (!m_frame->loader()->activeDocumentLoader())
+    if (!m_frame->loader()->activeDocumentLoader()) {
+        s_contextFailureReason = 0;
         return result;
+    }
 
     // Create a new environment using an empty template for the shadow
     // object. Reuse the global object if one has been created earlier.
     v8::Persistent<v8::ObjectTemplate> globalTemplate = V8DOMWindow::GetShadowObjectTemplate();
-    if (globalTemplate.IsEmpty())
+    if (globalTemplate.IsEmpty()) {
+        s_contextFailureReason = 1;
         return result;
+    }
 
     // Used to avoid sleep calls in unload handlers.
     if (!V8Proxy::registeredExtensionWithV8(DateExtension::get()))
@@ -368,8 +377,8 @@ v8::Persistent<v8::Context> V8DOMWindowShell::createNewContext(v8::Handle<v8::Ob
 
 #if ENABLE(JAVASCRIPT_I18N_API)
     // Enables experimental i18n API in V8.
-    if (RuntimeEnabledFeatures::javaScriptI18NAPIEnabled() && !V8Proxy::registeredExtensionWithV8(v8::internal::I18NExtension::get()))
-        V8Proxy::registerExtension(v8::internal::I18NExtension::get());
+    if (RuntimeEnabledFeatures::javaScriptI18NAPIEnabled() && !V8Proxy::registeredExtensionWithV8(v8_i18n::Extension::get()))
+        V8Proxy::registerExtension(v8_i18n::Extension::get());
 #endif
 
     // Dynamically tell v8 about our extensions now.
@@ -387,6 +396,8 @@ v8::Persistent<v8::Context> V8DOMWindowShell::createNewContext(v8::Handle<v8::Ob
     v8::ExtensionConfiguration extensionConfiguration(index, extensionNames.get());
     result = v8::Context::New(&extensionConfiguration, globalTemplate, global);
 
+    if (result.IsEmpty())
+        s_contextFailureReason = 2;
     return result;
 }
 
@@ -406,8 +417,10 @@ bool V8DOMWindowShell::installDOMWindow(v8::Handle<v8::Context> context, DOMWind
     v8::Handle<v8::Function> windowConstructor = V8DOMWrapper::getConstructor(&V8DOMWindow::info, getHiddenObjectPrototype(context));
     v8::Local<v8::Object> jsWindow = SafeAllocation::newInstance(windowConstructor);
     // Bail out if allocation failed.
-    if (jsWindow.IsEmpty())
+    if (jsWindow.IsEmpty()) {
+        s_contextFailureReason = 7;
         return false;
+    }
 
     // Wrap the window.
     V8DOMWrapper::setDOMWrapper(jsWindow, &V8DOMWindow::info, window);
@@ -569,6 +582,24 @@ void V8DOMWindowShell::namedItemAdded(HTMLDocument* doc, const AtomicString& nam
 {
     initContextIfNeeded();
 
+    if (!isContextInitialized()) {
+#if PLATFORM(CHROMIUM)
+        // FIXME: Temporary diagnostics as to why V8 sometimes crashes with a null context below.
+        // See https://bugs.webkit.org/show_bug.cgi?id=68099.
+        PlatformSupport::histogramEnumeration("V8Bindings.nullContextState", 0, 3);
+        if (m_frame->settings() && !m_frame->settings()->isJavaScriptEnabled())
+            PlatformSupport::histogramEnumeration("V8Bindings.nullContextState", 1, 3);
+
+        if (!m_frame->script()->canExecuteScripts(NotAboutToExecuteScript))
+            PlatformSupport::histogramEnumeration("V8Bindings.nullContextState", 2, 3);
+
+        if (s_contextFailureReason >= 0 && s_contextFailureReason <= 7)
+            PlatformSupport::histogramEnumeration("V8Bindings.nullContextReason", s_contextFailureReason, 8);
+        s_contextFailureReason = -1;
+#endif
+        return;
+    }
+
     v8::HandleScope handleScope;
     v8::Context::Scope contextScope(m_context);
 
@@ -598,17 +629,23 @@ bool V8DOMWindowShell::installHiddenObjectPrototype(v8::Handle<v8::Context> cont
     v8::Handle<v8::String> prototypeString = v8::String::New("prototype");
     v8::Handle<v8::String> hiddenObjectPrototypeString = V8HiddenPropertyName::objectPrototype();
     // Bail out if allocation failed.
-    if (objectString.IsEmpty() || prototypeString.IsEmpty() || hiddenObjectPrototypeString.IsEmpty())
+    if (objectString.IsEmpty() || prototypeString.IsEmpty() || hiddenObjectPrototypeString.IsEmpty()) {
+        s_contextFailureReason = 4;
         return false;
+    }
 
     v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(context->Global()->Get(objectString));
     // Bail out if fetching failed.
-    if (object.IsEmpty())
+    if (object.IsEmpty()) {
+        s_contextFailureReason = 5;
         return false;
+    }
     v8::Handle<v8::Value> objectPrototype = object->Get(prototypeString);
     // Bail out if fetching failed.
-    if (objectPrototype.IsEmpty())
+    if (objectPrototype.IsEmpty()) {
+        s_contextFailureReason = 6;
         return false;
+    }
 
     context->Global()->SetHiddenValue(hiddenObjectPrototypeString, objectPrototype);
 

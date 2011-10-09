@@ -670,15 +670,18 @@ void DumpRenderTreeSupportQt::setEditingBehavior(QWebPage* page, const QString& 
 
 void DumpRenderTreeSupportQt::clearAllApplicationCaches()
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     WebCore::cacheStorage().empty();
     WebCore::cacheStorage().vacuumDatabaseFile();
-#endif
 }
 
 void DumpRenderTreeSupportQt::dumpFrameLoader(bool b)
 {
     FrameLoaderClientQt::dumpFrameLoaderCallbacks = b;
+}
+
+void DumpRenderTreeSupportQt::dumpProgressFinishedCallback(bool b)
+{
+    FrameLoaderClientQt::dumpProgressFinishedCallback = b;
 }
 
 void DumpRenderTreeSupportQt::dumpUserGestureInFrameLoader(bool b)
@@ -780,7 +783,8 @@ QString DumpRenderTreeSupportQt::viewportAsText(QWebPage* page, int deviceDPI, c
 void DumpRenderTreeSupportQt::scalePageBy(QWebFrame* frame, float scalefactor, const QPoint& origin)
 {
     WebCore::Frame* coreFrame = QWebFramePrivate::core(frame);
-    coreFrame->scalePage(scalefactor, origin);
+    if (Page* page = coreFrame->page())
+        page->setPageScaleFactor(scalefactor, origin);
 }
 
 void DumpRenderTreeSupportQt::activeMockDeviceOrientationClient(bool b)
@@ -1052,7 +1056,7 @@ static QStringList iterateContextMenu(QMenu* menu)
 QStringList DumpRenderTreeSupportQt::contextMenu(QWebPage* page)
 {
 #ifndef QT_NO_CONTEXTMENU
-    return iterateContextMenu(page->d->currentContextMenu);
+    return iterateContextMenu(page->d->currentContextMenu.data());
 #else
     return QStringList();
 #endif
@@ -1162,6 +1166,25 @@ void DumpRenderTreeSupportQt::injectInternalsObject(QWebFrame* frame)
     WebCoreTestSupport::injectInternalsObject(context);
 #elif USE(V8)
     WebCoreTestSupport::injectInternalsObject(V8Proxy::mainWorldContext(coreFrame));
+#endif
+}
+
+void DumpRenderTreeSupportQt::resetInternalsObject(QWebFrame* frame)
+{
+    WebCore::Frame* coreFrame = QWebFramePrivate::core(frame);
+#if USE(JSC)
+    JSC::JSLock lock(JSC::SilenceAssertionsOnly);
+
+    JSDOMWindow* window = toJSDOMWindow(coreFrame, mainThreadNormalWorld());
+    Q_ASSERT(window);
+
+    JSC::ExecState* exec = window->globalExec();
+    Q_ASSERT(exec);
+
+    JSContextRef context = toRef(exec);
+    WebCoreTestSupport::resetInternalsObject(context);
+#elif USE(V8)
+    WebCoreTestSupport::resetInternalsObject(V8Proxy::mainWorldContext(coreFrame));
 #endif
 }
 

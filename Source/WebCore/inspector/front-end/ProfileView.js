@@ -87,14 +87,16 @@ WebInspector.CPUProfileView = function(profile)
             return;
         self.profile.head = profile.head;
         self._assignParentsInProfile();
-      
+
         self.profileDataGridTree = self.bottomUpProfileDataGridTree;
         self.profileDataGridTree.sort(WebInspector.ProfileDataGridTree.propertyComparator("selfTime", false));
-     
+
         self.refresh();
-     
+
         self._updatePercentButton();
     }
+
+    this._linkifier = WebInspector.debuggerPresentationModel.createLinkifier();
 
     ProfilerAgent.getProfile(this.profile.typeId, this.profile.uid, profileCallback);
 }
@@ -164,19 +166,13 @@ WebInspector.CPUProfileView.prototype = {
         return this._bottomUpTree;
     },
 
-    show: function(parentElement)
-    {
-        WebInspector.View.prototype.show.call(this, parentElement);
-        this.dataGrid.updateWidths();
-    },
-
     hide: function()
     {
         WebInspector.View.prototype.hide.call(this);
         this._currentSearchResultIndex = -1;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this.dataGrid)
             this.dataGrid.updateWidths();
@@ -491,6 +487,7 @@ WebInspector.CPUProfileView.prototype = {
     {
         this.resetButton.visible = false;
         this.profileDataGridTree.restore();
+        this._linkifier.reset();
         this.refresh();
         this.refreshVisibleData();
     },

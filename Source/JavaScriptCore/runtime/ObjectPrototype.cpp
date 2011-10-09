@@ -44,7 +44,7 @@ static EncodedJSValue JSC_HOST_CALL objectProtoFuncToLocaleString(ExecState*);
 
 namespace JSC {
 
-const ClassInfo ObjectPrototype::s_info = { "Object", &JSNonFinalObject::s_info, 0, ExecState::objectPrototypeTable };
+const ClassInfo ObjectPrototype::s_info = { "Object", &JSNonFinalObject::s_info, 0, ExecState::objectPrototypeTable, CREATE_METHOD_TABLE(ObjectPrototype) };
 
 /* Source for ObjectPrototype.lut.h
 @begin objectPrototypeTable
@@ -63,22 +63,32 @@ const ClassInfo ObjectPrototype::s_info = { "Object", &JSNonFinalObject::s_info,
 
 ASSERT_CLASS_FITS_IN_CELL(ObjectPrototype);
 
-ObjectPrototype::ObjectPrototype(ExecState* exec, JSGlobalObject* globalObject, Structure* stucture)
+ObjectPrototype::ObjectPrototype(ExecState* exec, Structure* stucture)
     : JSNonFinalObject(exec->globalData(), stucture)
     , m_hasNoPropertiesWithUInt32Names(true)
 {
+}
+
+void ObjectPrototype::finishCreation(JSGlobalData& globalData, JSGlobalObject*)
+{
+    Base::finishCreation(globalData);
     ASSERT(inherits(&s_info));
-    putAnonymousValue(globalObject->globalData(), 0, globalObject);
 }
 
 void ObjectPrototype::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    JSNonFinalObject::put(exec, propertyName, value, slot);
+    put(this, exec, propertyName, value, slot);
+}
 
-    if (m_hasNoPropertiesWithUInt32Names) {
+void ObjectPrototype::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    ObjectPrototype* thisObject = static_cast<ObjectPrototype*>(cell);
+    JSNonFinalObject::put(cell, exec, propertyName, value, slot);
+
+    if (thisObject->m_hasNoPropertiesWithUInt32Names) {
         bool isUInt32;
         propertyName.toUInt32(isUInt32);
-        m_hasNoPropertiesWithUInt32Names = !isUInt32;
+        thisObject->m_hasNoPropertiesWithUInt32Names = !isUInt32;
     }
 }
 
@@ -134,34 +144,46 @@ EncodedJSValue JSC_HOST_CALL objectProtoFuncIsPrototypeOf(ExecState* exec)
 
 EncodedJSValue JSC_HOST_CALL objectProtoFuncDefineGetter(ExecState* exec)
 {
-    JSValue thisValue = exec->hostThisValue();
+    JSObject* thisObject = exec->hostThisValue().toObject(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
     CallData callData;
     if (getCallData(exec->argument(1), callData) == CallTypeNone)
         return throwVMError(exec, createSyntaxError(exec, "invalid getter usage"));
-    thisValue.toThisObject(exec)->defineGetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
+    thisObject->defineGetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
     return JSValue::encode(jsUndefined());
 }
 
 EncodedJSValue JSC_HOST_CALL objectProtoFuncDefineSetter(ExecState* exec)
 {
-    JSValue thisValue = exec->hostThisValue();
+    JSObject* thisObject = exec->hostThisValue().toObject(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
     CallData callData;
     if (getCallData(exec->argument(1), callData) == CallTypeNone)
         return throwVMError(exec, createSyntaxError(exec, "invalid setter usage"));
-    thisValue.toThisObject(exec)->defineSetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
+    thisObject->defineSetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
     return JSValue::encode(jsUndefined());
 }
 
 EncodedJSValue JSC_HOST_CALL objectProtoFuncLookupGetter(ExecState* exec)
 {
-    JSValue thisValue = exec->hostThisValue();
-    return JSValue::encode(thisValue.toThisObject(exec)->lookupGetter(exec, Identifier(exec, exec->argument(0).toString(exec))));
+    JSObject* thisObject = exec->hostThisValue().toObject(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
+    return JSValue::encode(thisObject->lookupGetter(exec, Identifier(exec, exec->argument(0).toString(exec))));
 }
 
 EncodedJSValue JSC_HOST_CALL objectProtoFuncLookupSetter(ExecState* exec)
 {
-    JSValue thisValue = exec->hostThisValue();
-    return JSValue::encode(thisValue.toThisObject(exec)->lookupSetter(exec, Identifier(exec, exec->argument(0).toString(exec))));
+    JSObject* thisObject = exec->hostThisValue().toObject(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
+    return JSValue::encode(thisObject->lookupSetter(exec, Identifier(exec, exec->argument(0).toString(exec))));
 }
 
 EncodedJSValue JSC_HOST_CALL objectProtoFuncPropertyIsEnumerable(ExecState* exec)

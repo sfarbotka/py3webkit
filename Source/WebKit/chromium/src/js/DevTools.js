@@ -56,6 +56,7 @@ var context = {};  // Used by WebCore's inspector routines.
     Preferences.canClearCacheAndCookies = true;
     Preferences.canDisableCache = true;
     Preferences.showNetworkPanelInitiatorColumn = true;
+    Preferences.haveExtensions = true;
 })();
 
 // Recognize WebP as a valid image mime type.
@@ -99,16 +100,30 @@ WebInspector.UIString = function(string)
 /** Pending WebKit upstream by apavlov). Fixes iframe vs drag problem. */
 (function()
 {
+    var glassPane = null;
+
+    function showGlassPane(element)
+    {
+        hideGlassPane();
+        glassPane = document.createElement("div");
+        glassPane.style.cssText = "position:absolute;top:0;bottom:0;left:0;right:0;opacity:0;z-index:1";
+        glassPane.id = "glass-pane-for-drag";
+        element.ownerDocument.body.appendChild(glassPane);
+    }
+
+    function hideGlassPane()
+    {
+        if (glassPane) {
+            glassPane.parentElement.removeChild(glassPane);
+            glassPane = null;
+        }
+    }
+
     var originalDragStart = WebInspector.elementDragStart;
     WebInspector.elementDragStart = function(element)
     {
-        if (element) {
-            var glassPane = document.createElement("div");
-            glassPane.style.cssText = "position:absolute;width:100%;height:100%;opacity:0;z-index:1";
-            glassPane.id = "glass-pane-for-drag";
-            element.parentElement.appendChild(glassPane);
-        }
-
+        if (element)
+            showGlassPane(element);
         originalDragStart.apply(this, arguments);
     };
 
@@ -116,13 +131,9 @@ WebInspector.UIString = function(string)
     WebInspector.elementDragEnd = function()
     {
         originalDragEnd.apply(this, arguments);
-
-        var glassPane = document.getElementById("glass-pane-for-drag");
-        if (glassPane)
-            glassPane.parentElement.removeChild(glassPane);
+        hideGlassPane();
     };
 })();
-
 
 
 /////////////////////////////
@@ -168,8 +179,12 @@ WebInspector.platformExtensionAPI = function(tabId)
     chrome = window.chrome || {};
     chrome.experimental = chrome.experimental || {};
     chrome.experimental.devtools = chrome.experimental.devtools || {};
-    for (var property in webInspector)
-        chrome.experimental.devtools[property] = webInspector[property];
+
+    var properties = Object.getOwnPropertyNames(webInspector);
+    for (var i = 0; i < properties.length; ++i) {
+        var descriptor = Object.getOwnPropertyDescriptor(webInspector, properties[i]);
+        Object.defineProperty(chrome.experimental.devtools, properties[i], descriptor);
+    }
 }
 
 WebInspector.buildPlatformExtensionAPI = function()

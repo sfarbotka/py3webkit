@@ -377,7 +377,7 @@ static void decidePolicyForResponse(WKPageRef page, WKFrameRef frame, WKURLRespo
 
 // MARK: UI Client Callbacks
 
-static WKPageRef createNewPage(WKPageRef page, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton button, const void* clientInfo)
+static WKPageRef createNewPage(WKPageRef page, WKURLRequestRef request, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton button, const void* clientInfo)
 {
     LOG(@"createNewPage");
     BrowserWindowController *controller = [[BrowserWindowController alloc] initWithContext:WKPageGetContext(page)];
@@ -490,7 +490,7 @@ static void setStatusText(WKPageRef page, WKStringRef text, const void* clientIn
     LOG(@"setStatusText");
 }
 
-static void mouseDidMoveOverElement(WKPageRef page, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo)
+static void mouseDidMoveOverElement(WKPageRef page, WKHitTestResultRef hitTestResult, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo)
 {
     LOG(@"mouseDidMoveOverElement");
 }
@@ -616,7 +616,7 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
     WKPageUIClient uiClient = {
         kWKPageUIClientCurrentVersion,
         self,       /* clientInfo */
-        createNewPage,
+        0,          /* createNewPage_deprecatedForUseWithV0 */
         showPage,
         closePage,
         0,          /* takeFocus */
@@ -626,7 +626,7 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
         runJavaScriptConfirm,
         runJavaScriptPrompt,
         setStatusText,
-        mouseDidMoveOverElement,
+        0,          /* mouseDidMoveOverElement_deprecatedForUseWithV0 */
         0,          /* missingPluginButtonClicked */
         0,          /* didNotHandleKeyEvent */
         0,          /* didNotHandleWheelEvent */
@@ -655,6 +655,8 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
         0, // didCompleteRubberBandForMainFrame
         0, // saveDataToFileInDownloadsFolder
         0, // shouldInterruptJavaScript
+        createNewPage,
+        mouseDidMoveOverElement,
     };
     WKPageSetPageUIClient(_webView.pageRef, &uiClient);
 }
@@ -683,6 +685,10 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
         emptyURL = WKURLCreateWithUTF8CString("");
 
     WKURLRef url = WKFrameCopyProvisionalURL(frame);
+
+    if (!url)
+        return;
+
     if (WKURLIsEqual(url, emptyURL)) {
         WKRelease(url);
         return;

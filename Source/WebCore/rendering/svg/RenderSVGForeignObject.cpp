@@ -21,10 +21,11 @@
 
 #include "config.h"
 
-#if ENABLE(SVG) && ENABLE(SVG_FOREIGN_OBJECT)
+#if ENABLE(SVG)
 #include "RenderSVGForeignObject.h"
 
 #include "GraphicsContext.h"
+#include "LayoutRepainter.h"
 #include "RenderSVGResource.h"
 #include "RenderView.h"
 #include "SVGForeignObjectElement.h"
@@ -44,7 +45,7 @@ RenderSVGForeignObject::~RenderSVGForeignObject()
 {
 }
 
-void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const IntPoint&)
+void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     if (paintInfo.context->paintingDisabled())
         return;
@@ -66,12 +67,12 @@ void RenderSVGForeignObject::paint(PaintInfo& paintInfo, const IntPoint&)
         childPaintInfo.context->endTransparencyLayer();
 }
 
-IntRect RenderSVGForeignObject::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderSVGForeignObject::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     return SVGRenderSupport::clippedOverflowRectForRepaint(this, repaintContainer);
 }
 
-void RenderSVGForeignObject::computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect& repaintRect, bool fixed) const
+void RenderSVGForeignObject::computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect& repaintRect, bool fixed) const
 {
     SVGRenderSupport::computeRectForRepaint(this, repaintContainer, repaintRect, fixed);
 }
@@ -159,12 +160,9 @@ bool RenderSVGForeignObject::nodeAtPoint(const HitTestRequest&, HitTestResult&, 
     return false;
 }
 
-void RenderSVGForeignObject::mapLocalToContainer(RenderBoxModelObject* repaintContainer, bool fixed, bool useTransforms, TransformState& transformState, bool* wasFixed) const
+void RenderSVGForeignObject::mapLocalToContainer(RenderBoxModelObject* repaintContainer, bool /* fixed */, bool /* useTransforms */, TransformState& transformState, bool* wasFixed) const
 {
-    // When crawling up the hierachy starting from foreignObject child content, useTransforms may not be set to true.
-    if (!useTransforms)
-        useTransforms = true;
-    SVGRenderSupport::mapLocalToContainer(this, repaintContainer, fixed, useTransforms, transformState, wasFixed);
+    SVGRenderSupport::mapLocalToContainer(this, repaintContainer, transformState, wasFixed);
 }
 
 }

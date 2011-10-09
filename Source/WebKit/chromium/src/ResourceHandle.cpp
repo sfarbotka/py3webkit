@@ -31,13 +31,14 @@
 #include "config.h"
 #include "ResourceHandle.h"
 
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
 #include "ResourceHandleClient.h"
+#include "ResourceHandleInternal.h"
 #include "ResourceRequest.h"
 #include "SharedBuffer.h"
 
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebURLError.h"
 #include "WebURLLoader.h"
 #include "WebURLLoaderClient.h"
@@ -51,54 +52,12 @@ using namespace WebKit;
 namespace WebCore {
 
 // ResourceHandleInternal -----------------------------------------------------
-
-class ResourceHandleInternal : public WebURLLoaderClient {
-public:
-    ResourceHandleInternal(const ResourceRequest& request, ResourceHandleClient* client)
-        : m_request(request)
-        , m_owner(0)
-        , m_client(client)
-        , m_state(ConnectionStateNew)
-    {
-    }
-
-    virtual ~ResourceHandleInternal() { }
-
-    void start();
-    void cancel();
-    void setDefersLoading(bool);
-    bool allowStoredCredentials() const;
-
-    // WebURLLoaderClient methods:
-    virtual void willSendRequest(WebURLLoader*, WebURLRequest&, const WebURLResponse&);
-    virtual void didSendData(
-        WebURLLoader*, unsigned long long bytesSent, unsigned long long totalBytesToBeSent);
-    virtual void didReceiveResponse(WebURLLoader*, const WebURLResponse&);
-    virtual void didReceiveData(WebURLLoader*, const char* data, int dataLength, int encodedDataLength);
-
-    virtual void didReceiveCachedMetadata(WebURLLoader*, const char* data, int dataLength);
-    virtual void didFinishLoading(WebURLLoader*, double finishTime);
-    virtual void didFail(WebURLLoader*, const WebURLError&);
-
-    enum ConnectionState {
-        ConnectionStateNew,
-        ConnectionStateStarted,
-        ConnectionStateReceivedResponse,
-        ConnectionStateReceivingData,
-        ConnectionStateFinishedLoading,
-        ConnectionStateCanceled,
-        ConnectionStateFailed,
-    };
-
-    ResourceRequest m_request;
-    ResourceHandle* m_owner;
-    ResourceHandleClient* m_client;
-    OwnPtr<WebURLLoader> m_loader;
-
-    // Used for sanity checking to make sure we don't experience illegal state
-    // transitions.
-    ConnectionState m_state;
-};
+ResourceHandleInternal::ResourceHandleInternal(const ResourceRequest& request, ResourceHandleClient* client)
+    : m_request(request)
+    , m_owner(0)
+    , m_client(client)
+    , m_state(ConnectionStateNew)
+{ }
 
 void ResourceHandleInternal::start()
 {
@@ -106,7 +65,7 @@ void ResourceHandleInternal::start()
         CRASH();
     m_state = ConnectionStateStarted;
 
-    m_loader = adoptPtr(webKitClient()->createURLLoader());
+    m_loader = adoptPtr(webKitPlatformSupport()->createURLLoader());
     ASSERT(m_loader.get());
 
     WrappedResourceRequest wrappedRequest(m_request);
@@ -162,6 +121,15 @@ void ResourceHandleInternal::didReceiveResponse(WebURLLoader*, const WebURLRespo
     m_client->didReceiveResponse(m_owner, response.toResourceResponse());
 }
 
+void ResourceHandleInternal::didDownloadData(WebURLLoader*, int dataLength)
+{
+    ASSERT(m_client);
+    if (m_state != ConnectionStateReceivedResponse)
+        CRASH();
+
+    m_client->didDownloadData(m_owner, dataLength);
+}
+
 void ResourceHandleInternal::didReceiveData(WebURLLoader*, const char* data, int dataLength, int encodedDataLength)
 {
     ASSERT(m_client);
@@ -197,6 +165,11 @@ void ResourceHandleInternal::didFail(WebURLLoader*, const WebURLError& error)
     m_client->didFail(m_owner, error);
 }
 
+ResourceHandleInternal* ResourceHandleInternal::FromResourceHandle(ResourceHandle* handle)
+{
+    return handle->d.get();
+}
+
 // ResourceHandle -------------------------------------------------------------
 
 ResourceHandle::ResourceHandle(const ResourceRequest& request,
@@ -205,7 +178,7 @@ ResourceHandle::ResourceHandle(const ResourceRequest& request,
                                bool shouldContentSniff)
     : d(adoptPtr(new ResourceHandleInternal(request, client)))
 {
-    d->m_owner = this;
+    d->setOwner(this);
 
     // FIXME: Figure out what to do with the bool params.
 }
@@ -227,17 +200,17 @@ PassRefPtr<ResourceHandle> ResourceHandle::create(NetworkingContext* context,
 
 ResourceRequest& ResourceHandle::firstRequest()
 {
-    return d->m_request;
+    return d->request();
 }
 
 ResourceHandleClient* ResourceHandle::client() const
 {
-    return d->m_client;
+    return d->client();
 }
 
 void ResourceHandle::setClient(ResourceHandleClient* client)
 {
-    d->m_client = client;
+    d->setClient(client);
 }
 
 void ResourceHandle::setDefersLoading(bool value)
@@ -267,23 +240,12 @@ void ResourceHandle::cancel()
 
 ResourceHandle::~ResourceHandle()
 {
-    d->m_owner = 0;
-}
-
-PassRefPtr<SharedBuffer> ResourceHandle::bufferedData()
-{
-    return 0;
+    d->setOwner(0);
 }
 
 bool ResourceHandle::loadsBlocked()
 {
     return false;  // This seems to be related to sync XMLHttpRequest...
-}
-
-// static
-bool ResourceHandle::supportsBufferedData()
-{
-    return false;  // The loader will buffer manually if it needs to.
 }
 
 // static
@@ -294,7 +256,7 @@ void ResourceHandle::loadResourceSynchronously(NetworkingContext* context,
                                                ResourceResponse& response,
                                                Vector<char>& data)
 {
-    OwnPtr<WebURLLoader> loader = adoptPtr(webKitClient()->createURLLoader());
+    OwnPtr<WebURLLoader> loader = adoptPtr(webKitPlatformSupport()->createURLLoader());
     ASSERT(loader.get());
 
     WrappedResourceRequest requestIn(request);
@@ -329,7 +291,7 @@ bool ResourceHandle::willLoadFromCache(ResourceRequest& request, Frame*)
 // static
 void ResourceHandle::cacheMetadata(const ResourceResponse& response, const Vector<char>& data)
 {
-    PlatformBridge::cacheMetadata(response.url(), response.responseTime(), data);
+    PlatformSupport::cacheMetadata(response.url(), response.responseTime(), data);
 }
 
 } // namespace WebCore

@@ -25,6 +25,7 @@
 #include "config.h"
 #include "RenderDeprecatedFlexibleBox.h"
 
+#include "LayoutRepainter.h"
 #include "RenderLayer.h"
 #include "RenderView.h"
 #include <wtf/StdLibExtras.h>
@@ -38,7 +39,7 @@ class FlexBoxIterator {
 public:
     FlexBoxIterator(RenderDeprecatedFlexibleBox* parent)
         : m_box(parent)
-        , m_lastOrdinal(1)
+        , m_largestOrdinal(1)
     {
         if (m_box->style()->boxOrient() == HORIZONTAL && !m_box->style()->isLeftToRightDirection())
             m_forward = m_box->style()->boxDirection() != BNORMAL;
@@ -48,8 +49,8 @@ public:
             // No choice, since we're going backwards, we have to find out the highest ordinal up front.
             RenderBox* child = m_box->firstChildBox();
             while (child) {
-                if (child->style()->boxOrdinalGroup() > m_lastOrdinal)
-                    m_lastOrdinal = child->style()->boxOrdinalGroup();
+                if (child->style()->boxOrdinalGroup() > m_largestOrdinal)
+                    m_largestOrdinal = child->style()->boxOrdinalGroup();
                 child = child->nextSiblingBox();
             }
         }
@@ -60,7 +61,7 @@ public:
     void reset()
     {
         m_currentChild = 0;
-        m_currentOrdinal = m_forward ? 0 : m_lastOrdinal + 1;
+        m_ordinalIteration = -1;
     }
 
     RenderBox* first()
@@ -73,33 +74,48 @@ public:
     {
         do {
             if (!m_currentChild) {
-                if (m_forward) {
-                    ++m_currentOrdinal;
-                    if (m_currentOrdinal > m_lastOrdinal)
+                ++m_ordinalIteration;
+
+                if (!m_ordinalIteration)
+                    m_currentOrdinal = m_forward ? 1 : m_largestOrdinal;
+                else {
+                    if (m_ordinalIteration >= m_ordinalValues.size() + 1)
                         return 0;
-                    m_currentChild = m_box->firstChildBox();
-                } else {
-                    --m_currentOrdinal;
-                    if (!m_currentOrdinal)
-                        return 0;
-                    m_currentChild = m_box->lastChildBox();
+
+                    // Only copy+sort the values once per layout even if the iterator is reset.
+                    if (static_cast<size_t>(m_ordinalValues.size()) != m_sortedOrdinalValues.size()) {
+                        copyToVector(m_ordinalValues, m_sortedOrdinalValues);
+                        sort(m_sortedOrdinalValues.begin(), m_sortedOrdinalValues.end());
+                    }
+                    m_currentOrdinal = m_forward ? m_sortedOrdinalValues[m_ordinalIteration - 1] : m_sortedOrdinalValues[m_sortedOrdinalValues.size() - m_ordinalIteration];
                 }
-            }
-            else
+
+                m_currentChild = m_forward ? m_box->firstChildBox() : m_box->lastChildBox();
+            } else
                 m_currentChild = m_forward ? m_currentChild->nextSiblingBox() : m_currentChild->previousSiblingBox();
-            if (m_currentChild && m_currentChild->style()->boxOrdinalGroup() > m_lastOrdinal)
-                m_lastOrdinal = m_currentChild->style()->boxOrdinalGroup();
+
+            if (m_currentChild && notFirstOrdinalValue())
+                m_ordinalValues.add(m_currentChild->style()->boxOrdinalGroup());
         } while (!m_currentChild || (!m_currentChild->isAnonymous()
                  && (m_currentChild->style()->boxOrdinalGroup() != m_currentOrdinal || m_currentChild->style()->visibility() == COLLAPSE)));
         return m_currentChild;
     }
 
 private:
+    bool notFirstOrdinalValue()
+    {
+        unsigned int firstOrdinalValue = m_forward ? 1 : m_largestOrdinal;
+        return m_currentOrdinal == firstOrdinalValue && m_currentChild->style()->boxOrdinalGroup() != firstOrdinalValue;
+    }
+
     RenderDeprecatedFlexibleBox* m_box;
     RenderBox* m_currentChild;
     bool m_forward;
     unsigned int m_currentOrdinal;
-    unsigned int m_lastOrdinal;
+    unsigned int m_largestOrdinal;
+    HashSet<unsigned int> m_ordinalValues;
+    Vector<unsigned int> m_sortedOrdinalValues;
+    int m_ordinalIteration;
 };
 
 RenderDeprecatedFlexibleBox::RenderDeprecatedFlexibleBox(Node* node)
@@ -186,7 +202,7 @@ void RenderDeprecatedFlexibleBox::computePreferredLogicalWidths()
         m_minPreferredLogicalWidth = max(m_minPreferredLogicalWidth, computeContentBoxLogicalWidth(style()->minWidth().value()));
     }
 
-    if (style()->maxWidth().isFixed() && style()->maxWidth().value() != undefinedLength) {
+    if (style()->maxWidth().isFixed()) {
         m_maxPreferredLogicalWidth = min(m_maxPreferredLogicalWidth, computeContentBoxLogicalWidth(style()->maxWidth().value()));
         m_minPreferredLogicalWidth = min(m_minPreferredLogicalWidth, computeContentBoxLogicalWidth(style()->maxWidth().value()));
     }
@@ -500,7 +516,7 @@ void RenderDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren)
                         if (allowedChildFlex(child, expanding, i)) {
                             LayoutUnit spaceAdd = static_cast<LayoutUnit>(spaceAvailableThisPass * (child->style()->boxFlex() / totalFlex));
                             if (spaceAdd) {
-                                child->setOverrideSize(LayoutSize(child->overrideWidth() + spaceAdd, 0));
+                                child->setOverrideWidth(child->overrideWidth() + spaceAdd);
                                 m_flexingChildren = true;
                                 relayoutChildren = true;
                             }
@@ -517,7 +533,7 @@ void RenderDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren)
                         LayoutUnit spaceAdd = groupRemainingSpace > 0 ? 1 : -1;
                         for (RenderBox* child = iterator.first(); child && groupRemainingSpace; child = iterator.next()) {
                             if (allowedChildFlex(child, expanding, i)) {
-                                child->setOverrideSize(LayoutSize(child->overrideWidth() + spaceAdd, 0));
+                                child->setOverrideWidth(child->overrideWidth() + spaceAdd);
                                 m_flexingChildren = true;
                                 relayoutChildren = true;
                                 remainingSpace -= spaceAdd;
@@ -746,7 +762,7 @@ void RenderDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren)
                         if (allowedChildFlex(child, expanding, i)) {
                             LayoutUnit spaceAdd = static_cast<LayoutUnit>(spaceAvailableThisPass * (child->style()->boxFlex() / totalFlex));
                             if (spaceAdd) {
-                                child->setOverrideSize(LayoutSize(0, child->overrideHeight() + spaceAdd));
+                                child->setOverrideHeight(child->overrideHeight() + spaceAdd);
                                 m_flexingChildren = true;
                                 relayoutChildren = true;
                             }
@@ -763,7 +779,7 @@ void RenderDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren)
                         LayoutUnit spaceAdd = groupRemainingSpace > 0 ? 1 : -1;
                         for (RenderBox* child = iterator.first(); child && groupRemainingSpace; child = iterator.next()) {
                             if (allowedChildFlex(child, expanding, i)) {
-                                child->setOverrideSize(LayoutSize(0, child->overrideHeight() + spaceAdd));
+                                child->setOverrideHeight(child->overrideHeight() + spaceAdd);
                                 m_flexingChildren = true;
                                 relayoutChildren = true;
                                 remainingSpace -= spaceAdd;
@@ -877,7 +893,7 @@ void RenderDeprecatedFlexibleBox::applyLineClamp(FlexBoxIterator& iterator, bool
             continue;
 
         child->setChildNeedsLayout(true, false);
-        child->setOverrideSize(LayoutSize(0, newHeight));
+        child->setOverrideHeight(newHeight);
         m_flexingChildren = true;
         child->layoutIfNeeded();
         m_flexingChildren = false;

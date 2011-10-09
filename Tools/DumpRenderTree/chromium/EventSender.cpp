@@ -574,6 +574,10 @@ void EventSender::keyDown(const CppArgumentList& arguments, CppVariant* result)
     eventDown.type = WebInputEvent::RawKeyDown;
     eventDown.modifiers = 0;
     eventDown.windowsKeyCode = code;
+#if OS(LINUX)
+    eventDown.nativeKeyCode = webkit_support::NativeKeyCodeForWindowsKeyCode(code, needsShiftKeyModifier);
+#endif
+
     if (generateChar) {
         eventDown.text[0] = text;
         eventDown.unmodifiedText[0] = text;
@@ -944,16 +948,16 @@ void EventSender::cancelTouchPoint(const CppArgumentList& arguments, CppVariant*
 
 void EventSender::sendCurrentTouchEvent(const WebInputEvent::Type type)
 {
-    ASSERT(static_cast<unsigned>(WebTouchEvent::touchPointsLengthCap) > touchPoints.size());
+    ASSERT(static_cast<unsigned>(WebTouchEvent::touchesLengthCap) > touchPoints.size());
     webview()->layout();
 
     WebTouchEvent touchEvent;
     touchEvent.type = type;
     touchEvent.modifiers = touchModifiers;
     touchEvent.timeStampSeconds = getCurrentEventTimeSec();
-    touchEvent.touchPointsLength = touchPoints.size();
+    touchEvent.touchesLength = touchPoints.size();
     for (unsigned i = 0; i < touchPoints.size(); ++i)
-        touchEvent.touchPoints[i] = touchPoints[i];
+        touchEvent.touches[i] = touchPoints[i];
     webview()->handleInputEvent(touchEvent);
 
     for (unsigned i = 0; i < touchPoints.size(); ++i) {

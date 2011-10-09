@@ -37,6 +37,7 @@ use English; # for $POSTMATCH, etc.
 use File::Basename;
 use File::Spec;
 use POSIX;
+use Term::ANSIColor qw(colored);
 
 BEGIN {
     use Exporter   ();
@@ -72,6 +73,7 @@ BEGIN {
         &parseFirstEOL
         &parsePatch
         &pathRelativeToSVNRepositoryRootForPath
+        &possiblyColored
         &prepareParsedPatch
         &removeEOL
         &runPatchCommand
@@ -408,6 +410,17 @@ sub normalizePath($)
     my ($path) = @_;
     $path =~ s/\\/\//g;
     return $path;
+}
+
+sub possiblyColored($$)
+{
+    my ($colors, $string) = @_;
+
+    if (-t STDOUT) {
+        return colored([$colors], $string);
+    } else {
+        return $string;
+    }
 }
 
 sub adjustPathForRecentRenamings($)
@@ -1696,7 +1709,7 @@ sub mergeChangeLogs($$$)
         rename($fileMine, "$fileMine.save");
         rename($fileOlder, "$fileOlder.save");
     } else {
-        open(DIFF, "-|", qw(diff -u -a --binary), $fileOlder, $fileMine) or die $!;
+        open(DIFF, "diff -u -a --binary \"$fileOlder\" \"$fileMine\" |") or die $!;
         $patch = <DIFF>;
         close(DIFF);
     }
@@ -1704,7 +1717,7 @@ sub mergeChangeLogs($$$)
     unlink("${fileNewer}.orig");
     unlink("${fileNewer}.rej");
 
-    open(PATCH, "| patch --force --fuzz=3 --binary $fileNewer > " . File::Spec->devnull()) or die $!;
+    open(PATCH, "| patch --force --fuzz=3 --binary \"$fileNewer\" > " . File::Spec->devnull()) or die $!;
     if ($traditionalReject) {
         print PATCH $patch;
     } else {

@@ -35,6 +35,7 @@
 #include "FontPlatformData.h"
 #include "FontSelector.h"
 #include "GlyphPageTreeNode.h"
+#include "WebKitFontFamilyNames.h"
 #include <wtf/HashMap.h>
 #include <wtf/ListHashSet.h>
 #include <wtf/StdLibExtras.h>
@@ -309,6 +310,11 @@ SimpleFontData* FontCache::getCachedFontData(const FontPlatformData* platformDat
     return result.get()->second.first;
 }
 
+SimpleFontData* FontCache::getNonRetainedLastResortFallbackFont(const FontDescription& fontDescription)
+{
+    return getLastResortFallbackFont(fontDescription, DoNotRetain);
+}
+
 void FontCache::releaseFontData(const SimpleFontData* fontData)
 {
     ASSERT(gFontDataCache);
@@ -428,7 +434,7 @@ const FontData* FontCache::getFontData(const Font& font, int& familyIndex, FontS
 
         if (fontSelector) {
             // Try the user's preferred standard font.
-            if (FontData* data = fontSelector->getFontData(font.fontDescription(), "-webkit-standard"))
+            if (FontData* data = fontSelector->getFontData(font.fontDescription(), standardFamily))
                 return data;
         }
 
@@ -457,9 +463,9 @@ void FontCache::removeClient(FontSelector* client)
     gClients->remove(client);
 }
 
-static unsigned gGeneration = 0;
+static unsigned short gGeneration = 0;
 
-unsigned FontCache::generation()
+unsigned short FontCache::generation()
 {
     return gGeneration;
 }

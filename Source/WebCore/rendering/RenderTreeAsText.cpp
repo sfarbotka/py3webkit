@@ -197,7 +197,7 @@ static bool isEmptyOrUnstyledAppleStyleSpan(const Node* node)
 
 String quoteAndEscapeNonPrintables(const String& s)
 {
-    Vector<UChar> result;
+    StringBuilder result;
     result.append('"');
     for (unsigned i = 0; i != s.length(); ++i) {
         UChar c = s[i];
@@ -222,7 +222,7 @@ String quoteAndEscapeNonPrintables(const String& s)
         }
     }
     result.append('"');
-    return String::adopt(result);
+    return result.toString();
 }
 
 void RenderTreeAsText::writeRenderObject(TextStream& ts, const RenderObject& o, RenderAsTextBehavior behavior)
@@ -246,7 +246,8 @@ void RenderTreeAsText::writeRenderObject(TextStream& ts, const RenderObject& o, 
         }
     }
     
-    bool adjustForTableCells = o.containingBlock()->isTableCell();
+    RenderBlock* cb = o.containingBlock();
+    bool adjustForTableCells = cb ? cb->isTableCell() : false;
 
     IntRect r;
     if (o.isText()) {
@@ -647,6 +648,51 @@ static void write(TextStream& ts, RenderLayer& l,
         write(ts, *l.renderer(), indent + 1, behavior);
 }
 
+static void writeRenderFlowThreads(TextStream& ts, RenderView* renderView, const RenderLayer* rootLayer,
+                        const IntRect& paintRect, int indent, RenderAsTextBehavior behavior)
+{
+    const RenderFlowThreadList* list = renderView->renderFlowThreadList();
+    if (!list || list->isEmpty())
+        return;
+
+    writeIndent(ts, indent);
+    ts << "Flow Threads\n";
+
+    for (RenderFlowThreadList::const_iterator iter = list->begin(); iter != list->end(); ++iter) {
+        const RenderFlowThread* renderFlowThread = *iter;
+
+        writeIndent(ts, indent + 1);
+        ts << "Thread with flow-name '" << renderFlowThread->flowThread() << "'\n";
+
+        RenderLayer* layer = renderFlowThread->layer();
+        writeLayers(ts, rootLayer, layer, paintRect, indent + 2, behavior);
+
+        // Display the render regions attached to this flow thread
+        const RenderRegionList& flowThreadRegionList = renderFlowThread->renderRegionList();
+        if (!flowThreadRegionList.isEmpty()) {
+            writeIndent(ts, indent + 1);
+            ts << "Regions for flow '"<< renderFlowThread->flowThread() << "'\n";
+            for (RenderRegionList::const_iterator itRR = flowThreadRegionList.begin(); itRR != flowThreadRegionList.end(); ++itRR) {
+                RenderRegion* renderRegion = *itRR;
+                writeIndent(ts, indent + 2);
+                ts << "RenderRegion";
+                if (renderRegion->node()) {
+                    String tagName = getTagName(renderRegion->node());
+                    if (!tagName.isEmpty())
+                        ts << " {" << tagName << "}";
+                    if (renderRegion->node()->isElementNode() && renderRegion->node()->hasID()) {
+                        Element* element = static_cast<Element*>(renderRegion->node());
+                        ts << " #" << element->idForStyleResolution();
+                    }
+                }
+                if (!renderRegion->isValid())
+                    ts << " invalid";
+                ts << " with index " << renderRegion->style()->regionIndex() << "\n";
+            }
+        }
+    }
+}
+
 static void writeLayers(TextStream& ts, const RenderLayer* rootLayer, RenderLayer* l,
                         const IntRect& paintRect, int indent, RenderAsTextBehavior behavior)
 {
@@ -659,18 +705,19 @@ static void writeLayers(TextStream& ts, const RenderLayer* rootLayer, RenderLaye
     }
     
     // Calculate the clip rects we should use.
-    IntRect layerBounds, damageRect, clipRectToApply, outlineRect;
-    l->calculateRects(rootLayer, paintDirtyRect, layerBounds, damageRect, clipRectToApply, outlineRect, true);
+    IntRect layerBounds;
+    ClipRect damageRect, clipRectToApply, outlineRect;
+    l->calculateRects(rootLayer, 0, paintDirtyRect, layerBounds, damageRect, clipRectToApply, outlineRect, true);
 
     // Ensure our lists are up-to-date.
     l->updateZOrderLists();
     l->updateNormalFlowList();
 
-    bool shouldPaint = (behavior & RenderAsTextShowAllLayers) ? true : l->intersectsDamageRect(layerBounds, damageRect, rootLayer);
+    bool shouldPaint = (behavior & RenderAsTextShowAllLayers) ? true : l->intersectsDamageRect(layerBounds, damageRect.rect(), rootLayer);
     Vector<RenderLayer*>* negList = l->negZOrderList();
     bool paintsBackgroundSeparately = negList && negList->size() > 0;
     if (shouldPaint && paintsBackgroundSeparately)
-        write(ts, *l, layerBounds, damageRect, clipRectToApply, outlineRect, LayerPaintPhaseBackground, indent, behavior);
+        write(ts, *l, layerBounds, damageRect.rect(), clipRectToApply.rect(), outlineRect.rect(), LayerPaintPhaseBackground, indent, behavior);
 
     if (negList) {
         int currIndent = indent;
@@ -684,7 +731,7 @@ static void writeLayers(TextStream& ts, const RenderLayer* rootLayer, RenderLaye
     }
 
     if (shouldPaint)
-        write(ts, *l, layerBounds, damageRect, clipRectToApply, outlineRect, paintsBackgroundSeparately ? LayerPaintPhaseForeground : LayerPaintPhaseAll, indent, behavior);
+        write(ts, *l, layerBounds, damageRect.rect(), clipRectToApply.rect(), outlineRect.rect(), paintsBackgroundSeparately ? LayerPaintPhaseForeground : LayerPaintPhaseAll, indent, behavior);
 
     if (Vector<RenderLayer*>* normalFlowList = l->normalFlowList()) {
         int currIndent = indent;
@@ -710,42 +757,9 @@ static void writeLayers(TextStream& ts, const RenderLayer* rootLayer, RenderLaye
     
     // Altough the RenderFlowThread requires a layer, it is not collected by its parent,
     // so we have to treat it as a special case.
-    bool firstRenderFlowThread = true;
-    for (RenderObject* child = l->renderer()->firstChild(); child; child = child->nextSibling()) {
-        if (child->isRenderFlowThread()) {
-            if (firstRenderFlowThread) {
-                firstRenderFlowThread = false;
-                writeIndent(ts, indent);
-                ts << "Flow Threads\n";
-            }
-            const RenderFlowThread* renderFlowThread = toRenderFlowThread(child);
-            writeIndent(ts, indent + 1);
-            ts << "Thread with flow-name '" << renderFlowThread->flowThread() << "'\n";
-            RenderLayer* layer = renderFlowThread->layer();
-            writeLayers(ts, rootLayer, layer, paintDirtyRect, indent + 2, behavior);
-
-            // Display the render regions attached to this flow thread
-            const RenderRegionList& flowThreadRegionList = renderFlowThread->renderRegionList();
-            if (!flowThreadRegionList.isEmpty()) {
-                writeIndent(ts, indent + 1);
-                ts << "Regions for flow '"<< renderFlowThread->flowThread() << "'\n";
-                for (RenderRegionList::const_iterator itRR = flowThreadRegionList.begin(); itRR != flowThreadRegionList.end(); ++itRR) {
-                    RenderRegion* renderRegion = *itRR;
-                    writeIndent(ts, indent + 2);
-                    ts << "RenderRegion";
-                    if (renderRegion->node()) {
-                        String tagName = getTagName(renderRegion->node());
-                        if (!tagName.isEmpty())
-                            ts << " {" << tagName << "}";
-                        if (renderRegion->node()->isElementNode() && renderRegion->node()->hasID()) {
-                            Element* element = static_cast<Element*>(renderRegion->node());
-                            ts << " #" << element->idForStyleResolution();
-                        }
-                    }
-                    ts << " with index " << renderRegion->style()->regionIndex() << "\n";
-                }
-            }
-        }
+    if (l->renderer()->isRenderView()) {
+        RenderView* renderView = toRenderView(l->renderer());
+        writeRenderFlowThreads(ts, renderView, rootLayer, paintDirtyRect, indent, behavior);
     }
 }
 

@@ -58,6 +58,9 @@ public:
     NPError popUpContextMenu(NPMenu*);
 
     void setPluginReturnsNonretainedLayer(bool pluginReturnsNonretainedLayer) { m_pluginReturnsNonretainedLayer = pluginReturnsNonretainedLayer; }
+    void setPluginWantsLegacyCocoaTextInput(bool pluginWantsLegacyCocoaTextInput) { m_pluginWantsLegacyCocoaTextInput = pluginWantsLegacyCocoaTextInput; }
+
+    bool hasHandledAKeyDownEvent() const { return m_hasHandledAKeyDownEvent; }
 
     mach_port_t compositingRenderServerPort();
 
@@ -87,6 +90,8 @@ public:
     bool evaluate(NPObject*, const String&scriptString, NPVariant* result);
     bool isPrivateBrowsingEnabled();
 
+    static void setSetExceptionFunction(void (*)(const String&));
+
     // These return retained objects.
     NPObject* windowScriptNPObject();
     NPObject* pluginElementNPObject();
@@ -105,6 +110,9 @@ public:
 
     // Called on the plug-in run loop (which is currently the main thread run loop).
     void handlePluginThreadAsyncCall(void (*function)(void*), void* userData);
+
+    unsigned scheduleTimer(unsigned interval, bool repeat, void (*timerFunc)(NPP, unsigned timerID));
+    void unscheduleTimer(unsigned timerID);
 
     String proxiesForURL(const String& urlString);
     String cookiesForURL(const String& urlString);
@@ -190,10 +198,16 @@ private:
 
     virtual uint64_t pluginComplexTextInputIdentifier() const;
     virtual void sendComplexTextInput(const String& textInput);
+
+    void pluginFocusOrWindowFocusChanged();
+    void setComplexTextInputEnabled(bool);
 #endif
 
     virtual void privateBrowsingStateChanged(bool);
     virtual bool getFormValue(String& formValue);
+    virtual bool handleScroll(WebCore::ScrollDirection, WebCore::ScrollGranularity);
+    virtual WebCore::Scrollbar* horizontalScrollbar();
+    virtual WebCore::Scrollbar* verticalScrollbar();
 
     bool supportsSnapshotting() const;
 
@@ -227,6 +241,37 @@ private:
     RefPtr<NetscapePluginStream> m_manualStream;
     Vector<bool, 8> m_popupEnabledStates;
 
+    class Timer {
+        WTF_MAKE_NONCOPYABLE(Timer);
+
+    public:
+        typedef void (*TimerFunc)(NPP, uint32_t timerID);
+
+        static PassOwnPtr<Timer> create(NetscapePlugin*, unsigned timerID, unsigned interval, bool repeat, TimerFunc);
+        ~Timer();
+
+        void start();
+        void stop();
+
+    private:
+        Timer(NetscapePlugin*, unsigned timerID, unsigned interval, bool repeat, TimerFunc);
+
+        void timerFired();
+
+        // This is a weak pointer since Timer objects are destroyed before the NetscapePlugin object itself is destroyed.
+        NetscapePlugin* m_netscapePlugin;
+
+        unsigned m_timerID;
+        unsigned m_interval;
+        bool m_repeat;
+        TimerFunc m_timerFunc;
+
+        RunLoop::Timer<Timer> m_timer;
+    };
+    typedef HashMap<unsigned, Timer*> TimerMap;
+    TimerMap m_timers;
+    unsigned m_nextTimerID;
+
 #if PLUGIN_ARCHITECTURE(MAC)
     NPDrawingModel m_drawingModel;
     NPEventModel m_eventModel;
@@ -238,6 +283,21 @@ private:
 
     bool m_pluginHasFocus;
     bool m_windowHasFocus;
+
+    // Whether the plug-in wants to use the legacy Cocoa text input handling that
+    // existed in WebKit1, or the updated Cocoa text input handling specified on
+    // https://wiki.mozilla.org/NPAPI:CocoaEventModel#Text_Input
+    bool m_pluginWantsLegacyCocoaTextInput;
+
+    // Whether complex text input is enabled.
+    bool m_isComplexTextInputEnabled;
+
+    // Whether the plug-in has handled a keydown event. This is used to determine
+    // if we can tell the plug-in that we support the updated Cocoa text input specification.
+    bool m_hasHandledAKeyDownEvent;
+
+    // The number of NPCocoaEventKeyUp events that  should be ignored.
+    unsigned m_ignoreNextKeyUpEventCounter;
 
     WebCore::IntRect m_windowFrameInScreenCoordinates;
     WebCore::IntRect m_viewFrameInWindowCoordinates;

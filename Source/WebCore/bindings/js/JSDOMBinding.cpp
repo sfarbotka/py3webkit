@@ -38,7 +38,7 @@
 #include "JSOperationNotAllowedException.h"
 #endif
 #include "JSRangeException.h"
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 #include "JSSQLException.h"
 #endif
 #if ENABLE(SVG)
@@ -57,6 +57,7 @@
 #include "XPathException.h"
 #include <runtime/DateInstance.h>
 #include <runtime/Error.h>
+#include <runtime/ExceptionHelpers.h>
 #include <runtime/JSFunction.h>
 
 using namespace JSC;
@@ -162,7 +163,7 @@ JSValue jsDateOrNull(ExecState* exec, double value)
 double valueToDate(ExecState* exec, JSValue value)
 {
     if (value.isNumber())
-        return value.uncheckedGetNumber();
+        return value.asNumber();
     if (!value.inherits(&DateInstance::s_info))
         return std::numeric_limits<double>::quiet_NaN();
     return static_cast<DateInstance*>(value.toObject(exec))->internalNumber();
@@ -170,7 +171,7 @@ double valueToDate(ExecState* exec, JSValue value)
 
 void reportException(ExecState* exec, JSValue exception)
 {
-    if (exception.isObject() && asObject(exception)->exceptionType() == Terminated)
+    if (isTerminatedExecutionException(exception))
         return;
 
     UString errorMessage = exception.toString(exec);
@@ -237,7 +238,7 @@ void setDOMException(ExecState* exec, ExceptionCode ec)
             errorObject = toJS(exec, globalObject, XPathException::create(description));
             break;
 #endif
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         case SQLExceptionType:
             errorObject = toJS(exec, globalObject, SQLException::create(description));
             break;
@@ -307,7 +308,7 @@ Frame* toDynamicFrame(ExecState* exec)
 
 JSValue objectToStringFunctionGetter(ExecState* exec, JSValue, const Identifier& propertyName)
 {
-    return JSFunction::create(exec, exec->lexicalGlobalObject(), exec->lexicalGlobalObject()->functionStructure(), 0, propertyName, objectProtoFuncToString);
+    return JSFunction::create(exec, exec->lexicalGlobalObject(), 0, propertyName, objectProtoFuncToString);
 }
 
 Structure* getCachedDOMStructure(JSDOMGlobalObject* globalObject, const ClassInfo* classInfo)

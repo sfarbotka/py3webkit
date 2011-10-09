@@ -50,7 +50,13 @@ class MockFileSystem(object):
         self._sep = '/'
         self.current_tmpno = 0
         self.cwd = cwd
-        self.dirs = dirs or set()
+        self.dirs = set(dirs or [])
+        self.dirs.add(cwd)
+        for f in self.files:
+            d = self.dirname(f)
+            while not d in self.dirs:
+                self.dirs.add(d)
+                d = self.dirname(d)
 
     def _get_sep(self):
         return self._sep
@@ -142,13 +148,13 @@ class MockFileSystem(object):
         return self.cwd
 
     def glob(self, glob_string):
-        # FIXME: This only handles a wildcard '*' at the end of the path.
-        # Maybe it should handle more?
-        if glob_string[-1] == '*':
-            path_filter = lambda path: path.startswith(glob_string[:-1])
-        else:
-            path_filter = lambda path: glob_string == path
+        # FIXME: This handles '*', but not '?', '[', or ']'.
+        glob_string = re.escape(glob_string)
+        glob_string = glob_string.replace('\\*', '[^\\/]*') + '$'
+        glob_string = glob_string.replace('\\/', '/')
+        path_filter = lambda path: re.match(glob_string, path)
 
+        # We could use fnmatch.fnmatch, but that might not do the right thing on windows.
         existing_files = [path for path, contents in self.files.items() if contents is not None]
         return filter(path_filter, existing_files) + filter(path_filter, self.dirs)
 

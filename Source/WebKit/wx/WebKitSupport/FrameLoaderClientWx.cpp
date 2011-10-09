@@ -592,18 +592,6 @@ bool FrameLoaderClientWx::shouldStopLoadingForHistoryItem(WebCore::HistoryItem*)
     return true;
 }
 
-void FrameLoaderClientWx::dispatchDidAddBackForwardItem(WebCore::HistoryItem*) const
-{
-}
-
-void FrameLoaderClientWx::dispatchDidRemoveBackForwardItem(WebCore::HistoryItem*) const
-{
-}
-
-void FrameLoaderClientWx::dispatchDidChangeBackForwardIndex() const
-{
-}
-
 void FrameLoaderClientWx::didDisplayInsecureContent()
 {
     notImplemented();
@@ -878,7 +866,7 @@ void FrameLoaderClientWx::didTransferChildFrameToNewDocument(Page*)
 {
 }
 
-void FrameLoaderClientWx::transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*)
+void FrameLoaderClientWx::transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*)
 {
 }
 

@@ -219,6 +219,10 @@ extern NSString *WebPreferencesChangedInternalNotification;
 - (NSString *)pictographFontFamily;
 - (void)setPictographFontFamily:(NSString *)family;
 
+// This is a global setting.
+- (BOOL)mockScrollbarsEnabled;
+- (void)setMockScrollbarsEnabled:(BOOL)flag;
+
 // Other private methods
 - (void)_postPreferencesChangedNotification;
 - (void)_postPreferencesChangedAPINotification;
@@ -229,6 +233,8 @@ extern NSString *WebPreferencesChangedInternalNotification;
 + (CFStringEncoding)_systemCFStringEncoding;
 + (void)_setInitialDefaultTextEncodingToSystemEncoding;
 + (void)_setIBCreatorID:(NSString *)string;
++ (void)_switchNetworkLoaderToNewTestingSession;
++ (void)_setCurrentNetworkLoaderSessionCookieAcceptPolicy:(NSHTTPCookieAcceptPolicy)cookieAcceptPolicy;
 
 + (void)setWebKitLinkTimeVersion:(int)version;
 
@@ -258,5 +264,8 @@ extern NSString *WebPreferencesChangedInternalNotification;
 // WebSocket support depends on ENABLE(WEB_SOCKETS).
 - (void)setHixie76WebSocketProtocolEnabled:(BOOL)flag;
 - (BOOL)isHixie76WebSocketProtocolEnabled;
+
+- (void)setSuppressIncrementalRendering:(BOOL)flag;
+- (BOOL)suppressIncrementalRendering;
 
 @end

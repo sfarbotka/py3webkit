@@ -43,8 +43,6 @@ public:
 
     virtual WebCore::FloatRect pageRect();
 
-    virtual float scaleFactor();
-
     virtual void focus();
     virtual void unfocus();
 
@@ -103,7 +101,7 @@ public:
     virtual WebCore::IntRect windowToScreen(const WebCore::IntRect&) const;
     virtual PlatformPageClient platformPageClient() const;
     virtual void contentsSizeChanged(WebCore::Frame*, const WebCore::IntSize&) const;
-    virtual void scrollRectIntoView(const WebCore::IntRect&, const WebCore::ScrollView*) const; // Currently only Mac has a non empty implementation.
+    virtual void scrollRectIntoView(const WebCore::IntRect&) const; // Currently only Mac has a non empty implementation.
     virtual void scrollbarsModeDidChange() const;
     virtual void setCursor(const WebCore::Cursor&);
     virtual void setCursorHiddenUntilMouseMoves(bool);
@@ -115,11 +113,10 @@ public:
 
     virtual void print(WebCore::Frame*);
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     virtual void exceededDatabaseQuota(WebCore::Frame*, const WTF::String& databaseName);
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     // Callback invoked when the application cache fails to save a cache object
     // because storing it would grow the database file past its defined maximum
     // size or past the amount of free space on the device.
@@ -133,7 +130,6 @@ public:
     // to take action, such as prompting the user to ask to increase the quota
     // for this origin.
     virtual void reachedApplicationCacheOriginQuota(WebCore::SecurityOrigin*, int64_t totalSpaceNeeded);
-#endif
 
 #if ENABLE(CONTEXT_MENUS)
     virtual void showContextMenu() { }

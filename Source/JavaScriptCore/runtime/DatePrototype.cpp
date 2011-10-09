@@ -27,6 +27,7 @@
 #include "DateConversion.h"
 #include "DateInstance.h"
 #include "Error.h"
+#include "JSGlobalObject.h"
 #include "JSString.h"
 #include "JSStringBuilder.h"
 #include "Lookup.h"
@@ -374,7 +375,7 @@ static bool fillStructuresUsingDateArgs(ExecState *exec, int maxArgs, double *ms
     return ok;
 }
 
-const ClassInfo DatePrototype::s_info = {"Date", &DateInstance::s_info, 0, ExecState::dateTable};
+const ClassInfo DatePrototype::s_info = {"Date", &DateInstance::s_info, 0, ExecState::dateTable, CREATE_METHOD_TABLE(DatePrototype)};
 
 /* Source for DatePrototype.lut.h
 @begin dateTable
@@ -429,13 +430,17 @@ const ClassInfo DatePrototype::s_info = {"Date", &DateInstance::s_info, 0, ExecS
 
 // ECMA 15.9.4
 
-DatePrototype::DatePrototype(ExecState* exec, JSGlobalObject* globalObject, Structure* structure)
+DatePrototype::DatePrototype(ExecState* exec, Structure* structure)
     : DateInstance(exec, structure)
 {
+}
+
+void DatePrototype::finishCreation(ExecState* exec, JSGlobalObject*)
+{
+    Base::finishCreation(exec->globalData());
     ASSERT(inherits(&s_info));
 
     // The constructor will be added later, after DateConstructor has been built.
-    putAnonymousValue(exec->globalData(), 0, globalObject);
 }
 
 bool DatePrototype::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)

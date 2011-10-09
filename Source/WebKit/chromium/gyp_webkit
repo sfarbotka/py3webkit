@@ -90,7 +90,7 @@ if __name__ == '__main__':
     args.append('--no-circular-check')
 
   # On linux, we want gyp to output a makefile (default is scons).
-  if sys.platform.startswith('linux'):
+  if sys.platform.startswith('linux') or 'GYP_ANDROID_BUILD' in os.environ:
     args.extend(['-fmake',
                  '--suffix=.chromium',
                  '--toplevel-dir=../../..',
@@ -103,6 +103,10 @@ if __name__ == '__main__':
                '-Dinside_chromium_build=0',
                '-Dv8_use_snapshot=false',
                '-Dmsvs_use_common_release=0',
+
+               # Temporarily disable clang plugins. http://crbug.com/97043
+               '-Dclang=0',
+               '-Dclang_use_chrome_plugins=0',
 
                # gyp hack: otherwise gyp assumes its in chromium's src/ dir.
                '--depth=./',

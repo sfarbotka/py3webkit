@@ -280,7 +280,7 @@ public:
     void setComposition(const String&, const Vector<CompositionUnderline>&, unsigned selectionStart, unsigned selectionEnd);
     void confirmComposition();
     void confirmComposition(const String&); // if no existing composition, replaces selection
-    void confirmCompositionWithoutDisturbingSelection();
+    void cancelComposition();
     PassRefPtr<Range> compositionRange() const;
     bool getCompositionSelection(unsigned& selectionStart, unsigned& selectionEnd) const;
 
@@ -295,7 +295,7 @@ public:
 
     void setStartNewKillRingSequence(bool);
 
-    PassRefPtr<Range> rangeForPoint(const IntPoint& windowPoint);
+    PassRefPtr<Range> rangeForPoint(const LayoutPoint& windowPoint);
 
     void clear();
 
@@ -309,7 +309,7 @@ public:
     PassRefPtr<Range> selectedRange();
     
     // We should make these functions private when their callers in Frame are moved over here to Editor
-    bool insideVisibleArea(const IntPoint&) const;
+    bool insideVisibleArea(const LayoutPoint&) const;
     bool insideVisibleArea(Range*) const;
 
     void addToKillRing(Range*, bool prepend);
@@ -334,6 +334,8 @@ public:
     bool findString(const String&, FindOptions);
     // FIXME: Switch callers over to the FindOptions version and retire this one.
     bool findString(const String&, bool forward, bool caseFlag, bool wrapFlag, bool startInSelection);
+
+    PassRefPtr<Range> rangeOfString(const String&, Range*, FindOptions);
 
     const VisibleSelection& mark() const; // Mark, to be used as emacs uses it.
     void setMark(const VisibleSelection&);
@@ -376,6 +378,8 @@ public:
     void updateMarkersForWordsAffectedByEditing(bool onlyHandleWordsContainingSelection);
     void deletedAutocorrectionAtPosition(const Position&, const String& originalString);
 
+    void deviceScaleFactorChanged();
+
 private:
     Frame* m_frame;
     OwnPtr<DeleteButtonController> m_deleteButtonController;
@@ -407,7 +411,8 @@ private:
     TextCheckingTypeMask resolveTextCheckingTypeMask(TextCheckingTypeMask);
 
     void selectComposition();
-    void confirmComposition(const String&, bool preserveSelection);
+    enum SetCompositionMode { ConfirmComposition, CancelComposition };
+    void setComposition(const String&, SetCompositionMode);
     void setIgnoreCompositionSelectionChange(bool ignore);
 
     PassRefPtr<Range> firstVisibleRange(const String&, FindOptions);

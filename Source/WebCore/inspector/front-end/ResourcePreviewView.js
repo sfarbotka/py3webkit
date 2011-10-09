@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @extends {WebInspector.ResourceContentView}
+ * @constructor
+ */
 WebInspector.ResourcePreviewView = function(resource, responseView)
 {
     WebInspector.ResourceContentView.call(this, resource);
@@ -40,18 +44,20 @@ WebInspector.ResourcePreviewView.prototype = {
         if (!this.resource.content) {
             if (!this._emptyView) {
                 this._emptyView = this._createEmptyView();
-                this._emptyView.show(this.element);
-                this.innerView = this._emptyView; 
+                this.addChildView(this._emptyView);
+                this._emptyView.show();
+                this.innerView = this._emptyView;
             }
         } else {
             if (this._emptyView) {
-                this._emptyView.detach();
+                this.removeChildView(this._emptyView);
                 delete this._emptyView;
             }
             if (!this._previewView)
                 this._previewView = this._createPreviewView();
-            this._previewView.show(this.element);
-            this.innerView = this._previewView; 
+            this.addChildView(this._previewView);
+            this._previewView.show();
+            this.innerView = this._previewView;
         }
     },
 
@@ -59,7 +65,7 @@ WebInspector.ResourcePreviewView.prototype = {
     {
         return new WebInspector.EmptyView(WebInspector.UIString("This request has no preview available."));
     },
-    
+
     _createPreviewView: function()
     {
         if (this.resource.hasErrorStatusCode() && this.resource.content)
@@ -79,7 +85,7 @@ WebInspector.ResourcePreviewView.prototype = {
 
         if (this._responseView.sourceView)
             return this._responseView.sourceView;
-        
+
         if (this.resource.category === WebInspector.resourceCategories.other)
             return this._createEmptyView();
 

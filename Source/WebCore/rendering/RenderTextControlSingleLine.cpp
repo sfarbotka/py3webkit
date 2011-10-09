@@ -111,13 +111,6 @@ inline HTMLElement* RenderTextControlSingleLine::cancelButtonElement() const
     return inputElement()->cancelButtonElement();
 }
 
-#if ENABLE(INPUT_SPEECH)
-inline HTMLElement* RenderTextControlSingleLine::speechButtonElement() const
-{
-    return inputElement()->speechButtonElement();
-}
-#endif
-
 RenderStyle* RenderTextControlSingleLine::textBaseStyle() const
 {
     HTMLElement* innerBlock = innerBlockElement();
@@ -181,7 +174,7 @@ void RenderTextControlSingleLine::showPopup()
         m_searchPopup->saveRecentSearches(name, m_recentSearches);
     }
 
-    m_searchPopup->popupMenu()->show(absoluteBoundingBoxRect(true), document()->view(), -1);
+    m_searchPopup->popupMenu()->show(absoluteBoundingBoxRect(), document()->view(), -1);
 }
 
 void RenderTextControlSingleLine::hidePopup()
@@ -265,12 +258,12 @@ void RenderTextControlSingleLine::layout()
     currentHeight = innerTextRenderer->height();
     if (!container && currentHeight != contentHeight()) {
         LayoutUnit heightDiff = currentHeight - contentHeight();
-        innerTextRenderer->setY(innerTextRenderer->y() - (heightDiff / 2 + heightDiff % 2));
+        innerTextRenderer->setY(innerTextRenderer->y() - (heightDiff / 2 + layoutMod(heightDiff, 2)));
     } else if (inputElement()->isSearchField() && containerRenderer && containerRenderer->height() > contentHeight()) {
         // A quirk for find-in-page box on Safari Windows.
         // http://webkit.org/b/63157
         LayoutUnit heightDiff = containerRenderer->height() - contentHeight();
-        containerRenderer->setY(containerRenderer->y() - (heightDiff / 2 + heightDiff % 2));
+        containerRenderer->setY(containerRenderer->y() - (heightDiff / 2 + layoutMod(heightDiff, 2)));
     }
 
     // Ignores the paddings for the inner spin button.
@@ -364,16 +357,23 @@ void RenderTextControlSingleLine::capsLockStateMayHaveChanged()
     }
 }
 
+#if ENABLE(INPUT_SPEECH)
+HTMLElement* RenderTextControlSingleLine::speechButtonElement() const
+{
+    return inputElement()->speechButtonElement();
+}
+#endif
+
 bool RenderTextControlSingleLine::hasControlClip() const
 {
     // Apply control clip for text fields with decorations.
     return !!containerElement();
 }
 
-IntRect RenderTextControlSingleLine::controlClipRect(const IntPoint& additionalOffset) const
+LayoutRect RenderTextControlSingleLine::controlClipRect(const LayoutPoint& additionalOffset) const
 {
     ASSERT(hasControlClip());
-    IntRect clipRect = IntRect(containerElement()->renderBox()->frameRect());
+    LayoutRect clipRect = LayoutRect(containerElement()->renderBox()->frameRect());
     clipRect.moveBy(additionalOffset);
     return clipRect;
 }
@@ -390,14 +390,14 @@ float RenderTextControlSingleLine::getAvgCharWidth(AtomicString family)
     return RenderTextControl::getAvgCharWidth(family);
 }
 
-int RenderTextControlSingleLine::preferredContentWidth(float charWidth) const
+LayoutUnit RenderTextControlSingleLine::preferredContentWidth(float charWidth) const
 {
     int factor;
     bool includesDecoration = inputElement()->sizeShouldIncludeDecoration(factor);
     if (factor <= 0)
         factor = 20;
 
-    int result = static_cast<int>(ceilf(charWidth * factor));
+    LayoutUnit result = static_cast<LayoutUnit>(ceiledLayoutUnit(charWidth * factor));
 
     float maxCharWidth = 0.f;
     AtomicString family = style()->font().family().family();
@@ -475,18 +475,6 @@ void RenderTextControlSingleLine::updateFromElement()
 
     if (cancelButtonElement())
         updateCancelButtonVisibility();
-
-    if (!inputElement()->suggestedValue().isNull())
-        setInnerTextValue(inputElement()->suggestedValue());
-    else {
-        if (node()->hasTagName(inputTag)) {
-            // For HTMLInputElement, update the renderer value if the formControlValueMatchesRenderer()
-            // flag is false. It protects an unacceptable renderer value from
-            // being overwritten with the DOM value.
-            if (!inputElement()->formControlValueMatchesRenderer())
-                setInnerTextValue(inputElement()->visibleValue());
-        }
-    }
 
     if (m_searchPopupIsVisible)
         m_searchPopup->popupMenu()->updateFromElement();
@@ -719,41 +707,41 @@ void RenderTextControlSingleLine::autoscroll()
         layer->autoscroll();
 }
 
-int RenderTextControlSingleLine::scrollWidth() const
+LayoutUnit RenderTextControlSingleLine::scrollWidth() const
 {
     if (innerTextElement())
         return innerTextElement()->scrollWidth();
     return RenderBlock::scrollWidth();
 }
 
-int RenderTextControlSingleLine::scrollHeight() const
+LayoutUnit RenderTextControlSingleLine::scrollHeight() const
 {
     if (innerTextElement())
         return innerTextElement()->scrollHeight();
     return RenderBlock::scrollHeight();
 }
 
-int RenderTextControlSingleLine::scrollLeft() const
+LayoutUnit RenderTextControlSingleLine::scrollLeft() const
 {
     if (innerTextElement())
         return innerTextElement()->scrollLeft();
     return RenderBlock::scrollLeft();
 }
 
-int RenderTextControlSingleLine::scrollTop() const
+LayoutUnit RenderTextControlSingleLine::scrollTop() const
 {
     if (innerTextElement())
         return innerTextElement()->scrollTop();
     return RenderBlock::scrollTop();
 }
 
-void RenderTextControlSingleLine::setScrollLeft(int newLeft)
+void RenderTextControlSingleLine::setScrollLeft(LayoutUnit newLeft)
 {
     if (innerTextElement())
         innerTextElement()->setScrollLeft(newLeft);
 }
 
-void RenderTextControlSingleLine::setScrollTop(int newTop)
+void RenderTextControlSingleLine::setScrollTop(LayoutUnit newTop)
 {
     if (innerTextElement())
         innerTextElement()->setScrollTop(newTop);

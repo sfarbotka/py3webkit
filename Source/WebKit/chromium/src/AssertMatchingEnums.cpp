@@ -57,6 +57,7 @@
 #include "Settings.h"
 #include "StorageInfo.h"
 #include "TextAffinity.h"
+#include "TextControlInnerElements.h"
 #include "UserContentTypes.h"
 #include "UserScriptTypes.h"
 #include "UserStyleSheetTypes.h"
@@ -92,7 +93,7 @@
 #include <wtf/text/StringImpl.h>
 
 #if OS(DARWIN)
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
 #include "mac/WebThemeEngine.h"
 #endif
 
@@ -206,7 +207,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleDocumentNote, DocumentNoteRole)
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleDocumentRegion, DocumentRegionRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleUserInterfaceTooltip, UserInterfaceTooltipRole);
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::Uncached, ApplicationCacheHost::UNCACHED);
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::Idle, ApplicationCacheHost::IDLE);
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::Checking, ApplicationCacheHost::CHECKING);
@@ -221,7 +221,6 @@ COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::ProgressEvent, Application
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::UpdateReadyEvent, ApplicationCacheHost::UPDATEREADY_EVENT);
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::CachedEvent, ApplicationCacheHost::CACHED_EVENT);
 COMPILE_ASSERT_MATCHING_ENUM(WebApplicationCacheHost::ObsoleteEvent, ApplicationCacheHost::OBSOLETE_EVENT);
-#endif
 
 COMPILE_ASSERT_MATCHING_ENUM(WebClipboard::FormatPlainText, PasteboardPrivate::PlainTextFormat);
 COMPILE_ASSERT_MATCHING_ENUM(WebClipboard::FormatHTML, PasteboardPrivate::HTMLFormat);
@@ -310,6 +309,10 @@ COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeInvalid, InvalidIcon);
 COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeFavicon, Favicon);
 COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeTouch, TouchIcon);
 COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeTouchPrecomposed, TouchPrecomposedIcon);
+
+COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Idle, InputFieldSpeechButtonElement::Idle);
+COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Recording, InputFieldSpeechButtonElement::Recording);
+COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Recognizing, InputFieldSpeechButtonElement::Recognizing);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebNode::ElementNode, Node::ELEMENT_NODE);
 COMPILE_ASSERT_MATCHING_ENUM(WebNode::AttributeNode, Node::ATTRIBUTE_NODE);
@@ -438,19 +441,19 @@ COMPILE_ASSERT_MATCHING_ENUM(WebStorageQuotaErrorAbort, ABORT_ERR);
 #endif
 
 #if OS(DARWIN)
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateDisabled, PlatformBridge::StateDisabled);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateInactive, PlatformBridge::StateInactive);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateActive, PlatformBridge::StateActive);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StatePressed, PlatformBridge::StatePressed);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateDisabled, PlatformSupport::StateDisabled);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateInactive, PlatformSupport::StateInactive);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StateActive, PlatformSupport::StateActive);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::StatePressed, PlatformSupport::StatePressed);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::SizeRegular, PlatformBridge::SizeRegular);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::SizeSmall, PlatformBridge::SizeSmall);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::SizeRegular, PlatformSupport::SizeRegular);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::SizeSmall, PlatformSupport::SizeSmall);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarOrientationHorizontal, PlatformBridge::ScrollbarOrientationHorizontal);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarOrientationVertical, PlatformBridge::ScrollbarOrientationVertical);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarOrientationHorizontal, PlatformSupport::ScrollbarOrientationHorizontal);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarOrientationVertical, PlatformSupport::ScrollbarOrientationVertical);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarParentScrollView, PlatformBridge::ScrollbarParentScrollView);
-COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarParentRenderLayer, PlatformBridge::ScrollbarParentRenderLayer);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarParentScrollView, PlatformSupport::ScrollbarParentScrollView);
+COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarParentRenderLayer, PlatformSupport::ScrollbarParentRenderLayer);
 #endif
 
 COMPILE_ASSERT_MATCHING_ENUM(WebPageVisibilityStateVisible, PageVisibilityStateVisible);

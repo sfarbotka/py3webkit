@@ -60,7 +60,7 @@ String defaultDetailsSummaryText()
 
 String searchableIndexIntroduction()
 {
-    return String::fromUTF8("_Searchable Index");
+    return String::fromUTF8("This is a searchable index. Enter search keywords: ");
 }
 
 String fileButtonChooseFileLabel()
@@ -543,6 +543,11 @@ String multipleFileUploadText(unsigned numberOfFiles)
 String crashedPluginText()
 {
     return String::fromUTF8("plugin crashed");
+}
+
+String localizedString(const char* key)
+{
+    return String::fromUTF8(key, strlen(key));
 }
 
 }

@@ -21,7 +21,7 @@
 #ifndef RenderSVGForeignObject_h
 #define RenderSVGForeignObject_h
 
-#if ENABLE(SVG) && ENABLE(SVG_FOREIGN_OBJECT)
+#if ENABLE(SVG)
 #include "AffineTransform.h"
 #include "FloatPoint.h"
 #include "RenderSVGBlock.h"
@@ -39,8 +39,8 @@ public:
 
     virtual void paint(PaintInfo&, const LayoutPoint&);
 
-    virtual IntRect clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const;
-    virtual void computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect&, bool fixed = false) const;
+    virtual LayoutRect clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const;
+    virtual void computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect&, bool fixed = false) const;
 
     virtual bool requiresLayer() const { return false; }
     virtual void layout();

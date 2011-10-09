@@ -38,12 +38,15 @@ class ClientRect;
 class Document;
 class Element;
 class Node;
+class Range;
 
 class Internals : public RefCounted<Internals> {
 public:
     static PassRefPtr<Internals> create();
     virtual ~Internals();
-    
+
+    void reset(Document*);
+
     String elementRenderTreeAsText(Element*, ExceptionCode&);
 
     bool isPreloaded(Document*, const String& url);
@@ -55,7 +58,11 @@ public:
     String shadowPseudoId(Element*, ExceptionCode&);
     PassRefPtr<Element> createShadowContentElement(Document*, ExceptionCode&);
     Element* getElementByIdInShadowRoot(Node* shadowRoot, const String& id, ExceptionCode&);
-    void disableMemoryCache(bool disabled);
+
+#if ENABLE(INPUT_COLOR)
+    bool connectColorChooserClient(Element*);
+    void selectColorInColorChooser(const String& colorValue);
+#endif
 
 #if ENABLE(INSPECTOR)
     void setInspectorResourcesDataSizeLimits(Document*, int maximumResourcesContentSize, int maximumSingleResourceContentSize, ExceptionCode&);
@@ -65,10 +72,33 @@ public:
 
     PassRefPtr<ClientRect> boundingBox(Element*, ExceptionCode&);
 
+    unsigned markerCountForNode(Node*, ExceptionCode&);
+    PassRefPtr<Range> markerRangeForNode(Node*, unsigned, ExceptionCode&);
+
     void setForceCompositingMode(Document*, bool enabled, ExceptionCode&);
+    void setZoomAnimatorTransform(Document*, double scale, double tx, double ty, ExceptionCode&);
+
+    void setPasswordEchoEnabled(Document*, bool enabled, ExceptionCode&);
+    void setPasswordEchoDurationInSeconds(Document*, double durationInSeconds, ExceptionCode&);
+
+    void setScrollViewPosition(Document*, long x, long y, ExceptionCode&);
+
+    bool wasLastChangeUserEdit(Element* textField, ExceptionCode&);
+    String suggestedValue(Element* inputElement, ExceptionCode&);
+    void setSuggestedValue(Element* inputElement, const String&, ExceptionCode&);
+    void scrollElementToRect(Element*, long x, long y, long w, long h, ExceptionCode&);
+
+    static const char* internalsId;
+
+    void paintControlTints(Document*, ExceptionCode&);
 
 private:
     Internals();
+
+    double passwordEchoDurationInSecondsBackup;
+    bool passwordEchoEnabledBackup : 1;
+    bool passwordEchoDurationInSecondsBackedUp : 1;
+    bool passwordEchoEnabledBackedUp : 1;
 };
 
 } // namespace WebCore

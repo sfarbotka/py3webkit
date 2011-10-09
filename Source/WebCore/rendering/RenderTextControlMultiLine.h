@@ -37,11 +37,9 @@ private:
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const LayoutPoint& pointInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
 
     virtual float getAvgCharWidth(AtomicString family);
-    virtual int preferredContentWidth(float charWidth) const;
-    virtual void adjustControlHeightBasedOnLineHeight(int lineHeight);
-    virtual int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const;
-
-    virtual void updateFromElement();
+    virtual LayoutUnit preferredContentWidth(float charWidth) const;
+    virtual void adjustControlHeightBasedOnLineHeight(LayoutUnit lineHeight);
+    virtual LayoutUnit baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const;
 
     virtual RenderStyle* textBaseStyle() const;
     virtual PassRefPtr<RenderStyle> createInnerTextStyle(const RenderStyle* startStyle) const;

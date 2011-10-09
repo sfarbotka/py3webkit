@@ -24,6 +24,7 @@
 #include "config.h"
 #include "RenderFrameSet.h"
 
+#include "Cursor.h"
 #include "Document.h"
 #include "EventHandler.h"
 #include "EventNames.h"
@@ -36,6 +37,7 @@
 #include "MouseEvent.h"
 #include "PaintInfo.h"
 #include "RenderFrame.h"
+#include "RenderLayer.h"
 #include "RenderView.h"
 #include "Settings.h"
 
@@ -498,6 +500,12 @@ void RenderFrameSet::layout()
             view()->repaintViewRectangle(newBounds);
     }
 
+    // If this FrameSet has a transform matrix then we need to recompute it
+    // because the transform origin is a function the size of the RenderFrameSet
+    // which may not be computed until it is attached to the render tree.
+    if (layer() && hasTransform())
+        layer()->updateTransform();
+
     setNeedsLayout(false);
 }
 
@@ -692,9 +700,9 @@ bool RenderFrameSet::userResize(MouseEvent* evt)
         if (needsLayout())
             return false;
         if (evt->type() == eventNames().mousedownEvent && evt->button() == LeftButton) {
-            FloatPoint pos = localToAbsolute();
-            startResizing(m_cols, evt->absoluteLocation().x() - pos.x());
-            startResizing(m_rows, evt->absoluteLocation().y() - pos.y());
+            FloatPoint localPos = absoluteToLocal(evt->absoluteLocation(), false, true);
+            startResizing(m_cols, localPos.x());
+            startResizing(m_rows, localPos.y());
             if (m_cols.m_splitBeingResized != noSplit || m_rows.m_splitBeingResized != noSplit) {
                 setIsResizing(true);
                 return true;
@@ -702,9 +710,9 @@ bool RenderFrameSet::userResize(MouseEvent* evt)
         }
     } else {
         if (evt->type() == eventNames().mousemoveEvent || (evt->type() == eventNames().mouseupEvent && evt->button() == LeftButton)) {
-            FloatPoint pos = localToAbsolute();
-            continueResizing(m_cols, evt->absoluteLocation().x() - pos.x());
-            continueResizing(m_rows, evt->absoluteLocation().y() - pos.y());
+            FloatPoint localPos = absoluteToLocal(evt->absoluteLocation(), false, true);
+            continueResizing(m_cols, localPos.x());
+            continueResizing(m_rows, localPos.y());
             if (evt->type() == eventNames().mouseupEvent && evt->button() == LeftButton) {
                 setIsResizing(false);
                 return true;
@@ -790,6 +798,19 @@ int RenderFrameSet::hitTestSplit(const GridAxis& axis, int position) const
 bool RenderFrameSet::isChildAllowed(RenderObject* child, RenderStyle*) const
 {
     return child->isFrame() || child->isFrameSet();
+}
+
+CursorDirective RenderFrameSet::getCursor(const LayoutPoint& point, Cursor& cursor) const
+{
+    if (canResizeRow(point)) {
+        cursor = rowResizeCursor();
+        return SetCursor;
+    }
+    if (canResizeColumn(point)) {
+        cursor = columnResizeCursor();
+        return SetCursor;
+    }
+    return RenderBox::getCursor(point, cursor);
 }
 
 } // namespace WebCore

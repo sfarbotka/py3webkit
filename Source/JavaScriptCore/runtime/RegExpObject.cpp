@@ -50,7 +50,7 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(RegExpObject);
 
-const ClassInfo RegExpObject::s_info = { "RegExp", &JSObjectWithGlobalObject::s_info, 0, ExecState::regExpTable };
+const ClassInfo RegExpObject::s_info = { "RegExp", &JSNonFinalObject::s_info, 0, ExecState::regExpTable, CREATE_METHOD_TABLE(RegExpObject) };
 
 /* Source for RegExpObject.lut.h
 @begin regExpTable
@@ -63,9 +63,14 @@ const ClassInfo RegExpObject::s_info = { "RegExp", &JSObjectWithGlobalObject::s_
 */
 
 RegExpObject::RegExpObject(JSGlobalObject* globalObject, Structure* structure, RegExp* regExp)
-    : JSObjectWithGlobalObject(globalObject, structure)
+    : JSNonFinalObject(globalObject->globalData(), structure)
     , d(adoptPtr(new RegExpObjectData(globalObject->globalData(), this, regExp)))
 {
+}
+
+void RegExpObject::finishCreation(JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 }
 
@@ -73,16 +78,17 @@ RegExpObject::~RegExpObject()
 {
 }
 
-void RegExpObject::visitChildren(SlotVisitor& visitor)
+void RegExpObject::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    RegExpObject* thisObject = static_cast<RegExpObject*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    Base::visitChildren(visitor);
-    if (d->regExp)
-        visitor.append(&d->regExp);
-    if (UNLIKELY(!d->lastIndex.get().isInt32()))
-        visitor.append(&d->lastIndex);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    Base::visitChildren(thisObject, visitor);
+    if (thisObject->d->regExp)
+        visitor.append(&thisObject->d->regExp);
+    if (UNLIKELY(!thisObject->d->lastIndex.get().isInt32()))
+        visitor.append(&thisObject->d->lastIndex);
 }
 
 bool RegExpObject::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
@@ -156,7 +162,12 @@ JSValue regExpObjectLastIndex(ExecState*, JSValue slotBase, const Identifier&)
 
 void RegExpObject::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    lookupPut<RegExpObject, JSObject>(exec, propertyName, value, ExecState::regExpTable(exec), this, slot);
+    put(this, exec, propertyName, value, slot);
+}
+
+void RegExpObject::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    lookupPut<RegExpObject, JSObject>(exec, propertyName, value, ExecState::regExpTable(exec), static_cast<RegExpObject*>(cell), slot);
 }
 
 void setRegExpObjectLastIndex(ExecState* exec, JSObject* baseObject, JSValue value)

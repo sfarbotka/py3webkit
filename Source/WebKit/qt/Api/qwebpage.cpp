@@ -108,6 +108,7 @@
 #include "SystemInfo.h"
 #endif // Q_OS_WIN32
 #include "TextIterator.h"
+#include "UtilsQt.h"
 #include "WebPlatformStrategies.h"
 #if USE(QTKIT)
 #include "WebSystemInterface.h"
@@ -139,7 +140,6 @@
 #include <QStyle>
 #include <QSysInfo>
 #include <QTextCharFormat>
-#include <QTextDocument>
 #include <QTouchEvent>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
@@ -293,7 +293,6 @@ static inline Qt::DropAction dragOpToDropAction(unsigned actions)
 QWebPagePrivate::QWebPagePrivate(QWebPage *qq)
     : q(qq)
     , page(0)
-    , mainFrame(0)
 #ifndef QT_NO_UNDOSTACK
     , undoStack(0)
 #endif
@@ -307,10 +306,6 @@ QWebPagePrivate::QWebPagePrivate(QWebPage *qq)
     , selectTrailingWhitespaceEnabled(false)
     , linkPolicy(QWebPage::DontDelegateLinks)
     , viewportSize(QSize(0, 0))
-    , pixelRatio(1)
-#ifndef QT_NO_CONTEXTMENU
-    , currentContextMenu(0)
-#endif
     , settings(0)
     , useFixedLayout(false)
     , pluginFactory(0)
@@ -380,7 +375,7 @@ QWebPagePrivate::~QWebPagePrivate()
         setInspector(0);
     }
 #ifndef QT_NO_CONTEXTMENU
-    delete currentContextMenu;
+    delete currentContextMenu.data();
 #endif
 #ifndef QT_NO_UNDOSTACK
     delete undoStack;
@@ -414,7 +409,7 @@ QWebPagePrivate* QWebPagePrivate::priv(QWebPage* page)
 bool QWebPagePrivate::acceptNavigationRequest(QWebFrame *frame, const QNetworkRequest &request, QWebPage::NavigationType type)
 {
     if (insideOpenCall
-        && frame == mainFrame)
+        && frame == mainFrame.data())
         return true;
     return q->acceptNavigationRequest(frame, request, type);
 }
@@ -425,7 +420,7 @@ void QWebPagePrivate::createMainFrame()
         QWebFrameData frameData(page);
         mainFrame = new QWebFrame(q, &frameData);
 
-        emit q->frameCreated(mainFrame);
+        emit q->frameCreated(mainFrame.data());
     }
 }
 
@@ -547,7 +542,7 @@ void QWebPagePrivate::updateAction(QWebPage::WebAction action)
     if (!a || !mainFrame)
         return;
 
-    WebCore::FrameLoader *loader = mainFrame->d->frame->loader();
+    WebCore::FrameLoader *loader = mainFrame.data()->d->frame->loader();
     WebCore::Editor *editor = page->focusController()->focusedOrMainFrame()->editor();
 
     bool enabled = a->isEnabled();
@@ -680,7 +675,7 @@ void QWebPagePrivate::timerEvent(QTimerEvent *ev)
 template<class T>
 void QWebPagePrivate::mouseMoveEvent(T* ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -691,7 +686,7 @@ void QWebPagePrivate::mouseMoveEvent(T* ev)
 template<class T>
 void QWebPagePrivate::mousePressEvent(T* ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -727,7 +722,7 @@ void QWebPagePrivate::mousePressEvent(T* ev)
 template<class T>
 void QWebPagePrivate::mouseDoubleClickEvent(T *ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -745,7 +740,7 @@ void QWebPagePrivate::mouseDoubleClickEvent(T *ev)
 template<class T>
 void QWebPagePrivate::mouseTripleClickEvent(T *ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -783,7 +778,7 @@ void QWebPagePrivate::handleClipboard(QEvent* ev, Qt::MouseButton button)
 template<class T>
 void QWebPagePrivate::mouseReleaseEvent(T *ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -843,8 +838,8 @@ void QWebPagePrivate::contextMenuEvent(const QPoint& globalPos)
 QMenu *QWebPage::createStandardContextMenu()
 {
 #ifndef QT_NO_CONTEXTMENU
-    QMenu *menu = d->currentContextMenu;
-    d->currentContextMenu = 0;
+    QMenu* menu = d->currentContextMenu.data();
+    d->currentContextMenu.clear();
     return menu;
 #else
     return 0;
@@ -855,7 +850,7 @@ QMenu *QWebPage::createStandardContextMenu()
 template<class T>
 void QWebPagePrivate::wheelEvent(T *ev)
 {
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return;
 
@@ -976,7 +971,7 @@ void QWebPagePrivate::focusInEvent(QFocusEvent*)
     focusController->setActive(true);
     focusController->setFocused(true);
     if (!focusController->focusedFrame())
-        focusController->setFocusedFrame(QWebFramePrivate::core(mainFrame));
+        focusController->setFocusedFrame(QWebFramePrivate::core(mainFrame.data()));
 }
 
 void QWebPagePrivate::focusOutEvent(QFocusEvent*)
@@ -1058,12 +1053,12 @@ void QWebPagePrivate::leaveEvent(QEvent*)
 void QWebPage::setPalette(const QPalette &pal)
 {
     d->palette = pal;
-    if (!d->mainFrame || !d->mainFrame->d->frame->view())
+    if (!d->mainFrame || !d->mainFrame.data()->d->frame->view())
         return;
 
     QBrush brush = pal.brush(QPalette::Base);
     QColor backgroundColor = brush.style() == Qt::SolidPattern ? brush.color() : QColor();
-    QWebFramePrivate::core(d->mainFrame)->view()->updateBackgroundRecursively(backgroundColor, !backgroundColor.alpha());
+    QWebFramePrivate::core(d->mainFrame.data())->view()->updateBackgroundRecursively(backgroundColor, !backgroundColor.alpha());
 }
 
 QPalette QWebPage::palette() const
@@ -1223,21 +1218,23 @@ void QWebPagePrivate::dynamicPropertyChangeEvent(QDynamicPropertyChangeEvent* ev
         WebCore::Frame* frame = QWebFramePrivate::core(q->mainFrame());
         if (!frame->tiledBackingStore())
             return;
-        FloatSize keepMultiplier;
-        FloatSize coverMultiplier;
+        float keepMultiplier;
+        float coverMultiplier;
         frame->tiledBackingStore()->getKeepAndCoverAreaMultipliers(keepMultiplier, coverMultiplier);
         QSizeF qSize = q->property("_q_TiledBackingStoreKeepAreaMultiplier").toSizeF();
-        keepMultiplier = FloatSize(qSize.width(), qSize.height());
+        // setKeepAndCoverAreaMultipliers do not use FloatSize anymore, keep only the height part.
+        keepMultiplier = qSize.height();
         frame->tiledBackingStore()->setKeepAndCoverAreaMultipliers(keepMultiplier, coverMultiplier);
     } else if (event->propertyName() == "_q_TiledBackingStoreCoverAreaMultiplier") {
         WebCore::Frame* frame = QWebFramePrivate::core(q->mainFrame());
         if (!frame->tiledBackingStore())
             return;
-        FloatSize keepMultiplier;
-        FloatSize coverMultiplier;
+        float keepMultiplier;
+        float coverMultiplier;
         frame->tiledBackingStore()->getKeepAndCoverAreaMultipliers(keepMultiplier, coverMultiplier);
         QSizeF qSize = q->property("_q_TiledBackingStoreCoverAreaMultiplier").toSizeF();
-        coverMultiplier = FloatSize(qSize.width(), qSize.height());
+        // setKeepAndCoverAreaMultipliers do not use FloatSize anymore, keep only the height part.
+        coverMultiplier = qSize.height();
         frame->tiledBackingStore()->setKeepAndCoverAreaMultipliers(keepMultiplier, coverMultiplier);
     }
 #endif
@@ -1377,7 +1374,7 @@ void QWebPagePrivate::adjustPointForClicking(QGraphicsSceneMouseEvent* ev)
 bool QWebPagePrivate::touchEvent(QTouchEvent* event)
 {
 #if ENABLE(TOUCH_EVENTS)
-    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame);
+    WebCore::Frame* frame = QWebFramePrivate::core(mainFrame.data());
     if (!frame->view())
         return false;
 
@@ -1440,8 +1437,8 @@ QVariant QWebPage::inputMethodQuery(Qt::InputMethodQuery property) const
             return QVariant(frame->selection()->extent().offsetInContainerNode());
         }
         case Qt::ImSurroundingText: {
-            if (renderTextControl) {
-                QString text = renderTextControl->text();
+            if (renderTextControl && renderTextControl->textFormControlElement()) {
+                QString text = renderTextControl->textFormControlElement()->value();
                 RefPtr<Range> range = editor->compositionRange();
                 if (range)
                     text.remove(range->startPosition().offsetInContainerNode(), TextIterator::rangeLength(range.get()));
@@ -1450,11 +1447,11 @@ QVariant QWebPage::inputMethodQuery(Qt::InputMethodQuery property) const
             return QVariant();
         }
         case Qt::ImCurrentSelection: {
-            if (!editor->hasComposition() && renderTextControl) {
+            if (!editor->hasComposition() && renderTextControl && renderTextControl->textFormControlElement()) {
                 int start = frame->selection()->start().offsetInContainerNode();
                 int end = frame->selection()->end().offsetInContainerNode();
                 if (end > start)
-                    return QVariant(QString(renderTextControl->text()).mid(start, end - start));
+                    return QVariant(QString(renderTextControl->textFormControlElement()->value()).mid(start, end - start));
             }
             return QVariant();
 
@@ -1985,7 +1982,7 @@ QWebPage::QWebPage(QObject *parent)
 QWebPage::~QWebPage()
 {
     d->createMainFrame();
-    FrameLoader *loader = d->mainFrame->d->frame->loader();
+    FrameLoader* loader = d->mainFrame.data()->d->frame->loader();
     if (loader)
         loader->detachFromParent();
     delete d;
@@ -2002,7 +1999,7 @@ QWebPage::~QWebPage()
 QWebFrame *QWebPage::mainFrame() const
 {
     d->createMainFrame();
-    return d->mainFrame;
+    return d->mainFrame.data();
 }
 
 /*!
@@ -2113,7 +2110,7 @@ void QWebPage::javaScriptAlert(QWebFrame *frame, const QString& msg)
     Q_UNUSED(frame)
 #ifndef QT_NO_MESSAGEBOX
     QWidget* parent = (d->client) ? d->client->ownerWidget() : 0;
-    QMessageBox::information(parent, tr("JavaScript Alert - %1").arg(mainFrame()->url().host()), Qt::escape(msg), QMessageBox::Ok);
+    QMessageBox::information(parent, tr("JavaScript Alert - %1").arg(mainFrame()->url().host()), escapeHtml(msg), QMessageBox::Ok);
 #endif
 }
 
@@ -2130,7 +2127,7 @@ bool QWebPage::javaScriptConfirm(QWebFrame *frame, const QString& msg)
     return true;
 #else
     QWidget* parent = (d->client) ? d->client->ownerWidget() : 0;
-    return QMessageBox::Yes == QMessageBox::information(parent, tr("JavaScript Confirm - %1").arg(mainFrame()->url().host()), Qt::escape(msg), QMessageBox::Yes, QMessageBox::No);
+    return QMessageBox::Yes == QMessageBox::information(parent, tr("JavaScript Confirm - %1").arg(mainFrame()->url().host()), escapeHtml(msg), QMessageBox::Yes, QMessageBox::No);
 #endif
 }
 
@@ -2150,7 +2147,7 @@ bool QWebPage::javaScriptPrompt(QWebFrame *frame, const QString& msg, const QStr
     bool ok = false;
 #ifndef QT_NO_INPUTDIALOG
     QWidget* parent = (d->client) ? d->client->ownerWidget() : 0;
-    QString x = QInputDialog::getText(parent, tr("JavaScript Prompt - %1").arg(mainFrame()->url().host()), Qt::escape(msg), QLineEdit::Normal, defaultValue, &ok);
+    QString x = QInputDialog::getText(parent, tr("JavaScript Prompt - %1").arg(mainFrame()->url().host()), escapeHtml(msg), QLineEdit::Normal, defaultValue, &ok);
     if (ok && result)
         *result = x;
 #endif
@@ -2448,8 +2445,8 @@ void QWebPage::triggerAction(WebAction action, bool)
 
 QSize QWebPage::viewportSize() const
 {
-    if (d->mainFrame && d->mainFrame->d->frame->view())
-        return d->mainFrame->d->frame->view()->frameRect().size();
+    if (d->mainFrame && d->mainFrame.data()->d->frame->view())
+        return d->mainFrame.data()->d->frame->view()->frameRect().size();
 
     return d->viewportSize;
 }
@@ -2569,18 +2566,18 @@ QWebPage::ViewportAttributes QWebPage::viewportAttributesForSize(const QSize& av
     result.m_devicePixelRatio = conf.devicePixelRatio;
     result.m_isUserScalable = static_cast<bool>(conf.userScalable);
 
-    d->pixelRatio = conf.devicePixelRatio;
+    d->page->setDeviceScaleFactor(conf.devicePixelRatio);
 
     return result;
 }
 
 QSize QWebPage::preferredContentsSize() const
 {
-    QWebFrame* frame = d->mainFrame;
+    QWebFrame* frame = d->mainFrame.data();
     if (frame) {
         WebCore::FrameView* view = frame->d->frame->view();
         if (view && view->useFixedLayout())
-            return d->mainFrame->d->frame->view()->fixedLayoutSize();
+            return d->mainFrame.data()->d->frame->view()->fixedLayoutSize();
     }
 
     return d->fixedLayoutSize;
@@ -3200,7 +3197,7 @@ void QWebPage::setContentEditable(bool editable)
         d->page->setEditable(editable);
         d->page->setTabKeyCyclesThroughElements(!editable);
         if (d->mainFrame) {
-            WebCore::Frame* frame = d->mainFrame->d->frame;
+            WebCore::Frame* frame = d->mainFrame.data()->d->frame;
             if (editable) {
                 frame->editor()->applyEditingStyleToBodyElement();
                 // FIXME: mac port calls this if there is no selectedDOMRange
@@ -3324,7 +3321,7 @@ void QWebPage::updatePositionDependentActions(const QPoint &pos)
     QBitArray visitedWebActions(QWebPage::WebActionCount);
 
 #ifndef QT_NO_CONTEXTMENU
-    delete d->currentContextMenu;
+    delete d->currentContextMenu.data();
 
     // Then we let createContextMenu() enable the actions that are put into the menu
     d->currentContextMenu = d->createContextMenu(d->page->contextMenuController()->contextMenu(), d->page->contextMenuController()->contextMenu()->platformDescription(), &visitedWebActions);

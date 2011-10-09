@@ -22,10 +22,11 @@
 
 #if ENABLE(TILED_BACKING_STORE)
 
-#include "FloatSize.h"
+#include "FloatPoint.h"
 #include "IntPoint.h"
 #include "IntRect.h"
 #include "Tile.h"
+#include "TiledBackingStoreBackend.h"
 #include "Timer.h"
 #include <wtf/Assertions.h>
 #include <wtf/HashMap.h>
@@ -34,21 +35,24 @@
 namespace WebCore {
 
 class GraphicsContext;
+class TiledBackingStore;
 class TiledBackingStoreClient;
 
 class TiledBackingStore {
     WTF_MAKE_NONCOPYABLE(TiledBackingStore); WTF_MAKE_FAST_ALLOCATED;
 public:
-    TiledBackingStore(TiledBackingStoreClient*);
+    TiledBackingStore(TiledBackingStoreClient*, PassOwnPtr<TiledBackingStoreBackend> = TiledBackingStoreBackend::create());
     ~TiledBackingStore();
 
     void adjustVisibleRect();
     
+    TiledBackingStoreClient* client() { return m_client; }
     float contentsScale() { return m_contentsScale; }
     void setContentsScale(float);
     
     bool contentsFrozen() const { return m_contentsFrozen; }
     void setContentsFrozen(bool);
+    void updateTileBuffers();
 
     void invalidate(const IntRect& dirtyRect);
     void paint(GraphicsContext*, const IntRect&);
@@ -60,12 +64,21 @@ public:
     void setTileCreationDelay(double delay);
     
     // Tiled are dropped outside the keep area, and created for cover area. The values a relative to the viewport size.
-    void getKeepAndCoverAreaMultipliers(FloatSize& keepMultiplier, FloatSize& coverMultiplier)
+    void getKeepAndCoverAreaMultipliers(float& keepMultiplier, float& coverMultiplier)
     {
         keepMultiplier = m_keepAreaMultiplier;
         coverMultiplier = m_coverAreaMultiplier;
     }
-    void setKeepAndCoverAreaMultipliers(const FloatSize& keepMultiplier, const FloatSize& coverMultiplier);    
+    void setKeepAndCoverAreaMultipliers(float keepMultiplier, float coverMultiplier);
+    void setVisibleRectTrajectoryVector(const FloatPoint&);
+
+    IntRect mapToContents(const IntRect&) const;
+    IntRect mapFromContents(const IntRect&) const;
+
+    IntRect tileRectForCoordinate(const Tile::Coordinate&) const;
+    Tile::Coordinate tileCoordinateForPoint(const IntPoint&) const;
+    double tileDistance(const IntRect& viewport, const Tile::Coordinate&) const;
+    float coverageRatio(const WebCore::IntRect& contentsRect);
 
 private:
     void startTileBufferUpdateTimer();
@@ -76,31 +89,26 @@ private:
     void tileBufferUpdateTimerFired(TileTimer*);
     void tileCreationTimerFired(TileTimer*);
     
-    void updateTileBuffers();
     void createTiles();
+    IntRect computeKeepRect(const IntRect& visibleRect) const;
+    IntRect computeCoverRect(const IntRect& visibleRect) const;
     
     void commitScaleChange();
 
-    void dropOverhangingTiles();
+    bool resizeEdgeTiles();
     void dropTilesOutsideRect(const IntRect&);
     
     PassRefPtr<Tile> tileAt(const Tile::Coordinate&) const;
     void setTile(const Tile::Coordinate& coordinate, PassRefPtr<Tile> tile);
     void removeTile(const Tile::Coordinate& coordinate);
 
-    IntRect mapToContents(const IntRect&) const;
-    IntRect mapFromContents(const IntRect&) const;
-    
     IntRect contentsRect() const;
-    
-    IntRect tileRectForCoordinate(const Tile::Coordinate&) const;
-    Tile::Coordinate tileCoordinateForPoint(const IntPoint&) const;
-    double tileDistance(const IntRect& viewport, const Tile::Coordinate&);
     
     void paintCheckerPattern(GraphicsContext*, const IntRect&, const Tile::Coordinate&);
 
 private:
     TiledBackingStoreClient* m_client;
+    OwnPtr<TiledBackingStoreBackend> m_backend;
 
     typedef HashMap<Tile::Coordinate, RefPtr<Tile> > TileMap;
     TileMap m_tiles;
@@ -110,8 +118,9 @@ private:
 
     IntSize m_tileSize;
     double m_tileCreationDelay;
-    FloatSize m_keepAreaMultiplier;
-    FloatSize m_coverAreaMultiplier;
+    float m_keepAreaMultiplier;
+    float m_coverAreaMultiplier;
+    FloatPoint m_visibleRectTrajectoryVector;
     
     IntRect m_previousVisibleRect;
     float m_contentsScale;

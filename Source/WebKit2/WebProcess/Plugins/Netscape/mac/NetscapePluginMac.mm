@@ -737,8 +737,32 @@ bool NetscapePlugin::platformHandleKeyboardEvent(const WebKeyboardEvent& keyboar
 
     switch (m_eventModel) {
     case NPEventModelCocoa: {
+        if (keyboardEvent.type() == WebEvent::KeyDown) {
+            m_hasHandledAKeyDownEvent = true;
+
+            if (!m_pluginWantsLegacyCocoaTextInput && m_isComplexTextInputEnabled && !keyboardEvent.isAutoRepeat()) {
+                // When complex text is enabled in the new model, the plug-in should never
+                // receive any key down or key up events until the composition is complete.
+                m_ignoreNextKeyUpEventCounter++;
+                return true;
+            }
+        } else if (keyboardEvent.type() == WebEvent::KeyUp && m_ignoreNextKeyUpEventCounter) {
+            m_ignoreNextKeyUpEventCounter--;
+            return true;
+        }
+
         NPCocoaEvent event = initializeKeyboardEvent(keyboardEvent);
-        handled = NPP_HandleEvent(&event);
+        int16_t returnValue = NPP_HandleEvent(&event);
+        handled = returnValue;
+
+        if (!m_pluginWantsLegacyCocoaTextInput) {
+            if (event.type == NPCocoaEventKeyDown && returnValue == kNPEventStartIME) {
+                if (!keyboardEvent.isAutoRepeat())
+                    m_ignoreNextKeyUpEventCounter++;
+                setComplexTextInputEnabled(true);
+            }
+        }
+
         break;
     }
 
@@ -787,7 +811,7 @@ bool NetscapePlugin::platformHandleKeyboardEvent(const WebKeyboardEvent& keyboar
 void NetscapePlugin::platformSetFocus(bool hasFocus)
 {
     m_pluginHasFocus = hasFocus;
-    controller()->setComplexTextInputEnabled(m_pluginHasFocus && m_windowHasFocus);
+    pluginFocusOrWindowFocusChanged();
 
     switch (m_eventModel) {
         case NPEventModelCocoa: {
@@ -815,7 +839,7 @@ void NetscapePlugin::platformSetFocus(bool hasFocus)
 void NetscapePlugin::windowFocusChanged(bool hasFocus)
 {
     m_windowHasFocus = hasFocus;
-    controller()->setComplexTextInputEnabled(m_pluginHasFocus && m_windowHasFocus);
+    pluginFocusOrWindowFocusChanged();
 
     switch (m_eventModel) {
         case NPEventModelCocoa: {
@@ -941,6 +965,18 @@ static bool convertStringToKeyCodes(const String& string, ScriptCode scriptCode,
 
 void NetscapePlugin::sendComplexTextInput(const String& textInput)
 {
+    if (!m_pluginWantsLegacyCocoaTextInput) {
+        // In the updated Cocoa text input spec, text input is disabled when the text input string has been sent
+        // by the UI process. Since the UI process has also updated its state, we can just reset the variable here
+        // instead of calling setComplexTextInputEnabled.
+        m_isComplexTextInputEnabled = false;
+
+        // The UI process can also disable text input by sending an empty input string. In this case, we don't want
+        // to send it to the plug-in.
+        if (textInput.isNull())
+            return;
+    }
+
     switch (m_eventModel) {
     case NPEventModelCocoa: {
         NPCocoaEvent event = initializeEvent(NPCocoaEventTextInput);
@@ -973,6 +1009,35 @@ void NetscapePlugin::sendComplexTextInput(const String& textInput)
     default:
         ASSERT_NOT_REACHED();
     }
+}
+
+void NetscapePlugin::pluginFocusOrWindowFocusChanged()
+{
+    bool pluginHasFocusAndWindowHasFocus = m_pluginHasFocus && m_windowHasFocus;
+
+    controller()->pluginFocusOrWindowFocusChanged(pluginHasFocusAndWindowHasFocus);
+
+    // In the updated Cocoa text input spec, the plug-in will enable complex text input
+    // by returning kNPEventStartIME from it's NPCocoaEventKeyDown handler.
+    if (!m_pluginWantsLegacyCocoaTextInput)
+        return;
+
+    // In the old model, if the plug-in is focused, enable complex text input.
+    setComplexTextInputEnabled(pluginHasFocusAndWindowHasFocus);
+}
+
+void NetscapePlugin::setComplexTextInputEnabled(bool complexTextInputEnabled)
+{
+    if (m_isComplexTextInputEnabled == complexTextInputEnabled)
+        return;
+
+    m_isComplexTextInputEnabled = complexTextInputEnabled;
+
+    PluginComplexTextInputState complexTextInputState = PluginComplexTextInputDisabled;
+    if (m_isComplexTextInputEnabled)
+        complexTextInputState = m_pluginWantsLegacyCocoaTextInput ? PluginComplexTextInputEnabledLegacy : PluginComplexTextInputEnabled;
+
+    controller()->setComplexTextInputState(complexTextInputState);
 }
 
 PlatformLayer* NetscapePlugin::pluginLayer()

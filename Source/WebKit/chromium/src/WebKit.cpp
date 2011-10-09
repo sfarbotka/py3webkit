@@ -37,7 +37,7 @@
 #include "Settings.h"
 #include "TextEncoding.h"
 #include "V8Binding.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebMediaPlayerClientImpl.h"
 #include "WebSocket.h"
 #include "WorkerContextExecutionProxy.h"
@@ -54,26 +54,35 @@ namespace WebKit {
 // Doing so may cause hard to reproduce crashes.
 static bool s_webKitInitialized = false;
 
-static WebKitClient* s_webKitClient = 0;
+static WebKitPlatformSupport* s_webKitPlatformSupport = 0;
 static bool s_layoutTestMode = false;
 
 static bool generateEntropy(unsigned char* buffer, size_t length)
 {
-    if (s_webKitClient) {
-        s_webKitClient->cryptographicallyRandomValues(buffer, length);
+    if (s_webKitPlatformSupport) {
+        s_webKitPlatformSupport->cryptographicallyRandomValues(buffer, length);
         return true;
     }
     return false;
 }
 
-void initialize(WebKitClient* webKitClient)
+void initialize(WebKitPlatformSupport* webKitPlatformSupport)
+{
+    initializeWithoutV8(webKitPlatformSupport);
+
+    v8::V8::SetEntropySource(&generateEntropy);
+    v8::V8::Initialize();
+    WebCore::V8BindingPerIsolateData::ensureInitialized(v8::Isolate::GetCurrent());
+}
+
+void initializeWithoutV8(WebKitPlatformSupport* webKitPlatformSupport)
 {
     ASSERT(!s_webKitInitialized);
     s_webKitInitialized = true;
 
-    ASSERT(webKitClient);
-    ASSERT(!s_webKitClient);
-    s_webKitClient = webKitClient;
+    ASSERT(webKitPlatformSupport);
+    ASSERT(!s_webKitPlatformSupport);
+    s_webKitPlatformSupport = webKitPlatformSupport;
 
     WTF::initializeThreading();
     WTF::initializeMainThread();
@@ -88,19 +97,18 @@ void initialize(WebKitClient* webKitClient)
     // this, initializing this lazily probably doesn't buy us much.
     WebCore::UTF8Encoding();
 
-    v8::V8::SetEntropySource(&generateEntropy);
-    v8::V8::Initialize();
-    WebCore::V8BindingPerIsolateData::ensureInitialized(v8::Isolate::GetCurrent());
+ 
 }
+
 
 void shutdown()
 {
-    s_webKitClient = 0;
+    s_webKitPlatformSupport = 0;
 }
 
-WebKitClient* webKitClient()
+WebKitPlatformSupport* webKitPlatformSupport()
 {
-    return s_webKitClient;
+    return s_webKitPlatformSupport;
 }
 
 void setLayoutTestMode(bool value)

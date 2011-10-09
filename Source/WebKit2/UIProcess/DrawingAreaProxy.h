@@ -54,16 +54,6 @@ class LayerTreeContext;
 class UpdateInfo;
 class WebPageProxy;
 
-#if PLATFORM(MAC)
-typedef CGContextRef PlatformDrawingContext;
-#elif PLATFORM(WIN)
-typedef HDC PlatformDrawingContext;
-#elif PLATFORM(QT)
-typedef QPainter* PlatformDrawingContext;
-#elif PLATFORM(GTK)
-typedef cairo_t* PlatformDrawingContext;
-#endif
-
 class DrawingAreaProxy {
     WTF_MAKE_NONCOPYABLE(DrawingAreaProxy);
 
@@ -74,10 +64,7 @@ public:
 
     void didReceiveDrawingAreaProxyMessage(CoreIPC::Connection*, CoreIPC::MessageID, CoreIPC::ArgumentDecoder*);
 
-    // Returns true if painting was successful, false otherwise.
-    virtual bool paint(const WebCore::IntRect&, PlatformDrawingContext) = 0;
-
-    virtual void sizeDidChange() = 0;
+    virtual void deviceScaleFactorDidChange() = 0;
 
     // FIXME: These should be pure virtual.
     virtual void visibilityDidChange() { }
@@ -100,6 +87,8 @@ protected:
     WebCore::IntSize m_scrollOffset;
 
 private:
+    virtual void sizeDidChange() = 0;
+
     // CoreIPC message handlers.
     // FIXME: These should be pure virtual.
     virtual void update(uint64_t backingStoreStateID, const UpdateInfo&) { }
@@ -109,10 +98,11 @@ private:
     virtual void exitAcceleratedCompositingMode(uint64_t backingStoreStateID, const UpdateInfo&) { }
 #endif
 #if ENABLE(TILED_BACKING_STORE)
-    virtual void didSetSize(const WebCore::IntSize&) { }
-    virtual void invalidate(const WebCore::IntRect&) { }
     virtual void snapshotTaken(const UpdateInfo&) { }
-    virtual void tileUpdated(int tileID, const UpdateInfo&, float scale, unsigned pendingUpdateCount) { }
+    virtual void createTile(int tileID, const UpdateInfo& updateInfo) { }
+    virtual void updateTile(int tileID, const UpdateInfo& updateInfo) { }
+    virtual void didRenderFrame() { }
+    virtual void removeTile(int tileID) { }
     virtual void allTileUpdatesProcessed() { }
 #endif
 };

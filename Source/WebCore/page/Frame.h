@@ -147,14 +147,11 @@ namespace WebCore {
 
         Settings* settings() const; // can be NULL
 
-        void setPrinting(bool printing, const FloatSize& pageSize, float maximumShrinkRatio, AdjustViewSizeOrNot);
+        void setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio, AdjustViewSizeOrNot);
         FloatSize resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize);
 
         bool inViewSourceMode() const;
         void setInViewSourceMode(bool = true);
-
-        void keepAlive(); // Used to keep the frame alive when running a script that might destroy it.
-        static void cancelAllKeepAlive();
 
         void setDocument(PassRefPtr<Document>);
 
@@ -164,8 +161,12 @@ namespace WebCore {
         float textZoomFactor() const { return m_textZoomFactor; }
         void setPageAndTextZoomFactors(float pageZoomFactor, float textZoomFactor);
 
-        void scalePage(float scale, const IntPoint& origin);
-        float pageScaleFactor() const { return m_pageScaleFactor; }
+        // Scale factor of this frame with respect to the container.
+        float frameScaleFactor() const;
+
+#if USE(ACCELERATED_COMPOSITING)
+        void deviceOrPageScaleFactorChanged();
+#endif
 
 #if ENABLE(ORIENTATION_EVENTS)
         // Orientation is the interface orientation in degrees. Some examples are:
@@ -185,18 +186,15 @@ namespace WebCore {
         DragImageRef nodeImage(Node*);
         DragImageRef dragImageForSelection();
 
-        VisiblePosition visiblePositionForPoint(const IntPoint& framePoint);
-        Document* documentAtPoint(const IntPoint& windowPoint);
-        PassRefPtr<Range> rangeForPoint(const IntPoint& framePoint);
+        VisiblePosition visiblePositionForPoint(const LayoutPoint& framePoint);
+        Document* documentAtPoint(const LayoutPoint& windowPoint);
+        PassRefPtr<Range> rangeForPoint(const LayoutPoint& framePoint);
 
         String searchForLabelsAboveCell(RegularExpression*, HTMLTableCellElement*, size_t* resultDistanceFromStartOfCell);
         String searchForLabelsBeforeElement(const Vector<String>& labels, Element*, size_t* resultDistance, bool* resultIsInCellAbove);
         String matchLabelsAgainstElement(const Vector<String>& labels, Element*);
         
 #if PLATFORM(MAC)
-        NSString* searchForLabelsBeforeElement(NSArray* labels, Element*, size_t* resultDistance, bool* resultIsInCellAbove);
-        NSString* matchLabelsAgainstElement(NSArray* labels, Element*);
-
         NSImage* selectionImage(bool forceBlackText = false) const;
         NSImage* snapshotDragImage(Node*, NSRect* imageRect, NSRect* elementRect) const;
         NSImage* imageFromRect(NSRect) const;
@@ -215,11 +213,6 @@ namespace WebCore {
         Frame(Page*, HTMLFrameOwnerElement*, FrameLoaderClient*);
 
         void injectUserScriptsForWorld(DOMWrapperWorld*, const UserScriptVector&, UserScriptInjectionTime);
-        void lifeSupportTimerFired(Timer<Frame>*);
-
-#if USE(ACCELERATED_COMPOSITING)
-        void pageScaleFactorChanged(float);
-#endif
 
         HashSet<FrameDestructionObserver*> m_destructionObservers;
 
@@ -242,12 +235,8 @@ namespace WebCore {
         mutable EventHandler m_eventHandler;
         mutable AnimationController m_animationController;
 
-        Timer<Frame> m_lifeSupportTimer;
-
         float m_pageZoomFactor;
         float m_textZoomFactor;
-
-        float m_pageScaleFactor;
 
 #if ENABLE(ORIENTATION_EVENTS)
         int m_orientation;

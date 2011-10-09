@@ -1003,7 +1003,7 @@ bool InspectorStyleSheet::resourceStyleSheetText(String* result) const
 
     String error;
     bool base64Encoded;
-    InspectorPageAgent::resourceContent(&error, ownerDocument()->frame(), m_pageStyleSheet->finalURL(), result, &base64Encoded);
+    InspectorPageAgent::resourceContent(&error, ownerDocument()->frame(), KURL(ParsedURLString, m_pageStyleSheet->href()), result, &base64Encoded);
     return error.isEmpty() && !base64Encoded;
 }
 
@@ -1110,6 +1110,7 @@ InspectorStyleSheetForInlineStyle::InspectorStyleSheetForInlineStyle(const Strin
     : InspectorStyleSheet(id, 0, origin, "")
     , m_element(element)
     , m_ruleSourceData(0)
+    , m_isStyleTextValid(false)
 {
     ASSERT(m_element);
     m_inspectorStyle = InspectorStyle::create(InspectorCSSId(id, 0), inlineStyle(), this);

@@ -37,7 +37,7 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(JSActivation);
 
-const ClassInfo JSActivation::s_info = { "JSActivation", &Base::s_info, 0, 0 };
+const ClassInfo JSActivation::s_info = { "JSActivation", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(JSActivation) };
 
 JSActivation::JSActivation(CallFrame* callFrame, FunctionExecutable* functionExecutable)
     : Base(callFrame->globalData(), callFrame->globalData().activationStructure.get(), functionExecutable->symbolTable(), callFrame->registers())
@@ -46,6 +46,11 @@ JSActivation::JSActivation(CallFrame* callFrame, FunctionExecutable* functionExe
     , m_requiresDynamicChecks(functionExecutable->usesEval())
     , m_argumentsRegister(functionExecutable->generatedBytecode().argumentsRegister())
 {
+}
+
+void JSActivation::finishCreation(CallFrame* callFrame)
+{
+    Base::finishCreation(callFrame->globalData());
     ASSERT(inherits(&s_info));
 
     // We have to manually ref and deref the symbol table as JSVariableObject
@@ -58,22 +63,23 @@ JSActivation::~JSActivation()
     static_cast<SharedSymbolTable*>(m_symbolTable)->deref();
 }
 
-void JSActivation::visitChildren(SlotVisitor& visitor)
+void JSActivation::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    JSActivation* thisObject = static_cast<JSActivation*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    Base::visitChildren(visitor);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    Base::visitChildren(thisObject, visitor);
 
     // No need to mark our registers if they're still in the RegisterFile.
-    WriteBarrier<Unknown>* registerArray = m_registerArray.get();
+    WriteBarrier<Unknown>* registerArray = thisObject->m_registerArray.get();
     if (!registerArray)
         return;
 
-    visitor.appendValues(registerArray, m_numParametersMinusThis);
+    visitor.appendValues(registerArray, thisObject->m_numParametersMinusThis);
 
     // Skip the call frame, which sits between the parameters and vars.
-    visitor.appendValues(registerArray + m_numParametersMinusThis + RegisterFile::CallFrameHeaderSize, m_numCapturedVars);
+    visitor.appendValues(registerArray + thisObject->m_numParametersMinusThis + RegisterFile::CallFrameHeaderSize, thisObject->m_numCapturedVars);
 }
 
 inline bool JSActivation::symbolTableGet(const Identifier& propertyName, PropertySlot& slot)
@@ -159,16 +165,22 @@ bool JSActivation::getOwnPropertySlot(ExecState* exec, const Identifier& propert
 
 void JSActivation::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    ASSERT(!Heap::heap(value) || Heap::heap(value) == Heap::heap(this));
+    put(this, exec, propertyName, value, slot);
+}
 
-    if (symbolTablePut(exec->globalData(), propertyName, value))
+void JSActivation::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    JSActivation* thisObject = static_cast<JSActivation*>(cell);
+    ASSERT(!Heap::heap(value) || Heap::heap(value) == Heap::heap(thisObject));
+
+    if (thisObject->symbolTablePut(exec->globalData(), propertyName, value))
         return;
 
     // We don't call through to JSObject because __proto__ and getter/setter 
     // properties are non-standard extensions that other implementations do not
     // expose in the activation object.
-    ASSERT(!hasGetterSetterProperties());
-    putDirect(exec->globalData(), propertyName, value, 0, true, slot);
+    ASSERT(!thisObject->hasGetterSetterProperties());
+    thisObject->putDirect(exec->globalData(), propertyName, value, 0, true, slot);
 }
 
 // FIXME: Make this function honor ReadOnly (const) and DontEnum
@@ -189,10 +201,15 @@ void JSActivation::putWithAttributes(ExecState* exec, const Identifier& property
 
 bool JSActivation::deleteProperty(ExecState* exec, const Identifier& propertyName)
 {
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool JSActivation::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
+{
     if (propertyName == exec->propertyNames().arguments)
         return false;
 
-    return Base::deleteProperty(exec, propertyName);
+    return Base::deleteProperty(cell, exec, propertyName);
 }
 
 JSObject* JSActivation::toThisObject(ExecState* exec) const
@@ -200,11 +217,6 @@ JSObject* JSActivation::toThisObject(ExecState* exec) const
     return exec->globalThisValue();
 }
 
-JSValue JSActivation::toStrictThisObject(ExecState*) const
-{
-    return jsNull();
-}
-    
 bool JSActivation::isDynamicScope(bool& requiresDynamicChecks) const
 {
     requiresDynamicChecks = m_requiresDynamicChecks;

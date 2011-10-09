@@ -34,7 +34,7 @@ RenderSVGBlock::RenderSVGBlock(SVGElement* node)
 {
 }
 
-IntRect RenderSVGBlock::visualOverflowRect() const
+LayoutRect RenderSVGBlock::visualOverflowRect() const
 {
     LayoutRect borderRect = borderBoxRect();
 
@@ -78,7 +78,7 @@ void RenderSVGBlock::updateBoxModelInfoFromStyle()
     setHasOverflowClip(false);
 }
 
-void RenderSVGBlock::absoluteRects(Vector<LayoutRect>&, const LayoutPoint&)
+void RenderSVGBlock::absoluteRects(Vector<LayoutRect>&, const LayoutPoint&) const
 {
     // This code path should never be taken for SVG, as we're assuming useTransforms=true everywhere, absoluteQuads should be used.
     ASSERT_NOT_REACHED();

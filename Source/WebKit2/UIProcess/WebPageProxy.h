@@ -46,6 +46,7 @@
 #include "WebFormClient.h"
 #include "WebFrameProxy.h"
 #include "WebHistoryClient.h"
+#include "WebHitTestResult.h"
 #include "WebLoaderClient.h"
 #include "WebPageContextMenuClient.h"
 #include "WebPolicyClient.h"
@@ -53,6 +54,7 @@
 #include "WebResourceLoadClient.h"
 #include "WebUIClient.h"
 #include <WebCore/DragActions.h>
+#include <WebCore/HitTestResult.h>
 #include <WebCore/ScrollTypes.h>
 #include <WebCore/TextChecking.h>
 #include <wtf/HashMap.h>
@@ -260,7 +262,7 @@ public:
     void viewWillStartLiveResize();
     void viewWillEndLiveResize();
 
-    void setInitialFocus(bool);
+    void setInitialFocus(bool forward, bool isKeyboardEventValid, const WebKeyboardEvent&);
     void setWindowResizerSize(const WebCore::IntSize&);
     
     void clearSelection();
@@ -273,7 +275,7 @@ public:
         ViewWindowIsActive = 1 << 0,
         ViewIsFocused = 1 << 1,
         ViewIsVisible = 1 << 2,
-        ViewIsInWindow = 1 << 3
+        ViewIsInWindow = 1 << 3,
     };
     typedef unsigned ViewStateFlags;
     void viewStateDidChange(ViewStateFlags flags);
@@ -299,7 +301,7 @@ public:
 
     void setComposition(const String& text, Vector<WebCore::CompositionUnderline> underlines, uint64_t selectionStart, uint64_t selectionEnd, uint64_t replacementRangeStart, uint64_t replacementRangeEnd);
     void confirmComposition();
-    void confirmCompositionWithoutDisturbingSelection();
+    void cancelComposition();
     bool insertText(const String& text, uint64_t replacementRangeStart, uint64_t replacementRangeEnd);
     void getMarkedRange(uint64_t& location, uint64_t& length);
     void getSelectedRange(uint64_t& location, uint64_t& length);
@@ -383,8 +385,12 @@ public:
     void setPageZoomFactor(double);
     void setPageAndTextZoomFactors(double pageZoomFactor, double textZoomFactor);
 
-    void scaleWebView(double scale, const WebCore::IntPoint& origin);
-    double viewScaleFactor() const { return m_viewScaleFactor; }
+    void scalePage(double scale, const WebCore::IntPoint& origin);
+    double pageScaleFactor() const { return m_pageScaleFactor; }
+
+    float deviceScaleFactor() const;
+    void setIntrinsicDeviceScaleFactor(float);
+    void setCustomDeviceScaleFactor(float);
 
     void setUseFixedLayout(bool);
     void setFixedLayoutSize(const WebCore::IntSize&);
@@ -407,7 +413,7 @@ public:
     void makeFirstResponder();
 #endif
 
-    void viewScaleFactorDidChange(double);
+    void pageScaleFactorDidChange(double);
 
     void setMemoryCacheClientCallsEnabled(bool);
 
@@ -555,12 +561,10 @@ public:
 
     WebCore::IntRect visibleScrollerThumbRect() const { return m_visibleScrollerThumbRect; }
 
-    // FIXME: This is in violation of the no synchronous messages to the Web Process policy and
-    // should be removed as soon as possible.
-    PassRefPtr<WebImage> createSnapshotOfVisibleContent();
-
     uint64_t renderTreeSize() const { return m_renderTreeSize; }
- 
+
+    void setShouldSendEventsSynchronously(bool sync) { m_shouldSendEventsSynchronously = sync; };
+
 private:
     WebPageProxy(PageClient*, PassRefPtr<WebProcessProxy>, WebPageGroup*, uint64_t pageID);
 
@@ -615,7 +619,7 @@ private:
     void didFailLoadForResource(uint64_t frameID, uint64_t resourceIdentifier, const WebCore::ResourceError&);
 
     // UI client
-    void createNewPage(const WebCore::WindowFeatures&, uint32_t modifiers, int32_t mouseButton, uint64_t& newPageID, WebPageCreationParameters&);
+    void createNewPage(const WebCore::ResourceRequest&, const WebCore::WindowFeatures&, uint32_t modifiers, int32_t mouseButton, uint64_t& newPageID, WebPageCreationParameters&);
     void showPage();
     void closePage(bool stopResponsivenessTimer);
     void runJavaScriptAlert(uint64_t frameID, const String&);
@@ -623,7 +627,7 @@ private:
     void runJavaScriptPrompt(uint64_t frameID, const String&, const String&, String& result);
     void shouldInterruptJavaScript(bool& result);
     void setStatusText(const String&);
-    void mouseDidMoveOverElement(uint32_t modifiers, CoreIPC::ArgumentDecoder*);
+    void mouseDidMoveOverElement(const WebHitTestResult::Data& hitTestResultData, uint32_t modifiers, CoreIPC::ArgumentDecoder*);
     void missingPluginButtonClicked(const String& mimeType, const String& url, const String& pluginsPageURL);
     void setToolbarsAreVisible(bool toolbarsAreVisible);
     void getToolbarsAreVisible(bool& toolbarsAreVisible);
@@ -645,7 +649,6 @@ private:
     void exceededDatabaseQuota(uint64_t frameID, const String& originIdentifier, const String& databaseName, const String& displayName, uint64_t currentQuota, uint64_t currentOriginUsage, uint64_t currentDatabaseUsage, uint64_t expectedUsage, uint64_t& newQuota);
     void requestGeolocationPermissionForFrame(uint64_t geolocationID, uint64_t frameID, String originIdentifier);
     void runModal();
-    void didCompleteRubberBandForMainFrame(const WebCore::IntSize&);
     void notifyScrollerThumbIsVisibleInRect(const WebCore::IntRect&);
     void didChangeScrollbarsForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar);
     void didChangeScrollOffsetPinningForMainFrame(bool pinnedToLeftSide, bool pinnedToRightSide);
@@ -763,13 +766,14 @@ private:
     void didFinishLoadingDataForCustomRepresentation(const String& suggestedFilename, const CoreIPC::DataReference&);
 
 #if PLATFORM(MAC)
-    void setComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled);
+    void pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus);
+    void setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, uint64_t complexTextInputState);
 #endif
 
     void clearPendingAPIRequestURL() { m_pendingAPIRequestURL = String(); }
     void setPendingAPIRequestURL(const String& pendingAPIRequestURL) { m_pendingAPIRequestURL = pendingAPIRequestURL; }
 
-    void initializeSandboxExtensionHandle(const WebCore::KURL&, SandboxExtension::Handle&);
+    bool maybeInitializeSandboxExtensionHandle(const WebCore::KURL&, SandboxExtension::Handle&);
 
 #if PLATFORM(MAC)
     void substitutionsPanelIsShowing(bool&);
@@ -858,7 +862,9 @@ private:
 
     double m_textZoomFactor;
     double m_pageZoomFactor;
-    double m_viewScaleFactor;
+    double m_pageScaleFactor;
+    float m_intrinsicDeviceScaleFactor;
+    float m_customDeviceScaleFactor;
 
     bool m_drawsBackground;
     bool m_drawsTransparentBackground;
@@ -927,6 +933,8 @@ private:
     uint64_t m_renderTreeSize;
 
     static WKPageDebugPaintFlags s_debugPaintFlags;
+
+    bool m_shouldSendEventsSynchronously;
 };
 
 } // namespace WebKit

@@ -32,7 +32,7 @@ GeolocationService::FactoryFunction* GeolocationService::s_factoryFunction = &Ge
 
 PassOwnPtr<GeolocationService> GeolocationServiceEfl::create(GeolocationServiceClient* client)
 {
-    return new GeolocationServiceEfl(client);
+    return adoptPtr(new GeolocationServiceEfl(client));
 }
 
 GeolocationServiceEfl::GeolocationServiceEfl(GeolocationServiceClient* client)
@@ -52,16 +52,6 @@ bool GeolocationServiceEfl::startUpdating(PositionOptions* options)
 }
 
 void GeolocationServiceEfl::stopUpdating()
-{
-    notImplemented();
-}
-
-void GeolocationServiceEfl::suspend()
-{
-    notImplemented();
-}
-
-void GeolocationServiceEfl::resume()
 {
     notImplemented();
 }

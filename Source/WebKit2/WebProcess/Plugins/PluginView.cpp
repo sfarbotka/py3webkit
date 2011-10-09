@@ -287,7 +287,7 @@ PluginView::~PluginView()
         m_plugin->destroyPlugin();
         m_isBeingDestroyed = false;
 #if PLATFORM(MAC)
-        setComplexTextInputEnabled(false);
+        setComplexTextInputState(PluginComplexTextInputDisabled);
 #endif
     }
 
@@ -519,21 +519,44 @@ bool PluginView::getFormValue(String& formValue)
     return m_plugin->getFormValue(formValue);
 }
 
+bool PluginView::scroll(ScrollDirection direction, ScrollGranularity granularity)
+{
+    // The plug-in can be null here if it failed to initialize.
+    if (!m_isInitialized || !m_plugin)
+        return false;
+
+    return m_plugin->handleScroll(direction, granularity);
+}
+
+Scrollbar* PluginView::horizontalScrollbar()
+{
+    // The plug-in can be null here if it failed to initialize.
+    if (!m_isInitialized || !m_plugin)
+        return 0;
+
+    return m_plugin->horizontalScrollbar();
+}
+
+Scrollbar* PluginView::verticalScrollbar()
+{
+    // The plug-in can be null here if it failed to initialize.
+    if (!m_isInitialized || !m_plugin)
+        return 0;
+
+    return m_plugin->verticalScrollbar();
+}
+
 void PluginView::setFrameRect(const WebCore::IntRect& rect)
 {
     Widget::setFrameRect(rect);
     viewGeometryDidChange();
 }
 
-void PluginView::setBoundsSize(const WebCore::IntSize& size)
-{
-    Widget::setBoundsSize(size);
-    m_boundsSize = size;
-    viewGeometryDidChange();
-}
-
 void PluginView::paint(GraphicsContext* context, const IntRect& dirtyRect)
 {
+    if (m_plugin && context->updatingControlTints())
+        m_plugin->updateControlTints(context);
+
     if (context->paintingDisabled() || !m_plugin || !m_isInitialized)
         return;
 
@@ -586,11 +609,13 @@ void PluginView::handleEvent(Event* event)
         || (event->type() == eventNames().mousedownEvent && currentEvent->type() == WebEvent::MouseDown)
         || (event->type() == eventNames().mouseupEvent && currentEvent->type() == WebEvent::MouseUp)) {
         // We have a mouse event.
+
+        // FIXME: Clicking in a scroll bar should not change focus.
         if (currentEvent->type() == WebEvent::MouseDown)
             focusPluginElement();
         
-        // Adjust mouse coordinates to account for pageScaleFactor
-        WebMouseEvent eventWithScaledCoordinates(*static_cast<const WebMouseEvent*>(currentEvent), frame()->pageScaleFactor());
+        // Adjust mouse coordinates to account for frameScaleFactor
+        WebMouseEvent eventWithScaledCoordinates(*static_cast<const WebMouseEvent*>(currentEvent), frame()->frameScaleFactor());
         didHandleEvent = m_plugin->handleMouseEvent(eventWithScaledCoordinates);
     } else if (event->type() == eventNames().mousewheelEvent && currentEvent->type() == WebEvent::Wheel) {
         // We have a wheel event.
@@ -656,8 +681,8 @@ void PluginView::viewGeometryDidChange()
     // Get the frame rect in window coordinates.
     IntRect frameRectInWindowCoordinates = parent()->contentsToWindow(frameRect());
     
-    // Adjust bounds to account for pageScaleFactor
-    frameRectInWindowCoordinates.scale(1 / frame()->pageScaleFactor());
+    // Adjust bounds to account for frameScaleFactor
+    frameRectInWindowCoordinates.scale(1 / frame()->frameScaleFactor());
     m_plugin->geometryDidChange(frameRectInWindowCoordinates, clipRectInWindowCoordinates());
 }
 
@@ -683,7 +708,7 @@ IntRect PluginView::clipRectInWindowCoordinates() const
     // Intersect the two rects to get the view clip rect in window coordinates.
     frameRectInWindowCoordinates.intersect(windowClipRect);
 
-    frameRectInWindowCoordinates.scale(1 / frame->pageScaleFactor());
+    frameRectInWindowCoordinates.scale(1 / frame->frameScaleFactor());
     return frameRectInWindowCoordinates;
 }
 
@@ -1067,16 +1092,20 @@ void PluginView::scheduleWindowedPluginGeometryUpdate(const WindowGeometry& geom
 #endif
 
 #if PLATFORM(MAC)
-void PluginView::setComplexTextInputEnabled(bool complexTextInputEnabled)
+void PluginView::pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus)
 {
-    m_webPage->send(Messages::WebPageProxy::SetComplexTextInputEnabled(m_plugin->pluginComplexTextInputIdentifier(), complexTextInputEnabled));
+    m_webPage->send(Messages::WebPageProxy::PluginFocusOrWindowFocusChanged(m_plugin->pluginComplexTextInputIdentifier(), pluginHasFocusAndWindowHasFocus));
+}
+
+void PluginView::setComplexTextInputState(PluginComplexTextInputState pluginComplexTextInputState)
+{
+    m_webPage->send(Messages::WebPageProxy::SetPluginComplexTextInputState(m_plugin->pluginComplexTextInputIdentifier(), pluginComplexTextInputState));
 }
 
 mach_port_t PluginView::compositingRenderServerPort()
 {
     return WebProcess::shared().compositingRenderServerPort();
 }
-
 #endif
     
 String PluginView::proxiesForURL(const String& urlString)

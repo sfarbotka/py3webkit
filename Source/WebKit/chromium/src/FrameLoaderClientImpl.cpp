@@ -54,6 +54,8 @@
 #include "PluginData.h"
 #include "PluginDataChromium.h"
 #include "ProgressTracker.h"
+#include "ResourceHandleInternal.h"
+#include "ResourceLoader.h"
 #include "Settings.h"
 #include "StringExtras.h"
 #include "WebDataSourceImpl.h"
@@ -63,7 +65,7 @@
 #include "WebFrameClient.h"
 #include "WebFrameImpl.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebMimeRegistry.h"
 #include "WebNode.h"
 #include "WebPermissionClient.h"
@@ -81,6 +83,10 @@
 #include "WrappedResourceRequest.h"
 #include "WrappedResourceResponse.h"
 #include <wtf/text/CString.h>
+
+#if USE(V8)
+#include <v8.h>
+#endif
 
 using namespace WebCore;
 
@@ -134,23 +140,19 @@ void FrameLoaderClientImpl::documentElementAvailable()
         m_webFrame->client()->didCreateDocumentElement(m_webFrame);
 }
 
-void FrameLoaderClientImpl::didCreateScriptContextForFrame()
+#if USE(V8)
+void FrameLoaderClientImpl::didCreateScriptContext(v8::Handle<v8::Context> context, int worldId)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->didCreateScriptContext(m_webFrame);
+        m_webFrame->client()->didCreateScriptContext(m_webFrame, context, worldId);
 }
 
-void FrameLoaderClientImpl::didDestroyScriptContextForFrame()
+void FrameLoaderClientImpl::willReleaseScriptContext(v8::Handle<v8::Context> context, int worldId)
 {
     if (m_webFrame->client())
-        m_webFrame->client()->didDestroyScriptContext(m_webFrame);
+        m_webFrame->client()->willReleaseScriptContext(m_webFrame, context, worldId);
 }
-
-void FrameLoaderClientImpl::didCreateIsolatedScriptContext()
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didCreateIsolatedScriptContext(m_webFrame);
-}
+#endif
 
 bool FrameLoaderClientImpl::allowScriptExtension(const String& extensionName,
                                                  int extensionGroup)
@@ -194,11 +196,11 @@ bool FrameLoaderClientImpl::allowPlugins(bool enabledPerSettings)
     return enabledPerSettings;
 }
 
-bool FrameLoaderClientImpl::allowImages(bool enabledPerSettings)
+bool FrameLoaderClientImpl::allowImage(bool enabledPerSettings, const KURL& imageURL)
 {
     WebViewImpl* webview = m_webFrame->viewImpl();
     if (webview && webview->permissionClient())
-        return webview->permissionClient()->allowImages(m_webFrame, enabledPerSettings);
+        return webview->permissionClient()->allowImage(m_webFrame, enabledPerSettings, imageURL);
 
     return enabledPerSettings;
 }
@@ -281,6 +283,11 @@ void FrameLoaderClientImpl::detachedFromParent2()
 
 void FrameLoaderClientImpl::detachedFromParent3()
 {
+    // If we were reading data into a plugin, drop our reference to it. If we
+    // don't do this then it may end up out-living the rest of the page, which
+    // leads to problems if the plugin's destructor tries to script things.
+    m_pluginWidget = 0;
+
     // Close down the proxy.  The purpose of this change is to make the
     // call to ScriptController::clearWindowShell a no-op when called from
     // Frame::pageDestroyed.  Without this change, this call to clearWindowShell
@@ -430,10 +437,6 @@ void FrameLoaderClientImpl::dispatchDidFailLoading(DocumentLoader* loader,
 
 void FrameLoaderClientImpl::dispatchDidFinishDocumentLoad()
 {
-    // A frame may be reused.  This call ensures we don't hold on to our password
-    // listeners and their associated HTMLInputElements.
-    m_webFrame->clearPasswordListeners();
-
     if (m_webFrame->client())
         m_webFrame->client()->didFinishDocumentLoad(m_webFrame);
 }
@@ -957,7 +960,7 @@ void FrameLoaderClientImpl::dispatchDecidePolicyForNavigationAction(
             KURL url = ds->request().url();
             ASSERT(!url.protocolIs(backForwardNavigationScheme));
 
-            bool isRedirect = ds->hasRedirectChain();
+            bool isRedirect = ds->isRedirect();
 
             WebNavigationType webnavType =
                 WebDataSourceImpl::toWebNavigationType(action.type());
@@ -1180,18 +1183,6 @@ bool FrameLoaderClientImpl::shouldStopLoadingForHistoryItem(HistoryItem* targetI
     return !url.protocolIs(backForwardNavigationScheme);
 }
 
-void FrameLoaderClientImpl::dispatchDidAddBackForwardItem(HistoryItem*) const
-{
-}
-
-void FrameLoaderClientImpl::dispatchDidRemoveBackForwardItem(HistoryItem*) const
-{
-}
-
-void FrameLoaderClientImpl::dispatchDidChangeBackForwardIndex() const
-{
-}
-
 void FrameLoaderClientImpl::didDisplayInsecureContent()
 {
     if (m_webFrame->client())
@@ -1286,7 +1277,7 @@ bool FrameLoaderClientImpl::canShowMIMEType(const String& mimeType) const
     // mimeType strings are supposed to be ASCII, but if they are not for some
     // reason, then it just means that the mime type will fail all of these "is
     // supported" checks and go down the path of an unhandled mime type.
-    if (webKitClient()->mimeRegistry()->supportsMIMEType(mimeType) == WebMimeRegistry::IsSupported)
+    if (webKitPlatformSupport()->mimeRegistry()->supportsMIMEType(mimeType) == WebMimeRegistry::IsSupported)
         return true;
 
     // If Chrome is started with the --disable-plugins switch, pluginData is null.
@@ -1374,7 +1365,7 @@ void FrameLoaderClientImpl::setTitle(const StringWithDirection& title, const KUR
 
 String FrameLoaderClientImpl::userAgent(const KURL& url)
 {
-    return webKitClient()->userAgent(url);
+    return webKitPlatformSupport()->userAgent(url);
 }
 
 void FrameLoaderClientImpl::savePlatformDataToCachedFrame(CachedFrame*)
@@ -1451,13 +1442,18 @@ void FrameLoaderClientImpl::didTransferChildFrameToNewDocument(Page*)
     m_webFrame->setClient(newParent->client());
 }
 
-void FrameLoaderClientImpl::transferLoadingResourceFromPage(unsigned long identifier, DocumentLoader* loader, const ResourceRequest& request, Page* oldPage)
+void FrameLoaderClientImpl::transferLoadingResourceFromPage(ResourceLoader* loader, const ResourceRequest& request, Page* oldPage)
 {
-    assignIdentifierToInitialRequest(identifier, loader, request);
+    assignIdentifierToInitialRequest(loader->identifier(), loader->documentLoader(), request);
 
     WebFrameImpl* oldWebFrame = WebFrameImpl::fromFrame(oldPage->mainFrame());
     if (oldWebFrame && oldWebFrame->client())
-        oldWebFrame->client()->removeIdentifierForRequest(identifier);
+        oldWebFrame->client()->removeIdentifierForRequest(loader->identifier());
+
+    ResourceHandle* handle = loader->handle();
+    WebURLLoader* webURLLoader = ResourceHandleInternal::FromResourceHandle(handle)->loader();
+    if (webURLLoader && m_webFrame->client())
+        m_webFrame->client()->didAdoptURLLoader(webURLLoader);
 }
 
 PassRefPtr<Widget> FrameLoaderClientImpl::createPlugin(

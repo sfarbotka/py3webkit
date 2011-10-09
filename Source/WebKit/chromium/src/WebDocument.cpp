@@ -44,7 +44,7 @@
 #include "HTMLFormElement.h"
 #include "HTMLHeadElement.h"
 #include "NodeList.h"
-
+#include "SecurityOrigin.h"
 #include "WebAccessibilityObject.h"
 #include "WebDocumentType.h"
 #include "WebElement.h"
@@ -74,7 +74,7 @@ WebSecurityOrigin WebDocument::securityOrigin() const
 
 WebString WebDocument::encoding() const
 {
-    return constUnwrap<Document>()->loader()->writer()->encoding();
+    return constUnwrap<Document>()->encoding();
 }
 
 WebURL WebDocument::openSearchDescriptionURL() const
@@ -172,13 +172,6 @@ WebDocumentType WebDocument::doctype() const
     return WebDocumentType(constUnwrap<Document>()->doctype());
 }
 
-WebAccessibilityObject WebDocument::accessibilityObject() const
-{
-    const Document* document = constUnwrap<Document>();
-    return WebAccessibilityObject(
-        document->axObjectCache()->getOrCreate(document->renderer()));
-}
-
 void WebDocument::insertUserStyleSheet(const WebString& sourceCode, UserStyleLevel level)
 {
     RefPtr<Document> document = unwrap<Document>();
@@ -187,6 +180,27 @@ void WebDocument::insertUserStyleSheet(const WebString& sourceCode, UserStyleLev
     parsedSheet->setIsUserStyleSheet(level == UserStyleUserLevel);
     parsedSheet->parseString(sourceCode, !document->inQuirksMode());
     document->addUserSheet(parsedSheet.release());
+}
+
+void WebDocument::cancelFullScreen()
+{
+#if ENABLE(FULLSCREEN_API)
+    unwrap<Document>()->webkitCancelFullScreen();
+#endif
+}
+
+WebAccessibilityObject WebDocument::accessibilityObject() const
+{
+    const Document* document = constUnwrap<Document>();
+    return WebAccessibilityObject(
+        document->axObjectCache()->getOrCreate(document->renderer()));
+}
+
+WebAccessibilityObject WebDocument::accessibilityObjectFromID(int axID) const
+{
+    const Document* document = constUnwrap<Document>();
+    return WebAccessibilityObject(
+        document->axObjectCache()->objectFromAXID(axID));
 }
 
 WebDocument::WebDocument(const PassRefPtr<Document>& elem)

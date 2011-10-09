@@ -475,6 +475,11 @@ public:
         return DataLabelCompact(this);
     }
 
+    void load8(BaseIndex address, RegisterID dest)
+    {
+        m_assembler.movzbl_mr(address.offset, address.base, address.index, address.scale, dest);
+    }
+
     void load16(BaseIndex address, RegisterID dest)
     {
         m_assembler.movzwl_mr(address.offset, address.base, address.index, address.scale, dest);
@@ -504,6 +509,18 @@ public:
     void store32(TrustedImm32 imm, ImplicitAddress address)
     {
         m_assembler.movl_i32m(imm.m_value, address.offset, address.base);
+    }
+    
+    void store8(TrustedImm32 imm, Address address)
+    {
+        ASSERT(-128 <= imm.m_value && imm.m_value < 128);
+        m_assembler.movb_i8m(imm.m_value, address.offset, address.base);
+    }
+
+    void store8(TrustedImm32 imm, BaseIndex address)
+    {
+        ASSERT(-128 <= imm.m_value && imm.m_value < 128);
+        m_assembler.movb_i8m(imm.m_value, address.offset, address.base, address.index, address.scale);
     }
 
 
@@ -873,20 +890,6 @@ public:
         return branch32(cond, left, right);
     }
 
-    Jump branch16(RelationalCondition cond, BaseIndex left, RegisterID right)
-    {
-        m_assembler.cmpw_rm(right, left.offset, left.base, left.index, left.scale);
-        return Jump(m_assembler.jCC(x86Condition(cond)));
-    }
-
-    Jump branch16(RelationalCondition cond, BaseIndex left, TrustedImm32 right)
-    {
-        ASSERT(!(right.m_value & 0xFFFF0000));
-
-        m_assembler.cmpw_im(right.m_value, left.offset, left.base, left.index, left.scale);
-        return Jump(m_assembler.jCC(x86Condition(cond)));
-    }
-
     Jump branchTest32(ResultCondition cond, RegisterID reg, RegisterID mask)
     {
         m_assembler.testl_rr(reg, mask);
@@ -953,6 +956,14 @@ public:
             m_assembler.cmpb_im(0, address.offset, address.base, address.index, address.scale);
         else
             m_assembler.testb_im(mask.m_value, address.offset, address.base, address.index, address.scale);
+        return Jump(m_assembler.jCC(x86Condition(cond)));
+    }
+
+    Jump branch8(RelationalCondition cond, BaseIndex left, TrustedImm32 right)
+    {
+        ASSERT(!(right.m_value & 0xFFFFFF00));
+
+        m_assembler.cmpb_im(right.m_value, left.offset, left.base, left.index, left.scale);
         return Jump(m_assembler.jCC(x86Condition(cond)));
     }
 

@@ -37,13 +37,33 @@ module window {
         DOMString shadowPseudoId(in Element element) raises (DOMException);
         Element createShadowContentElement(in Document document) raises(DOMException);
         Element getElementByIdInShadowRoot(in Node shadowRoot, in DOMString id) raises(DOMException);
-        void disableMemoryCache(in boolean disabled);
+
+#if defined(ENABLE_INPUT_COLOR) && ENABLE_INPUT_COLOR
+        boolean connectColorChooserClient(in Element element);
+        void selectColorInColorChooser(in DOMString colorValue);
+#endif
 
         void setInspectorResourcesDataSizeLimits(in Document document, in long maximumResourcesContentSize, in long maximumSingleResourceContentSize) raises(DOMException);
 
         ClientRect boundingBox(in Element element) raises(DOMException);
+        unsigned long markerCountForNode(in Node node) raises(DOMException);
+        Range markerRangeForNode(in Node node, in unsigned long index) raises(DOMException);
 
         void setForceCompositingMode(in Document document, in boolean enabled) raises(DOMException);
+        void setZoomAnimatorTransform(in Document document, in double scale, in double tx, in double ty) raises(DOMException);
+
+        void setPasswordEchoEnabled(in Document document, in boolean enabled) raises(DOMException);
+        void setPasswordEchoDurationInSeconds(in Document document, in double durationInSeconds) raises(DOMException);
+
+        void setScrollViewPosition(in Document document, in long x, in long y) raises(DOMException);
+
+        boolean wasLastChangeUserEdit(in Element textField) raises (DOMException);
+        DOMString suggestedValue(in Element inputElement) raises (DOMException);
+        void setSuggestedValue(in Element inputElement, in DOMString value) raises (DOMException);
+
+        void paintControlTints(in Document document) raises (DOMException);
+
+        void scrollElementToRect(in Element element, in long x, in long y, in long w, in long h) raises (DOMException);
     };
 }
 

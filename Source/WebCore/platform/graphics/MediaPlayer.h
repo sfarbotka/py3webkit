@@ -58,6 +58,7 @@ class QTMovieVisualContext;
 
 namespace WebCore {
 
+class AudioSourceProvider;
 class GStreamerGWorld;
 class MediaPlayerPrivateInterface;
 
@@ -161,6 +162,11 @@ public:
     // availability of the platformLayer().
     virtual void mediaPlayerRenderingModeChanged(MediaPlayer*) { }
 #endif
+
+#if ENABLE(MEDIA_SOURCE)
+    virtual void mediaPlayerSourceOpened() { }
+    virtual String mediaPlayerSourceURL() const { return "x-media-source-unsupported:"; }
+#endif
 };
 
 class MediaPlayer {
@@ -210,6 +216,12 @@ public:
     void play();
     void pause();    
 
+#if ENABLE(MEDIA_SOURCE)
+    bool sourceAppend(const unsigned char* data, unsigned length);
+    enum EndOfStreamStatus { EosNoError, EosNetworkError, EosDecodeError };
+    void sourceEndOfStream(EndOfStreamStatus);
+#endif
+
     bool paused() const;
     bool seeking() const;
 
@@ -218,6 +230,8 @@ public:
     void seek(float time);
 
     float startTime() const;
+
+    double initialTime() const;
 
     float rate() const;
     void setRate(float);
@@ -308,6 +322,15 @@ public:
     unsigned videoDecodedByteCount() const;
 
     void setPrivateBrowsingMode(bool);
+
+#if ENABLE(WEB_AUDIO)
+    AudioSourceProvider* audioSourceProvider();
+#endif
+
+#if ENABLE(MEDIA_SOURCE)
+    void sourceOpened();
+    String sourceURL() const;
+#endif
 
 private:
     MediaPlayer(MediaPlayerClient*);

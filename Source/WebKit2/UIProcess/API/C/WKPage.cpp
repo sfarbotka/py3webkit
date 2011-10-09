@@ -31,7 +31,6 @@
 #include "WKAPICast.h"
 #include "WebBackForwardList.h"
 #include "WebData.h"
-#include "WebImage.h"
 #include "WebPageProxy.h"
 #include "WebProcessProxy.h"
 
@@ -259,6 +258,16 @@ double WKPageGetTextZoomFactor(WKPageRef pageRef)
     return toImpl(pageRef)->textZoomFactor();
 }
 
+double WKPageGetBackingScaleFactor(WKPageRef pageRef)
+{
+    return toImpl(pageRef)->deviceScaleFactor();
+}
+
+void WKPageSetCustomBackingScaleFactor(WKPageRef pageRef, double customScaleFactor)
+{
+    toImpl(pageRef)->setCustomDeviceScaleFactor(customScaleFactor);
+}
+
 bool WKPageSupportsTextZoom(WKPageRef pageRef)
 {
     return toImpl(pageRef)->supportsTextZoom();
@@ -286,12 +295,12 @@ void WKPageSetPageAndTextZoomFactors(WKPageRef pageRef, double pageZoomFactor, d
 
 void WKPageSetScaleFactor(WKPageRef pageRef, double scale, WKPoint origin)
 {
-    toImpl(pageRef)->scaleWebView(scale, toIntPoint(origin));
+    toImpl(pageRef)->scalePage(scale, toIntPoint(origin));
 }
 
 double WKPageGetScaleFactor(WKPageRef pageRef)
 {
-    return toImpl(pageRef)->viewScaleFactor();
+    return toImpl(pageRef)->pageScaleFactor();
 }
 
 void WKPageSetUseFixedLayout(WKPageRef pageRef, bool fixed)
@@ -567,9 +576,12 @@ void WKPageDrawPagesToPDF(WKPageRef page, WKFrameRef frame, uint32_t first, uint
 }
 #endif
 
-WKImageRef WKPageCreateSnapshotOfVisibleContent(WKPageRef page)
+WKImageRef WKPageCreateSnapshotOfVisibleContent(WKPageRef)
 {
-    RefPtr<WebImage> webImage = toImpl(page)->createSnapshotOfVisibleContent();
-    return toAPI(webImage.release().leakRef());
+    return 0;
 }
 
+void WKPageSetShouldSendEventsSynchronously(WKPageRef page, bool sync)
+{
+    toImpl(page)->setShouldSendEventsSynchronously(sync);
+}

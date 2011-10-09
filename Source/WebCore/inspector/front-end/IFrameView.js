@@ -28,11 +28,15 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.IFrameView = function(parent, stylesheets)
+/**
+ * @constructor
+ * @extends {WebInspector.View}
+ */
+WebInspector.IFrameView = function(parentElement, stylesheets)
 {
     this._iframeElement = document.createElement("iframe");
     this._iframeElement.addStyleClass("view");
-    this._initializeView = this._attachIFrameAndInitialize.bind(this, parent, stylesheets);
+    this._initializeView = this._attachIFrameAndInitialize.bind(this, parentElement, stylesheets);
     WebInspector.View.call(this);
 }
 

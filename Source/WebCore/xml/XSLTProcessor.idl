@@ -35,8 +35,8 @@ module xml {
     interface [
         Conditional=XSLT,
         CanBeConstructed,
-        CustomConstructFunction,
-        V8CustomConstructor
+        JSCustomConstructor,
+        Constructor
     ] XSLTProcessor {
         
         [Custom] void importStylesheet(in Node stylesheet);

@@ -29,7 +29,11 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef WEBKIT2
+#include <webkit2/webkit2.h>
+#else
 #include <webkit/webkit.h>
+#endif
 
 static gint windowCount = 0;
 
@@ -213,7 +217,11 @@ static GtkWidget* createWindow(WebKitWebView** outWebView)
     webView = WEBKIT_WEB_VIEW(webkit_web_view_new());
     uriEntry = gtk_entry_new();
 
+#ifdef GTK_API_VERSION_2
     vbox = gtk_vbox_new(FALSE, 0);
+#else
+    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+#endif
     statusbar = createStatusbar(webView);
     gtk_box_pack_start(GTK_BOX(vbox), createToolbar(uriEntry, webView), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(vbox), createBrowser(window, uriEntry, statusbar, webView), TRUE, TRUE, 0);

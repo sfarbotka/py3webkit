@@ -37,6 +37,7 @@ public:
         EngineError,
         NetworkError,
         HttpError,
+        DownloadError
     };
 
     Type type() const;

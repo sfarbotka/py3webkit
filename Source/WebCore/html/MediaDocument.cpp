@@ -73,9 +73,7 @@ void MediaDocumentParser::createDocumentStructure()
     ExceptionCode ec;
     RefPtr<Element> rootElement = document()->createElement(htmlTag, false);
     document()->appendChild(rootElement, ec);
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     static_cast<HTMLHtmlElement*>(rootElement.get())->insertedByParser();
-#endif
 
     if (document()->frame())
         document()->frame()->loader()->dispatchDocumentElementAvailable();
@@ -101,7 +99,7 @@ void MediaDocumentParser::createDocumentStructure()
     if (!frame)
         return;
 
-    frame->loader()->activeDocumentLoader()->mainResourceLoader()->setShouldBufferData(false);
+    frame->loader()->activeDocumentLoader()->mainResourceLoader()->setShouldBufferData(DoNotBufferData);
 }
 
 void MediaDocumentParser::appendBytes(DocumentWriter*, const char*, size_t)

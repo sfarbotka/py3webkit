@@ -61,7 +61,7 @@ static EncodedJSValue JSC_HOST_CALL dateUTC(ExecState*);
 
 namespace JSC {
 
-const ClassInfo DateConstructor::s_info = { "Function", &InternalFunction::s_info, 0, ExecState::dateConstructorTable };
+const ClassInfo DateConstructor::s_info = { "Function", &InternalFunction::s_info, 0, ExecState::dateConstructorTable, CREATE_METHOD_TABLE(DateConstructor) };
 
 /* Source for DateConstructor.lut.h
 @begin dateConstructorTable
@@ -73,9 +73,14 @@ const ClassInfo DateConstructor::s_info = { "Function", &InternalFunction::s_inf
 
 ASSERT_CLASS_FITS_IN_CELL(DateConstructor);
 
-DateConstructor::DateConstructor(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, DatePrototype* datePrototype)
-    : InternalFunction(&exec->globalData(), globalObject, structure, Identifier(exec, datePrototype->classInfo()->className))
+DateConstructor::DateConstructor(JSGlobalObject* globalObject, Structure* structure)
+    : InternalFunction(globalObject, structure) 
 {
+}
+
+void DateConstructor::finishCreation(ExecState* exec, DatePrototype* datePrototype)
+{
+    Base::finishCreation(exec->globalData(), Identifier(exec, datePrototype->classInfo()->className));
     putDirectWithoutTransition(exec->globalData(), exec->propertyNames().prototype, datePrototype, DontEnum | DontDelete | ReadOnly);
     putDirectWithoutTransition(exec->globalData(), exec->propertyNames().length, jsNumber(7), ReadOnly | DontEnum | DontDelete);
 }
@@ -171,7 +176,12 @@ static EncodedJSValue JSC_HOST_CALL callDate(ExecState* exec)
     return JSValue::encode(jsMakeNontrivialString(exec, date, " ", time));
 }
 
-CallType DateConstructor::getCallData(CallData& callData)
+CallType DateConstructor::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType DateConstructor::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = callDate;
     return CallTypeHost;

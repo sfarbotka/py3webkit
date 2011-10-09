@@ -33,18 +33,63 @@
 
 namespace WebCore {
 
+MessageEventInit::MessageEventInit()
+    : data(SerializedScriptValue::create())
+{
+}
+
 MessageEvent::MessageEvent()
-    : m_data(SerializedScriptValue::create())
+    : m_dataType(DataTypeSerializedScriptValue)
+    , m_dataAsSerializedScriptValue(SerializedScriptValue::create())
+{
+}
+
+MessageEvent::MessageEvent(const AtomicString& type, const MessageEventInit& initializer)
+    : Event(type, initializer)
+    , m_dataType(DataTypeSerializedScriptValue)
+    , m_dataAsSerializedScriptValue(initializer.data)
+    , m_origin(initializer.origin)
+    , m_lastEventId(initializer.lastEventId)
+    , m_source(initializer.source)
+    , m_ports(adoptPtr(new MessagePortArray(initializer.ports)))
 {
 }
 
 MessageEvent::MessageEvent(PassRefPtr<SerializedScriptValue> data, const String& origin, const String& lastEventId, PassRefPtr<DOMWindow> source, PassOwnPtr<MessagePortArray> ports)
     : Event(eventNames().messageEvent, false, false)
-    , m_data(data)
+    , m_dataType(DataTypeSerializedScriptValue)
+    , m_dataAsSerializedScriptValue(data)
     , m_origin(origin)
     , m_lastEventId(lastEventId)
     , m_source(source)
     , m_ports(ports)
+{
+}
+
+MessageEvent::MessageEvent(const String& data)
+    : Event(eventNames().messageEvent, false, false)
+    , m_dataType(DataTypeString)
+    , m_dataAsString(data)
+    , m_origin("")
+    , m_lastEventId("")
+{
+}
+
+MessageEvent::MessageEvent(PassRefPtr<Blob> data)
+    : Event(eventNames().messageEvent, false, false)
+    , m_dataType(DataTypeBlob)
+    , m_dataAsBlob(data)
+    , m_origin("")
+    , m_lastEventId("")
+{
+}
+
+MessageEvent::MessageEvent(PassRefPtr<ArrayBuffer> data)
+    : Event(eventNames().messageEvent, false, false)
+    , m_dataType(DataTypeArrayBuffer)
+    , m_dataAsArrayBuffer(data)
+    , m_origin("")
+    , m_lastEventId("")
 {
 }
 
@@ -56,14 +101,23 @@ void MessageEvent::initMessageEvent(const AtomicString& type, bool canBubble, bo
 {
     if (dispatched())
         return;
-        
+
     initEvent(type, canBubble, cancelable);
-    
-    m_data = data;
+
+    m_dataType = DataTypeSerializedScriptValue;
+    m_dataAsSerializedScriptValue = data;
     m_origin = origin;
     m_lastEventId = lastEventId;
     m_source = source;
     m_ports = ports;
+}
+
+// FIXME: Remove this when we have custom ObjC binding support.
+SerializedScriptValue* MessageEvent::data() const
+{
+    // WebSocket is not exposed in ObjC bindings, thus the data type should always be SerializedScriptValue.
+    ASSERT(m_dataType == DataTypeSerializedScriptValue);
+    return m_dataAsSerializedScriptValue.get();
 }
 
 // FIXME: remove this when we update the ObjC bindings (bug #28774).

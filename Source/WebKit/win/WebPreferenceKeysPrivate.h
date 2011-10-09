@@ -75,7 +75,7 @@
 // cover methods themselves are private.
 #define WebKitRespectStandardStyleKeyEquivalentsPreferenceKey "WebKitRespectStandardStyleKeyEquivalents"
 #define WebKitShowsURLsInToolTipsPreferenceKey "WebKitShowsURLsInToolTips"
-#define WebKitShowsToolTipOverTruncatedTextPreferenceKey "WebKitShowsToolTipForTruncatedText"
+#define WebKitShowsToolTipOverTruncatedTextPreferenceKey "WebKitShowsToolTipOverTruncatedText"
 #define WebKitPDFDisplayModePreferenceKey "WebKitPDFDisplayMode"
 #define WebKitPDFScaleFactorPreferenceKey "WebKitPDFScaleFactor"
 #define WebKitEditableLinkBehaviorPreferenceKey "WebKitEditableLinkBehavior"
@@ -124,8 +124,6 @@
 #define DisableWebKitDeveloperExtrasPreferenceKey "DisableWebKitDeveloperExtras"
 
 #define WebKitAuthorAndUserStylesEnabledPreferenceKey "WebKitAuthorAndUserStylesEnabled"
-
-#define WebKitPaintCustomScrollbarsPreferenceKey "WebKitPaintCustomScrollbars"
 
 #define WebKitPaintNativeControlsPreferenceKey "WebKitPaintNativeControls"
 

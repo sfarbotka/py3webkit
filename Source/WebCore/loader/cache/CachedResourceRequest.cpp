@@ -60,6 +60,8 @@ static ResourceRequest::TargetType cachedResourceTypeToTargetType(CachedResource
         return ResourceRequest::TargetIsFontResource;
     case CachedResource::ImageResource:
         return ResourceRequest::TargetIsImage;
+    case CachedResource::RawResource:
+        return ResourceRequest::TargetIsSubresource;    
 #if ENABLE(LINK_PREFETCH)
     case CachedResource::LinkPrefetch:
         return ResourceRequest::TargetIsPrefetch;
@@ -74,10 +76,9 @@ static ResourceRequest::TargetType cachedResourceTypeToTargetType(CachedResource
 }
 #endif
 
-CachedResourceRequest::CachedResourceRequest(CachedResourceLoader* cachedResourceLoader, CachedResource* resource, bool incremental)
+CachedResourceRequest::CachedResourceRequest(CachedResourceLoader* cachedResourceLoader, CachedResource* resource)
     : m_cachedResourceLoader(cachedResourceLoader)
     , m_resource(resource)
-    , m_incremental(incremental)
     , m_multipart(false)
     , m_finishing(false)
 {
@@ -87,9 +88,9 @@ CachedResourceRequest::~CachedResourceRequest()
 {
 }
 
-PassOwnPtr<CachedResourceRequest> CachedResourceRequest::load(CachedResourceLoader* cachedResourceLoader, CachedResource* resource, bool incremental, SecurityCheckPolicy securityCheck, bool sendResourceLoadCallbacks)
+PassOwnPtr<CachedResourceRequest> CachedResourceRequest::load(CachedResourceLoader* cachedResourceLoader, CachedResource* resource, const ResourceLoaderOptions& options)
 {
-    OwnPtr<CachedResourceRequest> request = adoptPtr(new CachedResourceRequest(cachedResourceLoader, resource, incremental));
+    OwnPtr<CachedResourceRequest> request = adoptPtr(new CachedResourceRequest(cachedResourceLoader, resource));
 
     ResourceRequest resourceRequest = resource->resourceRequest();
 #if PLATFORM(CHROMIUM)
@@ -124,8 +125,7 @@ PassOwnPtr<CachedResourceRequest> CachedResourceRequest::load(CachedResourceLoad
     ResourceLoadPriority priority = resource->loadPriority();
     resourceRequest.setPriority(priority);
 
-    RefPtr<SubresourceLoader> loader = resourceLoadScheduler()->scheduleSubresourceLoad(cachedResourceLoader->document()->frame(),
-        request.get(), resourceRequest, priority, securityCheck, sendResourceLoadCallbacks);
+    RefPtr<SubresourceLoader> loader = resourceLoadScheduler()->scheduleSubresourceLoad(cachedResourceLoader->document()->frame(), request.get(), resourceRequest, priority, options);
     if (!loader || loader->reachedTerminalState()) {
         // FIXME: What if resources in other frames were waiting for this revalidation?
         LOG(ResourceLoading, "Cannot start loading '%s'", resource->url().string().latin1().data());
@@ -140,11 +140,18 @@ PassOwnPtr<CachedResourceRequest> CachedResourceRequest::load(CachedResourceLoad
 
 void CachedResourceRequest::willSendRequest(SubresourceLoader* loader, ResourceRequest& req, const ResourceResponse&)
 {
-    if (!m_cachedResourceLoader->checkInsecureContent(m_resource->type(), req.url())) {
+    if (!m_cachedResourceLoader->canRequest(m_resource->type(), req.url())) {
         loader->cancel();
         return;
     }
     m_resource->setRequestedFromNetworkingLayer();
+}
+
+void CachedResourceRequest::cancel()
+{
+    if (m_finishing)
+        return;
+    m_loader->cancel();
 }
 
 void CachedResourceRequest::didFinishLoading(SubresourceLoader* loader, double)
@@ -272,7 +279,7 @@ void CachedResourceRequest::didReceiveData(SubresourceLoader* loader, const char
         // The resource data will change as the next part is loaded, so we need to make a copy.
         RefPtr<SharedBuffer> copiedData = SharedBuffer::create(data, size);
         m_resource->data(copiedData.release(), true);
-    } else if (m_incremental)
+    } else
         m_resource->data(loader->resourceData(), false);
 }
 

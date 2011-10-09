@@ -176,7 +176,7 @@ void FrameLoaderClientWinCE::didTransferChildFrameToNewDocument(Page*)
 {
 }
 
-void FrameLoaderClientWinCE::transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const WebCore::ResourceRequest&, Page*)
+void FrameLoaderClientWinCE::transferLoadingResourceFromPage(ResourceLoader*, const WebCore::ResourceRequest&, Page*)
 {
 }
 
@@ -262,18 +262,6 @@ bool FrameLoaderClientWinCE::shouldGoToHistoryItem(HistoryItem* item) const
 bool FrameLoaderClientWinCE::shouldStopLoadingForHistoryItem(HistoryItem* item) const
 {
     return true;
-}
-
-void FrameLoaderClientWinCE::dispatchDidAddBackForwardItem(HistoryItem*) const
-{
-}
-
-void FrameLoaderClientWinCE::dispatchDidRemoveBackForwardItem(HistoryItem*) const
-{
-}
-
-void FrameLoaderClientWinCE::dispatchDidChangeBackForwardIndex() const
-{
 }
 
 void FrameLoaderClientWinCE::didDisplayInsecureContent()

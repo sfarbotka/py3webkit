@@ -29,10 +29,21 @@
 #ifndef MiniBrowserApplication_h
 #define MiniBrowserApplication_h
 
+#include <QApplication>
+#include <QFileDialog>
 #include <QHash>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMainWindow>
+#include <QMenu>
+#include <QMenuBar>
+#include <QShortcut>
+#include <QStatusBar>
 #include <QStringList>
+#include <QToolBar>
 #include <QTouchEvent>
-#include <QtGui>
+#include <QUrl>
+#include "qwindowsysteminterface_qpa.h"
 
 struct WindowOptions {
     WindowOptions()
@@ -71,14 +82,14 @@ private:
     void handleUserOptions();
 
 private:
-    bool m_spontaneousTouchEventReceived;
-    bool m_sendingFakeTouchEvent;
+    bool m_realTouchEventReceived;
+    int m_pendingFakeTouchEventCount;
     bool m_isRobotized;
     int m_robotTimeoutSeconds;
     int m_robotExtraTimeSeconds;
     QStringList m_urls;
 
-    QHash<int, QTouchEvent::TouchPoint> m_touchPoints;
+    QHash<int, QWindowSystemInterface::TouchPoint> m_touchPoints;
 };
 
 #endif

@@ -36,6 +36,7 @@
 #include <JavaScriptCore/JSContextRef.h>
 #include <JavaScriptCore/JSObjectRef.h>
 #include <JavaScriptCore/JSRetainPtr.h>
+#include <locale.h>
 #include <stdio.h>
 #include <wtf/Assertions.h>
 #include <wtf/MathExtras.h>
@@ -55,6 +56,7 @@ LayoutTestController::LayoutTestController(const std::string& testPathOrURL, con
     , m_dumpDatabaseCallbacks(false)
     , m_dumpEditingCallbacks(false)
     , m_dumpFrameLoadCallbacks(false)
+    , m_dumpProgressFinishedCallback(false)
     , m_dumpUserGestureInFrameLoadCallbacks(false)
     , m_dumpHistoryDelegateCallbacks(false)
     , m_dumpResourceLoadCallbacks(false)
@@ -201,6 +203,13 @@ static JSValueRef dumpFrameLoadCallbacksCallback(JSContextRef context, JSObjectR
 {
     LayoutTestController* controller = static_cast<LayoutTestController*>(JSObjectGetPrivate(thisObject));
     controller->setDumpFrameLoadCallbacks(true);
+    return JSValueMakeUndefined(context);
+}
+
+static JSValueRef dumpProgressFinishedCallbackCallback(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
+{
+    LayoutTestController* controller = static_cast<LayoutTestController*>(JSObjectGetPrivate(thisObject));
+    controller->setDumpProgressFinishedCallback(true);
     return JSValueMakeUndefined(context);
 }
 
@@ -2151,6 +2160,36 @@ static JSValueRef setShouldStayOnPageAfterHandlingBeforeUnloadCallback(JSContext
     return JSValueMakeUndefined(context);
 }
 
+static JSValueRef addChromeInputFieldCallback(JSContextRef context, JSObjectRef, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
+{
+    LayoutTestController* controller = static_cast<LayoutTestController*>(JSObjectGetPrivate(thisObject));
+    controller->addChromeInputField();
+    // the first argument is a callback that is called once the input field has been added
+    if (argumentCount == 1)
+        JSObjectCallAsFunction(context, JSValueToObject(context, arguments[0], 0), thisObject, 0, 0, 0);
+    return JSValueMakeUndefined(context);
+}
+
+static JSValueRef removeChromeInputFieldCallback(JSContextRef context, JSObjectRef, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
+{
+    LayoutTestController* controller = static_cast<LayoutTestController*>(JSObjectGetPrivate(thisObject));
+    controller->removeChromeInputField();
+    // the first argument is a callback that is called once the input field has been added
+    if (argumentCount == 1)
+        JSObjectCallAsFunction(context, JSValueToObject(context, arguments[0], 0), thisObject, 0, 0, 0);
+    return JSValueMakeUndefined(context);
+}
+
+static JSValueRef focusWebViewCallback(JSContextRef context, JSObjectRef, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
+{
+    LayoutTestController* controller = static_cast<LayoutTestController*>(JSObjectGetPrivate(thisObject));
+    controller->focusWebView();
+    // the first argument is a callback that is called once the input field has been added
+    if (argumentCount == 1)
+        JSObjectCallAsFunction(context, JSValueToObject(context, arguments[0], 0), thisObject, 0, 0, 0);
+    return JSValueMakeUndefined(context);
+}
+
 // Static Values
 
 static JSValueRef getGlobalFlagCallback(JSContextRef context, JSObjectRef thisObject, JSStringRef propertyName, JSValueRef* exception)
@@ -2296,6 +2335,7 @@ JSStaticFunction* LayoutTestController::staticFunctions()
         { "dumpDatabaseCallbacks", dumpDatabaseCallbacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "dumpEditingCallbacks", dumpEditingCallbacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "dumpFrameLoadCallbacks", dumpFrameLoadCallbacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
+        { "dumpProgressFinishedCallback", dumpProgressFinishedCallbackCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "dumpUserGestureInFrameLoadCallbacks", dumpUserGestureInFrameLoadCallbacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },        
         { "dumpResourceLoadCallbacks", dumpResourceLoadCallbacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "dumpResourceResponseMIMETypes", dumpResourceResponseMIMETypesCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
@@ -2426,6 +2466,9 @@ JSStaticFunction* LayoutTestController::staticFunctions()
         { "setTextDirection", setTextDirectionCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "allowRoundingHacks", allowRoundingHacksCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { "setShouldStayOnPageAfterHandlingBeforeUnload", setShouldStayOnPageAfterHandlingBeforeUnloadCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
+        { "addChromeInputField", addChromeInputFieldCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
+        { "removeChromeInputField", removeChromeInputFieldCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
+        { "focusWebView", focusWebViewCallback, kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete },
         { 0, 0, 0 }
     };
 

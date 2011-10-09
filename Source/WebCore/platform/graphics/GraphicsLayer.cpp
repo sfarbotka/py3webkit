@@ -61,6 +61,10 @@ void KeyframeValueList::insert(const AnimationValue* value)
     m_values.append(value);
 }
 
+#ifndef NDEBUG
+static bool s_inPaintContents = false;
+#endif
+
 GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     : m_client(client)
     , m_anchorPoint(0.5f, 0.5f, 0)
@@ -84,12 +88,20 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_replicatedLayer(0)
     , m_repaintCount(0)
 {
+    ASSERT(!s_inPaintContents);
 }
 
 GraphicsLayer::~GraphicsLayer()
 {
+    ASSERT(!s_inPaintContents);
     removeAllChildren();
     removeFromParent();
+}
+
+void GraphicsLayer::setParent(GraphicsLayer* layer)
+{
+    ASSERT(!layer || !layer->hasAncestor(this));
+    m_parent = layer;
 }
 
 bool GraphicsLayer::hasAncestor(GraphicsLayer* ancestor) const
@@ -224,20 +236,20 @@ void GraphicsLayer::removeFromParent()
     }
 }
 
-void GraphicsLayer::notePageScaleFactorChangedIncludingDescendants()
+void GraphicsLayer::noteDeviceOrPageScaleFactorChangedIncludingDescendants()
 {
-    pageScaleFactorChanged();
+    deviceOrPageScaleFactorChanged();
 
     if (m_maskLayer)
-        m_maskLayer->pageScaleFactorChanged();
+        m_maskLayer->deviceOrPageScaleFactorChanged();
 
     if (m_replicaLayer)
-        m_replicaLayer->notePageScaleFactorChangedIncludingDescendants();
+        m_replicaLayer->noteDeviceOrPageScaleFactorChangedIncludingDescendants();
 
     const Vector<GraphicsLayer*>& childLayers = children();
     size_t numChildren = childLayers.size();
     for (size_t i = 0; i < numChildren; ++i)
-        childLayers[i]->notePageScaleFactorChangedIncludingDescendants();
+        childLayers[i]->noteDeviceOrPageScaleFactorChangedIncludingDescendants();
 }
 
 void GraphicsLayer::setReplicatedByLayer(GraphicsLayer* layer)
@@ -262,8 +274,14 @@ void GraphicsLayer::clearBackgroundColor()
 
 void GraphicsLayer::paintGraphicsLayerContents(GraphicsContext& context, const IntRect& clip)
 {
+#ifndef NDEBUG
+    s_inPaintContents = true;
+#endif
     if (m_client)
         m_client->paintContents(this, context, m_paintingPhase, clip);
+#ifndef NDEBUG
+    s_inPaintContents = false;
+#endif
 }
 
 String GraphicsLayer::animationNameForTransition(AnimatedPropertyID property)

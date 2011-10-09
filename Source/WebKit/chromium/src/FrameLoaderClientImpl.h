@@ -61,14 +61,10 @@ public:
     virtual void dispatchDidClearWindowObjectInWorld(WebCore::DOMWrapperWorld*);
     virtual void documentElementAvailable();
 
-    // A frame's V8 context was created or destroyed.
-    virtual void didCreateScriptContextForFrame();
-    virtual void didDestroyScriptContextForFrame();
-
-    // A context untied to a frame was created (through evaluateInIsolatedWorld).
-    // This context is not tied to the lifetime of its frame, and is destroyed
-    // in garbage collection.
-    virtual void didCreateIsolatedScriptContext();
+#if USE(V8)
+    virtual void didCreateScriptContext(v8::Handle<v8::Context>, int worldId);
+    virtual void willReleaseScriptContext(v8::Handle<v8::Context>, int worldId);
+#endif
 
     // Returns true if we should allow the given V8 extension to be added to
     // the script context at the currently loading page and given extension group.
@@ -140,9 +136,6 @@ public:
     virtual void updateGlobalHistoryRedirectLinks();
     virtual bool shouldGoToHistoryItem(WebCore::HistoryItem*) const;
     virtual bool shouldStopLoadingForHistoryItem(WebCore::HistoryItem*) const;
-    virtual void dispatchDidAddBackForwardItem(WebCore::HistoryItem*) const;
-    virtual void dispatchDidRemoveBackForwardItem(WebCore::HistoryItem*) const;
-    virtual void dispatchDidChangeBackForwardIndex() const;
     virtual void didDisplayInsecureContent();
     virtual void didRunInsecureContent(WebCore::SecurityOrigin*, const WebCore::KURL& insecureURL);
     virtual WebCore::ResourceError blockedError(const WebCore::ResourceRequest&);
@@ -185,7 +178,7 @@ public:
         const WTF::String& referrer, bool allowsScrolling,
         int marginWidth, int marginHeight);
     virtual void didTransferChildFrameToNewDocument(WebCore::Page*);
-    virtual void transferLoadingResourceFromPage(unsigned long, WebCore::DocumentLoader*, const WebCore::ResourceRequest&, WebCore::Page*);
+    virtual void transferLoadingResourceFromPage(WebCore::ResourceLoader*, const WebCore::ResourceRequest&, WebCore::Page*);
     virtual PassRefPtr<WebCore::Widget> createPlugin(
         const WebCore::IntSize&, WebCore::HTMLPlugInElement*, const WebCore::KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
@@ -205,7 +198,7 @@ public:
     virtual void didChangeScrollOffset();
     virtual bool allowJavaScript(bool enabledPerSettings);
     virtual bool allowPlugins(bool enabledPerSettings);
-    virtual bool allowImages(bool enabledPerSettings);
+    virtual bool allowImage(bool enabledPerSettings, const WebCore::KURL& imageURL);
     virtual bool allowDisplayingInsecureContent(bool enabledPerSettings, WebCore::SecurityOrigin*, const WebCore::KURL&);
     virtual bool allowRunningInsecureContent(bool enabledPerSettings, WebCore::SecurityOrigin*, const WebCore::KURL&);
     virtual void didNotAllowScript();

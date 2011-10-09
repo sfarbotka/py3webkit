@@ -57,7 +57,8 @@ Node* highestAncestor(Node*);
 Node* highestEditableRoot(const Position&);
 Node* highestEnclosingNodeOfType(const Position&, bool (*nodeIsOfType)(const Node*),
     EditingBoundaryCrossingRule = CannotCrossEditingBoundary, Node* stayWithin = 0);
-Node* lowestEditableAncestor(Node*);   
+Node* highestNodeToRemoveInPruning(Node*);
+Node* lowestEditableAncestor(Node*);
 
 Node* enclosingBlock(Node*, EditingBoundaryCrossingRule = CannotCrossEditingBoundary);
 Node* enclosingTableCell(const Position&);
@@ -142,8 +143,6 @@ inline Position lastPositionInOrAfterNode(Node* node)
     return editingIgnoresContent(node) ? positionAfterNode(node) : lastPositionInNode(node);
 }
 
-Position createPositionAvoidingIgnoredNode(Node*, int offset);
-
 // comparision functions on Position
     
 int comparePositions(const Position&, const Position&);
@@ -161,6 +160,7 @@ bool isAtUnsplittableElement(const Position&);
 // miscellaneous functions on Position
 
 unsigned numEnclosingMailBlockquotes(const Position&);
+void updatePositionForNodeRemoval(Position&, Node*);
 
 // -------------------------------------------------------------------------
 // VisiblePosition

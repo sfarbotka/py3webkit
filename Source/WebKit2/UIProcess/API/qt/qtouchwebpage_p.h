@@ -21,7 +21,7 @@
 #ifndef qtouchwebpage_p_h
 #define qtouchwebpage_p_h
 
-#include "SGAgent.h"
+#include "SGUpdateQueue.h"
 #include "qtouchwebpage.h"
 #include "qwebnavigationcontroller.h"
 #include <QMenu>
@@ -36,17 +36,12 @@ class QTouchWebPagePrivate {
 public:
     QTouchWebPagePrivate(QTouchWebPage* view);
 
-    static QTouchWebPagePrivate* getPageViewPrivate(QTouchWebPage* view) { return view->d; }
-
     void setPage(QTouchWebPageProxy*);
-
-    void setViewportRect(const QRectF&);
-    void commitScaleChange();
 
     QTouchWebPage* const q;
     QTouchWebPageProxy* page;
     QWebNavigationController* navigationController;
-    WebKit::SGAgent sgAgent;
+    WebKit::SGUpdateQueue sgUpdateQueue;
 };
 
 #endif /* qtouchwebpage_p_h */

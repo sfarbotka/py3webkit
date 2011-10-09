@@ -37,6 +37,7 @@
 #include "RenderCombineText.h"
 #include "RenderLayer.h"
 #include "RenderView.h"
+#include "Settings.h"
 #include "Text.h"
 #include "TextBreakIterator.h"
 #include "TextResourceDecoder.h"
@@ -51,6 +52,37 @@ using namespace WTF;
 using namespace Unicode;
 
 namespace WebCore {
+
+class SecureTextTimer;
+typedef HashMap<RenderText*, SecureTextTimer*> SecureTextTimerMap;
+static SecureTextTimerMap* gSecureTextTimers = 0;
+
+class SecureTextTimer : public TimerBase {
+public:
+    SecureTextTimer(RenderText* renderText)
+        : m_renderText(renderText)
+        , m_lastTypedCharacterOffset(-1)
+    {
+    }
+
+    void restartWithNewText(unsigned lastTypedCharacterOffset)
+    {
+        m_lastTypedCharacterOffset = lastTypedCharacterOffset;
+        startOneShot(m_renderText->document()->settings()->passwordEchoDurationInSeconds());
+    }
+    void invalidate() { m_lastTypedCharacterOffset = -1; }
+    unsigned lastTypedCharacterOffset() { return m_lastTypedCharacterOffset; }
+
+private:
+    virtual void fired()
+    {
+        ASSERT(gSecureTextTimers->contains(m_renderText));
+        m_renderText->setText(m_renderText->text(), true /* forcing setting text as it may be masked later */);
+    }
+
+    RenderText* m_renderText;
+    int m_lastTypedCharacterOffset;
+};
 
 static void makeCapitalized(String* string, UChar previous)
 {
@@ -82,7 +114,7 @@ static void makeCapitalized(String* string, UChar previous)
     int32_t endOfWord;
     int32_t startOfWord = textBreakFirst(boundary);
     for (endOfWord = textBreakNext(boundary); endOfWord != TextBreakDone; startOfWord = endOfWord, endOfWord = textBreakNext(boundary)) {
-        if (startOfWord != 0) // Ignore first char of previous string
+        if (startOfWord) // Ignore first char of previous string
             data[startOfWord - 1] = characters[startOfWord - 1] == noBreakSpace ? noBreakSpace : toTitleCase(stringWithPrevious[startOfWord]);
         for (int i = startOfWord + 1; i < endOfWord; i++)
             data[i - 1] = characters[i - 1];
@@ -192,6 +224,9 @@ void RenderText::removeAndDestroyTextBoxes()
 
 void RenderText::willBeDestroyed()
 {
+    if (SecureTextTimer* secureTextTimer = gSecureTextTimers ? gSecureTextTimers->take(this) : 0)
+        delete secureTextTimer;
+
     removeAndDestroyTextBoxes();
     RenderObject::willBeDestroyed();
 }
@@ -266,7 +301,7 @@ PassRefPtr<StringImpl> RenderText::originalText() const
     return (e && e->isTextNode()) ? static_cast<Text*>(e)->dataImpl() : 0;
 }
 
-void RenderText::absoluteRects(Vector<LayoutRect>& rects, const LayoutPoint& accumulatedOffset)
+void RenderText::absoluteRects(Vector<LayoutRect>& rects, const LayoutPoint& accumulatedOffset) const
 {
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox())
         rects.append(enclosingLayoutRect(FloatRect(accumulatedOffset + box->topLeft(), box->size())));
@@ -353,7 +388,7 @@ static IntRect ellipsisRectForBox(InlineTextBox* box, unsigned startPos, unsigne
     return IntRect();
 }
     
-void RenderText::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed, ClippingOption option)
+void RenderText::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed, ClippingOption option) const
 {
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
         IntRect boundaries = box->calculateBoundaries();
@@ -370,7 +405,7 @@ void RenderText::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed, Clippin
     }
 }
     
-void RenderText::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed)
+void RenderText::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
 {
     absoluteQuads(quads, wasFixed, NoClipping);
 }
@@ -431,9 +466,11 @@ InlineTextBox* RenderText::findNextInlineTextBox(int offset, int& pos) const
     return s;
 }
 
-static bool lineDirectionPointFitsInBox(int pointLineDirection, InlineTextBox* box, int offset, EAffinity& affinity)
+enum ShouldAffinityBeDownstream { AlwaysDownstream, AlwaysUpstream, UpstreamIfPositionIsNotAtStart };
+
+static bool lineDirectionPointFitsInBox(int pointLineDirection, InlineTextBox* box, ShouldAffinityBeDownstream& shouldAffinityBeDownstream)
 {
-    affinity = DOWNSTREAM;
+    shouldAffinityBeDownstream = AlwaysDownstream;
 
     // the x coordinate is equal to the left edge of this box
     // the affinity must be downstream so the position doesn't jump back to the previous line
@@ -443,7 +480,7 @@ static bool lineDirectionPointFitsInBox(int pointLineDirection, InlineTextBox* b
     // and the x coordinate is to the left of the right edge of this box
     // check to see if position goes in this box
     if (pointLineDirection < box->logicalRight()) {
-        affinity = offset > 0 ? VP_UPSTREAM_IF_POSSIBLE : DOWNSTREAM;
+        shouldAffinityBeDownstream = UpstreamIfPositionIsNotAtStart;
         return true;
     }
 
@@ -456,11 +493,102 @@ static bool lineDirectionPointFitsInBox(int pointLineDirection, InlineTextBox* b
         // box is last on line
         // and the x coordinate is to the right of the last text box right edge
         // generate VisiblePosition, use UPSTREAM affinity if possible
-        affinity = offset > 0 ? VP_UPSTREAM_IF_POSSIBLE : DOWNSTREAM;
+        shouldAffinityBeDownstream = UpstreamIfPositionIsNotAtStart;
         return true;
     }
 
     return false;
+}
+
+static VisiblePosition createVisiblePositionForBox(const InlineBox* box, int offset, ShouldAffinityBeDownstream shouldAffinityBeDownstream)
+{
+    EAffinity affinity = VP_DEFAULT_AFFINITY;
+    switch (shouldAffinityBeDownstream) {
+    case AlwaysDownstream:
+        affinity = DOWNSTREAM;
+        break;
+    case AlwaysUpstream:
+        affinity = VP_UPSTREAM_IF_POSSIBLE;
+        break;
+    case UpstreamIfPositionIsNotAtStart:
+        affinity = offset > box->caretMinOffset() ? VP_UPSTREAM_IF_POSSIBLE : DOWNSTREAM;
+        break;
+    }
+    return box->renderer()->createVisiblePosition(offset, affinity);
+}
+
+static VisiblePosition createVisiblePositionAfterAdjustingOffsetForBiDi(const InlineTextBox* box, int offset, ShouldAffinityBeDownstream shouldAffinityBeDownstream)
+{
+    ASSERT(box);
+    ASSERT(box->renderer());
+    ASSERT(offset >= 0);
+
+    if (offset && static_cast<unsigned>(offset) < box->len())
+        return createVisiblePositionForBox(box, box->start() + offset, shouldAffinityBeDownstream);
+
+    bool positionIsAtStartOfBox = !offset;
+    if (positionIsAtStartOfBox == box->isLeftToRightDirection()) {
+        // offset is on the left edge
+
+        const InlineBox* prevBox = box->prevLeafChild();
+        if ((prevBox && prevBox->bidiLevel() == box->bidiLevel())
+            || box->renderer()->containingBlock()->style()->direction() == box->direction()) // FIXME: left on 12CBA
+            return createVisiblePositionForBox(box, box->caretLeftmostOffset(), shouldAffinityBeDownstream);
+
+        if (prevBox && prevBox->bidiLevel() > box->bidiLevel()) {
+            // e.g. left of B in aDC12BAb
+            const InlineBox* leftmostBox;
+            do {
+                leftmostBox = prevBox;
+                prevBox = leftmostBox->prevLeafChild();
+            } while (prevBox && prevBox->bidiLevel() > box->bidiLevel());
+            return createVisiblePositionForBox(leftmostBox, leftmostBox->caretRightmostOffset(), shouldAffinityBeDownstream);
+        }
+
+        if (!prevBox || prevBox->bidiLevel() < box->bidiLevel()) {
+            // e.g. left of D in aDC12BAb
+            const InlineBox* rightmostBox;
+            const InlineBox* nextBox = box;
+            do {
+                rightmostBox = nextBox;
+                nextBox = rightmostBox->nextLeafChild();
+            } while (nextBox && nextBox->bidiLevel() >= box->bidiLevel());
+            return createVisiblePositionForBox(rightmostBox,
+                box->isLeftToRightDirection() ? rightmostBox->caretMaxOffset() : rightmostBox->caretMinOffset(), shouldAffinityBeDownstream);
+        }
+
+        return createVisiblePositionForBox(box, box->caretRightmostOffset(), shouldAffinityBeDownstream);
+    }
+
+    const InlineBox* nextBox = box->nextLeafChild();
+    if ((nextBox && nextBox->bidiLevel() == box->bidiLevel())
+        || box->renderer()->containingBlock()->style()->direction() == box->direction())
+        return createVisiblePositionForBox(box, box->caretRightmostOffset(), shouldAffinityBeDownstream);
+
+    // offset is on the right edge
+    if (nextBox && nextBox->bidiLevel() > box->bidiLevel()) {
+        // e.g. right of C in aDC12BAb
+        const InlineBox* rightmostBox;
+        do {
+            rightmostBox = nextBox;
+            nextBox = rightmostBox->nextLeafChild();
+        } while (nextBox && nextBox->bidiLevel() > box->bidiLevel());
+        return createVisiblePositionForBox(rightmostBox, rightmostBox->caretLeftmostOffset(), shouldAffinityBeDownstream);
+    }
+
+    if (!nextBox || nextBox->bidiLevel() < box->bidiLevel()) {
+        // e.g. right of A in aDC12BAb
+        const InlineBox* leftmostBox;
+        const InlineBox* prevBox = box;
+        do {
+            leftmostBox = prevBox;
+            prevBox = leftmostBox->prevLeafChild();
+        } while (prevBox && prevBox->bidiLevel() >= box->bidiLevel());
+        return createVisiblePositionForBox(leftmostBox,
+            box->isLeftToRightDirection() ? leftmostBox->caretMinOffset() : leftmostBox->caretMaxOffset(), shouldAffinityBeDownstream);
+    }
+
+    return createVisiblePositionForBox(box, box->caretLeftmostOffset(), shouldAffinityBeDownstream);
 }
 
 VisiblePosition RenderText::positionForPoint(const LayoutPoint& point)
@@ -479,13 +607,13 @@ VisiblePosition RenderText::positionForPoint(const LayoutPoint& point)
         // at the y coordinate of the first line or above
         // and the x coordinate is to the left of the first text box left edge
         offset = firstTextBox()->offsetForPosition(pointLineDirection);
-        return createVisiblePosition(offset + firstTextBox()->start(), offset > 0 ? VP_UPSTREAM_IF_POSSIBLE : DOWNSTREAM);
+        return createVisiblePositionAfterAdjustingOffsetForBiDi(firstTextBox(), offset, UpstreamIfPositionIsNotAtStart);
     }
     if (lastTextBox() && pointBlockDirection >= lastTextBox()->root()->selectionTop() && pointLineDirection >= lastTextBox()->logicalRight()) {
         // at the y coordinate of the last line or below
         // and the x coordinate is to the right of the last text box right edge
         offset = lastTextBox()->offsetForPosition(pointLineDirection);
-        return createVisiblePosition(offset + lastTextBox()->start(), VP_UPSTREAM_IF_POSSIBLE);
+        return createVisiblePositionAfterAdjustingOffsetForBiDi(lastTextBox(), offset, AlwaysUpstream);
     }
 
     InlineTextBox* lastBoxAbove = 0;
@@ -497,10 +625,10 @@ VisiblePosition RenderText::positionForPoint(const LayoutPoint& point)
                 bottom = min(bottom, rootBox->nextRootBox()->lineTop());
 
             if (pointBlockDirection < bottom) {
-                EAffinity affinity;
-                int offset = box->offsetForPosition(pointLineDirection);
-                if (lineDirectionPointFitsInBox(pointLineDirection, box, offset, affinity))
-                    return createVisiblePosition(offset + box->start(), affinity);
+                ShouldAffinityBeDownstream shouldAffinityBeDownstream;
+                offset = box->offsetForPosition(pointLineDirection);
+                if (lineDirectionPointFitsInBox(pointLineDirection, box, shouldAffinityBeDownstream))
+                    return createVisiblePositionAfterAdjustingOffsetForBiDi(box, offset, shouldAffinityBeDownstream);
             }
             lastBoxAbove = box;
         }
@@ -786,6 +914,10 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
     int nextBreakable = -1;
     int lastWordBoundary = 0;
 
+    // Non-zero only when kerning is enabled, in which case we measure words with their trailing
+    // space, then subtract its width.
+    float wordTrailingSpaceWidth = f.typesettingFeatures() & Kerning ? f.width(RenderBlock::constructTextRun(this, f, &space, 1, style())) : 0;
+
     int firstGlyphLeftOverflow = -1;
 
     bool breakNBSP = style()->autoWrap() && style()->nbspMode() == SPACE;
@@ -855,7 +987,13 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
 
         int wordLen = j - i;
         if (wordLen) {
-            float w = widthFromCache(f, i, wordLen, leadWidth + currMaxWidth, &fallbackFonts, &glyphOverflow);
+            bool isSpace = (j < len) && isSpaceAccordingToStyle(c, style());
+            float w;
+            if (wordTrailingSpaceWidth && isSpace)
+                w = widthFromCache(f, i, wordLen + 1, leadWidth + currMaxWidth, &fallbackFonts, &glyphOverflow) - wordTrailingSpaceWidth;
+            else
+                w = widthFromCache(f, i, wordLen, leadWidth + currMaxWidth, &fallbackFonts, &glyphOverflow);
+
             if (firstGlyphLeftOverflow < 0)
                 firstGlyphLeftOverflow = glyphOverflow.left;
             currMinWidth += w;
@@ -867,7 +1005,6 @@ void RenderText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
                 lastWordBoundary = j;
             }
 
-            bool isSpace = (j < len) && isSpaceAccordingToStyle(c, style());
             bool isCollapsibleWhiteSpace = (j < len) && style()->isCollapsibleWhiteSpace(c);
             if (j < len && style()->autoWrap())
                 m_hasBreakableChar = true;
@@ -1128,14 +1265,16 @@ UChar RenderText::previousCharacter() const
     return prev;
 }
 
-void RenderText::transformText(String& text) const
+void applyTextTransform(const RenderStyle* style, String& text, UChar previousCharacter)
 {
-    ASSERT(style());
-    switch (style()->textTransform()) {
+    if (!style)
+        return;
+
+    switch (style->textTransform()) {
     case TTNONE:
         break;
     case CAPITALIZE:
-        makeCapitalized(&text, previousCharacter());
+        makeCapitalized(&text, previousCharacter);
         break;
     case UPPERCASE:
         text.makeUpper();
@@ -1157,7 +1296,7 @@ void RenderText::setTextInternal(PassRefPtr<StringImpl> text)
     ASSERT(m_text);
 
     if (style()) {
-        transformText(m_text);
+        applyTextTransform(style(), m_text, previousCharacter());
 
         // We use the same characters here as for list markers.
         // See the listMarkerText function in RenderListMarker.cpp.
@@ -1165,13 +1304,13 @@ void RenderText::setTextInternal(PassRefPtr<StringImpl> text)
         case TSNONE:
             break;
         case TSCIRCLE:
-            m_text.fill(whiteBullet);
+            secureText(whiteBullet);
             break;
         case TSDISC:
-            m_text.fill(bullet);
+            secureText(bullet);
             break;
         case TSSQUARE:
-            m_text.fill(blackSquare);
+            secureText(blackSquare);
         }
     }
 
@@ -1179,6 +1318,28 @@ void RenderText::setTextInternal(PassRefPtr<StringImpl> text)
     ASSERT(!isBR() || (textLength() == 1 && m_text[0] == '\n'));
 
     m_isAllASCII = m_text.containsOnlyASCII();
+}
+
+void RenderText::secureText(UChar mask)
+{
+    if (!m_text.length())
+        return;
+
+    int lastTypedCharacterOffsetToReveal = -1;
+    String revealedText;
+    SecureTextTimer* secureTextTimer = gSecureTextTimers ? gSecureTextTimers->get(this) : 0;
+    if (secureTextTimer && secureTextTimer->isActive()) {
+        lastTypedCharacterOffsetToReveal = secureTextTimer->lastTypedCharacterOffset();
+        if (lastTypedCharacterOffsetToReveal >= 0)
+            revealedText.append(m_text[lastTypedCharacterOffsetToReveal]);
+    }
+
+    m_text.fill(mask);
+    if (lastTypedCharacterOffsetToReveal >= 0) {
+        m_text.replace(lastTypedCharacterOffsetToReveal, 1, revealedText);
+        // m_text may be updated later before timer fires. We invalidate the lastTypedCharacterOffset to avoid inconsistency.
+        secureTextTimer->invalidate();
+    }
 }
 
 void RenderText::setText(PassRefPtr<StringImpl> text, bool force)
@@ -1206,8 +1367,7 @@ String RenderText::textWithoutTranscoding() const
     // Otherwise, we should use original text. If text-transform is
     // specified, we should transform the text on the fly.
     String text = originalText();
-    if (style())
-        transformText(text);
+    applyTextTransform(style(), text, previousCharacter());
     return text;
 }
 
@@ -1436,15 +1596,16 @@ int RenderText::caretMinOffset() const
 int RenderText::caretMaxOffset() const
 {
     InlineTextBox* box = lastTextBox();
-    if (!box)
+    if (!lastTextBox())
         return textLength();
+
     int maxOffset = box->start() + box->len();
     for (box = box->prevTextBox(); box; box = box->prevTextBox())
         maxOffset = max<int>(maxOffset, box->start() + box->len());
     return maxOffset;
 }
 
-unsigned RenderText::caretMaxRenderedOffset() const
+unsigned RenderText::renderedTextLength() const
 {
     int l = 0;
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox())
@@ -1467,7 +1628,7 @@ int RenderText::previousOffset(int current) const
     return result;
 }
 
-#if PLATFORM(MAC)
+#if PLATFORM(MAC) || PLATFORM(CHROMIUM) && OS(MAC_OS_X)
 
 #define HANGUL_CHOSEONG_START (0x1100)
 #define HANGUL_CHOSEONG_END (0x115F)
@@ -1499,14 +1660,21 @@ inline bool isMark(UChar32 c)
     return charType == U_NON_SPACING_MARK || charType == U_ENCLOSING_MARK || charType == U_COMBINING_SPACING_MARK;
 }
 
+inline bool isRegionalIndicator(UChar32 c)
+{
+    // National flag emoji each consists of a pair of regional indicator symbols.
+    return 0x1F1E6 <= c && c <= 0x1F1FF;
+}
+
 #endif
 
 int RenderText::previousOffsetForBackwardDeletion(int current) const
 {
-#if PLATFORM(MAC)
+#if PLATFORM(MAC) || PLATFORM(CHROMIUM) && OS(MAC_OS_X)
     ASSERT(m_text);
     StringImpl& text = *m_text.impl();
     UChar32 character;
+    bool sawRegionalIndicator = false;
     while (current > 0) {
         if (U16_IS_TRAIL(text[--current]))
             --current;
@@ -1515,9 +1683,24 @@ int RenderText::previousOffsetForBackwardDeletion(int current) const
 
         UChar32 character = text.characterStartingAt(current);
 
+        if (sawRegionalIndicator) {
+            // We don't check if the pair of regional indicator symbols before current position can actually be combined
+            // into a flag, and just delete it. This may not agree with how the pair is rendered in edge cases,
+            // but is good enough in practice.
+            if (isRegionalIndicator(character))
+                break;
+            // Don't delete a preceding character that isn't a regional indicator symbol.
+            U16_FWD_1_UNSAFE(text, current);
+        }
+
         // We don't combine characters in Armenian ... Limbu range for backward deletion.
         if ((character >= 0x0530) && (character < 0x1950))
             break;
+
+        if (isRegionalIndicator(character)) {
+            sawRegionalIndicator = true;
+            continue;
+        }
 
         if (!isMark(character) && (character != 0xFF9E) && (character != 0xFF9F))
             break;
@@ -1575,7 +1758,11 @@ int RenderText::previousOffsetForBackwardDeletion(int current) const
     return current;
 #else
     // Platforms other than Mac delete by one code point.
-    return current - 1;
+    if (U16_IS_TRAIL(m_text[--current]))
+        --current;
+    if (current < 0)
+        current = 0;
+    return current;
 #endif
 }
 
@@ -1610,5 +1797,18 @@ void RenderText::checkConsistency() const
 }
 
 #endif
+
+void RenderText::momentarilyRevealLastTypedCharacter(unsigned lastTypedCharacterOffset)
+{
+    if (!gSecureTextTimers)
+        gSecureTextTimers = new SecureTextTimerMap;
+
+    SecureTextTimer* secureTextTimer = gSecureTextTimers->get(this);
+    if (!secureTextTimer) {
+        secureTextTimer = new SecureTextTimer(this);
+        gSecureTextTimers->add(this, secureTextTimer);
+    }
+    secureTextTimer->restartWithNewText(lastTypedCharacterOffset);
+}
 
 } // namespace WebCore

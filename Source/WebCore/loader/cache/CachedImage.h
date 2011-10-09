@@ -42,10 +42,13 @@ public:
     CachedImage(Image*);
     virtual ~CachedImage();
     
-    virtual void load(CachedResourceLoader* cachedResourceLoader);
+    virtual void load(CachedResourceLoader*, const ResourceLoaderOptions&);
 
     Image* image() const; // Returns the nullImage() if the image is not available yet.
     bool hasImage() const { return m_image.get(); }
+
+    std::pair<Image*, float> brokenImage(float deviceScaleFactor) const; // Returns an image and the image's resolution scale factor.
+    bool willPaintBrokenImage() const; 
 
     bool canRender(float multiplier) const { return !errorOccurred() && !imageSize(multiplier).isEmpty(); }
 

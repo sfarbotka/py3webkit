@@ -145,10 +145,12 @@ private:
         OP_MOV_EAXIv                    = 0xB8,
         OP_GROUP2_EvIb                  = 0xC1,
         OP_RET                          = 0xC3,
+        OP_GROUP11_EvIb                 = 0xC6,
         OP_GROUP11_EvIz                 = 0xC7,
         OP_INT3                         = 0xCC,
         OP_GROUP2_Ev1                   = 0xD1,
         OP_GROUP2_EvCL                  = 0xD3,
+        OP_ESCAPE_DD                    = 0xDD,
         OP_CALL_rel32                   = 0xE8,
         OP_JMP_rel32                    = 0xE9,
         PRE_SSE_F2                      = 0xF2,
@@ -217,6 +219,8 @@ private:
         GROUP5_OP_PUSH  = 6,
 
         GROUP11_MOV = 0,
+
+        ESCAPE_DD_FSTP_doubleReal = 3,
     } GroupOpcodeID;
     
     class X86InstructionFormatter;
@@ -842,6 +846,19 @@ public:
     }
 #endif
 
+    void cmpw_ir(int imm, RegisterID dst)
+    {
+        if (CAN_SIGN_EXTEND_8_32(imm)) {
+            m_formatter.prefix(PRE_OPERAND_SIZE);
+            m_formatter.oneByteOp(OP_GROUP1_EvIb, GROUP1_OP_CMP, dst);
+            m_formatter.immediate8(imm);
+        } else {
+            m_formatter.prefix(PRE_OPERAND_SIZE);
+            m_formatter.oneByteOp(OP_GROUP1_EvIz, GROUP1_OP_CMP, dst);
+            m_formatter.immediate16(imm);
+        }
+    }
+
     void cmpw_rm(RegisterID src, int offset, RegisterID base, RegisterID index, int scale)
     {
         m_formatter.prefix(PRE_OPERAND_SIZE);
@@ -970,6 +987,11 @@ public:
         m_formatter.oneByteOp(OP_CDQ);
     }
 
+    void fstpl(int offset, RegisterID base)
+    {
+        m_formatter.oneByteOp(OP_ESCAPE_DD, ESCAPE_DD_FSTP_doubleReal, base, offset);
+    }
+
     void xchgl_rr(RegisterID src, RegisterID dst)
     {
         m_formatter.oneByteOp(OP_XCHG_EvGv, src, dst);
@@ -1042,6 +1064,20 @@ public:
     {
         m_formatter.oneByteOp(OP_GROUP11_EvIz, GROUP11_MOV, base, offset);
         m_formatter.immediate32(imm);
+    }
+    
+    void movb_i8m(int imm, int offset, RegisterID base)
+    {
+        ASSERT(-128 <= imm && imm < 128);
+        m_formatter.oneByteOp(OP_GROUP11_EvIb, GROUP11_MOV, base, offset);
+        m_formatter.immediate8(imm);
+    }
+
+    void movb_i8m(int imm, int offset, RegisterID base, RegisterID index, int scale)
+    {
+        ASSERT(-128 <= imm && imm < 128);
+        m_formatter.oneByteOp(OP_GROUP11_EvIb, GROUP11_MOV, base, index, scale, offset);
+        m_formatter.immediate8(imm);
     }
 
     void movl_EAXm(const void* addr)
@@ -1157,6 +1193,11 @@ public:
     void movzwl_mr(int offset, RegisterID base, RegisterID index, int scale, RegisterID dst)
     {
         m_formatter.twoByteOp(OP2_MOVZX_GvEw, dst, base, index, scale, offset);
+    }
+
+    void movzbl_mr(int offset, RegisterID base, RegisterID index, int scale, RegisterID dst)
+    {
+        m_formatter.twoByteOp(OP2_MOVZX_GvEb, dst, base, index, scale, offset);
     }
 
     void movzbl_rr(RegisterID src, RegisterID dst)
@@ -1325,6 +1366,14 @@ public:
         m_formatter.twoByteOp(OP2_ADDSD_VsdWsd, (RegisterID)dst, base, offset);
     }
 
+#if !CPU(X86_64)
+    void addsd_mr(const void* address, XMMRegisterID dst)
+    {
+        m_formatter.prefix(PRE_SSE_F2);
+        m_formatter.twoByteOp(OP2_ADDSD_VsdWsd, (RegisterID)dst, address);
+    }
+#endif
+
     void cvtsi2sd_rr(RegisterID src, XMMRegisterID dst)
     {
         m_formatter.prefix(PRE_SSE_F2);
@@ -1394,6 +1443,11 @@ public:
     {
         m_formatter.prefix(PRE_SSE_F2);
         m_formatter.twoByteOp(OP2_MOVSD_VsdWsd, (RegisterID)dst, address);
+    }
+    void movsd_rm(XMMRegisterID src, const void* address)
+    {
+        m_formatter.prefix(PRE_SSE_F2);
+        m_formatter.twoByteOp(OP2_MOVSD_WsdVsd, (RegisterID)src, address);
     }
 #endif
 
@@ -1595,9 +1649,9 @@ public:
         return b.m_offset - a.m_offset;
     }
     
-    void* executableCopy(JSGlobalData& globalData, ExecutablePool* allocator)
+    PassRefPtr<ExecutableMemoryHandle> executableCopy(JSGlobalData& globalData)
     {
-        return m_formatter.executableCopy(globalData, allocator);
+        return m_formatter.executableCopy(globalData);
     }
 
     void rewindToLabel(AssemblerLabel rewindTo) { m_formatter.rewindToLabel(rewindTo); }
@@ -1939,9 +1993,9 @@ private:
         bool isAligned(int alignment) const { return m_buffer.isAligned(alignment); }
         void* data() const { return m_buffer.data(); }
 
-        void* executableCopy(JSGlobalData& globalData, ExecutablePool* allocator)
+        PassRefPtr<ExecutableMemoryHandle> executableCopy(JSGlobalData& globalData)
         {
-            return m_buffer.executableCopy(globalData, allocator);
+            return m_buffer.executableCopy(globalData);
         }
 
         void rewindToLabel(AssemblerLabel rewindTo) { m_buffer.rewindToLabel(rewindTo); }

@@ -32,7 +32,7 @@ using namespace WebKit;
 class QDesktopWebPageProxy : public QtWebPageProxy
 {
 public:
-    QDesktopWebPageProxy(QDesktopWebViewPrivate*, QWKContext*, WKPageGroupRef = 0);
+    QDesktopWebPageProxy(QDesktopWebViewPrivate*, WKContextRef, WKPageGroupRef = 0);
 
     virtual bool handleEvent(QEvent*);
 
@@ -47,14 +47,16 @@ private:
     virtual void doneWithTouchEvent(const NativeWebTouchEvent&, bool wasEventHandled);
 #endif
 
+    virtual PassRefPtr<WebKit::WebPopupMenuProxy> createPopupMenuProxy(WebKit::WebPageProxy*);
+
     virtual void timerEvent(QTimerEvent*);
 
-    bool handleMouseMoveEvent(QGraphicsSceneMouseEvent*);
-    bool handleMousePressEvent(QGraphicsSceneMouseEvent*);
-    bool handleMouseReleaseEvent(QGraphicsSceneMouseEvent*);
-    bool handleMouseDoubleClickEvent(QGraphicsSceneMouseEvent*);
-    bool handleWheelEvent(QGraphicsSceneWheelEvent*);
-    bool handleHoverMoveEvent(QGraphicsSceneHoverEvent*);
+    bool handleMouseMoveEvent(QMouseEvent*);
+    bool handleMousePressEvent(QMouseEvent*);
+    bool handleMouseReleaseEvent(QMouseEvent*);
+    bool handleMouseDoubleClickEvent(QMouseEvent*);
+    bool handleWheelEvent(QWheelEvent*);
+    bool handleHoverMoveEvent(QHoverEvent*);
     bool handleDragEnterEvent(QGraphicsSceneDragDropEvent*);
     bool handleDragLeaveEvent(QGraphicsSceneDragDropEvent*);
     bool handleDragMoveEvent(QGraphicsSceneDragDropEvent*);

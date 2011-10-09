@@ -381,13 +381,22 @@ EAPI Eina_Bool    ewk_frame_text_search(const Evas_Object *o, const char *string
  * @return number of matched @a string
  */
 EAPI unsigned int ewk_frame_text_matches_mark(Evas_Object *o, const char *string, Eina_Bool case_sensitive, Eina_Bool highlight, unsigned int limit);
-EAPI Eina_Bool    ewk_frame_text_matches_unmark_all(Evas_Object *o);
 
 /**
  * Unmarks all marked matches in a document.
  * Reverses the effect of ewk_frame_text_matches_mark().
  *
  * @param o frame object where to unmark matches
+ *
+ * @return @c EINA_TRUE on success, @c EINA_FALSE on failure
+ */
+EAPI Eina_Bool    ewk_frame_text_matches_unmark_all(Evas_Object *o);
+
+/**
+ * Sets whether matches marked with ewk_frame_text_matches_mark() should be highlighted.
+ *
+ * @param o frame object where to set if matches are highlighted or not
+ * @param highlight @c EINA_TRUE if matches are highlighted, @c EINA_FALSE if not
  *
  * @return @c EINA_TRUE on success, @c EINA_FALSE on failure
  */
@@ -413,7 +422,7 @@ EAPI Eina_Bool    ewk_frame_text_matches_highlight_get(const Evas_Object *o);
  * @return @c EINA_TRUE on success, @c EINA_FALSE when no matches were found or
  *         @a n is bigger than search results or on failure
  */
-EAPI Eina_Bool    ewk_frame_text_matches_nth_pos_get(Evas_Object *o, size_t n, int *x, int *y);
+EAPI Eina_Bool    ewk_frame_text_matches_nth_pos_get(const Evas_Object *o, size_t n, int *x, int *y);
 
 /**
  * Asks frame to stop loading.
@@ -763,7 +772,7 @@ EAPI Eina_Bool    ewk_frame_feed_key_up(Evas_Object *o, const Evas_Event_Key_Up 
  * @param o a frame object to check selection type
  * @return current text selection type on success or no selection otherwise
  */
-EAPI Ewk_Text_Selection_Type ewk_frame_text_selection_type_get(Evas_Object *o);
+EAPI Ewk_Text_Selection_Type ewk_frame_text_selection_type_get(const Evas_Object *o);
 
 /**
  * Gets the frame source.
@@ -778,14 +787,14 @@ EAPI Ewk_Text_Selection_Type ewk_frame_text_selection_type_get(Evas_Object *o);
  *
  * @see ewk_frame_resources_location_get()
  */
-EAPI ssize_t ewk_frame_source_get(Evas_Object *o, char **frame_source);
+EAPI ssize_t ewk_frame_source_get(const Evas_Object *o, char **frame_source);
 
 /**
  * Gets the resource list of this frame.
  *
  * It's part of HTML saving feature. Currently only locations of images are supported.
  * An application might find these values in frame source and
- * replace them to the local paths. Values are not duplicated.
+ * replace them to the local paths. Values are not duplicated and they are decoded.
  *
  * @param o frame smart object to get the resources list
  * @return @c Eina_List with location of resources on success, or @c 0 on failure,
@@ -793,7 +802,20 @@ EAPI ssize_t ewk_frame_source_get(Evas_Object *o, char **frame_source);
  *
  * @see ewk_frame_source_get()
  */
-EAPI Eina_List *ewk_frame_resources_location_get(Evas_Object *o);
+EAPI Eina_List *ewk_frame_resources_location_get(const Evas_Object *o);
+
+/**
+ * Retrieve the frame's contents in plain text.
+ *
+ * This function returns the contents of the given frame converted to plain text,
+ * removing all the HTML formatting.
+ *
+ * @param ewkFrame Frame object whose contents to retrieve.
+ *
+ * @return A newly allocated string (which must be freed by the caller with @c free())
+ *         or @c 0 in case of failure.
+ */
+EAPI char* ewk_frame_plain_text_get(const Evas_Object* o);
 
 #ifdef __cplusplus
 }

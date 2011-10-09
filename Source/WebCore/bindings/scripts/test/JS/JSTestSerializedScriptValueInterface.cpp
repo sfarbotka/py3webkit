@@ -40,12 +40,17 @@ ASSERT_CLASS_FITS_IN_CELL(JSTestSerializedScriptValueInterface);
 #else
 #define THUNK_GENERATOR(generator)
 #endif
+#if ENABLE(DFG_JIT)
+#define INTRINSIC(intrinsic) , intrinsic
+#else
+#define INTRINSIC(intrinsic)
+#endif
 
 static const HashTableValue JSTestSerializedScriptValueInterfaceTableValues[] =
 {
-    { "value", DontDelete | ReadOnly, (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestSerializedScriptValueInterfaceValue), (intptr_t)0 THUNK_GENERATOR(0) },
-    { "constructor", DontEnum | ReadOnly, (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestSerializedScriptValueInterfaceConstructor), (intptr_t)0 THUNK_GENERATOR(0) },
-    { 0, 0, 0, 0 THUNK_GENERATOR(0) }
+    { "value", DontDelete | ReadOnly, (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestSerializedScriptValueInterfaceValue), (intptr_t)0 THUNK_GENERATOR(0) INTRINSIC(DFG::NoIntrinsic) },
+    { "constructor", DontEnum | ReadOnly, (intptr_t)static_cast<PropertySlot::GetValueFunc>(jsTestSerializedScriptValueInterfaceConstructor), (intptr_t)0 THUNK_GENERATOR(0) INTRINSIC(DFG::NoIntrinsic) },
+    { 0, 0, 0, 0 THUNK_GENERATOR(0) INTRINSIC(DFG::NoIntrinsic) }
 };
 
 #undef THUNK_GENERATOR
@@ -56,41 +61,54 @@ static JSC_CONST_HASHTABLE HashTable JSTestSerializedScriptValueInterfaceTable =
 #else
 #define THUNK_GENERATOR(generator)
 #endif
+#if ENABLE(DFG_JIT)
+#define INTRINSIC(intrinsic) , intrinsic
+#else
+#define INTRINSIC(intrinsic)
+#endif
 
 static const HashTableValue JSTestSerializedScriptValueInterfaceConstructorTableValues[] =
 {
-    { 0, 0, 0, 0 THUNK_GENERATOR(0) }
+    { 0, 0, 0, 0 THUNK_GENERATOR(0) INTRINSIC(DFG::NoIntrinsic) }
 };
 
 #undef THUNK_GENERATOR
 static JSC_CONST_HASHTABLE HashTable JSTestSerializedScriptValueInterfaceConstructorTable = { 1, 0, JSTestSerializedScriptValueInterfaceConstructorTableValues, 0 };
 class JSTestSerializedScriptValueInterfaceConstructor : public DOMConstructorObject {
 private:
-    JSTestSerializedScriptValueInterfaceConstructor(JSC::ExecState*, JSC::Structure*, JSDOMGlobalObject*);
+    JSTestSerializedScriptValueInterfaceConstructor(JSC::Structure*, JSDOMGlobalObject*);
+    void finishCreation(JSC::ExecState*, JSDOMGlobalObject*);
 
 public:
     typedef DOMConstructorObject Base;
     static JSTestSerializedScriptValueInterfaceConstructor* create(JSC::ExecState* exec, JSC::Structure* structure, JSDOMGlobalObject* globalObject)
     {
-        return new (JSC::allocateCell<JSTestSerializedScriptValueInterfaceConstructor>(*exec->heap())) JSTestSerializedScriptValueInterfaceConstructor(exec, structure, globalObject);
+        JSTestSerializedScriptValueInterfaceConstructor* ptr = new (JSC::allocateCell<JSTestSerializedScriptValueInterfaceConstructor>(*exec->heap())) JSTestSerializedScriptValueInterfaceConstructor(structure, globalObject);
+        ptr->finishCreation(exec, globalObject);
+        return ptr;
     }
 
     virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
     virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
     static const JSC::ClassInfo s_info;
-    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSValue prototype)
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
     {
-        return JSC::Structure::create(globalData, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
     }
 protected:
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::ImplementsHasInstance | DOMConstructorObject::StructureFlags;
 };
 
-const ClassInfo JSTestSerializedScriptValueInterfaceConstructor::s_info = { "TestSerializedScriptValueInterfaceConstructor", &DOMConstructorObject::s_info, &JSTestSerializedScriptValueInterfaceConstructorTable, 0 };
+const ClassInfo JSTestSerializedScriptValueInterfaceConstructor::s_info = { "TestSerializedScriptValueInterfaceConstructor", &DOMConstructorObject::s_info, &JSTestSerializedScriptValueInterfaceConstructorTable, 0, CREATE_METHOD_TABLE(JSTestSerializedScriptValueInterfaceConstructor) };
 
-JSTestSerializedScriptValueInterfaceConstructor::JSTestSerializedScriptValueInterfaceConstructor(ExecState* exec, Structure* structure, JSDOMGlobalObject* globalObject)
+JSTestSerializedScriptValueInterfaceConstructor::JSTestSerializedScriptValueInterfaceConstructor(Structure* structure, JSDOMGlobalObject* globalObject)
     : DOMConstructorObject(structure, globalObject)
 {
+}
+
+void JSTestSerializedScriptValueInterfaceConstructor::finishCreation(ExecState* exec, JSDOMGlobalObject* globalObject)
+{
+    Base::finishCreation(exec->globalData());
     ASSERT(inherits(&s_info));
     putDirect(exec->globalData(), exec->propertyNames().prototype, JSTestSerializedScriptValueInterfacePrototype::self(exec, globalObject), DontDelete | ReadOnly);
 }
@@ -111,33 +129,43 @@ bool JSTestSerializedScriptValueInterfaceConstructor::getOwnPropertyDescriptor(E
 #else
 #define THUNK_GENERATOR(generator)
 #endif
+#if ENABLE(DFG_JIT)
+#define INTRINSIC(intrinsic) , intrinsic
+#else
+#define INTRINSIC(intrinsic)
+#endif
 
 static const HashTableValue JSTestSerializedScriptValueInterfacePrototypeTableValues[] =
 {
-    { 0, 0, 0, 0 THUNK_GENERATOR(0) }
+    { 0, 0, 0, 0 THUNK_GENERATOR(0) INTRINSIC(DFG::NoIntrinsic) }
 };
 
 #undef THUNK_GENERATOR
 static JSC_CONST_HASHTABLE HashTable JSTestSerializedScriptValueInterfacePrototypeTable = { 1, 0, JSTestSerializedScriptValueInterfacePrototypeTableValues, 0 };
-const ClassInfo JSTestSerializedScriptValueInterfacePrototype::s_info = { "TestSerializedScriptValueInterfacePrototype", &JSC::JSObjectWithGlobalObject::s_info, &JSTestSerializedScriptValueInterfacePrototypeTable, 0 };
+const ClassInfo JSTestSerializedScriptValueInterfacePrototype::s_info = { "TestSerializedScriptValueInterfacePrototype", &JSC::JSNonFinalObject::s_info, &JSTestSerializedScriptValueInterfacePrototypeTable, 0, CREATE_METHOD_TABLE(JSTestSerializedScriptValueInterfacePrototype) };
 
 JSObject* JSTestSerializedScriptValueInterfacePrototype::self(ExecState* exec, JSGlobalObject* globalObject)
 {
     return getDOMPrototype<JSTestSerializedScriptValueInterface>(exec, globalObject);
 }
 
-const ClassInfo JSTestSerializedScriptValueInterface::s_info = { "TestSerializedScriptValueInterface", &JSDOMWrapper::s_info, &JSTestSerializedScriptValueInterfaceTable, 0 };
+const ClassInfo JSTestSerializedScriptValueInterface::s_info = { "TestSerializedScriptValueInterface", &JSDOMWrapper::s_info, &JSTestSerializedScriptValueInterfaceTable, 0 , CREATE_METHOD_TABLE(JSTestSerializedScriptValueInterface) };
 
 JSTestSerializedScriptValueInterface::JSTestSerializedScriptValueInterface(Structure* structure, JSDOMGlobalObject* globalObject, PassRefPtr<TestSerializedScriptValueInterface> impl)
     : JSDOMWrapper(structure, globalObject)
     , m_impl(impl)
 {
+}
+
+void JSTestSerializedScriptValueInterface::finishCreation(JSGlobalData& globalData)
+{
+    Base::finishCreation(globalData);
     ASSERT(inherits(&s_info));
 }
 
 JSObject* JSTestSerializedScriptValueInterface::createPrototype(ExecState* exec, JSGlobalObject* globalObject)
 {
-    return JSTestSerializedScriptValueInterfacePrototype::create(exec->globalData(), globalObject, JSTestSerializedScriptValueInterfacePrototype::createStructure(globalObject->globalData(), globalObject->objectPrototype()));
+    return JSTestSerializedScriptValueInterfacePrototype::create(exec->globalData(), globalObject, JSTestSerializedScriptValueInterfacePrototype::createStructure(globalObject->globalData(), globalObject, globalObject->objectPrototype()));
 }
 
 bool JSTestSerializedScriptValueInterface::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)

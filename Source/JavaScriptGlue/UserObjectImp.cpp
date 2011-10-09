@@ -32,7 +32,7 @@
 #include <JavaScriptCore/JSString.h>
 #include <JavaScriptCore/PropertyNameArray.h>
 
-const ClassInfo UserObjectImp::s_info = { "UserObject", &JSNonFinalObject::s_info, 0, 0 };
+const ClassInfo UserObjectImp::s_info = { "UserObject", &JSNonFinalObject::s_info, 0, 0, CREATE_METHOD_TABLE(UserObjectImp) };
 
 UserObjectImp::UserObjectImp(JSGlobalData& globalData, Structure* structure, JSUserObject* userObject)
     : JSNonFinalObject(globalData, structure)
@@ -46,9 +46,15 @@ UserObjectImp::~UserObjectImp()
         fJSUserObject->Release();
 }
 
-CallType UserObjectImp::getCallData(CallData& callData)
+CallType UserObjectImp::getCallDataVirtual(CallData& callData)
 {
-    return fJSUserObject ? fJSUserObject->getCallData(callData) : CallTypeNone;
+    return getCallData(this, callData);
+}
+
+CallType UserObjectImp::getCallData(JSCell* cell, CallData& callData)
+{
+    UserObjectImp* thisObject = static_cast<UserObjectImp*>(cell);
+    return thisObject->fJSUserObject ? thisObject->fJSUserObject->getCallData(callData) : CallTypeNone;
 }
 
 JSValue UserObjectImp::callAsFunction(ExecState *exec)
@@ -145,15 +151,21 @@ bool UserObjectImp::getOwnPropertySlot(ExecState *exec, const Identifier& proper
     return JSObject::getOwnPropertySlot(exec, propertyName, slot);
 }
 
-void UserObjectImp::put(ExecState *exec, const Identifier &propertyName, JSValue value, PutPropertySlot&)
+void UserObjectImp::put(ExecState *exec, const Identifier &propertyName, JSValue value, PutPropertySlot& slot)
 {
-    if (!fJSUserObject)
+    put(this, exec, propertyName, value, slot);
+}
+
+void UserObjectImp::put(JSCell* cell, ExecState *exec, const Identifier &propertyName, JSValue value, PutPropertySlot&)
+{
+    UserObjectImp* thisObject = static_cast<UserObjectImp*>(cell);
+    if (!thisObject->fJSUserObject)
         return;
     
     CFStringRef cfPropName = IdentifierToCFString(propertyName);
     JSUserObject *jsValueObj = KJSValueToJSObject(value, exec);
 
-    fJSUserObject->SetProperty(cfPropName, jsValueObj);
+    thisObject->fJSUserObject->SetProperty(cfPropName, jsValueObj);
 
     if (jsValueObj) jsValueObj->Release();
     ReleaseCFType(cfPropName);
@@ -404,9 +416,10 @@ UString UserObjectImp::toString(ExecState *exec) const
     return result;
 }
 
-void UserObjectImp::visitChildren(SlotVisitor& visitor)
+void UserObjectImp::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSObject::visitChildren(visitor);
-    if (fJSUserObject)
-        fJSUserObject->Mark();
+    UserObjectImp* thisObject = static_cast<UserObjectImp*>(cell);
+    JSObject::visitChildren(thisObject, visitor);
+    if (thisObject->fJSUserObject)
+        thisObject->fJSUserObject->Mark();
 }

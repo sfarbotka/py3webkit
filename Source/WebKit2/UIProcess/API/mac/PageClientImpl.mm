@@ -298,15 +298,9 @@ IntRect PageClientImpl::windowToScreen(const IntRect& rect)
     return enclosingIntRect(tempRect);
 }
 
-void PageClientImpl::doneWithKeyEvent(const NativeWebKeyboardEvent& event, bool wasEventHandled)
+void PageClientImpl::doneWithKeyEvent(const NativeWebKeyboardEvent& event, bool eventWasHandled)
 {
-    NSEvent* nativeEvent = event.nativeEvent();
-    if ([nativeEvent type] != NSKeyDown)
-        return;
-    if (wasEventHandled)
-        [NSCursor setHiddenUntilMouseMoves:YES];
-    else
-        [m_wkView _resendKeyDownEvent:nativeEvent];
+    [m_wkView _doneWithKeyEvent:event.nativeEvent() eventWasHandled:eventWasHandled];
 }
 
 PassRefPtr<WebPopupMenuProxy> PageClientImpl::createPopupMenuProxy(WebPageProxy* page)
@@ -342,9 +336,14 @@ void PageClientImpl::exitAcceleratedCompositingMode()
 }
 #endif // USE(ACCELERATED_COMPOSITING)
 
-void PageClientImpl::setComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled)
+void PageClientImpl::pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus)
 {
-    [m_wkView _setComplexTextInputEnabled:complexTextInputEnabled pluginComplexTextInputIdentifier:pluginComplexTextInputIdentifier];
+    [m_wkView _pluginFocusOrWindowFocusChanged:pluginHasFocusAndWindowHasFocus pluginComplexTextInputIdentifier:pluginComplexTextInputIdentifier];
+}
+
+void PageClientImpl::setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, PluginComplexTextInputState pluginComplexTextInputState)
+{
+    [m_wkView _setPluginComplexTextInputState:pluginComplexTextInputState pluginComplexTextInputIdentifier:pluginComplexTextInputIdentifier];
 }
 
 CGContextRef PageClientImpl::containingWindowGraphicsContext()
@@ -459,20 +458,6 @@ void PageClientImpl::recordAutocorrectionResponse(EditorClient::AutocorrectionRe
 #if !defined(BUILDING_ON_SNOW_LEOPARD)
     NSCorrectionResponse response = responseType == EditorClient::AutocorrectionReverted ? NSCorrectionResponseReverted : NSCorrectionResponseEdited;
     CorrectionPanel::recordAutocorrectionResponse(m_wkView, response, replacedString, replacementString);
-#endif
-}
-
-float PageClientImpl::userSpaceScaleFactor() const
-{
-    NSWindow *window = [m_wkView window];
-#if !defined(BUILDING_ON_SNOW_LEOPARD)
-    if (window)
-        return [window backingScaleFactor];
-    return [[NSScreen mainScreen] backingScaleFactor];
-#else
-    if (window)
-        return [window userSpaceScaleFactor];
-    return [[NSScreen mainScreen] userSpaceScaleFactor];
 #endif
 }
 

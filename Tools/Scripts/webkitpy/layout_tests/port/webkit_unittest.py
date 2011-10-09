@@ -31,7 +31,7 @@ from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.system.outputcapture import OutputCapture
 
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
-from webkitpy.layout_tests.port.webkit import WebKitPort
+from webkitpy.layout_tests.port.webkit import WebKitPort, WebKitDriver
 from webkitpy.layout_tests.port import port_testcase
 
 from webkitpy.tool.mocktool import MockExecutive, MockOptions, MockUser
@@ -97,7 +97,7 @@ class WebKitPortTest(port_testcase.PortTestCase):
 
     def test_skipped_directories_for_symbols(self):
         supported_symbols = ["GraphicsLayer", "WebCoreHas3DRendering", "isXHTMLMPDocument", "fooSymbol"]
-        expected_directories = set(["mathml", "fast/canvas/webgl", "compositing/webgl", "http/tests/canvas/webgl", "fast/wcss", "mhtml"])
+        expected_directories = set(["mathml", "fast/canvas/webgl", "compositing/webgl", "http/tests/canvas/webgl", "mhtml"])
         result_directories = set(TestWebKitPort(supported_symbols, None)._skipped_tests_for_unsupported_features())
         self.assertEqual(result_directories, expected_directories)
 
@@ -197,3 +197,29 @@ BUG_SKIPPED SKIP : media = FAIL""")
         # Mock out _apache_config_file_name_for_platform to ignore the passed sys.platform value.
         port._apache_config_file_name_for_platform = lambda platform: 'httpd.conf'
         self.assertEquals(port._path_to_apache_config_file(), '/mock-checkout/LayoutTests/http/conf/httpd.conf')
+
+
+class MockServerProcess(object):
+    def __init__(self, lines=None):
+        self.timed_out = False
+        self.crashed = False
+        self.lines = lines or []
+
+    def read_line(self, timeout):
+        return self.lines.pop(0)
+
+
+class WebKitDriverTest(unittest.TestCase):
+    def test_read_block(self):
+        port = TestWebKitPort()
+        driver = WebKitDriver(port, 0)
+        driver._server_process = MockServerProcess([
+            'ActualHash: foobar',
+            'Content-Type: my_type',
+            'Content-Transfer-Encoding: none',
+            "#EOF",
+        ])
+        content_block = driver._read_block(0)
+        self.assertEquals(content_block.content_type, 'my_type')
+        self.assertEquals(content_block.encoding, 'none')
+        self.assertEquals(content_block.content_hash, 'foobar')
