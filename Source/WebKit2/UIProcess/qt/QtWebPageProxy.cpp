@@ -21,18 +21,18 @@
 #include "config.h"
 #include "QtWebPageProxy.h"
 
+#include "qweberror.h"
 #include "qwkpreferences_p.h"
 
 #include "ClientImpl.h"
-#include "qwkcontext.h"
-#include "qwkcontext_p.h"
 #include "qwkhistory.h"
 #include "qwkhistory_p.h"
-#include "ViewInterface.h"
 #include "FindIndicator.h"
 #include "LocalizedStrings.h"
 #include "NativeWebKeyboardEvent.h"
 #include "NotImplemented.h"
+#include "PolicyInterface.h"
+#include "ViewInterface.h"
 #include "WebBackForwardList.h"
 #include "WebContext.h"
 #include "WebContextMenuProxyQt.h"
@@ -45,6 +45,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QGraphicsSceneMouseEvent>
+#include <QJSEngine>
+#include <QMimeData>
 #include <QStyle>
 #include <QTouchEvent>
 #include <QUndoStack>
@@ -60,10 +62,16 @@
 using namespace WebKit;
 using namespace WebCore;
 
-QWKContext* defaultWKContext()
+
+RefPtr<WebContext> QtWebPageProxy::s_defaultContext;
+
+unsigned QtWebPageProxy::s_defaultPageProxyCount = 0;
+
+PassRefPtr<WebContext> QtWebPageProxy::defaultWKContext()
 {
-    static QWKContext* defaultContext = new QWKContext();
-    return defaultContext;
+    if (!s_defaultContext)
+        s_defaultContext = WebContext::create(String());
+    return s_defaultContext;
 }
 
 static inline Qt::DropActions dragOperationToDropActions(unsigned dragOperations)
@@ -94,102 +102,74 @@ WebCore::DragOperation dropActionToDragOperation(Qt::DropActions actions)
     return (DragOperation)result;
 }
 
-QtWebPageProxy::QtWebPageProxy(ViewInterface* viewInterface, QWKContext* c, WKPageGroupRef pageGroupRef)
+QtWebPageProxy::QtWebPageProxy(ViewInterface* viewInterface, PolicyInterface* policyInterface, WKContextRef contextRef, WKPageGroupRef pageGroupRef)
     : m_viewInterface(viewInterface)
-    , m_context(c)
+    , m_policyInterface(policyInterface)
+    , m_context(contextRef ? toImpl(contextRef) : defaultWKContext())
     , m_preferences(0)
     , m_undoStack(adoptPtr(new QUndoStack(this)))
     , m_loadProgress(0)
 {
     ASSERT(viewInterface);
     memset(m_actions, 0, sizeof(m_actions));
-    m_webPageProxy = m_context->d->context->createWebPage(this, toImpl(pageGroupRef));
+    m_webPageProxy = m_context->createWebPage(this, toImpl(pageGroupRef));
     m_history = QWKHistoryPrivate::createHistory(this, m_webPageProxy->backForwardList());
+    if (!contextRef)
+        s_defaultPageProxyCount++;
 }
 
 void QtWebPageProxy::init()
 {
     m_webPageProxy->initializeWebPage();
-    WKPageLoaderClient loadClient = {
-        0,      /* version */
-        this,   /* clientInfo */
-        qt_wk_didStartProvisionalLoadForFrame,
-        0, /* didReceiveServerRedirectForProvisionalLoadForFrame */
-        qt_wk_didFailProvisionalLoadWithErrorForFrame,
-        qt_wk_didCommitLoadForFrame,
-        0, /* didFinishDocumentLoadForFrame */
-        qt_wk_didFinishLoadForFrame,
-        qt_wk_didFailLoadWithErrorForFrame,
-        qt_wk_didSameDocumentNavigationForFrame,
-        qt_wk_didReceiveTitleForFrame,
-        0, /* didFirstLayoutForFrame */
-        0, /* didFirstVisuallyNonEmptyLayoutForFrame */
-        0, /* didRemoveFrameFromHierarchy */
-        0, /* didDisplayInsecureContentForFrame */
-        0, /* didRunInsecureContentForFrame */
-        0, /* canAuthenticateAgainstProtectionSpaceInFrame */
-        0, /* didReceiveAuthenticationChallengeInFrame */
-        qt_wk_didStartProgress,
-        qt_wk_didChangeProgress,
-        qt_wk_didFinishProgress,
-        0,  /* processDidBecomeUnresponsive */
-        0,  /* processDidBecomeResponsive */
-        0,  /* processDidCrash */
-        0,  /* didChangeBackForwardList */
-        0,  /* shouldGoToBackForwardListItem */
-        0   /* didFailToInitializePlugin */
-    };
+
+    WKPageLoaderClient loadClient;
+    memset(&loadClient, 0, sizeof(WKPageLoaderClient));
+    loadClient.version = kWKPageLoaderClientCurrentVersion;
+    loadClient.clientInfo = this;
+    loadClient.didStartProvisionalLoadForFrame = qt_wk_didStartProvisionalLoadForFrame;
+    loadClient.didFailProvisionalLoadWithErrorForFrame = qt_wk_didFailProvisionalLoadWithErrorForFrame;
+    loadClient.didCommitLoadForFrame = qt_wk_didCommitLoadForFrame;
+    loadClient.didFinishLoadForFrame = qt_wk_didFinishLoadForFrame;
+    loadClient.didFailLoadWithErrorForFrame = qt_wk_didFailLoadWithErrorForFrame;
+    loadClient.didSameDocumentNavigationForFrame = qt_wk_didSameDocumentNavigationForFrame;
+    loadClient.didReceiveTitleForFrame = qt_wk_didReceiveTitleForFrame;
+    loadClient.didStartProgress = qt_wk_didStartProgress;
+    loadClient.didChangeProgress = qt_wk_didChangeProgress;
+    loadClient.didFinishProgress = qt_wk_didFinishProgress;
     WKPageSetPageLoaderClient(pageRef(), &loadClient);
 
-    WKPageUIClient uiClient = {
-        0,      /* version */
-        m_viewInterface,   /* clientInfo */
-        0,  /* createNewPage */
-        0,  /* showPage */
-        0,  /* close */
-        0,  /* takeFocus */
-        0,  /* focus */
-        0,  /* unfocus */
-        0,  /* runJavaScriptAlert */
-        0,  /* runJavaScriptConfirm */
-        0,  /* runJavaScriptPrompt */
-        qt_wk_setStatusText,
-        0,  /* mouseDidMoveOverElement */
-        0,  /* missingPluginButtonClicked */
-        0,  /* didNotHandleKeyEvent */
-        0,  /* didNotHandleWheelEvent */
-        0,  /* toolbarsAreVisible */
-        0,  /* setToolbarsAreVisible */
-        0,  /* menuBarIsVisible */
-        0,  /* setMenuBarIsVisible */
-        0,  /* statusBarIsVisible */
-        0,  /* setStatusBarIsVisible */
-        0,  /* isResizable */
-        0,  /* setIsResizable */
-        0,  /* getWindowFrame */
-        0,  /* setWindowFrame */
-        0,  /* runBeforeUnloadConfirmPanel */
-        0,  /* didDraw */
-        0,  /* pageDidScroll */
-        0,  /* exceededDatabaseQuota */
-        0,  /* runOpenPanel */
-        0,  /* decidePolicyForGeolocationPermissionRequest */
-        0,  /* headerHeight */
-        0,  /* footerHeight */
-        0,  /* drawHeader */
-        0,  /* drawFooter */
-        0,  /* printFrame */
-        0,  /* runModal */
-        0,  /* didCompleteRubberBandForMainFrame */
-        0,  /* saveDataToFileInDownloadsFolder */
-        0,  /* shouldInterruptJavaScript */
-    };
+    WKPageUIClient uiClient;
+    memset(&uiClient, 0, sizeof(WKPageUIClient));
+    uiClient.version = kWKPageUIClientCurrentVersion;
+    uiClient.clientInfo = m_viewInterface;
+    uiClient.runJavaScriptAlert = qt_wk_runJavaScriptAlert;
+    uiClient.runJavaScriptConfirm = qt_wk_runJavaScriptConfirm;
+    uiClient.runJavaScriptPrompt = qt_wk_runJavaScriptPrompt;
+    uiClient.setStatusText = qt_wk_setStatusText;
+    uiClient.runOpenPanel = qt_wk_runOpenPanel;
+    uiClient.mouseDidMoveOverElement = qt_wk_mouseDidMoveOverElement;
     WKPageSetPageUIClient(toAPI(m_webPageProxy.get()), &uiClient);
+
+    if (m_policyInterface) {
+        WKPagePolicyClient policyClient;
+        memset(&policyClient, 0, sizeof(WKPagePolicyClient));
+        policyClient.version = kWKPagePolicyClientCurrentVersion;
+        policyClient.clientInfo = m_policyInterface;
+        policyClient.decidePolicyForNavigationAction = qt_wk_decidePolicyForNavigationAction;
+        WKPageSetPagePolicyClient(toAPI(m_webPageProxy.get()), &policyClient);
+    }
 }
 
 QtWebPageProxy::~QtWebPageProxy()
 {
     m_webPageProxy->close();
+    // The context is the default one and we're deleting the last QtWebPageProxy.
+    if (m_context == s_defaultContext) {
+        ASSERT(s_defaultPageProxyCount > 0);
+        s_defaultPageProxyCount--;
+        if (!s_defaultPageProxyCount)
+            s_defaultContext.clear();
+    }
     delete m_history;
 }
 
@@ -420,6 +400,11 @@ void QtWebPageProxy::loadDidBegin()
     m_viewInterface->loadDidBegin();
 }
 
+void QtWebPageProxy::loadDidCommit()
+{
+    m_viewInterface->loadDidCommit();
+}
+
 void QtWebPageProxy::loadDidSucceed()
 {
     m_viewInterface->loadDidSucceed();
@@ -436,7 +421,7 @@ void QtWebPageProxy::didChangeLoadProgress(int newLoadProgress)
     m_viewInterface->didChangeLoadProgress(newLoadProgress);
 }
 
-void QtWebPageProxy::paint(QPainter* painter, QRect area)
+void QtWebPageProxy::paint(QPainter* painter, const QRect& area)
 {
     if (m_webPageProxy->isValid())
         paintContent(painter, area);

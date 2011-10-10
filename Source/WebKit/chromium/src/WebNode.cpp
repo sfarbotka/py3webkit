@@ -140,6 +140,11 @@ WebString WebNode::createMarkup() const
     return WebCore::createMarkup(m_private.get());
 }
 
+bool WebNode::isLink() const
+{
+    return m_private->isLink();
+}
+
 bool WebNode::isTextNode() const
 {
     return m_private->isTextNode();
@@ -147,6 +152,7 @@ bool WebNode::isTextNode() const
 
 bool WebNode::isFocusable() const
 {
+    m_private->document()->updateLayout();
     return m_private->isFocusable();
 }
 

@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @extends {WebInspector.View}
+ * @constructor
+ */
 WebInspector.SourceFrame = function(delegate, url)
 {
     WebInspector.View.call(this);
@@ -40,7 +44,11 @@ WebInspector.SourceFrame = function(delegate, url)
 
     var textViewerDelegate = new WebInspector.TextViewerDelegateForSourceFrame(this);
     this._textViewer = new WebInspector.TextViewer(this._textModel, WebInspector.platform, this._url, textViewerDelegate);
+    this.addChildView(this._textViewer);
     this.element.appendChild(this._textViewer.element);
+
+    this._editButton = new WebInspector.StatusBarButton(WebInspector.UIString("Edit"), "edit-source-status-bar-item");
+    this._editButton.addEventListener("click", this._editButtonClicked.bind(this), this);
 
     this._currentSearchResultIndex = -1;
     this._searchResults = [];
@@ -80,25 +88,24 @@ WebInspector.SourceFrame.prototype = {
     show: function(parentElement)
     {
         WebInspector.View.prototype.show.call(this, parentElement);
-
         this._ensureContentLoaded();
-
-        this.restoreScrollPositions();
-
-        // Resize after setting the initial scroll positions to avoid unnecessary rendering work.
-        this._textViewer.resize();
+        this._textViewer.show();
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.View.prototype.hide.call(this);
-
+        WebInspector.View.prototype.willHide.call(this);
         if (this.loaded)
             this._textViewer.freeCachedElements();
 
-        this._textViewer.hide();
-        this._hidePopup();
+        if (this._popoverHelper)
+            this._popoverHelper.hidePopover();
         this._clearLineHighlight();
+    },
+
+    get statusBarItems()
+    {
+        return [this._editButton.element];
     },
 
     get loaded()
@@ -124,6 +131,9 @@ WebInspector.SourceFrame.prototype = {
         this._delegate.requestContent(callback);
     },
 
+    /**
+     * @param {TextDiff} diffData
+     */
     markDiff: function(diffData)
     {
         if (this._diffLines && this.loaded)
@@ -152,7 +162,7 @@ WebInspector.SourceFrame.prototype = {
         this._rowMessages = {};
         this._messageBubbles = {};
 
-        this._textViewer.resize();
+        this._textViewer.doResize();
     },
 
     get textModel()
@@ -160,26 +170,9 @@ WebInspector.SourceFrame.prototype = {
         return this._textModel;
     },
 
-    get scrollLeft()
+    canHighlightLine: function(line)
     {
-        return this.loaded ? this._textViewer.scrollLeft : 0;
-    },
-
-    set scrollLeft(scrollLeft)
-    {
-        if (this.loaded)
-            this._textViewer.scrollLeft = scrollLeft;
-    },
-
-    get scrollTop()
-    {
-        return this.loaded ? this._textViewer.scrollTop : 0;
-    },
-
-    set scrollTop(scrollTop)
-    {
-        if (this.loaded)
-            this._textViewer.scrollTop = scrollTop;
+        return true;
     },
 
     highlightLine: function(line)
@@ -308,9 +301,9 @@ WebInspector.SourceFrame.prototype = {
 
         var element = this._textViewer.element;
         if (this._delegate.debuggingSupported()) {
+            this._popoverHelper = new WebInspector.ObjectPopoverHelper(element,
+                this._getPopoverAnchor.bind(this), this._onShowPopover.bind(this), this._onHidePopover.bind(this), true);
             element.addEventListener("mousedown", this._mouseDown.bind(this), true);
-            element.addEventListener("mousemove", this._mouseMove.bind(this), true);
-            element.addEventListener("scroll", this._scroll.bind(this), true);
         }
 
         this._textViewer.beginUpdates();
@@ -333,6 +326,9 @@ WebInspector.SourceFrame.prototype = {
         this.dispatchEventToListeners(WebInspector.SourceFrame.Events.Loaded);
 
         this._textViewer.endUpdates();
+
+        if (!this.canEditSource())
+            this._editButton.disabled = true;
     },
 
     _setTextViewerDecorations: function()
@@ -345,7 +341,7 @@ WebInspector.SourceFrame.prototype = {
         this._addExistingMessagesToSource();
         this._updateDiffDecorations();
 
-        this._textViewer.resize();
+        this._textViewer.doResize();
 
         this._textViewer.endUpdates();
     },
@@ -452,6 +448,9 @@ WebInspector.SourceFrame.prototype = {
         return ranges;
     },
 
+    /**
+     * @param {boolean=} skipRevealLine
+     */
     setExecutionLine: function(lineNumber, skipRevealLine)
     {
         this._executionLineNumber = lineNumber;
@@ -657,14 +656,8 @@ WebInspector.SourceFrame.prototype = {
         return this._delegate.suggestedFileName();
     },
 
-    _scroll: function(event)
-    {
-        this._hidePopup();
-    },
-
     _mouseDown: function(event)
     {
-        this._hidePopup();
         if (event.button != 0 || event.altKey || event.ctrlKey || event.metaKey)
             return;
         var target = event.target.enclosingNodeOrSelfWithClass("webkit-line-number");
@@ -683,79 +676,47 @@ WebInspector.SourceFrame.prototype = {
         event.preventDefault();
     },
 
-    _mouseMove: function(event)
+    _onHidePopover: function()
     {
-        // Pretend that nothing has happened.
-        if (this._hoverElement === event.target || event.target.hasStyleClass("source-frame-eval-expression"))
-            return;
-
-        this._resetHoverTimer();
-        // User has 500ms to reach the popup.
-        if (this._popup) {
-            var self = this;
-            function doHide()
-            {
-                self._hidePopup();
-                delete self._hidePopupTimer;
-            }
-            if (!("_hidePopupTimer" in this))
-                this._hidePopupTimer = setTimeout(doHide, 500);
-        }
-
-        this._hoverElement = event.target;
-
-        // Now that cleanup routines are set up above, leave this in case we are not on a break.
-        if (!this._delegate.debuggerPaused())
-            return;
-
-        // We are interested in identifiers and "this" keyword.
-        if (this._hoverElement.hasStyleClass("webkit-javascript-keyword")) {
-            if (this._hoverElement.textContent !== "this")
-                return;
-        } else if (!this._hoverElement.hasStyleClass("webkit-javascript-ident"))
-            return;
-
-        const toolTipDelay = this._popup ? 600 : 1000;
-        this._hoverTimer = setTimeout(this._mouseHover.bind(this, this._hoverElement), toolTipDelay);
-    },
-
-    _resetHoverTimer: function()
-    {
-        if (this._hoverTimer) {
-            clearTimeout(this._hoverTimer);
-            delete this._hoverTimer;
-        }
-    },
-
-    _hidePopup: function()
-    {
-        this._resetHoverTimer();
-        if (!this._popup)
-            return;
-
         // Replace higlight element with its contents inplace.
-        var parentElement = this._popup.highlightElement.parentElement;
-        var child = this._popup.highlightElement.firstChild;
+        var highlightElement = this._highlightElement;
+        if (!highlightElement)
+            return;
+        var parentElement = highlightElement.parentElement;
+        var child = highlightElement.firstChild;
         while (child) {
             var nextSibling = child.nextSibling;
-            parentElement.insertBefore(child, this._popup.highlightElement);
+            parentElement.insertBefore(child, highlightElement);
             child = nextSibling;
         }
-        parentElement.removeChild(this._popup.highlightElement);
-
-        this._popup.hide();
-        delete this._popup;
+        parentElement.removeChild(highlightElement);
+        delete this._highlightElement;
         this._delegate.releaseEvaluationResult();
     },
 
-    _mouseHover: function(element)
+    _shouldShowPopover: function(element)
     {
-        delete this._hoverTimer;
+        if (!this._delegate.debuggerPaused())
+            return false;
+        if (!element.enclosingNodeOrSelfWithClass("webkit-line-content"))
+            return false;
 
-        var lineRow = element.enclosingNodeOrSelfWithClass("webkit-line-content");
-        if (!lineRow)
+        // We are interested in identifiers and "this" keyword.
+        if (element.hasStyleClass("webkit-javascript-keyword"))
+            return element.textContent === "this";
+
+        return element.hasStyleClass("webkit-javascript-ident");
+    },
+
+    _getPopoverAnchor: function(element)
+    {
+        if (!this._shouldShowPopover(element))
             return;
+        return element;
+    },
 
+    _highlightExpression: function(element)
+    {
         // Collect tokens belonging to evaluated exression.
         var tokens = [ element ];
         var token = element.previousSibling;
@@ -772,66 +733,28 @@ WebInspector.SourceFrame.prototype = {
         for (var i = 0; i < tokens.length; ++i)
             container.appendChild(tokens[i]);
         parentElement.insertBefore(container, nextElement);
-        this._showPopup(container);
+        return container;
     },
 
-    _showPopup: function(element)
+    _onShowPopover: function(element, showCallback)
     {
-        if (!this._delegate.debuggerPaused())
+        if (!this._textViewer.readOnly) {
+            this._popoverHelper.hidePopover();
             return;
-
-        function killHidePopupTimer()
-        {
-            if (this._hidePopupTimer) {
-                clearTimeout(this._hidePopupTimer);
-                delete this._hidePopupTimer;
-
-                // We know that we reached the popup, but we might have moved over other elements.
-                // Discard pending command.
-                this._resetHoverTimer();
-            }
         }
+        this._highlightElement = this._highlightExpression(element);
 
-        function showObjectPopup(result, wasThrown)
+        function showObjectPopover(result, wasThrown)
         {
-            if (wasThrown || !this._delegate.debuggerPaused())
+            if (!this._delegate.debuggerPaused()) {
+                this._popoverHelper.hidePopover();
                 return;
-
-            var popupContentElement = null;
-            if (result.type !== "object") {
-                popupContentElement = document.createElement("span");
-                popupContentElement.className = "monospace console-formatted-" + result.type;
-                popupContentElement.style.whiteSpace = "pre";
-                popupContentElement.textContent = result.description;
-                if (result.type === "string")
-                    popupContentElement.textContent = "\"" + popupContentElement.textContent + "\"";
-                this._popup = new WebInspector.Popover(popupContentElement);
-                this._popup.show(element);
-            } else {
-                var popupContentElement = document.createElement("div");
-
-                var titleElement = document.createElement("div");
-                titleElement.className = "source-frame-popover-title monospace";
-                titleElement.textContent = result.description;
-                popupContentElement.appendChild(titleElement);
-
-                var section = new WebInspector.ObjectPropertiesSection(result);
-                section.expanded = true;
-                section.element.addStyleClass("source-frame-popover-tree");
-                section.headerElement.addStyleClass("hidden");
-                popupContentElement.appendChild(section.element);
-
-                this._popup = new WebInspector.Popover(popupContentElement);
-                const popupWidth = 300;
-                const popupHeight = 250;
-                this._popup.show(element, popupWidth, popupHeight);
             }
-            this._popup.highlightElement = element;
-            this._popup.highlightElement.addStyleClass("source-frame-eval-expression");
-            popupContentElement.addEventListener("mousemove", killHidePopupTimer.bind(this), true);
+            showCallback(result, wasThrown);
+            this._highlightElement.addStyleClass("source-frame-eval-expression");
         }
 
-        this._delegate.evaluateInSelectedCallFrame(element.textContent, showObjectPopup.bind(this));
+        this._delegate.evaluateInSelectedCallFrame(this._highlightElement.textContent, showObjectPopover.bind(this));
     },
 
     _editBreakpointCondition: function(lineNumber, condition, callback)
@@ -847,11 +770,8 @@ WebInspector.SourceFrame.prototype = {
             callback(committed, newText);
         }
 
-        WebInspector.startEditing(this._conditionEditorElement, {
-            context: null,
-            commitHandler: finishEditing.bind(this, true),
-            cancelHandler: finishEditing.bind(this, false)
-        });
+        var config = new WebInspector.EditingConfig(finishEditing.bind(this, true), finishEditing.bind(this, false));
+        WebInspector.startEditing(this._conditionEditorElement, config);
         this._conditionEditorElement.value = condition;
         this._conditionEditorElement.select();
     },
@@ -877,20 +797,38 @@ WebInspector.SourceFrame.prototype = {
         return conditionElement;
     },
 
-    resize: function()
+    inheritScrollPositions: function(sourceFrame)
     {
-        this._textViewer.resize();
+        this._textViewer.inheritScrollPositions(sourceFrame._textViewer);
     },
 
-    doubleClick: function(lineNumber)
+    _editButtonClicked: function()
     {
-        if (!this._delegate.canEditScriptSource())
+        if (!this.canEditSource())
             return;
+
+        const shouldStartEditing = !this._editButton.toggled;
+        if (shouldStartEditing)
+            this.startEditing();
+        else
+            this.commitEditing();
+    },
+
+    canEditSource: function()
+    {
+        return this._delegate.canEditScriptSource();
+    },
+
+    startEditing: function()
+    {
+        if (!this.canEditSource())
+            return false;
 
         if (this._commitEditingInProgress)
-            return;
+            return false;
 
         this._setReadOnly(false);
+        return true;
     },
 
     commitEditing: function()
@@ -907,10 +845,8 @@ WebInspector.SourceFrame.prototype = {
             this._textViewer.readOnly = false;
 
             if (error) {
-                if (error.message) {
-                    WebInspector.log(error.message, WebInspector.ConsoleMessage.MessageLevel.Error);
-                    WebInspector.showConsole();
-                }
+                if (error.message)
+                    WebInspector.log(error.message, WebInspector.ConsoleMessage.MessageLevel.Error, true);
                 return;
             }
 
@@ -933,6 +869,7 @@ WebInspector.SourceFrame.prototype = {
         }
         this._commitEditingInProgress = true;
         this._textViewer.readOnly = true;
+        this._editButton.toggled = false;
         this.editContent(this._textModel.text, didEditContent.bind(this));
     },
 
@@ -949,7 +886,11 @@ WebInspector.SourceFrame.prototype = {
 
     _setReadOnly: function(readOnly)
     {
+        if (!readOnly && this._popoverHelper)
+            this._popoverHelper.hidePopover();
+
         this._textViewer.readOnly = readOnly;
+        this._editButton.toggled = !readOnly;
         WebInspector.markBeingEdited(this._textViewer.element, !readOnly);
         if (readOnly)
             this._delegate.setScriptSourceIsBeingEdited(false);
@@ -959,6 +900,10 @@ WebInspector.SourceFrame.prototype = {
 WebInspector.SourceFrame.prototype.__proto__ = WebInspector.View.prototype;
 
 
+/**
+ * @implements {WebInspector.TextViewerDelegate}
+ * @constructor
+ */
 WebInspector.TextViewerDelegateForSourceFrame = function(sourceFrame)
 {
     this._sourceFrame = sourceFrame;
@@ -967,7 +912,7 @@ WebInspector.TextViewerDelegateForSourceFrame = function(sourceFrame)
 WebInspector.TextViewerDelegateForSourceFrame.prototype = {
     doubleClick: function(lineNumber)
     {
-        this._sourceFrame.doubleClick(lineNumber);
+        this._sourceFrame.startEditing(lineNumber);
     },
 
     beforeTextChanged: function()
@@ -1004,83 +949,49 @@ WebInspector.TextViewerDelegateForSourceFrame.prototype = {
     {
         return this._sourceFrame.suggestedFileName();
     }
-};
+}
 
 WebInspector.TextViewerDelegateForSourceFrame.prototype.__proto__ = WebInspector.TextViewerDelegate.prototype;
 
 
+/**
+ * @interface
+ */
 WebInspector.SourceFrameDelegate = function()
 {
 }
 
 WebInspector.SourceFrameDelegate.prototype = {
-    requestContent: function(callback)
-    {
-        // Should be implemented by subclasses.
-    },
+    requestContent: function(callback) { },
 
-    debuggingSupported: function()
-    {
-        return false;
-    },
+    debuggingSupported: function() { return false; },
 
-    setBreakpoint: function(lineNumber, condition, enabled)
-    {
-        // Should be implemented by subclasses.
-    },
+    setBreakpoint: function(lineNumber, condition, enabled) { },
 
-    removeBreakpoint: function(lineNumber)
-    {
-        // Should be implemented by subclasses.
-    },
+    removeBreakpoint: function(lineNumber) { },
 
-    updateBreakpoint: function(lineNumber, condition, enabled)
-    {
-        // Should be implemented by subclasses.
-    },
+    updateBreakpoint: function(lineNumber, condition, enabled) { },
 
-    findBreakpoint: function(lineNumber)
-    {
-        // Should be implemented by subclasses.
-    },
+    findBreakpoint: function(lineNumber) { },
 
-    continueToLine: function(lineNumber)
-    {
-        // Should be implemented by subclasses.
-    },
+    continueToLine: function(lineNumber) { },
 
-    canEditScriptSource: function()
-    {
-        return false;
-    },
+    canEditScriptSource: function() { return false; },
 
-    setScriptSource: function(text, callback)
-    {
-        // Should be implemented by subclasses.
-    },
+    setScriptSource: function(text, callback) { },
 
-    setScriptSourceIsBeingEdited: function(inEditMode)
-    {
-        // Should be implemented by subclasses.
-    },
+    setScriptSourceIsBeingEdited: function(inEditMode) { },
 
-    debuggerPaused: function()
-    {
-        // Should be implemented by subclasses.
-    },
+    debuggerPaused: function() { },
 
-    evaluateInSelectedCallFrame: function(string)
-    {
-        // Should be implemented by subclasses.
-    },
+    evaluateInSelectedCallFrame: function(string) { },
 
-    releaseEvaluationResult: function()
-    {
-        // Should be implemented by subclasses.
-    },
+    releaseEvaluationResult: function() { },
 
-    suggestedFileName: function()
-    {
-        // Should be implemented by subclasses.
-    }
+    suggestedFileName: function() { }
 }
+
+/**
+ * Default implementation.
+ */
+WebInspector.SourceFrameDelegate.stub = Object.create(WebInspector.SourceFrameDelegate.prototype);

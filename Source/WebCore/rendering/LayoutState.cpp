@@ -28,6 +28,7 @@
 
 #include "ColumnInfo.h"
 #include "RenderArena.h"
+#include "RenderFlowThread.h"
 #include "RenderInline.h"
 #include "RenderLayer.h"
 #include "RenderView.h"
@@ -94,7 +95,7 @@ LayoutState::LayoutState(LayoutState* prev, RenderBox* renderer, const LayoutSiz
         m_pageOffset = m_next->m_pageOffset;
         
         // Disable pagination for objects we don't support.  For now this includes overflow:scroll/auto and inline blocks.
-        if (renderer->isReplaced() || renderer->scrollsOverflow())
+        if (renderer->isReplaced() || renderer->hasUnsplittableScrollingOverflow())
             m_pageLogicalHeight = 0;
     }
     
@@ -103,11 +104,30 @@ LayoutState::LayoutState(LayoutState* prev, RenderBox* renderer, const LayoutSiz
 
     m_layoutDelta = m_next->m_layoutDelta;
     
+    m_isPaginated = m_pageLogicalHeight || m_columnInfo;
+    
     // FIXME: <http://bugs.webkit.org/show_bug.cgi?id=13443> Apply control clip if present.
+}
+
+LayoutState::LayoutState(LayoutState* prev, RenderFlowThread* flowThread, bool regionsChanged)
+    : m_clipped(false)
+    , m_isPaginated(true)
+    , m_pageLogicalHeight(1) // Use a fake height here. That value is not important, just needs to be non-zero.
+    , m_pageLogicalHeightChanged(regionsChanged)
+    , m_columnInfo(0)
+    , m_next(prev)
+#ifndef NDEBUG
+    , m_renderer(flowThread)
+#endif
+{
+#ifdef NDEBUG
+    UNUSED_PARAM(flowThread);
+#endif
 }
 
 LayoutState::LayoutState(RenderObject* root)
     : m_clipped(false)
+    , m_isPaginated(false)
     , m_pageLogicalHeight(0)
     , m_pageLogicalHeightChanged(false)
     , m_columnInfo(0)

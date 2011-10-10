@@ -49,9 +49,13 @@ public:
 
     void capsLockStateMayHaveChanged();
 
+#if ENABLE(INPUT_SPEECH)
+    HTMLElement* speechButtonElement() const;
+#endif
+
 private:
     virtual bool hasControlClip() const;
-    virtual IntRect controlClipRect(const IntPoint&) const;
+    virtual LayoutRect controlClipRect(const LayoutPoint&) const;
     virtual bool isTextField() const { return true; }
 
     virtual void paint(PaintInfo&, const LayoutPoint&);
@@ -62,18 +66,18 @@ private:
     virtual void autoscroll();
 
     // Subclassed to forward to our inner div.
-    virtual int scrollLeft() const;
-    virtual int scrollTop() const;
-    virtual int scrollWidth() const;
-    virtual int scrollHeight() const;
-    virtual void setScrollLeft(int);
-    virtual void setScrollTop(int);
+    virtual LayoutUnit scrollLeft() const;
+    virtual LayoutUnit scrollTop() const;
+    virtual LayoutUnit scrollWidth() const;
+    virtual LayoutUnit scrollHeight() const;
+    virtual void setScrollLeft(LayoutUnit);
+    virtual void setScrollTop(LayoutUnit);
     virtual bool scroll(ScrollDirection, ScrollGranularity, float multiplier = 1, Node** stopNode = 0);
     virtual bool logicalScroll(ScrollLogicalDirection, ScrollGranularity, float multiplier = 1, Node** stopNode = 0);
 
     int textBlockWidth() const;
     virtual float getAvgCharWidth(AtomicString family);
-    virtual int preferredContentWidth(float charWidth) const;
+    virtual LayoutUnit preferredContentWidth(float charWidth) const;
     virtual void adjustControlHeightBasedOnLineHeight(LayoutUnit lineHeight);
 
     virtual void updateFromElement();
@@ -120,9 +124,6 @@ private:
     HTMLElement* innerSpinButtonElement() const;
     HTMLElement* resultsButtonElement() const;
     HTMLElement* cancelButtonElement() const;
-#if ENABLE(INPUT_SPEECH)
-    HTMLElement* speechButtonElement() const;
-#endif
 
     bool m_searchPopupIsVisible;
     bool m_shouldDrawCapsLockIndicator;

@@ -28,13 +28,30 @@
 
 #if ENABLE(PLUGIN_PROCESS)
 
-#import <QuartzCore/QuartzCore.h>
 #import "PluginProcess.h"
+#import "PluginProxyMessages.h"
 #import "WebKitSystemInterface.h"
+#import "WebProcessConnection.h"
+#import <QuartzCore/QuartzCore.h>
 
 using namespace WebCore;
 
 namespace WebKit {
+
+void PluginControllerProxy::pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus)
+{
+    m_connection->connection()->send(Messages::PluginProxy::PluginFocusOrWindowFocusChanged(pluginHasFocusAndWindowHasFocus), m_pluginInstanceID);
+}
+
+void PluginControllerProxy::setComplexTextInputState(PluginComplexTextInputState pluginComplexTextInputState)
+{
+    m_connection->connection()->send(Messages::PluginProxy::SetComplexTextInputState(pluginComplexTextInputState), m_pluginInstanceID, CoreIPC::DispatchMessageEvenWhenWaitingForSyncReply);
+}
+
+mach_port_t PluginControllerProxy::compositingRenderServerPort()
+{
+    return PluginProcess::shared().compositingRenderServerPort();
+}
 
 void PluginControllerProxy::platformInitialize()
 {

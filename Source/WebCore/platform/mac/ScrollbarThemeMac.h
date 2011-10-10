@@ -28,8 +28,8 @@
 
 #include "ScrollbarThemeComposite.h"
 
-#if USE(WK_SCROLLBAR_PAINTER)
-typedef struct __WKScrollbarPainter *WKScrollbarPainterRef;
+#if USE(SCROLLBAR_PAINTER)
+typedef id ScrollbarPainter;
 #endif
 
 namespace WebCore {
@@ -38,6 +38,8 @@ class ScrollbarThemeMac : public ScrollbarThemeComposite {
 public:
     ScrollbarThemeMac();
     virtual ~ScrollbarThemeMac();
+
+    void preferencesChanged();
 
     virtual void updateEnabledState(Scrollbar*);
 
@@ -57,9 +59,9 @@ public:
     virtual void registerScrollbar(Scrollbar*);
     virtual void unregisterScrollbar(Scrollbar*);
 
-#if USE(WK_SCROLLBAR_PAINTER)
-    void setNewPainterForScrollbar(Scrollbar*, WKScrollbarPainterRef);
-    WKScrollbarPainterRef painterForScrollbar(Scrollbar*);
+#if USE(SCROLLBAR_PAINTER)
+    void setNewPainterForScrollbar(Scrollbar*, ScrollbarPainter);
+    ScrollbarPainter painterForScrollbar(Scrollbar*);
 #endif
 
 protected:
@@ -76,9 +78,6 @@ protected:
     
     virtual bool shouldCenterOnThumb(Scrollbar*, const PlatformMouseEvent&);
     virtual bool shouldDragDocumentInsteadOfThumb(Scrollbar*, const PlatformMouseEvent&);
-    
-public:
-    void preferencesChanged();
 };
 
 }

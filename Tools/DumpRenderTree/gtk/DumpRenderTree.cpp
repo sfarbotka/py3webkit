@@ -64,7 +64,7 @@ using namespace std;
 
 extern "C" {
 // This API is not yet public.
-extern G_CONST_RETURN gchar* webkit_web_history_item_get_target(WebKitWebHistoryItem*);
+extern gchar* webkit_web_history_item_get_target(WebKitWebHistoryItem*);
 extern gboolean webkit_web_history_item_is_target_item(WebKitWebHistoryItem*);
 extern GList* webkit_web_history_item_get_children(WebKitWebHistoryItem*);
 extern void webkit_web_settings_add_extra_plugin_directory(WebKitWebView* view, const gchar* directory);
@@ -290,8 +290,9 @@ static gchar* dumpFramesAsText(WebKitWebFrame* frame)
 
 static gint compareHistoryItems(gpointer* item1, gpointer* item2)
 {
-    return g_ascii_strcasecmp(webkit_web_history_item_get_target(WEBKIT_WEB_HISTORY_ITEM(item1)),
-                              webkit_web_history_item_get_target(WEBKIT_WEB_HISTORY_ITEM(item2)));
+    GOwnPtr<gchar> firstItemTarget(webkit_web_history_item_get_target(WEBKIT_WEB_HISTORY_ITEM(item1)));
+    GOwnPtr<gchar> secondItemTarget(webkit_web_history_item_get_target(WEBKIT_WEB_HISTORY_ITEM(item2)));
+    return g_ascii_strcasecmp(firstItemTarget.get(), secondItemTarget.get());
 }
 
 static void dumpHistoryItem(WebKitWebHistoryItem* item, int indent, bool current)
@@ -330,12 +331,15 @@ static void dumpHistoryItem(WebKitWebHistoryItem* item, int indent, bool current
     if (webkit_web_history_item_is_target_item(item))
         printf("  **nav target**");
     putchar('\n');
-    GList* kids = webkit_web_history_item_get_children(item);
-    if (kids) {
+
+    if (GList* kids = webkit_web_history_item_get_children(item)) {
         // must sort to eliminate arbitrary result ordering which defeats reproducible testing
-        kids = g_list_sort(kids, (GCompareFunc) compareHistoryItems);
-        for (unsigned i = 0; i < g_list_length(kids); i++)
-            dumpHistoryItem(WEBKIT_WEB_HISTORY_ITEM(g_list_nth_data(kids, i)), indent+4, FALSE);
+        for (GList* kid = g_list_sort(kids, (GCompareFunc) compareHistoryItems); kid; kid = g_list_next(kid)) {
+            WebKitWebHistoryItem* item = WEBKIT_WEB_HISTORY_ITEM(kid->data);
+            dumpHistoryItem(item, indent + 4, FALSE);
+            g_object_unref(item);
+        }
+        g_list_free(kids);
     }
     g_object_unref(item);
 }
@@ -354,29 +358,28 @@ static void dumpBackForwardListForWebView(WebKitWebView* view)
         // something is wrong if the item from the last test is in the forward part of the b/f list
         ASSERT(item != prevTestBFItem);
         g_object_ref(item);
-        itemsToPrint = g_list_append(itemsToPrint, item);
+        itemsToPrint = g_list_prepend(itemsToPrint, item);
     }
 
     WebKitWebHistoryItem* currentItem = webkit_web_back_forward_list_get_current_item(bfList);
-
     g_object_ref(currentItem);
-    itemsToPrint = g_list_append(itemsToPrint, currentItem);
+    itemsToPrint = g_list_prepend(itemsToPrint, currentItem);
 
-    gint currentItemIndex = g_list_length(itemsToPrint) - 1;
     gint backListCount = webkit_web_back_forward_list_get_back_length(bfList);
     for (int i = -1; i >= -(backListCount); i--) {
         WebKitWebHistoryItem* item = webkit_web_back_forward_list_get_nth_item(bfList, i);
         if (item == prevTestBFItem)
             break;
         g_object_ref(item);
-        itemsToPrint = g_list_append(itemsToPrint, item);
+        itemsToPrint = g_list_prepend(itemsToPrint, item);
     }
 
-    for (int i = g_list_length(itemsToPrint) - 1; i >= 0; i--) {
-        WebKitWebHistoryItem* item = WEBKIT_WEB_HISTORY_ITEM(g_list_nth_data(itemsToPrint, i));
-        dumpHistoryItem(item, historyItemIndent, i == currentItemIndex);
+    for (GList* itemToPrint = itemsToPrint; itemToPrint; itemToPrint = g_list_next(itemToPrint)) {
+        WebKitWebHistoryItem* item = WEBKIT_WEB_HISTORY_ITEM(itemToPrint->data);
+        dumpHistoryItem(item, historyItemIndent, item == currentItem);
         g_object_unref(item);
     }
+
     g_list_free(itemsToPrint);
     printf("===============================================\n");
 }
@@ -387,9 +390,8 @@ static void dumpBackForwardListForAllWebViews()
     dumpBackForwardListForWebView(webView);
 
     // The view list is prepended. Reverse the list so we get the order right.
-    GSList* viewList = g_slist_reverse(webViewList);
-    for (unsigned i = 0; i < g_slist_length(viewList); ++i)
-        dumpBackForwardListForWebView(WEBKIT_WEB_VIEW(g_slist_nth_data(viewList, i)));
+    for (GSList* currentView = g_slist_reverse(webViewList); currentView; currentView = g_slist_next(currentView))
+        dumpBackForwardListForWebView(WEBKIT_WEB_VIEW(currentView->data));
 }
 
 static void invalidateAnyPreviousWaitToDumpWatchdog()
@@ -777,18 +779,12 @@ static char* getFrameNameSuitableForTestResult(WebKitWebView* view, WebKitWebFra
 
 static void webViewLoadFinished(WebKitWebView* view, WebKitWebFrame* frame, void*)
 {
+    // The deprecated "load-finished" signal is triggered by postProgressFinishedNotification(),
+    // so we can use it here in the DRT to provide the correct dump.
     if (frame != topLoadingFrame)
         return;
-
-    topLoadingFrame = 0;
-    WorkQueue::shared()->setFrozen(true); // first complete load freezes the queue for the rest of this test
-    if (gLayoutTestController->waitToDump())
-        return;
-
-    if (WorkQueue::shared()->count())
-        g_timeout_add(0, processWork, 0);
-    else
-        dump();
+    if (gLayoutTestController->dumpProgressFinishedCallback())
+        printf("postProgressFinishedNotification\n");
 }
 
 static gboolean webViewLoadError(WebKitWebView*, WebKitWebFrame*, gchar*, gpointer, gpointer)
@@ -1022,6 +1018,19 @@ static WebKitWebView* webInspectorInspectWebView(WebKitWebInspector*, gpointer d
     return WEBKIT_WEB_VIEW(webView);
 }
 
+static void topLoadingFrameLoadFinished()
+{
+    topLoadingFrame = 0;
+    WorkQueue::shared()->setFrozen(true); // first complete load freezes the queue for the rest of this test
+    if (gLayoutTestController->waitToDump())
+        return;
+
+    if (WorkQueue::shared()->count())
+        g_timeout_add(0, processWork, 0);
+    else
+        dump();
+}
+
 static void webFrameLoadStatusNotified(WebKitWebFrame* frame, gpointer user_data)
 {
     WebKitLoadStatus loadStatus = webkit_web_frame_get_load_status(frame);
@@ -1039,13 +1048,17 @@ static void webFrameLoadStatusNotified(WebKitWebFrame* frame, gpointer user_data
                 printf("%s - didCommitLoadForFrame\n", frameName.get());
             break;
         case WEBKIT_LOAD_FINISHED:
-            if (frame != topLoadingFrame || !done)
+            if (!done)
                 printf("%s - didFinishLoadForFrame\n", frameName.get());
             break;
         default:
             break;
         }
     }
+
+    if ((loadStatus == WEBKIT_LOAD_FINISHED || loadStatus == WEBKIT_LOAD_FAILED)
+        && frame == topLoadingFrame)
+        topLoadingFrameLoadFinished();
 }
 
 static void frameCreatedCallback(WebKitWebView* webView, WebKitWebFrame* webFrame, gpointer user_data)
@@ -1167,7 +1180,12 @@ int main(int argc, char* argv[])
     initializeFonts();
 
     window = gtk_window_new(GTK_WINDOW_POPUP);
+#ifdef GTK_API_VERSION_2
     container = gtk_hbox_new(TRUE, 0);
+#else
+    container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_set_homogeneous(GTK_BOX(container), TRUE);
+#endif
     gtk_container_add(GTK_CONTAINER(window), container);
     gtk_widget_show_all(window);
 

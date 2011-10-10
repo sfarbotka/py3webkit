@@ -21,15 +21,16 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 messages -> DrawingArea {
-    UpdateBackingStoreState(uint64_t backingStoreStateID, bool respondImmediately, WebCore::IntSize size, WebCore::IntSize scrollOffset)
+    UpdateBackingStoreState(uint64_t backingStoreStateID, bool respondImmediately, float deviceScaleFactor, WebCore::IntSize size, WebCore::IntSize scrollOffset)
     DidUpdate()
     SuspendPainting()
     ResumePainting()
 
 #if ENABLE(TILED_BACKING_STORE)
     SetSize(WebCore::IntSize viewSize)
-    RequestTileUpdate(int tileID, WebCore::IntRect dirtyRect, float scale)
-    CancelTileUpdate(int tileID)
+    SetVisibleContentRectAndScale(WebCore::IntRect visibleContentRect, float scale)
+    SetVisibleContentRectTrajectoryVector(WebCore::FloatPoint trajectoryVector)
+    RenderNextFrame()
     TakeSnapshot(WebCore::IntSize size, WebCore::IntRect contentsRect)
 #endif
 }

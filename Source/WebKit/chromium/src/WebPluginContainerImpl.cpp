@@ -42,7 +42,7 @@
 #include "WebInputEvent.h"
 #include "WebInputEventConversion.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebPlugin.h"
 #include "WebRect.h"
 #include "WebString.h"
@@ -75,6 +75,10 @@
 #include "ScrollbarTheme.h"
 #include "UserGestureIndicator.h"
 #include "WheelEvent.h"
+
+#if ENABLE(GESTURE_EVENTS)
+#include "PlatformGestureEvent.h"
+#endif
 
 #if WEBKIT_USING_SKIA
 #include "PlatformContextSkia.h"
@@ -270,7 +274,7 @@ void WebPluginContainerImpl::copy()
     if (!m_webPlugin->hasSelection())
         return;
 
-    webKitClient()->clipboard()->writeHTML(m_webPlugin->selectionAsMarkup(), WebURL(), m_webPlugin->selectionAsText(), false);
+    webKitPlatformSupport()->clipboard()->writeHTML(m_webPlugin->selectionAsMarkup(), WebURL(), m_webPlugin->selectionAsText(), false);
 }
 
 WebElement WebPluginContainerImpl::element()
@@ -382,7 +386,7 @@ WebString WebPluginContainerImpl::executeScriptURL(const WebURL& url, bool popup
 void WebPluginContainerImpl::loadFrameRequest(const WebURLRequest& request, const WebString& target, bool notifyNeeded, void* notifyData)
 {
     Frame* frame = m_element->document()->frame();
-    if (!frame)
+    if (!frame || !frame->loader()->documentLoader())
         return;  // FIXME: send a notification in this case?
 
     if (notifyNeeded) {
@@ -470,6 +474,27 @@ void WebPluginContainerImpl::willEndLiveResize()
     if (m_scrollbarGroup)
         m_scrollbarGroup->willEndLiveResize();
 }
+
+bool WebPluginContainerImpl::paintCustomOverhangArea(GraphicsContext* context, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect)
+{
+    context->save();
+    context->setFillColor(Color(0xCC, 0xCC, 0xCC), ColorSpaceDeviceRGB);
+    context->fillRect(intersection(horizontalOverhangArea, dirtyRect));
+    context->fillRect(intersection(verticalOverhangArea, dirtyRect));
+    context->restore();
+    return true;
+}
+
+#if ENABLE(GESTURE_EVENTS)
+bool WebPluginContainerImpl::handleGestureEvent(const WebCore::PlatformGestureEvent& gestureEvent)
+{
+    if (m_scrollbarGroup) {
+        m_scrollbarGroup->handleGestureEvent(gestureEvent);
+        return true;
+    }
+    return false;
+}
+#endif
 
 // Private methods -------------------------------------------------------------
 

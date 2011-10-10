@@ -34,11 +34,14 @@
 #include "FontWidthVariant.h"
 #include "TextOrientation.h"
 #include "TextRenderingMode.h"
+#include "WebKitFontFamilyNames.h"
 #include <wtf/MathExtras.h>
 
 #include <wtf/RefPtr.h>
 
 namespace WebCore {
+
+using namespace WebKitFontFamilyNames;
 
 enum FontWeight {
     FontWeight100,
@@ -107,7 +110,7 @@ public:
     GenericFamilyType genericFamily() const { return static_cast<GenericFamilyType>(m_genericFamily); }
     bool usePrinterFont() const { return m_usePrinterFont; }
     // only use fixed default size when there is only one font family, and that family is "monospace"
-    bool useFixedDefaultSize() const { return genericFamily() == MonospaceFamily && !family().next() && family().family() == "-webkit-monospace"; }
+    bool useFixedDefaultSize() const { return genericFamily() == MonospaceFamily && !family().next() && family().family() == monospaceFamily; }
     FontRenderingMode renderingMode() const { return static_cast<FontRenderingMode>(m_renderingMode); }
     unsigned keywordSize() const { return m_keywordSize; }
     FontSmoothingMode fontSmoothing() const { return static_cast<FontSmoothingMode>(m_fontSmoothing); }
@@ -116,9 +119,9 @@ public:
 
     FontTraitsMask traitsMask() const;
     bool isSpecifiedFont() const { return m_isSpecifiedFont; }
-    FontOrientation orientation() const { return m_orientation; }
-    TextOrientation textOrientation() const { return m_textOrientation; }
-    FontWidthVariant widthVariant() const { return m_widthVariant; }
+    FontOrientation orientation() const { return static_cast<FontOrientation>(m_orientation); }
+    TextOrientation textOrientation() const { return static_cast<TextOrientation>(m_textOrientation); }
+    FontWidthVariant widthVariant() const { return static_cast<FontWidthVariant>(m_widthVariant); }
     FontFeatureSettings* featureSettings() const { return m_featureSettings.get(); }
     FontDescription makeNormalFeatureSettings() const;
 
@@ -150,17 +153,16 @@ public:
 
 private:
     FontFamily m_familyList; // The list of font families to be used.
+    RefPtr<FontFeatureSettings> m_featureSettings;
 
     float m_specifiedSize;   // Specified CSS value. Independent of rendering issues such as integer
                              // rounding, minimum font sizes, and zooming.
     float m_computedSize;    // Computed size adjusted for the minimum font size and the zoom factor.  
 
-    FontOrientation m_orientation; // Whether the font is rendering on a horizontal line or a vertical line.
-    TextOrientation m_textOrientation; // Only used by vertical text. Determines the default orientation for non-ideograph glyphs.
+    unsigned m_orientation : 1; // FontOrientation - Whether the font is rendering on a horizontal line or a vertical line.
+    unsigned m_textOrientation : 1; // TextOrientation - Only used by vertical text. Determines the default orientation for non-ideograph glyphs.
 
-    FontWidthVariant m_widthVariant;
-
-    RefPtr<FontFeatureSettings> m_featureSettings;
+    unsigned m_widthVariant : 2; // FontWidthVariant
 
     unsigned m_italic : 1; // FontItalic
     unsigned m_smallCaps : 1; // FontSmallCaps

@@ -30,9 +30,6 @@
  */
 
 #include "config.h"
-
-#if ENABLE(EVENTSOURCE)
-
 #include "JSEventSource.h"
 
 #include "EventSource.h"
@@ -47,7 +44,7 @@ namespace WebCore {
 EncodedJSValue JSC_HOST_CALL JSEventSourceConstructor::constructJSEventSource(ExecState* exec)
 {
     if (exec->argumentCount() < 1)
-        return throwVMError(exec, createSyntaxError(exec, "Not enough arguments"));
+        return throwVMError(exec, createTypeError(exec, "Not enough arguments"));
 
     UString url = exec->argument(0).toString(exec);
     if (exec->hadException())
@@ -69,5 +66,3 @@ EncodedJSValue JSC_HOST_CALL JSEventSourceConstructor::constructJSEventSource(Ex
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(EVENTSOURCE)

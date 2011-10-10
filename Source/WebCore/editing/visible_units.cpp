@@ -292,7 +292,7 @@ static unsigned previousWordPositionBoundary(const UChar* characters, unsigned l
 VisiblePosition previousWordPosition(const VisiblePosition &c)
 {
     VisiblePosition prev = previousBoundary(c, previousWordPositionBoundary);
-    return c.honorEditableBoundaryAtOrBefore(prev);
+    return c.honorEditingBoundaryAtOrBefore(prev);
 }
 
 static unsigned nextWordPositionBoundary(const UChar* characters, unsigned length, unsigned offset, BoundarySearchContextAvailability mayHaveMoreContext, bool& needMoreContext)
@@ -308,7 +308,7 @@ static unsigned nextWordPositionBoundary(const UChar* characters, unsigned lengt
 VisiblePosition nextWordPosition(const VisiblePosition &c)
 {
     VisiblePosition next = nextBoundary(c, nextWordPositionBoundary);    
-    return c.honorEditableBoundaryAtOrAfter(next);
+    return c.honorEditingBoundaryAtOrAfter(next);
 }
 
 bool isStartOfWord(const VisiblePosition& p)
@@ -373,7 +373,7 @@ VisiblePosition startOfLine(const VisiblePosition& c)
 {
     VisiblePosition visPos = startPositionForLine(c);
 
-    return c.honorEditableBoundaryAtOrBefore(visPos);
+    return c.honorEditingBoundaryAtOrBefore(visPos);
 }
 
 static VisiblePosition endPositionForLine(const VisiblePosition& c)
@@ -442,7 +442,7 @@ VisiblePosition endOfLine(const VisiblePosition& c)
         visPos = endPositionForLine(visPos);
     }
     
-    return c.honorEditableBoundaryAtOrAfter(visPos);
+    return c.honorEditingBoundaryAtOrAfter(visPos);
 }
 
 bool inSameLine(const VisiblePosition &a, const VisiblePosition &b)
@@ -533,7 +533,7 @@ VisiblePosition previousLinePosition(const VisiblePosition &visiblePosition, int
         while (n) {
             if (highestEditableRoot(firstPositionInOrBeforeNode(n)) != highestRoot)
                 break;
-            Position pos = createLegacyEditingPosition(n, caretMinOffset(n));
+            Position pos = n->hasTagName(brTag) ? positionBeforeNode(n) : createLegacyEditingPosition(n, caretMaxOffset(n));
             if (pos.isCandidate()) {
                 pos.getInlineBoxAndOffset(DOWNSTREAM, box, ignoredCaretOffset);
                 if (box) {
@@ -705,7 +705,7 @@ static unsigned previousSentencePositionBoundary(const UChar* characters, unsign
 VisiblePosition previousSentencePosition(const VisiblePosition &c)
 {
     VisiblePosition prev = previousBoundary(c, previousSentencePositionBoundary);
-    return c.honorEditableBoundaryAtOrBefore(prev);
+    return c.honorEditingBoundaryAtOrBefore(prev);
 }
 
 static unsigned nextSentencePositionBoundary(const UChar* characters, unsigned length, unsigned, BoundarySearchContextAvailability, bool&)
@@ -719,7 +719,7 @@ static unsigned nextSentencePositionBoundary(const UChar* characters, unsigned l
 VisiblePosition nextSentencePosition(const VisiblePosition &c)
 {
     VisiblePosition next = nextBoundary(c, nextSentencePositionBoundary);    
-    return c.honorEditableBoundaryAtOrAfter(next);
+    return c.honorEditingBoundaryAtOrAfter(next);
 }
 
 VisiblePosition startOfParagraph(const VisiblePosition& c, EditingBoundaryCrossingRule boundaryCrossingRule)
@@ -764,7 +764,7 @@ VisiblePosition startOfParagraph(const VisiblePosition& c, EditingBoundaryCrossi
         if (r->isBR() || isBlock(n))
             break;
 
-        if (r->isText() && r->caretMaxRenderedOffset() > 0) {
+        if (r->isText() && toRenderText(r)->renderedTextLength()) {
             ASSERT(n->isTextNode());
             type = Position::PositionIsOffsetInAnchor;
             if (style->preserveNewline()) {
@@ -842,7 +842,7 @@ VisiblePosition endOfParagraph(const VisiblePosition &c, EditingBoundaryCrossing
             break;
 
         // FIXME: We avoid returning a position where the renderer can't accept the caret.
-        if (r->isText() && r->caretMaxRenderedOffset() > 0) {
+        if (r->isText() && toRenderText(r)->renderedTextLength()) {
             ASSERT(n->isTextNode());
             int length = toRenderText(r)->textLength();
             type = Position::PositionIsOffsetInAnchor;
@@ -1067,7 +1067,7 @@ VisiblePosition logicalStartOfLine(const VisiblePosition& c)
         if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
             return firstPositionInNode(editableRoot);
     }
-    return c.honorEditableBoundaryAtOrBefore(visPos);
+    return c.honorEditingBoundaryAtOrBefore(visPos);
 }
 
 static VisiblePosition logicalEndPositionForLine(const VisiblePosition& c)
@@ -1130,7 +1130,7 @@ VisiblePosition logicalEndOfLine(const VisiblePosition& c)
         if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
             return lastPositionInNode(editableRoot);
     }
-    return c.honorEditableBoundaryAtOrAfter(visPos);
+    return c.honorEditingBoundaryAtOrAfter(visPos);
 }
 
 VisiblePosition leftBoundaryOfLine(const VisiblePosition& c, TextDirection direction)
@@ -1144,6 +1144,7 @@ VisiblePosition rightBoundaryOfLine(const VisiblePosition& c, TextDirection dire
 }
 
 static const int invalidOffset = -1;
+static const int offsetNotFound = -1;
 
 static bool isBoxVisuallyLastInLine(const InlineBox* box, TextDirection blockDirection)
 {
@@ -1176,7 +1177,7 @@ static VisiblePosition previousWordBreakInBoxInsideBlockWithSameDirectionality(c
     if (hasSeenWordBreakInThisBox)
         wordBreak = previousWordBreak;
     else {
-        wordBreak = createPositionAvoidingIgnoredNode(box->renderer()->node(), box->caretMaxOffset());
+        wordBreak = createLegacyEditingPosition(box->renderer()->node(), box->caretMaxOffset());
 
         // Return the rightmost word boundary of LTR box or leftmost word boundary of RTL box if
         // it is not in the previously visited boxes. For example, given a logical text 
@@ -1215,21 +1216,21 @@ static VisiblePosition leftmostPositionInRTLBoxInLTRBlock(const InlineBox* box)
     InlineBox* nextLeaf = box->nextLeafChild();   
     
     if (previousLeaf && !previousLeaf->isLeftToRightDirection())
-        return createPositionAvoidingIgnoredNode(node, box->caretMaxOffset());
+        return createLegacyEditingPosition(node, box->caretMaxOffset());
 
     if (nextLeaf && !nextLeaf->isLeftToRightDirection()) {
         if (previousLeaf)
-            return createPositionAvoidingIgnoredNode(previousLeaf->renderer()->node(), previousLeaf->caretMaxOffset());
+            return createLegacyEditingPosition(previousLeaf->renderer()->node(), previousLeaf->caretMaxOffset());
 
         InlineBox* lastRTLLeaf;
         do {
             lastRTLLeaf = nextLeaf;
             nextLeaf = nextLeaf->nextLeafChild();
         } while (nextLeaf && !nextLeaf->isLeftToRightDirection());
-        return createPositionAvoidingIgnoredNode(lastRTLLeaf->renderer()->node(), lastRTLLeaf->caretMinOffset());
+        return createLegacyEditingPosition(lastRTLLeaf->renderer()->node(), lastRTLLeaf->caretMinOffset());
     }
 
-    return createPositionAvoidingIgnoredNode(node, box->caretMinOffset());
+    return createLegacyEditingPosition(node, box->caretMinOffset());
 }
 
 static VisiblePosition rightmostPositionInLTRBoxInRTLBlock(const InlineBox* box)
@@ -1240,21 +1241,21 @@ static VisiblePosition rightmostPositionInLTRBoxInRTLBlock(const InlineBox* box)
     InlineBox* nextLeaf = box->nextLeafChild();   
     
     if (nextLeaf && nextLeaf->isLeftToRightDirection())    
-        return createPositionAvoidingIgnoredNode(node, box->caretMaxOffset());
+        return createLegacyEditingPosition(node, box->caretMaxOffset());
 
     if (previousLeaf && previousLeaf->isLeftToRightDirection()) {
         if (nextLeaf)
-            return createPositionAvoidingIgnoredNode(nextLeaf->renderer()->node(), nextLeaf->caretMaxOffset());
+            return createLegacyEditingPosition(nextLeaf->renderer()->node(), nextLeaf->caretMaxOffset());
 
         InlineBox* firstLTRLeaf;
         do {
             firstLTRLeaf = previousLeaf;
             previousLeaf = previousLeaf->prevLeafChild();
         } while (previousLeaf && previousLeaf->isLeftToRightDirection());
-        return createPositionAvoidingIgnoredNode(firstLTRLeaf->renderer()->node(), firstLTRLeaf->caretMinOffset());
+        return createLegacyEditingPosition(firstLTRLeaf->renderer()->node(), firstLTRLeaf->caretMinOffset());
     }
 
-    return createPositionAvoidingIgnoredNode(node, box->caretMinOffset());
+    return createLegacyEditingPosition(node, box->caretMinOffset());
 }
     
 static VisiblePosition lastWordBreakInBox(const InlineBox* box, int& offsetOfWordBreak)
@@ -1300,7 +1301,7 @@ static VisiblePosition nextWordBreakInBoxInsideBlockWithDifferentDirectionality(
     
     bool hasSeenWordBreakInThisBox = previousWordBreak.isNotNull();
     VisiblePosition wordBreak = hasSeenWordBreakInThisBox ? previousWordBreak : 
-        createPositionAvoidingIgnoredNode(box->renderer()->node(), box->caretMinOffset());
+        createLegacyEditingPosition(box->renderer()->node(), box->caretMinOffset());
 
     wordBreak = nextBoundary(wordBreak, nextWordPositionBoundary);
   
@@ -1339,7 +1340,7 @@ typedef Vector<WordBoundaryEntry, 50> WordBoundaryVector;
     
 static void appendPositionAtLogicalEndOfLine(const InlineBox* box, WordBoundaryVector& orderedWordBoundaries)
 {
-    VisiblePosition endOfBlock = logicalEndOfLine(createPositionAvoidingIgnoredNode(box->renderer()->node(), box->caretMaxOffset()));
+    VisiblePosition endOfBlock = logicalEndOfLine(createLegacyEditingPosition(box->renderer()->node(), box->caretMaxOffset()));
 
     int offsetOfEndOfBlock;
     if (positionIsInBox(endOfBlock, box, offsetOfEndOfBlock))
@@ -1436,91 +1437,39 @@ static VisiblePosition visuallyLastWordBoundaryInBox(const InlineBox* box, int o
 static int greatestOffsetUnder(int offset, bool boxAndBlockAreInSameDirection, const WordBoundaryVector& orderedWordBoundaries)
 {
     if (!orderedWordBoundaries.size())
-        return -1;
+        return offsetNotFound;
     // FIXME: binary search.
     if (boxAndBlockAreInSameDirection) {
         for (unsigned i = 0; i < orderedWordBoundaries.size(); ++i) {
             if (orderedWordBoundaries[i].offsetInInlineBox < offset)
                 return i;
         }
-        return -1;
+        return offsetNotFound;
     }
     for (int i = orderedWordBoundaries.size() - 1; i >= 0; --i) {
         if (orderedWordBoundaries[i].offsetInInlineBox < offset)
             return i;
     }
-    return -1;
+    return offsetNotFound;
 }
 
 static int smallestOffsetAbove(int offset, bool boxAndBlockAreInSameDirection, const WordBoundaryVector& orderedWordBoundaries)
 {
     if (!orderedWordBoundaries.size())
-        return -1;
+        return offsetNotFound;
     // FIXME: binary search.
     if (boxAndBlockAreInSameDirection) {
         for (int i = orderedWordBoundaries.size() - 1; i >= 0; --i) {
             if (orderedWordBoundaries[i].offsetInInlineBox > offset)
                 return i;
         }
-        return -1;
+        return offsetNotFound;
     }
     for (unsigned i = 0; i < orderedWordBoundaries.size(); ++i) {
         if (orderedWordBoundaries[i].offsetInInlineBox > offset)
             return i;
     }
-    return -1;
-}
-
-static const RenderBlock* blockWithPreviousLineBox(const RenderBlock* startingBlock)
-{
-    for (const RenderBlock* block = startingBlock; block; block = toRenderBlock(block->previousSibling())) {
-        if (block->childrenInline()) {
-            if (block->firstRootBox())
-                return block;
-        } else if (const RenderBlock* renderBlock = blockWithPreviousLineBox(toRenderBlock(block->lastChild())))
-            return renderBlock;
-    }
-    return 0;
-}
-
-static const RootInlineBox* previousRootInlineBox(const InlineBox* box)
-{
-    Node* node = box->renderer()->node();
-
-    for (RenderObject* renderer = node->renderer(); renderer; renderer = renderer->parent()) {
-        if (renderer->isRenderBlock()) {
-            if (const RenderBlock* blockWithLineBoxes = blockWithPreviousLineBox(toRenderBlock(renderer->previousSibling())))
-                return blockWithLineBoxes->lastRootBox();
-        }
-    }
-
-    return 0;
-}
-
-static const RenderBlock* blockWithNextLineBox(const RenderBlock* startingBlock)
-{
-    for (const RenderBlock* block = startingBlock; block; block = toRenderBlock(block->nextSibling())) {
-        if (block->childrenInline()) {
-            if (block->firstRootBox())
-                return block;
-        } else if (const RenderBlock* renderBlock = blockWithNextLineBox(toRenderBlock(block->firstChild())))
-            return renderBlock;
-    }
-    return 0;
-}
-
-static const RootInlineBox* nextRootInlineBox(const InlineBox* box)
-{
-    Node* node = box->renderer()->node();
-
-    for (RenderObject* renderer = node->renderer(); renderer; renderer = renderer->parent()) {
-        if (renderer->isRenderBlock()) {
-            if (const RenderBlock* blockWithLineBoxes = blockWithNextLineBox(toRenderBlock(renderer->nextSibling())))
-                return blockWithLineBoxes->firstRootBox();
-        }
-    }
-
-    return 0;
+    return offsetNotFound;
 }
 
 static const InlineBox* leftInlineBox(const InlineBox* box, TextDirection blockDirection)
@@ -1534,8 +1483,7 @@ static const InlineBox* leftInlineBox(const InlineBox* box, TextDirection blockD
     if (leftLineBox)
         return leftLineBox->lastLeafChild();
 
-    const RootInlineBox* leftRootInlineBox = isBlockLTR ? previousRootInlineBox(box) : nextRootInlineBox(box);
-    return leftRootInlineBox ? leftRootInlineBox->lastLeafChild() : 0;
+    return 0;
 }
 
 static const InlineBox* rightInlineBox(const InlineBox* box, TextDirection blockDirection)
@@ -1549,8 +1497,7 @@ static const InlineBox* rightInlineBox(const InlineBox* box, TextDirection block
     if (rightLineBox)
         return rightLineBox->firstLeafChild();
 
-    const RootInlineBox* rightRootInlineBox = isBlockLTR ? nextRootInlineBox(box) : previousRootInlineBox(box);
-    return rightRootInlineBox ? rightRootInlineBox->firstLeafChild() : 0;
+    return 0;
 }
 
 static VisiblePosition leftWordBoundary(const InlineBox* box, int offset, TextDirection blockDirection)
@@ -1595,7 +1542,7 @@ static bool positionIsInBoxButNotOnBoundary(const VisiblePosition& wordBreak, co
         && offsetOfWordBreak != box->caretMaxOffset() && offsetOfWordBreak != box->caretMinOffset();
 }
 
-static VisiblePosition leftWordPositionAcrossBoundary(const VisiblePosition& visiblePosition)
+static VisiblePosition leftWordPositionIgnoringEditingBoundary(const VisiblePosition& visiblePosition)
 {
     InlineBox* box;
     int offset;
@@ -1636,7 +1583,7 @@ static VisiblePosition leftWordPositionAcrossBoundary(const VisiblePosition& vis
     return leftWordBoundary(leftInlineBox(box, blockDirection), invalidOffset, blockDirection);
 }
 
-static VisiblePosition rightWordPositionAcrossBoundary(const VisiblePosition& visiblePosition)
+static VisiblePosition rightWordPositionIgnoringEditingBoundary(const VisiblePosition& visiblePosition)
 {
     InlineBox* box;
     int offset;
@@ -1678,8 +1625,8 @@ VisiblePosition leftWordPosition(const VisiblePosition& visiblePosition)
     if (visiblePosition.isNull())
         return VisiblePosition();
 
-    VisiblePosition leftWordBreak = leftWordPositionAcrossBoundary(visiblePosition);
-    return visiblePosition.honorEditableBoundaryAtOrBefore(leftWordBreak);
+    VisiblePosition leftWordBreak = leftWordPositionIgnoringEditingBoundary(visiblePosition);
+    return visiblePosition.honorEditingBoundaryAtOrBefore(leftWordBreak);
 }
 
 VisiblePosition rightWordPosition(const VisiblePosition& visiblePosition)
@@ -1687,8 +1634,8 @@ VisiblePosition rightWordPosition(const VisiblePosition& visiblePosition)
     if (visiblePosition.isNull())
         return VisiblePosition();
 
-    VisiblePosition rightWordBreak = rightWordPositionAcrossBoundary(visiblePosition);
-    return visiblePosition.honorEditableBoundaryAtOrBefore(rightWordBreak);
+    VisiblePosition rightWordBreak = rightWordPositionIgnoringEditingBoundary(visiblePosition);
+    return visiblePosition.honorEditingBoundaryAtOrBefore(rightWordBreak);
 }
 
 }

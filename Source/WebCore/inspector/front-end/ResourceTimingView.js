@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @extends {WebInspector.View}
+ * @constructor
+ */
 WebInspector.ResourceTimingView = function(resource)
 {
     WebInspector.View.call(this);
@@ -44,14 +48,16 @@ WebInspector.ResourceTimingView.prototype = {
         if (!this._resource.timing) {
             if (!this._emptyView) {
                 this._emptyView = new WebInspector.EmptyView(WebInspector.UIString("This request has no detailed timing info."));
-                this._emptyView.show(this.element);
+                this.addChildView(this._emptyView);
+                this._emptyView.show();
+                this.innerView = this._emptyView;
             }
             WebInspector.View.prototype.show.call(this, parentElement);
             return;
         }
 
         if (this._emptyView) {
-            this._emptyView.detach();
+            this.removeChildView(this._emptyView);
             delete this._emptyView;
         }
 
@@ -74,7 +80,7 @@ WebInspector.ResourceTimingView.createTimingTable = function(resource)
     var tableElement = document.createElement("table");
     var rows = [];
 
-    function addRow(title, className, start, end, color)
+    function addRow(title, className, start, end)
     {
         var row = {};
         row.title = title;
@@ -108,7 +114,7 @@ WebInspector.ResourceTimingView.createTimingTable = function(resource)
     var sendStart = resource.timing.sendStart;
     if (resource.timing.sslStart !== -1)
         sendStart += resource.timing.sslEnd - resource.timing.sslStart;
-    
+
     addRow(WebInspector.UIString("Sending"), "sending", resource.timing.sendStart, resource.timing.sendEnd);
     addRow(WebInspector.UIString("Waiting"), "waiting", resource.timing.sendEnd, resource.timing.receiveHeadersEnd);
     addRow(WebInspector.UIString("Receiving"), "receiving", (resource.responseReceivedTime - resource.timing.requestTime) * 1000, (resource.endTime - resource.timing.requestTime) * 1000);
@@ -146,7 +152,7 @@ WebInspector.ResourceTimingView.createTimingTable = function(resource)
             title.style.right = (scale * (total - rows[i].end) + 3) + "px";
         else
             title.style.left = (scale * rows[i].start + 3) + "px";
-        title.textContent = Number.millisToString(rows[i].end - rows[i].start);
+        title.textContent = Number.secondsToString((rows[i].end - rows[i].start) / 1000);
         row.appendChild(title);
 
         tr.appendChild(td);

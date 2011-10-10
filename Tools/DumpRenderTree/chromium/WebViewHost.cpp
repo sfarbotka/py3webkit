@@ -36,6 +36,7 @@
 #include "TestShell.h"
 #include "TestWebWorker.h"
 #include "WebCString.h"
+#include "WebCompositor.h"
 #include "WebConsoleMessage.h"
 #include "WebContextMenuData.h"
 #include "WebDataSource.h"
@@ -45,6 +46,8 @@
 #include "WebFrame.h"
 #include "WebGeolocationClientMock.h"
 #include "WebHistoryItem.h"
+#include "WebKit.h"
+#include "WebKitPlatformSupport.h"
 #include "WebNode.h"
 #include "WebPopupMenu.h"
 #include "WebPopupType.h"
@@ -56,6 +59,7 @@
 #include "WebStorageNamespace.h"
 #include "WebTextCheckingCompletion.h"
 #include "WebTextCheckingResult.h"
+#include "WebThread.h"
 #include "WebURLRequest.h"
 #include "WebURLResponse.h"
 #include "WebView.h"
@@ -287,6 +291,8 @@ void WebViewHost::didStartLoading()
 
 void WebViewHost::didStopLoading()
 {
+    if (layoutTestController()->shouldDumpProgressFinishedCallback())
+        fputs("postProgressFinishedNotification\n", stdout);
     m_shell->setIsLoading(false);
 }
 
@@ -792,15 +798,23 @@ WebApplicationCacheHost* WebViewHost::createApplicationCacheHost(WebFrame* frame
     return webkit_support::CreateApplicationCacheHost(frame, client);
 }
 
-bool WebViewHost::allowPlugins(WebFrame* frame, bool enabledPerSettings)
+void WebViewHost::didUpdateLayout(WebFrame*)
 {
-    return enabledPerSettings;
+#if OS(MAC_OS_X)
+    static bool queryingPreferredSize = false;
+    if (queryingPreferredSize)
+        return;
+
+    queryingPreferredSize = true;
+    // Query preferred width to emulate the same functionality in Chromium:
+    // see RenderView::CheckPreferredSize (src/content/renderer/render_view.cc)
+    // and TabContentsViewMac::RenderViewCreated (src/chrome/browser/tab_contents/tab_contents_view_mac.mm)
+    webView()->mainFrame()->contentsPreferredWidth();
+    webView()->mainFrame()->documentElementScrollHeight();
+    queryingPreferredSize = false;
+#endif
 }
 
-bool WebViewHost::allowImages(WebFrame* frame, bool enabledPerSettings)
-{
-    return enabledPerSettings;
-}
 
 void WebViewHost::loadURLExternally(WebFrame* frame, const WebURLRequest& request, WebNavigationPolicy policy)
 {
@@ -1144,11 +1158,6 @@ void WebViewHost::didRunInsecureContent(WebFrame*, const WebSecurityOrigin& orig
         fputs("didRunInsecureContent\n", stdout);
 }
 
-bool WebViewHost::allowScript(WebFrame*, bool enabledPerSettings)
-{
-    return enabledPerSettings;
-}
-
 void WebViewHost::openFileSystem(WebFrame* frame, WebFileSystem::Type type, long long size, bool create, WebFileSystemCallbacks* callbacks)
 {
     webkit_support::OpenFileSystem(frame, type, size, create, callbacks);
@@ -1162,6 +1171,10 @@ WebViewHost::WebViewHost(TestShell* shell)
     , m_lastRequestedTextCheckingCompletion(0)
 {
     WTF::initializeThreading();
+
+    m_compositorThread = adoptPtr(WebKit::webKitPlatformSupport()->createThread("Compositor"));
+    WebCompositor::setThread(m_compositorThread.get());
+
     reset();
 }
 

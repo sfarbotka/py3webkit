@@ -42,6 +42,7 @@
 #include "InspectorFrontendChannel.h"
 #include "InspectorRuntimeAgent.h"
 #include "InspectorState.h"
+#include "InspectorStateClient.h"
 #include "InstrumentingAgents.h"
 #include "WorkerContext.h"
 #include "WorkerDebuggerAgent.h"
@@ -87,11 +88,26 @@ private:
     WorkerContext* m_workerContext;
 };
 
+class WorkerStateClient : public InspectorStateClient {
+public:
+    WorkerStateClient(WorkerContext* context) : m_workerContext(context) { }
+    virtual ~WorkerStateClient() { }
+
+private:
+    virtual void updateInspectorStateCookie(const String& cookie)
+    {
+        m_workerContext->thread()->workerReportingProxy().updateInspectorStateCookie(cookie);
+    }
+
+    WorkerContext* m_workerContext;
+};
+
 }
 
 WorkerInspectorController::WorkerInspectorController(WorkerContext* workerContext)
     : m_workerContext(workerContext)
-    , m_state(adoptPtr(new InspectorState(0)))
+    , m_stateClient(adoptPtr(new WorkerStateClient(workerContext)))
+    , m_state(adoptPtr(new InspectorState(m_stateClient.get())))
     , m_instrumentingAgents(adoptPtr(new InstrumentingAgents()))
     , m_injectedScriptManager(InjectedScriptManager::createForWorker())
 #if ENABLE(JAVASCRIPT_DEBUGGER)
@@ -101,7 +117,7 @@ WorkerInspectorController::WorkerInspectorController(WorkerContext* workerContex
 {
     m_injectedScriptManager->injectedScriptHost()->init(0
         , 0
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         , 0
 #endif
 #if ENABLE(DOM_STORAGE)
@@ -116,6 +132,7 @@ WorkerInspectorController::WorkerInspectorController(WorkerContext* workerContex
  
 WorkerInspectorController::~WorkerInspectorController()
 {
+    disconnectFrontend();
 }
 
 void WorkerInspectorController::connectFrontend()
@@ -126,9 +143,7 @@ void WorkerInspectorController::connectFrontend()
     m_frontend = adoptPtr(new InspectorFrontend(m_frontendChannel.get()));
     m_backendDispatcher = adoptRef(new InspectorBackendDispatcher(
         m_frontendChannel.get(),
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         0, // InspectorApplicationCacheAgent
-#endif
 #if ENABLE(JAVASCRIPT_DEBUGGER)
         0, // InspectorDOMDebuggerAgent
 #endif
@@ -138,7 +153,7 @@ void WorkerInspectorController::connectFrontend()
 #if ENABLE(DOM_STORAGE)
         0, // InspectorDOMStorageAgent
 #endif
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         0, // InspectorDatabaseAgent
 #endif
 #if ENABLE(JAVASCRIPT_DEBUGGER)
@@ -176,6 +191,17 @@ void WorkerInspectorController::disconnectFrontend()
 
     m_frontend.clear();
     m_frontendChannel.clear();
+}
+
+void WorkerInspectorController::restoreInspectorStateFromCookie(const String& inspectorCookie)
+{
+    ASSERT(!m_frontend);
+    connectFrontend();
+    m_state->loadFromCookie(inspectorCookie);
+
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    m_debuggerAgent->restore();
+#endif
 }
 
 void WorkerInspectorController::dispatchMessageFromFrontend(const String& message)

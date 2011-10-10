@@ -118,12 +118,6 @@ FloatRect WebChromeClient::pageRect()
     return rect;
 }
 
-float WebChromeClient::scaleFactor()
-{
-    // Windows doesn't support UI scaling.
-    return 1.0;
-}
-
 void WebChromeClient::focus()
 {
     IWebUIDelegate* uiDelegate = 0;
@@ -583,7 +577,7 @@ void WebChromeClient::print(Frame* frame)
         uiDelegate->printFrame(m_webView, kit(frame));
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& databaseIdentifier)
 {
     COMPtr<WebSecurityOrigin> origin(AdoptCOM, WebSecurityOrigin::createInstance(frame->document()->securityOrigin()));
@@ -620,8 +614,9 @@ void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& database
 }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+// FIXME: Move this include to the top of the file with the other includes.
 #include "ApplicationCacheStorage.h"
+
 void WebChromeClient::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     // FIXME: Free some space.
@@ -632,7 +627,6 @@ void WebChromeClient::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_
 {
     notImplemented();
 }
-#endif
 
 void WebChromeClient::populateVisitedLinks()
 {
@@ -647,89 +641,6 @@ void WebChromeClient::populateVisitedLinks()
     if (!history)
         return;
     history->addVisitedLinksToPageGroup(m_webView->page()->group());
-}
-
-bool WebChromeClient::paintCustomScrollbar(GraphicsContext* context, const FloatRect& rect, ScrollbarControlSize size, 
-                                           ScrollbarControlState state, ScrollbarPart pressedPart, bool vertical,
-                                           float value, float proportion, ScrollbarControlPartMask parts)
-{
-    if (context->paintingDisabled())
-        return false;
-
-    COMPtr<IWebUIDelegate> delegate = uiDelegate();
-    if (!delegate)
-        return false;
-
-    WebScrollbarControlPartMask webParts = WebNoScrollPart;
-    if (parts & BackButtonStartPart) // FIXME: Hyatt, what about BackButtonEndPart?
-        webParts |= WebBackButtonPart;
-    if (parts & BackTrackPart)
-        webParts |= WebBackTrackPart;
-    if (parts & ThumbPart)
-        webParts |= WebThumbPart;
-    if (parts & ForwardTrackPart)
-        webParts |= WebForwardTrackPart;
-    if (parts & ForwardButtonStartPart) // FIXME: Hyatt, what about ForwardButtonEndPart?
-        webParts |= WebForwardButtonPart;
-
-    WebScrollbarControlPart webPressedPart = WebNoScrollPart;
-    switch (pressedPart) {
-        case BackButtonStartPart: // FIXME: Hyatt, what about BackButtonEndPart?
-            webPressedPart = WebBackButtonPart;
-            break;
-        case BackTrackPart:
-            webPressedPart = WebBackTrackPart;
-            break;
-        case ThumbPart:
-            webPressedPart = WebThumbPart;
-            break;
-        case ForwardTrackPart:
-            webPressedPart = WebForwardTrackPart;
-            break;
-        case ForwardButtonStartPart: // FIXME: Hyatt, what about ForwardButtonEndPart?
-            webPressedPart = WebForwardButtonPart;
-            break;
-        default:
-            break;
-    }
-
-    WebScrollBarControlSize webSize;
-    switch (size) {
-        case SmallScrollbar:
-            webSize = WebSmallScrollbar;
-            break;
-        case RegularScrollbar:
-        default:
-            webSize = WebRegularScrollbar;
-    }
-    WebScrollbarControlState webState = 0;
-    if (state & ActiveScrollbarState)
-        webState |= WebActiveScrollbarState;
-    if (state & EnabledScrollbarState)
-        webState |= WebEnabledScrollbarState;
-    if (state & PressedScrollbarState)
-        webState |= WebPressedScrollbarState;
-    
-    RECT webRect = enclosingIntRect(rect);
-    LocalWindowsContext windowsContext(context, webRect);
-    HRESULT hr = delegate->paintCustomScrollbar(m_webView, windowsContext.hdc(), webRect, webSize, webState, webPressedPart, 
-                                                          vertical, value, proportion, webParts);
-    return SUCCEEDED(hr);
-}
-
-bool WebChromeClient::paintCustomScrollCorner(GraphicsContext* context, const FloatRect& rect)
-{
-    if (context->paintingDisabled())
-        return false;
-
-    COMPtr<IWebUIDelegate> delegate = uiDelegate();
-    if (!delegate)
-        return false;
-
-    RECT webRect = enclosingIntRect(rect);
-    LocalWindowsContext windowsContext(context, webRect);
-    HRESULT hr = delegate->paintCustomScrollCorner(m_webView, windowsContext.hdc(), webRect);
-    return SUCCEEDED(hr);
 }
 
 void WebChromeClient::runOpenPanel(Frame*, PassRefPtr<FileChooser> prpFileChooser)

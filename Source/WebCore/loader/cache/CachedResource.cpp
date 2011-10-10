@@ -61,6 +61,7 @@ static ResourceLoadPriority defaultPriorityForResourceType(CachedResource::Type 
         case CachedResource::FontResource:
             return ResourceLoadPriorityMedium;
         case CachedResource::ImageResource:
+        case CachedResource::RawResource:
             return ResourceLoadPriorityLow;
 #if ENABLE(LINK_PREFETCH)
         case CachedResource::LinkPrefetch:
@@ -75,9 +76,7 @@ static ResourceLoadPriority defaultPriorityForResourceType(CachedResource::Type 
     return ResourceLoadPriorityLow;
 }
 
-#ifndef NDEBUG
-static RefCountedLeakCounter cachedResourceLeakCounter("CachedResource");
-#endif
+DEFINE_DEBUG_ONLY_GLOBAL(RefCountedLeakCounter, cachedResourceLeakCounter, ("CachedResource"));
 
 CachedResource::CachedResource(const ResourceRequest& request, Type type)
     : m_resourceRequest(request)
@@ -92,7 +91,6 @@ CachedResource::CachedResource(const ResourceRequest& request, Type type)
     , m_preloadResult(PreloadNotReferenced)
     , m_inLiveDecodedResourcesList(false)
     , m_requestedFromNetworkingLayer(false)
-    , m_sendResourceLoadCallbacks(true)
     , m_inCache(false)
     , m_loading(false)
     , m_type(type)
@@ -131,11 +129,11 @@ CachedResource::~CachedResource()
         m_owningCachedResourceLoader->removeCachedResource(this);
 }
 
-void CachedResource::load(CachedResourceLoader* cachedResourceLoader, bool incremental, SecurityCheckPolicy securityCheck, bool sendResourceLoadCallbacks)
+void CachedResource::load(CachedResourceLoader* cachedResourceLoader, const ResourceLoaderOptions& options)
 {
-    m_sendResourceLoadCallbacks = sendResourceLoadCallbacks;
+    m_options = options;
     m_loading = true;
-    m_request = CachedResourceRequest::load(cachedResourceLoader, this, incremental, securityCheck, sendResourceLoadCallbacks);
+    m_request = CachedResourceRequest::load(cachedResourceLoader, this, options);
     if (m_request) {
         m_status = Pending;
         cachedResourceLoader->incrementRequestCount(this);
@@ -179,7 +177,7 @@ void CachedResource::finish()
 bool CachedResource::passesAccessControlCheck(SecurityOrigin* securityOrigin)
 {
     String errorDescription;
-    return WebCore::passesAccessControlCheck(m_response, resourceRequest().allowCookies(), securityOrigin, errorDescription);
+    return WebCore::passesAccessControlCheck(m_response, resourceRequest().allowCookies() ? AllowStoredCredentials : DoNotAllowStoredCredentials, securityOrigin, errorDescription);
 }
 
 bool CachedResource::isExpired() const

@@ -39,6 +39,7 @@
 
 namespace WebCore {
 
+class CCLayerSorter;
 class LayerChromium;
 class LayerRendererChromium;
 
@@ -69,9 +70,9 @@ public:
     int debugID() const { return m_debugID; }
 #endif
 
-    virtual void draw();
+    virtual void draw(LayerRendererChromium*);
     void unreserveContentsTexture();
-    virtual void bindContentsTexture();
+    virtual void bindContentsTexture(LayerRendererChromium*);
 
     // Returns true if this layer has content to draw.
     void setDrawsContent(bool drawsContent) { m_drawsContent = drawsContent; }
@@ -103,6 +104,9 @@ public:
     void setUsesLayerScissor(bool usesLayerScissor) { m_usesLayerScissor = usesLayerScissor; }
     bool usesLayerScissor() const { return m_usesLayerScissor; }
 
+    void setIsNonCompositedContent(bool isNonCompositedContent) { m_isNonCompositedContent = isNonCompositedContent; }
+    bool isNonCompositedContent() const { return m_isNonCompositedContent; }
+
     void setSublayerTransform(const TransformationMatrix& sublayerTransform) { m_sublayerTransform = sublayerTransform; }
     const TransformationMatrix& sublayerTransform() const { return m_sublayerTransform; }
 
@@ -118,10 +122,7 @@ public:
     void setDebugBorderWidth(float width) { m_debugBorderWidth = width; }
     float debugBorderWidth() const { return m_debugBorderWidth; }
 
-    void drawDebugBorder();
-
-    void setLayerRenderer(LayerRendererChromium*);
-    LayerRendererChromium* layerRenderer() const { return m_layerRenderer.get(); }
+    void drawDebugBorder(LayerRendererChromium*);
 
     CCRenderSurface* renderSurface() const { return m_renderSurface.get(); }
     void createRenderSurface();
@@ -141,6 +142,18 @@ public:
     const IntSize& contentBounds() const { return m_contentBounds; }
     void setContentBounds(const IntSize& contentBounds) { m_contentBounds = contentBounds; }
 
+    const IntPoint& scrollPosition() const { return m_scrollPosition; }
+    void setScrollPosition(const IntPoint& scrollPosition) { m_scrollPosition = scrollPosition; }
+
+    const IntSize& maxScrollPosition() const {return m_maxScrollPosition; }
+    void setMaxScrollPosition(const IntSize& maxScrollPosition) { m_maxScrollPosition = maxScrollPosition; }
+
+    const IntSize& scrollDelta() const { return m_scrollDelta; }
+    void setScrollDelta(const IntSize& scrollDelta) { m_scrollDelta = scrollDelta; }
+
+    void scrollBy(const IntSize& scroll);
+    bool scrollable() const { return !maxScrollPosition().isZero(); }
+
     const IntRect& visibleLayerRect() const { return m_visibleLayerRect; }
     void setVisibleLayerRect(const IntRect& visibleLayerRect) { m_visibleLayerRect = visibleLayerRect; }
 
@@ -152,20 +165,27 @@ public:
 
     const TransformationMatrix& drawTransform() const { return m_drawTransform; }
     void setDrawTransform(const TransformationMatrix& matrix) { m_drawTransform = matrix; }
+    const TransformationMatrix& screenSpaceTransform() const { return m_screenSpaceTransform; }
+    void setScreenSpaceTransform(const TransformationMatrix& matrix) { m_screenSpaceTransform = matrix; }
     const IntRect& drawableContentRect() const { return m_drawableContentRect; }
     void setDrawableContentRect(const IntRect& rect) { m_drawableContentRect = rect; }
 
-    virtual void dumpLayerProperties(TextStream&, int indent) const;
+    String layerTreeAsText() const;
 
 protected:
     explicit CCLayerImpl(int);
 
+    virtual void dumpLayerProperties(TextStream&, int indent) const;
     static void writeIndent(TextStream&, int indent);
 
 private:
     void setParent(CCLayerImpl* parent) { m_parent = parent; }
     friend class TreeSynchronizer;
     void clearChildList(); // Warning: This does not preserve tree structure invariants and so is only exposed to the tree synchronizer.
+
+    virtual const char* layerTypeAsString() const { return "LayerChromium"; }
+
+    void dumpLayer(TextStream&, int indent) const;
 
     // Properties internal to CCLayerImpl
     CCLayerImpl* m_parent;
@@ -179,11 +199,13 @@ private:
     float m_anchorPointZ;
     IntSize m_bounds;
     IntSize m_contentBounds;
-    IntRect m_visibleLayerRect;
+    IntPoint m_scrollPosition;
+    IntSize m_maxScrollPosition;
 
     // Whether the "back" of this layer should draw.
     bool m_doubleSided;
 
+    IntRect m_visibleLayerRect;
     bool m_masksToBounds;
     float m_opacity;
     FloatPoint m_position;
@@ -191,8 +213,11 @@ private:
     TransformationMatrix m_sublayerTransform;
     TransformationMatrix m_transform;
     bool m_usesLayerScissor;
+    bool m_isNonCompositedContent;
 
     bool m_drawsContent;
+
+    IntSize m_scrollDelta;
 
     // Properties owned exclusively by this CCLayerImpl.
     // Debugging.
@@ -218,6 +243,7 @@ private:
     float m_debugBorderWidth;
 
     TransformationMatrix m_drawTransform;
+    TransformationMatrix m_screenSpaceTransform;
 
     // The scissor rectangle that should be used when this layer is drawn.
     // Inherited by the parent layer and further restricted if this layer masks
@@ -230,10 +256,9 @@ private:
 
     // Hierarchical bounding rect containing the layer and its descendants.
     IntRect m_drawableContentRect;
-
-    // Points to the layer renderer that updates and draws this layer.
-    RefPtr<LayerRendererChromium> m_layerRenderer;
 };
+
+void sortLayers(Vector<RefPtr<CCLayerImpl> >::iterator first, Vector<RefPtr<CCLayerImpl> >::iterator end, CCLayerSorter*);
 
 }
 

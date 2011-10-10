@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @extends {WebInspector.View}
+ * @constructor
+ * @param {Element=} element
+ */
 WebInspector.TabbedPane = function(element)
 {
     WebInspector.View.call(this, element);
@@ -46,10 +51,14 @@ WebInspector.TabbedPane.prototype = {
 
         this._tabsElement.appendChild(tabElement);
         this._contentElement.appendChild(view.element);
+        this.addChildView(view);
 
         this._tabs[id] = { tabElement: tabElement, view: view };
     },
 
+    /**
+     * @param {boolean=} userGesture
+     */
     selectTab: function(id, userGesture)
     {
         if (!(id in this._tabs))
@@ -78,6 +87,17 @@ WebInspector.TabbedPane.prototype = {
     {
         tab.tabElement.removeStyleClass("selected");
         tab.view.visible = false;
+    },
+
+    canHighlightLine: function()
+    {
+        return this._currentTab && this._currentTab.view && this._currentTab.view.canHighlightLine();
+    },
+
+    highlightLine: function(line)
+    {
+        if (this.canHighlightLine())
+            this._currentTab.view.highlightLine(line);
     }
 }
 

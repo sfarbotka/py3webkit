@@ -131,10 +131,6 @@
     # binary and increasing the speed of gdb.
     'enable_svg%': 1,
 
-    # Use v8 as default JavaScript engine. This makes sure that javascript_engine variable
-    # is set for both inside_chromium_build 0 and 1 cases.
-    'javascript_engine%': 'v8',
-
     'webcore_include_dirs': [
       '../',
       '../..',
@@ -158,6 +154,7 @@
       '../html/canvas',
       '../html/parser',
       '../html/shadow',
+      '../html/track',
       '../inspector',
       '../loader',
       '../loader/appcache',
@@ -196,13 +193,13 @@
       '../platform/image-decoders/webp',
       '../platform/image-encoders/skia',
       '../platform/leveldb',
+      '../platform/mediastream',
       '../platform/mock',
       '../platform/network',
       '../platform/network/chromium',
       '../platform/sql',
       '../platform/text',
       '../platform/text/transcoder',
-      '../platform/track',
       '../plugins',
       '../plugins/chromium',
       '../rendering',
@@ -339,9 +336,38 @@
   },
   'targets': [
     {
+      'target_name': 'generate_inspector_protocol_version',
+      'type': 'none',
+      'actions': [
+         {
+          'action_name': 'generateInspectorProtocolVersion',
+          'inputs': [
+            '../inspector/generate-inspector-protocol-version',
+            '../inspector/Inspector.json',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/InspectorProtocolVersion.h',
+          ],
+          'variables': {
+            'generator_include_dirs': [
+            ],
+          },
+          'action': [
+            'python',
+            '../inspector/generate-inspector-protocol-version',
+            '-o',
+            '<@(_outputs)',
+            '<@(_inputs)'
+          ],
+          'message': 'Validate inspector protocol for backwards compatibility and generate version file',
+        }
+      ]
+    },
+    {
       'target_name': 'inspector_idl',
       'type': 'none',
       'actions': [
+
         {
           'action_name': 'generateInspectorProtocolIDL',
           'inputs': [
@@ -363,14 +389,15 @@
             '<@(_inputs)'
           ],
           'message': 'Generating Inspector protocol sources from Inspector.idl',
-        },
+        }
       ]
     },
     {
       'target_name': 'inspector_protocol_sources',
       'type': 'none',
       'dependencies': [
-        'inspector_idl'
+        'inspector_idl',
+        'generate_inspector_protocol_version'
       ],
       'actions': [
         {
@@ -470,7 +497,6 @@
         '../xml/XPathGrammar.y',
 
         # gperf rule
-        '../html/DocTypeStrings.gperf',
         '../platform/ColorData.gperf',
 
         # idl rules
@@ -479,6 +505,23 @@
       ],
       'actions': [
         # Actions to build derived sources.
+        {
+          'action_name': 'generateV8ArrayBufferViewCustomScript',
+          'inputs': [
+            '../bindings/v8/custom/V8ArrayBufferViewCustomScript.js',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/V8ArrayBufferViewCustomScript.h',
+          ],
+          'action': [
+            'perl',
+            '../inspector/xxd.pl',
+            'V8ArrayBufferViewCustomScript_js',
+            '<@(_inputs)',
+            '<@(_outputs)'
+          ],
+          'message': 'Generating V8ArrayBufferViewCustomScript.h from V8ArrayBufferViewCustomScript.js',
+        },
         {
           'action_name': 'generateXMLViewerCSS',
           'inputs': [
@@ -607,6 +650,26 @@
             '--factory',
             '--wrapperFactoryV8',
             '--extraDefines', '<(feature_defines)'
+          ],
+        },
+        {
+          'action_name': 'WebKitFontFamilyNames',
+          'inputs': [
+            '../dom/make_names.pl',
+            '../css/WebKitFontFamilyNames.in',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/WebKitFontFamilyNames.cpp',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/WebKitFontFamilyNames.h',
+          ],
+          'action': [
+            'python',
+            'scripts/action_makenames.py',
+            '<@(_outputs)',
+            '--',
+            '<@(_inputs)',
+            '--',
+            '--fonts',
           ],
         },
         {
@@ -919,6 +982,7 @@
         '<(chromium_src_dir)/third_party/libwebp/libwebp.gyp:libwebp',
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
         '<(chromium_src_dir)/third_party/sqlite/sqlite.gyp:sqlite',
+        '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
         '<(libjpeg_gyp_path):libjpeg',
       ],
       'include_dirs': [
@@ -943,7 +1007,6 @@
         '<@(derived_sources_aggregate_files)',
 
         # Additional .cpp files for HashTools.h
-        '<(SHARED_INTERMEDIATE_DIR)/webkit/DocTypeStrings.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/ColorData.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/CSSPropertyNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/CSSValueKeywords.cpp',
@@ -959,6 +1022,7 @@
         '<(SHARED_INTERMEDIATE_DIR)/webkit/SVGNames.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/MathMLElementFactory.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/MathMLNames.cpp',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/WebKitFontFamilyNames.cpp',
 
         # Generated from HTMLEntityNames.in
         '<(SHARED_INTERMEDIATE_DIR)/webkit/HTMLEntityTable.cpp',
@@ -972,16 +1036,9 @@
         '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorBackendDispatcher.cpp',
       ],
       'conditions': [
-        ['javascript_engine=="v8"', {
-          'dependencies': [
-            '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
-          ],
-          'conditions': [
-            ['inside_chromium_build==1 and OS=="win" and component=="shared_library"', {
-              'defines': [
-                'USING_V8_SHARED',
-              ],
-            }],
+        ['inside_chromium_build==1 and OS=="win" and component=="shared_library"', {
+          'defines': [
+            'USING_V8_SHARED',
           ],
         }],
         # TODO(maruel): Move it in its own project or generate it anyway?
@@ -1024,7 +1081,10 @@
       'target_name': 'webcore_prerequisites',
       'type': 'none',
       'dependencies': [
-        'webcore_bindings',
+        'debugger_script_source',
+        'injected_script_source',
+        'inspector_protocol_sources',
+        'webcore_bindings_sources',
         '../../ThirdParty/glu/glu.gyp:libtess',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:yarr',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
@@ -1039,10 +1099,10 @@
         '<(chromium_src_dir)/third_party/ots/ots.gyp:ots',
         '<(chromium_src_dir)/third_party/sqlite/sqlite.gyp:sqlite',
         '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_common',
+        '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
         '<(libjpeg_gyp_path):libjpeg',
       ],
       'export_dependent_settings': [
-        'webcore_bindings',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:yarr',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
@@ -1056,6 +1116,7 @@
         '<(chromium_src_dir)/third_party/ots/ots.gyp:ots',
         '<(chromium_src_dir)/third_party/sqlite/sqlite.gyp:sqlite',
         '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_common',
+        '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
         '<(libjpeg_gyp_path):libjpeg',
       ],
       # This is needed for mac because of webkit_system_interface. It'd be nice
@@ -1070,6 +1131,8 @@
           '<@(webcore_include_dirs)',
           '<(chromium_src_dir)/gpu',
           '<(chromium_src_dir)/third_party/angle/include/GLSLANG',
+          '<(SHARED_INTERMEDIATE_DIR)/webkit',
+          '<(SHARED_INTERMEDIATE_DIR)/webkit/bindings',
         ],
         'mac_framework_dirs': [
           '$(SDKROOT)/System/Library/Frameworks/ApplicationServices.framework/Frameworks',
@@ -1086,22 +1149,12 @@
         },
       },
       'conditions': [
-        ['javascript_engine=="v8"', {
-          'dependencies': [
-            '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
-          ],
-          'export_dependent_settings': [
-            '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
-          ],
-          'conditions': [
-            ['inside_chromium_build==1 and OS=="win" and component=="shared_library"', {
-              'direct_dependent_settings': {
-                'defines': [
-                  'USING_V8_SHARED',
-                ],
-              },
-            }],
-          ],
+        ['inside_chromium_build==1 and OS=="win" and component=="shared_library"', {
+          'direct_dependent_settings': {
+            'defines': [
+               'USING_V8_SHARED',
+            ],
+          },
         }],
         ['use_accelerated_compositing==1', {
           'dependencies': [
@@ -1111,14 +1164,12 @@
             '<(chromium_src_dir)/gpu/gpu.gyp:gles2_c_lib',
           ],
         }],
-        ['toolkit_uses_gtk == 1', {
+        ['use_x11 == 1', {
           'dependencies': [
             '<(chromium_src_dir)/build/linux/system.gyp:fontconfig',
-            '<(chromium_src_dir)/build/linux/system.gyp:gtk',
           ],
           'export_dependent_settings': [
             '<(chromium_src_dir)/build/linux/system.gyp:fontconfig',
-            '<(chromium_src_dir)/build/linux/system.gyp:gtk',
           ],
           'direct_dependent_settings': {
             'cflags': [
@@ -1127,6 +1178,14 @@
               '-fno-strict-aliasing',
             ],
           },
+        }],
+        ['toolkit_uses_gtk == 1', {
+          'dependencies': [
+            '<(chromium_src_dir)/build/linux/system.gyp:gtk',
+          ],
+          'export_dependent_settings': [
+            '<(chromium_src_dir)/build/linux/system.gyp:gtk',
+          ],
         }],
         ['OS=="linux"', {
           'direct_dependent_settings': {
@@ -1170,6 +1229,7 @@
               # If this is unhandled, the console will receive log messages
               # such as:
               # com.google.Chrome[] objc[]: Class ScrollbarPrefsObserver is implemented in both .../Google Chrome.app/Contents/Versions/.../Google Chrome Helper.app/Contents/MacOS/../../../Google Chrome Framework.framework/Google Chrome Framework and /System/Library/Frameworks/WebKit.framework/Versions/A/Frameworks/WebCore.framework/Versions/A/WebCore. One of the two will be used. Which one is undefined.
+              'WebCascadeList=ChromiumWebCoreObjCWebCascadeList',
               'ScrollbarPrefsObserver=ChromiumWebCoreObjCScrollbarPrefsObserver',
               'WebCoreRenderThemeNotificationObserver=ChromiumWebCoreObjCWebCoreRenderThemeNotificationObserver',
               'WebFontCache=ChromiumWebCoreObjCWebFontCache',
@@ -1244,12 +1304,12 @@
             '<(chromium_src_dir)/third_party/ffmpeg/ffmpeg.gyp:ffmpeg',
           ],
         }],
-        ['"ENABLE_LEVELDB=1" in feature_defines', {
+        ['"WTF_USE_LEVELDB=1" in feature_defines', {
           'dependencies': [
-            '<(chromium_src_dir)/third_party/leveldb/leveldb.gyp:leveldb',
+            '<(chromium_src_dir)/third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
           ],
           'export_dependent_settings': [
-            '<(chromium_src_dir)/third_party/leveldb/leveldb.gyp:leveldb',
+            '<(chromium_src_dir)/third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
           ],
         }],
       ],
@@ -1270,8 +1330,8 @@
       ],
       'sources/': [
         # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(android|brew|cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|haiku|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
-        ['exclude', '(?<!Chromium)(Android|Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
+        ['exclude', '(cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
+        ['exclude', '(?<!Chromium)(Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
 
         ['exclude', 'AllInOne\\.cpp$'],
       ],
@@ -1325,8 +1385,8 @@
         ['include', 'platform/'],
 
         # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(android|brew|cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|haiku|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
-        ['exclude', '(?<!Chromium)(Android|Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
+        ['exclude', '(cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
+        ['exclude', '(?<!Chromium)(Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
 
         ['exclude', 'platform/LinkHash\\.cpp$'],
         ['exclude', 'platform/MIMETypeRegistry\\.cpp$'],
@@ -1344,16 +1404,32 @@
         ['exclude', 'platform/text/TextEncodingDetectorNone\\.cpp$'],
       ],
       'conditions': [
-        ['toolkit_uses_gtk == 1', {
+        ['use_x11 == 1', {
           'sources/': [
             # Cherry-pick files excluded by the broader regular expressions above.
-            ['include', 'platform/chromium/KeyCodeConversionGtk\\.cpp$'],
             ['include', 'platform/graphics/chromium/ComplexTextControllerLinux\\.cpp$'],
             ['include', 'platform/graphics/chromium/FontCacheLinux\\.cpp$'],
             ['include', 'platform/graphics/chromium/FontLinux\\.cpp$'],
             ['include', 'platform/graphics/chromium/FontPlatformDataLinux\\.cpp$'],
             ['include', 'platform/graphics/chromium/SimpleFontDataLinux\\.cpp$'],
           ],
+        }, { # use_x11==0
+          'sources/': [
+            ['exclude', 'Linux\\.cpp$'],
+            ['exclude', 'Harfbuzz[^/]+\\.(cpp|h)$'],
+          ],
+        }],
+        ['toolkit_uses_gtk == 1', {
+          'sources/': [
+            # Cherry-pick files excluded by the broader regular expressions above.
+            ['include', 'platform/chromium/KeyCodeConversionGtk\\.cpp$'],
+          ],
+        }, { # toolkit_uses_gtk==0
+          'sources/': [
+            ['exclude', 'Gtk\\.cpp$'],
+          ],
+        }],
+        ['use_x11==1 or OS=="android"', {
           'dependencies': [
             '<(chromium_src_dir)/third_party/harfbuzz/harfbuzz.gyp:harfbuzz',
           ],
@@ -1412,6 +1488,7 @@
             # the specific exclusions in the "sources!" list below.
             ['include', 'rendering/RenderThemeMac\\.mm$'],
             ['include', 'platform/graphics/mac/ColorMac\\.mm$'],
+            ['include', 'platform/graphics/mac/ComplexTextControllerCoreText\\.mm$'],
             ['include', 'platform/graphics/mac/FloatPointMac\\.mm$'],
             ['include', 'platform/graphics/mac/FloatRectMac\\.mm$'],
             ['include', 'platform/graphics/mac/FloatSizeMac\\.mm$'],
@@ -1492,13 +1569,7 @@
             ['exclude', 'platform/chromium/DragImageChromiumMac\\.cpp$'],
           ],
         }],
-        ['toolkit_uses_gtk == 0', {
-          'sources/': [
-            ['exclude', '(Gtk|Linux)\\.cpp$'],
-            ['exclude', 'Harfbuzz[^/]+\\.(cpp|h)$'],
-          ],
-        }],
-        ['toolkit_uses_gtk == 0 and (OS!="mac" or use_skia==0)', {
+        ['use_x11 == 0 and (OS!="mac" or use_skia==0)', {
           'sources/': [
             ['exclude', 'VDMX[^/]+\\.(cpp|h)$'],
           ],
@@ -1550,6 +1621,10 @@
         ['include', 'platform/graphics/filters/arm/.*NEON\\.(cpp|h)'],
       ],
       'conditions': [
+        ['OS=="android"', {
+          'cflags!': ['-mthumb'],
+          'cflags': ['-marm'],
+        }],
         ['OS=="linux" and target_arch=="arm"', {
           'cflags': ['-marm'],
         }],
@@ -1570,8 +1645,8 @@
         ['include', 'rendering/'],
 
         # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(android|brew|cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|haiku|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
-        ['exclude', '(?<!Chromium)(Android|Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
+        ['exclude', '(cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
+        ['exclude', '(?<!Chromium)(Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
 
         ['exclude', 'AllInOne\\.cpp$'],
       ],
@@ -1593,9 +1668,14 @@
           # warnings about uninitialized this.
           'cflags': ['-Wno-uninitialized'],
         }],
+        ['use_x11 == 0', {
+          'sources/': [
+            ['exclude', 'Linux\\.cpp$'],
+          ],
+        }],
         ['toolkit_uses_gtk == 0', {
           'sources/': [
-            ['exclude', '(Gtk|Linux)\\.cpp$'],
+            ['exclude', 'Gtk\\.cpp$'],
           ],
         }],
         ['OS!="mac"', {
@@ -1613,6 +1693,7 @@
       'type': 'static_library',
       'dependencies': [
         'webcore_prerequisites',
+        '<(chromium_src_dir)/third_party/v8-i18n/build/all.gyp:v8-i18n',
       ],
       # This is needed for mac because of webkit_system_interface. It'd be nice
       # if this hard dependency could be split off the rest.
@@ -1638,8 +1719,8 @@
         ['exclude', 'bridge/jni/jsc/'],
 
         # FIXME: Figure out how to store these patterns in a variable.
-        ['exclude', '(android|brew|cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|haiku|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
-        ['exclude', '(?<!Chromium)(Android|Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
+        ['exclude', '(cairo|ca|cf|cg|curl|efl|freetype|gstreamer|gtk|linux|mac|opengl|openvg|opentype|pango|posix|qt|soup|svg|symbian|texmap|iphone|win|wince|wx)/'],
+        ['exclude', '(?<!Chromium)(Cairo|CF|CG|Curl|Gtk|JSC|Linux|Mac|OpenType|POSIX|Posix|Qt|Safari|Soup|Symbian|Win|WinCE|Wx)\\.(cpp|mm?)$'],
 
         ['exclude', 'AllInOne\\.cpp$'],
 
@@ -1714,8 +1795,6 @@
           'sources/': [
             ['exclude', 'Posix\\.cpp$'],
             ['include', '/opentype/'],
-            ['include', '/ScrollAnimatorWin\\.cpp$'],
-            ['include', '/ScrollAnimatorWin\\.h$'],
             ['include', '/SkiaFontWin\\.cpp$'],
             ['include', '/TransparencyWin\\.cpp$'],
           ],
@@ -1725,9 +1804,14 @@
           # warnings about uninitialized this.
           'cflags': ['-Wno-uninitialized'],
         }],
+        ['use_x11 == 0', {
+          'sources/': [
+            ['exclude', 'Linux\\.cpp$'],
+          ],
+        }],
         ['toolkit_uses_gtk == 0', {
           'sources/': [
-            ['exclude', '(Gtk|Linux)\\.cpp$'],
+            ['exclude', 'Gtk\\.cpp$'],
           ],
         }],
         ['OS!="mac"', {
@@ -1737,11 +1821,6 @@
           'sources/': [
             ['exclude', 'Win\\.cpp$'],
             ['exclude', '/(Windows|Uniscribe)[^/]*\\.cpp$']
-          ],
-        }],
-        ['javascript_engine=="v8"', {
-          'dependencies': [
-            '<(chromium_src_dir)/v8/src/extensions/experimental/experimental.gyp:i18n_api',
           ],
         }],
       ],
@@ -1762,6 +1841,7 @@
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
+        '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
       ],
       'export_dependent_settings': [
         'webcore_bindings',
@@ -1769,6 +1849,7 @@
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
+        '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
       ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -1786,14 +1867,6 @@
         ],
       },
       'conditions': [
-        ['javascript_engine=="v8"', {
-          'dependencies': [
-            '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
-          ],
-          'export_dependent_settings': [
-            '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
-          ],
-        }],
         ['OS=="mac"', {
           'direct_dependent_settings': {
             'include_dirs': [

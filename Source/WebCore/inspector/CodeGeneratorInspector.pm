@@ -134,6 +134,8 @@ $typeTransform{"Value"} = {
 };
 $typeTransform{"String"} = {
     "param" => "const String&",
+    "optional_param" => "const String* const",
+    "optional_valueAccessor" => "*",
     "variable" => "String",
     "return" => "String",
     "defaultValue" => "\"\"",
@@ -144,6 +146,8 @@ $typeTransform{"String"} = {
 };
 $typeTransform{"long"} = {
     "param" => "long",
+    "optional_param" => "const long* const",
+    "optional_valueAccessor" => "*",
     "variable" => "long",
     "defaultValue" => "0",
     "forward" => "",
@@ -153,6 +157,8 @@ $typeTransform{"long"} = {
 };
 $typeTransform{"int"} = {
     "param" => "int",
+    "optional_param" => "const int* const",
+    "optional_valueAccessor" => "*",
     "variable" => "int",
     "defaultValue" => "0",
     "forward" => "",
@@ -162,6 +168,8 @@ $typeTransform{"int"} = {
 };
 $typeTransform{"unsigned long"} = {
     "param" => "unsigned long",
+    "optional_param" => "const unsigned long* const",
+    "optional_valueAccessor" => "*",
     "variable" => "unsigned long",
     "defaultValue" => "0u",
     "forward" => "",
@@ -171,6 +179,8 @@ $typeTransform{"unsigned long"} = {
 };
 $typeTransform{"unsigned int"} = {
     "param" => "unsigned int",
+    "optional_param" => "const unsigned int* const",
+    "optional_valueAccessor" => "*",
     "variable" => "unsigned int",
     "defaultValue" => "0u",
     "forward" => "",
@@ -180,6 +190,8 @@ $typeTransform{"unsigned int"} = {
 };
 $typeTransform{"double"} = {
     "param" => "double",
+    "optional_param" => "const double* const",
+    "optional_valueAccessor" => "*",
     "variable" => "double",
     "defaultValue" => "0.0",
     "forward" => "",
@@ -189,6 +201,8 @@ $typeTransform{"double"} = {
 };
 $typeTransform{"boolean"} = {
     "param" => "bool",
+    "optional_param" => "const bool* const",
+    "optional_valueAccessor" => "*",
     "variable"=> "bool",
     "defaultValue" => "false",
     "forward" => "",
@@ -245,6 +259,7 @@ my $frontendConstructor;
 my @frontendConstantDeclarations;
 my @frontendConstantDefinitions;
 my @frontendFooter;
+my @frontendDomains;
 
 # Default constructor
 sub new
@@ -304,6 +319,7 @@ sub GenerateInterface
     );
     generateFunctions($interface, \%agent);
     if (@{$agent{methodDeclarations}}) {
+        push(@frontendDomains, $interface->name);
         generateAgentDeclaration($interface, \%agent);
     }
 }
@@ -374,7 +390,7 @@ sub generateFrontendFunction
     my $domain = $interface->name;
     my @argsFiltered = grep($_->direction eq "out", @{$function->parameters}); # just keep only out parameters for frontend interface.
     map($frontendTypes{$_->type} = 1, @argsFiltered); # register required types.
-    my $arguments = join(", ", map(typeTraits($_->type, "param") . " " . $_->name, @argsFiltered)); # prepare arguments for function signature.
+    my $arguments = join(", ", map(paramTypeTraits($_, "param") . " " . $_->name, @argsFiltered)); # prepare arguments for function signature.
 
     my $signature = "        void ${functionName}(${arguments});";
     !$agent->{methodSignatures}->{$signature} || die "Duplicate frontend function was detected for signature '$signature'.";
@@ -391,7 +407,7 @@ sub generateFrontendFunction
 
         foreach my $parameter (@argsFiltered) {
             my $optional = $parameter->extendedAttributes->{"optional"} ? "if (" . $parameter->name . ")\n        " : "";
-            push(@function, "    " . $optional . "paramsObject->set" . typeTraits($parameter->type, "JSONType") . "(\"" . $parameter->name . "\", " . $parameter->name . ");");
+            push(@function, "    " . $optional . "paramsObject->set" . paramTypeTraits($parameter, "JSONType") . "(\"" . $parameter->name . "\", " . paramTypeTraits($parameter, "valueAccessor") . $parameter->name . ");");
         }
         push(@function, "    ${functionName}Message->setObject(\"params\", paramsObject);");
     }
@@ -755,6 +771,7 @@ sub collectBackendJSStubEvents
 
 sub generateBackendStubJS
 {
+    my $JSRegisterDomainDispatchers = join("\n", map("    this.register" . $_ . "Dispatcher = this._registerDomainDispatcher.bind(this, \"" . $_ ."\");", @frontendDomains));
     my $JSStubs = join("\n", @backendJSStubs);
     my $JSEvents = join("\n", @backendJSEvents);
     my $inspectorBackendStubJS = << "EOF";
@@ -769,9 +786,13 @@ InspectorBackendStub = function()
     this._eventArgs = {};
 $JSStubs
 $JSEvents
+$JSRegisterDomainDispatchers
 }
 
 InspectorBackendStub.prototype = {
+    dumpInspectorTimeStats: 0,
+    dumpInspectorProtocolMessages: 0,
+
     _wrap: function(callback)
     {
         var callbackId = this._lastCallbackId++;
@@ -785,10 +806,18 @@ InspectorBackendStub.prototype = {
         var agentName = domainAndFunction[0] + "Agent";
         if (!window[agentName])
             window[agentName] = {};
-        window[agentName][domainAndFunction[1]] = this.sendMessageToBackend.bind(this, requestString);
+        window[agentName][domainAndFunction[1]] = this._sendMessageToBackend.bind(this, requestString);
+        window[agentName][domainAndFunction[1]]["invoke"] = this._invoke.bind(this, requestString)
     },
 
-    sendMessageToBackend: function()
+    _invoke: function(requestString, args, callback)
+    {
+        var request = JSON.parse(requestString);
+        request.params = args;
+        this._wrapCallbackAndSendMessageObject(request, callback);
+    },
+
+    _sendMessageToBackend: function()
     {
         var args = Array.prototype.slice.call(arguments);
         var request = JSON.parse(args.shift());
@@ -831,29 +860,42 @@ InspectorBackendStub.prototype = {
                 return;
             }
         }
-        request.id = this._wrap(callback || function() {});
 
-        if (window.dumpInspectorProtocolMessages)
-            console.log("frontend: " + JSON.stringify(request));
+        this._wrapCallbackAndSendMessageObject(request, callback);
+    },
+
+    _wrapCallbackAndSendMessageObject: function(messageObject, callback)
+    {
+        messageObject.id = this._wrap(callback);
+
+        if (this.dumpInspectorTimeStats) {
+            var wrappedCallback = this._callbacks[messageObject.id];
+            wrappedCallback.methodName = messageObject.method;
+            wrappedCallback.sendRequestTime = Date.now();
+        }
+
+        if (this.dumpInspectorProtocolMessages)
+            console.log("frontend: " + JSON.stringify(messageObject));
 
         ++this._pendingResponsesCount;
-        this.sendMessageObjectToBackend(request);
+        this.sendMessageObjectToBackend(messageObject);
     },
 
     sendMessageObjectToBackend: function(messageObject)
     {
+        console.timeStamp(messageObject.method);
         var message = JSON.stringify(messageObject);
         InspectorFrontendHost.sendMessageToBackend(message);
     },
 
-    registerDomainDispatcher: function(domain, dispatcher)
+    _registerDomainDispatcher: function(domain, dispatcher)
     {
         this._domainDispatchers[domain] = dispatcher;
     },
 
     dispatch: function(message)
     {
-        if (window.dumpInspectorProtocolMessages)
+        if (this.dumpInspectorProtocolMessages)
             console.log("backend: " + ((typeof message === "string") ? message : JSON.stringify(message)));
 
         var messageObject = (typeof message === "string") ? JSON.parse(message) : message;
@@ -897,10 +939,17 @@ InspectorBackendStub.prototype = {
 
             var callback = this._callbacks[messageObject.id];
             if (callback) {
+                var processingStartTime;
+                if (this.dumpInspectorTimeStats && callback.methodName)
+                    processingStartTime = Date.now();
+
                 arguments.unshift(messageObject.error);
                 callback.apply(null, arguments);
                 --this._pendingResponsesCount;
                 delete this._callbacks[messageObject.id];
+
+                if (this.dumpInspectorTimeStats && callback.methodName)
+                    console.log("time-stats: " + callback.methodName + " = " + (processingStartTime - callback.sendRequestTime) + " + " + (Date.now() - processingStartTime));
             }
 
             if (this._scripts && !this._pendingResponsesCount)
@@ -933,7 +982,14 @@ InspectorBackendStub.prototype = {
                     params.push(messageObject.params[paramNames[i]]);
             }
 
+            var processingStartTime;
+            if (this.dumpInspectorTimeStats)
+                processingStartTime = Date.now();
+
             dispatcher[functionName].apply(dispatcher, params);
+
+            if (this.dumpInspectorTimeStats)
+                console.log("time-stats: " + messageObject.method + " = " + (Date.now() - processingStartTime));
         }
     },
 
@@ -1052,6 +1108,18 @@ sub typeTraits
     my $type = shift;
     my $trait = shift;
     return $typeTransform{$type}->{$trait};
+}
+
+sub paramTypeTraits
+{
+    my $paramDescription = shift;
+    my $trait = shift;
+    if ($paramDescription->extendedAttributes->{"optional"}) {
+        my $optionalResult = typeTraits($paramDescription->type, "optional_" . $trait);
+        return $optionalResult if defined $optionalResult;
+    }
+    my $result = typeTraits($paramDescription->type, $trait);
+    return defined $result ? $result : "";
 }
 
 sub generateBackendAgentFieldsAndConstructor

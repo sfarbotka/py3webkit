@@ -59,7 +59,7 @@ static EncodedJSValue JSC_HOST_CALL mathProtoFuncTan(ExecState*);
 
 namespace JSC {
 
-const ClassInfo MathObject::s_info = { "Math", &JSObjectWithGlobalObject::s_info, 0, ExecState::mathTable };
+const ClassInfo MathObject::s_info = { "Math", &JSNonFinalObject::s_info, 0, ExecState::mathTable, CREATE_METHOD_TABLE(MathObject) };
 
 /* Source for MathObject.lut.h
 @begin mathTable
@@ -84,9 +84,14 @@ const ClassInfo MathObject::s_info = { "Math", &JSObjectWithGlobalObject::s_info
 @end
 */
 
-MathObject::MathObject(ExecState* exec, JSGlobalObject* globalObject, Structure* structure)
-    : JSObjectWithGlobalObject(globalObject, structure)
+MathObject::MathObject(JSGlobalObject* globalObject, Structure* structure)
+    : JSNonFinalObject(globalObject->globalData(), structure)
 {
+}
+
+void MathObject::finishCreation(ExecState* exec, JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 
     putDirectWithoutTransition(exec->globalData(), Identifier(exec, "E"), jsNumber(exp(1.0)), DontDelete | DontEnum | ReadOnly);

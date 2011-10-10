@@ -55,11 +55,6 @@
 #include <e32debug.h>
 #endif
 
-#if PLATFORM(BREWMP)
-#include <AEEError.h>
-#include <AEEdbg.h>
-#endif
-
 #ifdef NDEBUG
 /* Disable ASSERT* macros in release mode. */
 #define ASSERTIONS_DISABLED_DEFAULT 1
@@ -149,11 +144,13 @@ typedef struct {
 WTF_EXPORT_PRIVATE void WTFReportAssertionFailure(const char* file, int line, const char* function, const char* assertion);
 WTF_EXPORT_PRIVATE void WTFReportAssertionFailureWithMessage(const char* file, int line, const char* function, const char* assertion, const char* format, ...) WTF_ATTRIBUTE_PRINTF(5, 6);
 WTF_EXPORT_PRIVATE void WTFReportArgumentAssertionFailure(const char* file, int line, const char* function, const char* argName, const char* assertion);
-WTF_EXPORT_PRIVATE void WTFReportBacktrace();
 WTF_EXPORT_PRIVATE void WTFReportFatalError(const char* file, int line, const char* function, const char* format, ...) WTF_ATTRIBUTE_PRINTF(4, 5);
 WTF_EXPORT_PRIVATE void WTFReportError(const char* file, int line, const char* function, const char* format, ...) WTF_ATTRIBUTE_PRINTF(4, 5);
 WTF_EXPORT_PRIVATE void WTFLog(WTFLogChannel*, const char* format, ...) WTF_ATTRIBUTE_PRINTF(2, 3);
 WTF_EXPORT_PRIVATE void WTFLogVerbose(const char* file, int line, const char* function, WTFLogChannel*, const char* format, ...) WTF_ATTRIBUTE_PRINTF(5, 6);
+
+WTF_EXPORT_PRIVATE void WTFGetBacktrace(void** stack, int* size);
+WTF_EXPORT_PRIVATE void WTFReportBacktrace();
 
 #ifdef __cplusplus
 }
@@ -173,15 +170,10 @@ WTF_EXPORT_PRIVATE void WTFLogVerbose(const char* file, int line, const char* fu
     __DEBUGGER(); \
     User::Panic(_L("Webkit CRASH"),0); \
 } while (false)
-#elif PLATFORM(BREWMP)
-#define CRASH() do { \
-    dbg_Message("WebKit CRASH", DBG_MSG_LEVEL_FATAL, __FILE__, __LINE__); \
-    *(int *)(uintptr_t)0xbbadbeef = 0; \
-    ((void(*)())0)(); /* More reliable, but doesn't say BBADBEEF */ \
-} while (false)
 #elif COMPILER(CLANG)
 #define CRASH() do { \
     WTFReportBacktrace(); \
+    *(int *)(uintptr_t)0xbbadbeef = 0; \
     __builtin_trap(); \
 } while (false)
 #else
@@ -234,14 +226,6 @@ WTF_EXPORT_PRIVATE void WTFLogVerbose(const char* file, int line, const char* fu
 #if OS(WINDOWS) || OS(SYMBIAN)
 /* FIXME: Change to use something other than ASSERT to avoid this conflict with the underlying platform */
 #undef ASSERT
-#endif
-
-#if PLATFORM(BREWMP)
-/* FIXME: We include this here only to avoid a conflict with the COMPILE_ASSERT macro. */
-#include <AEEClassIDs.h>
-
-/* FIXME: Change to use something other than COMPILE_ASSERT to avoid this conflict with the underlying platform */
-#undef COMPILE_ASSERT
 #endif
 
 #if ASSERT_DISABLED

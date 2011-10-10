@@ -13,6 +13,10 @@ Programs_WebKitTestRunner_SOURCES = \
 	Tools/WebKitTestRunner/gtk/PlatformWebViewGtk.cpp \
 	Tools/WebKitTestRunner/gtk/TestControllerGtk.cpp \
 	Tools/WebKitTestRunner/cairo/TestInvocationCairo.cpp \
+	Tools/WebKitTestRunner/CyclicRedundancyCheck.cpp \
+	Tools/WebKitTestRunner/CyclicRedundancyCheck.h \
+	Tools/WebKitTestRunner/PixelDumpSupport.cpp \
+	Tools/WebKitTestRunner/PixelDumpSupport.h \
 	Tools/WebKitTestRunner/PlatformWebView.h \
 	Tools/WebKitTestRunner/StringFunctions.h \
 	Tools/WebKitTestRunner/TestController.cpp \
@@ -55,7 +59,8 @@ noinst_LTLIBRARIES += Libraries/libTestRunnerInjectedBundle.la
 webkittestrunner_built_sources += \
 	DerivedSources/InjectedBundle/JSEventSendingController.cpp \
 	DerivedSources/InjectedBundle/JSGCController.cpp \
-	DerivedSources/InjectedBundle/JSLayoutTestController.cpp
+	DerivedSources/InjectedBundle/JSLayoutTestController.cpp \
+	DerivedSources/InjectedBundle/JSTextInputController.cpp
 nodist_Libraries_libTestRunnerInjectedBundle_la_SOURCES = $(webkittestrunner_built_sources)
 BUILT_SOURCES += $(webkittestrunner_built_sources)
 
@@ -77,7 +82,8 @@ Libraries_libTestRunnerInjectedBundle_la_SOURCES = \
 	Tools/WebKitTestRunner/InjectedBundle/InjectedBundlePage.cpp \
 	Tools/WebKitTestRunner/InjectedBundle/InjectedBundlePage.h \
 	Tools/WebKitTestRunner/InjectedBundle/LayoutTestController.cpp \
-	Tools/WebKitTestRunner/InjectedBundle/LayoutTestController.h
+	Tools/WebKitTestRunner/InjectedBundle/TextInputController.cpp \
+	Tools/WebKitTestRunner/InjectedBundle/TextInputController.h
 
 Libraries_libTestRunnerInjectedBundle_la_LIBADD = \
 	libWebCoreInternals.la

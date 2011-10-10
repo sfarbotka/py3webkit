@@ -159,12 +159,18 @@ enum EFillSizeType { Contain, Cover, SizeLength, SizeNone };
 enum EMarqueeBehavior { MNONE, MSCROLL, MSLIDE, MALTERNATE };
 enum EMarqueeDirection { MAUTO = 0, MLEFT = 1, MRIGHT = -1, MUP = 2, MDOWN = -2, MFORWARD = 3, MBACKWARD = -3 };
 
-// CSS3 Flexible Box Properties
+// Deprecated Flexible Box Properties
 
 enum EBoxAlignment { BSTRETCH, BSTART, BCENTER, BEND, BJUSTIFY, BBASELINE };
 enum EBoxOrient { HORIZONTAL, VERTICAL };
 enum EBoxLines { SINGLE, MULTIPLE };
 enum EBoxDirection { BNORMAL, BREVERSE };
+
+// CSS3 Flexbox Properties
+
+enum EFlexPack { PackStart, PackEnd, PackCenter, PackJustify };
+enum EFlexAlign { AlignStart, AlignEnd, AlignCenter, AlignStretch, AlignBaseline };
+enum EFlexFlow { FlowRow, FlowRowReverse, FlowColumn, FlowColumnReverse};
 
 enum ETextSecurity {
     TSNONE, TSDISC, TSCIRCLE, TSSQUARE
@@ -396,9 +402,6 @@ enum EDisplay {
     TABLE_HEADER_GROUP, TABLE_FOOTER_GROUP, TABLE_ROW,
     TABLE_COLUMN_GROUP, TABLE_COLUMN, TABLE_CELL,
     TABLE_CAPTION, BOX, INLINE_BOX, 
-#if ENABLE(WCSS)
-    WAP_MARQUEE,
-#endif
 #if ENABLE(CSS3_FLEXBOX)
     FLEXBOX, INLINE_FLEXBOX,
 #endif
@@ -433,6 +436,8 @@ enum TextEmphasisFill { TextEmphasisFillFilled, TextEmphasisFillOpen };
 enum TextEmphasisMark { TextEmphasisMarkNone, TextEmphasisMarkAuto, TextEmphasisMarkDot, TextEmphasisMarkCircle, TextEmphasisMarkDoubleCircle, TextEmphasisMarkTriangle, TextEmphasisMarkSesame, TextEmphasisMarkCustom };
 
 enum TextEmphasisPosition { TextEmphasisPositionOver, TextEmphasisPositionUnder };
+
+enum TextOverflow { TextOverflowClip = 0, TextOverflowEllipsis };
 
 enum EImageRendering { ImageRenderingAuto, ImageRenderingOptimizeSpeed, ImageRenderingOptimizeQuality, ImageRenderingOptimizeContrast };
 

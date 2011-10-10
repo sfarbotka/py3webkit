@@ -32,7 +32,7 @@
 
 vars = {
   'chromium_svn': 'http://src.chromium.org/svn/trunk/src',
-  'chromium_rev': '96244'
+  'chromium_rev': '104381'
 }
 
 deps = {
@@ -42,8 +42,6 @@ deps = {
   # build tools
   'build':
     Var('chromium_svn')+'/build@'+Var('chromium_rev'),
-  'tools/data_pack':
-    Var('chromium_svn')+'/tools/data_pack@'+Var('chromium_rev'),
   'tools/gyp':
     From('chromium_deps', 'src/tools/gyp'),
 
@@ -112,9 +110,13 @@ deps = {
   'third_party/libwebp':
     Var('chromium_svn')+'/third_party/libwebp@'+Var('chromium_rev'),
   'tools/grit':
-    Var('chromium_svn')+'/tools/grit@'+Var('chromium_rev'),
+    From('chromium_deps', 'src/tools/grit'),
+  'tools/gritsettings':
+    Var('chromium_svn')+'/tools/gritsettings@'+Var('chromium_rev'),
   'tools/generate_stubs':
     Var('chromium_svn')+'/tools/generate_stubs@'+Var('chromium_rev'),
+  'tools/win':
+    Var('chromium_svn')+'/tools/win@'+Var('chromium_rev'),
   'ui':
     Var('chromium_svn')+'/ui@'+Var('chromium_rev'), # needed by app
 
@@ -127,12 +129,14 @@ deps = {
     From('chromium_deps', 'src/third_party/yasm/source/patched-yasm'),
   'third_party/libjpeg_turbo':
     From('chromium_deps', 'src/third_party/libjpeg_turbo'),
-  'third_party/leveldb':
-    From('chromium_deps', 'src/third_party/leveldb'),
+  'third_party/leveldatabase/src':
+    From('chromium_deps', 'src/third_party/leveldatabase/src'),
   'third_party/snappy/src':
     From('chromium_deps', 'src/third_party/snappy/src'),
   'third_party/sfntly/src/sfntly':
     From('chromium_deps', 'src/third_party/sfntly/src/sfntly'),
+  'third_party/v8-i18n':
+    From('chromium_deps', 'src/third_party/v8-i18n'),
   'third_party':
     Var('chromium_svn')+'/third_party@'+Var('chromium_rev'),
 }

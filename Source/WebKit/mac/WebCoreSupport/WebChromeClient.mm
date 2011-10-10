@@ -88,18 +88,18 @@
 NSString *WebConsoleMessageHTMLMessageSource = @"HTMLMessageSource";
 NSString *WebConsoleMessageXMLMessageSource = @"XMLMessageSource";
 NSString *WebConsoleMessageJSMessageSource = @"JSMessageSource";
-NSString *WebConsoleMessageCSSMessageSource = @"CSSMessageSource";
+NSString *WebConsoleMessageNetworkMessageSource = @"NetworkMessageSource";
+NSString *WebConsoleMessageConsoleAPIMessageSource = @"ConsoleAPIMessageSource";
 NSString *WebConsoleMessageOtherMessageSource = @"OtherMessageSource";
 
 NSString *WebConsoleMessageLogMessageType = @"LogMessageType";
-NSString *WebConsoleMessageObjectMessageType = @"ObjectMessageType";
+NSString *WebConsoleMessageDirMessageType = @"DirMessageType";
+NSString *WebConsoleMessageDirXMLMessageType = @"DirXMLMessageType";
 NSString *WebConsoleMessageTraceMessageType = @"TraceMessageType";
 NSString *WebConsoleMessageStartGroupMessageType = @"StartGroupMessageType";
 NSString *WebConsoleMessageStartGroupCollapsedMessageType = @"StartGroupCollapsedMessageType";
 NSString *WebConsoleMessageEndGroupMessageType = @"EndGroupMessageType";
 NSString *WebConsoleMessageAssertMessageType = @"AssertMessageType";
-NSString *WebConsoleMessageUncaughtExceptionMessageType = @"UncaughtExceptionMessageType";
-NSString *WebConsoleMessageNetworkErrorMessageType = @"NetworkErrorMessageType";
 
 NSString *WebConsoleMessageTipMessageLevel = @"TipMessageLevel";
 NSString *WebConsoleMessageLogMessageLevel = @"LogMessageLevel";
@@ -174,20 +174,6 @@ FloatRect WebChromeClient::windowRect()
 FloatRect WebChromeClient::pageRect()
 {
     return [m_webView frame];
-}
-
-float WebChromeClient::scaleFactor()
-{
-    NSWindow *window = [m_webView window];
-#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
-    if (window)
-        return [window backingScaleFactor];
-    return [[NSScreen mainScreen] backingScaleFactor];
-#else
-    if (window)
-        return [window userSpaceScaleFactor];
-    return [[NSScreen mainScreen] userSpaceScaleFactor];
-#endif
 }
 
 void WebChromeClient::focus()
@@ -371,8 +357,10 @@ inline static NSString *stringForMessageSource(MessageSource source)
         return WebConsoleMessageXMLMessageSource;
     case JSMessageSource:
         return WebConsoleMessageJSMessageSource;
-    case CSSMessageSource:
-        return WebConsoleMessageCSSMessageSource;
+    case NetworkMessageSource:
+        return WebConsoleMessageNetworkMessageSource;
+    case ConsoleAPIMessageSource:
+        return WebConsoleMessageConsoleAPIMessageSource;
     case OtherMessageSource:
         return WebConsoleMessageOtherMessageSource;
     }
@@ -385,8 +373,10 @@ inline static NSString *stringForMessageType(MessageType type)
     switch (type) {
     case LogMessageType:
         return WebConsoleMessageLogMessageType;
-    case ObjectMessageType:
-        return WebConsoleMessageObjectMessageType;
+    case DirMessageType:
+        return WebConsoleMessageDirMessageType;
+    case DirXMLMessageType:
+        return WebConsoleMessageDirXMLMessageType;
     case TraceMessageType:
         return WebConsoleMessageTraceMessageType;
     case StartGroupMessageType:
@@ -397,10 +387,6 @@ inline static NSString *stringForMessageType(MessageType type)
         return WebConsoleMessageEndGroupMessageType;
     case AssertMessageType:
         return WebConsoleMessageAssertMessageType;
-    case UncaughtExceptionMessageType:
-        return WebConsoleMessageUncaughtExceptionMessageType;
-    case NetworkErrorMessageType:
-        return WebConsoleMessageNetworkErrorMessageType;
     }
     ASSERT_NOT_REACHED();
     return @"";
@@ -557,10 +543,7 @@ void WebChromeClient::setStatusbarText(const String& status)
 
 IntRect WebChromeClient::windowResizerRect() const
 {
-    NSRect rect = [[m_webView window] _growBoxRect];
-    if ([m_webView _usesDocumentViews])
-        return enclosingIntRect(rect);
-    return enclosingIntRect([m_webView convertRect:rect fromView:nil]);
+    return enclosingIntRect([[m_webView window] _growBoxRect]);
 }
 
 void WebChromeClient::invalidateWindow(const IntRect&, bool immediate)
@@ -573,15 +556,6 @@ void WebChromeClient::invalidateWindow(const IntRect&, bool immediate)
 
 void WebChromeClient::invalidateContentsAndWindow(const IntRect& rect, bool immediate)
 {
-    if ([m_webView _usesDocumentViews])
-        return;
-
-    [m_webView setNeedsDisplayInRect:rect];
-
-    if (immediate) {
-        [[m_webView window] displayIfNeeded];
-        [[m_webView window] flushWindowIfNeeded];
-    }
 }
 
 void WebChromeClient::invalidateContentsForSlowScroll(const IntRect& rect, bool immediate)
@@ -595,39 +569,28 @@ void WebChromeClient::scroll(const IntSize&, const IntRect&, const IntRect&)
 
 IntPoint WebChromeClient::screenToWindow(const IntPoint& p) const
 {
-    if ([m_webView _usesDocumentViews])
-        return p;
-    NSPoint windowCoord = [[m_webView window] convertScreenToBase:p];
-    return IntPoint([m_webView convertPoint:windowCoord fromView:nil]);
+    return p;
 }
 
 IntRect WebChromeClient::windowToScreen(const IntRect& r) const
 {
-    if ([m_webView _usesDocumentViews])
-        return r;
-    NSRect tempRect = r;
-    tempRect = [m_webView convertRect:tempRect toView:nil];
-    tempRect.origin = [[m_webView window] convertBaseToScreen:tempRect.origin];
-    return enclosingIntRect(tempRect);
+    return r;
 }
 
 PlatformPageClient WebChromeClient::platformPageClient() const
 {
-    if ([m_webView _usesDocumentViews])
-        return 0;
-    return m_webView;
+    return 0;
 }
 
 void WebChromeClient::contentsSizeChanged(Frame*, const IntSize&) const
 {
 }
 
-void WebChromeClient::scrollRectIntoView(const IntRect& r, const ScrollView*) const
+void WebChromeClient::scrollRectIntoView(const IntRect& r) const
 {
     // FIXME: This scrolling behavior should be under the control of the embedding client,
     // perhaps in a delegate method, rather than something WebKit does unconditionally.
-    NSView *coordinateView = [m_webView _usesDocumentViews]
-        ? (NSView *)[[[m_webView mainFrame] frameView] documentView] : m_webView;
+    NSView *coordinateView = [[[m_webView mainFrame] frameView] documentView];
     NSRect rect = r;
     for (NSView *view = m_webView; view; view = [view superview]) {
         if ([view isKindOfClass:[NSClipView class]]) {
@@ -659,7 +622,9 @@ void WebChromeClient::mouseDidMoveOverElement(const HitTestResult& result, unsig
 
 void WebChromeClient::setToolTip(const String& toolTip, TextDirection)
 {
-    [m_webView _setToolTip:toolTip];
+    NSView<WebDocumentView> *documentView = [[[m_webView _selectedOrMainFrame] frameView] documentView];
+    if ([documentView isKindOfClass:[WebHTMLView class]])
+        [(WebHTMLView *)documentView _setToolTip:toolTip];
 }
 
 void WebChromeClient::print(Frame* frame)
@@ -667,11 +632,11 @@ void WebChromeClient::print(Frame* frame)
     WebFrame *webFrame = kit(frame);
     if ([[m_webView UIDelegate] respondsToSelector:@selector(webView:printFrame:)])
         CallUIDelegate(m_webView, @selector(webView:printFrame:), webFrame);
-    else if ([m_webView _usesDocumentViews])
+    else
         CallUIDelegate(m_webView, @selector(webView:printFrameView:), [webFrame frameView]);
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 
 void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& databaseName)
 {
@@ -691,8 +656,6 @@ void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& database
 
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
-
 void WebChromeClient::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     // FIXME: Free some space.
@@ -709,8 +672,6 @@ void WebChromeClient::reachedApplicationCacheOriginQuota(SecurityOrigin* origin,
     END_BLOCK_OBJC_EXCEPTIONS;
 }
 
-#endif
-    
 void WebChromeClient::populateVisitedLinks()
 {
     if ([m_webView historyDelegate]) {
@@ -779,8 +740,10 @@ void WebChromeClient::runOpenPanel(Frame*, PassRefPtr<FileChooser> chooser)
     id delegate = [m_webView UIDelegate];
     if ([delegate respondsToSelector:@selector(webView:runOpenPanelForFileButtonWithResultListener:allowMultipleFiles:)])
         CallUIDelegate(m_webView, @selector(webView:runOpenPanelForFileButtonWithResultListener:allowMultipleFiles:), listener, allowMultipleFiles);
-    else
+    else if ([delegate respondsToSelector:@selector(webView:runOpenPanelForFileButtonWithResultListener:)])
         CallUIDelegate(m_webView, @selector(webView:runOpenPanelForFileButtonWithResultListener:), listener);
+    else
+        [listener cancel];
     [listener release];
     END_BLOCK_OBJC_EXCEPTIONS;
 }

@@ -63,7 +63,7 @@
 #include <gtk/gtk.h>
 #include <wtf/text/CString.h>
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 #include "DatabaseTracker.h"
 #endif
 
@@ -135,12 +135,6 @@ FloatRect ChromeClient::pageRect()
     allocation = GTK_WIDGET(m_webView)->allocation;
 #endif
     return IntRect(allocation.x, allocation.y, allocation.width, allocation.height);
-}
-
-float ChromeClient::scaleFactor()
-{
-    // Not implementable
-    return 1.0;
 }
 
 void ChromeClient::focus()
@@ -582,7 +576,7 @@ void ChromeClient::print(Frame* frame)
     webkit_web_frame_print(webFrame);
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void ChromeClient::exceededDatabaseQuota(Frame* frame, const String& databaseName)
 {
     guint64 defaultQuota = webkit_get_default_web_database_quota();
@@ -595,7 +589,6 @@ void ChromeClient::exceededDatabaseQuota(Frame* frame, const String& databaseNam
 }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClient::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     // FIXME: Free some space.
@@ -606,7 +599,6 @@ void ChromeClient::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_t)
 {
     notImplemented();
 }
-#endif
 
 void ChromeClient::runOpenPanel(Frame*, PassRefPtr<FileChooser> prpFileChooser)
 {

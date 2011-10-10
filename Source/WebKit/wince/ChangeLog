@@ -1,3 +1,114 @@
+2011-10-07  Patrick Gansterer  <paroga@webkit.org>
+
+        Unreviewed build fix after r95604.
+
+        * WebCoreSupport/PlatformStrategiesWinCE.cpp:
+        (PlatformStrategiesWinCE::isLinkVisited):
+        (PlatformStrategiesWinCE::addVisitedLink):
+
+2011-09-24  Adam Barth  <abarth@webkit.org>
+
+        Always enable ENABLE(OFFLINE_WEB_APPLICATIONS)
+        https://bugs.webkit.org/show_bug.cgi?id=68767
+
+        Reviewed by Eric Seidel.
+
+        * WebCoreSupport/ChromeClientWinCE.cpp:
+        (WebKit::ChromeClientWinCE::reachedApplicationCacheOriginQuota):
+        * WebCoreSupport/ChromeClientWinCE.h:
+
+2011-09-21  Andras Becsi  <andras.becsi@nokia.com>
+
+        [Qt] Remove Qt specific code from css/SelectorChecker.cpp
+        https://bugs.webkit.org/show_bug.cgi?id=67702
+
+        Reviewed by Csaba Osztrogonác.
+
+        * WebCoreSupport/PlatformStrategiesWinCE.cpp:
+        (PlatformStrategiesWinCE::addVisitedLink):
+        * WebCoreSupport/PlatformStrategiesWinCE.h:
+
+2011-09-17  Mihai Parparita  <mihaip@chromium.org>
+
+        FrameLoaderClient BackForwardList-related methods are unsued
+        https://bugs.webkit.org/show_bug.cgi?id=68293
+
+        Reviewed by Darin Adler.
+
+        Remove FrameLoaderClient methods that were added by r51629, since only        
+        the old (since-deleted) Android port needed them.
+
+        * WebCoreSupport/FrameLoaderClientWinCE.cpp:
+        * WebCoreSupport/FrameLoaderClientWinCE.h:
+
+2011-09-15  Adam Barth  <abarth@webkit.org>
+
+        Rename ENABLE(DATABASE) to ENABLE(SQL_DATABASE)
+        https://bugs.webkit.org/show_bug.cgi?id=68205
+
+        Reviewed by Eric Seidel.
+
+        * WebCoreSupport/ChromeClientWinCE.cpp:
+        * WebCoreSupport/ChromeClientWinCE.h:
+
+2011-08-30  Ryosuke Niwa  <rniwa@webkit.org>
+
+        WinCE build fix attempt after r94080.
+
+        * WebCoreSupport/ChromeClientWinCE.cpp:
+        (WebKit::ChromeClientWinCE::scrollRectIntoView):
+
+2011-08-30  Kaustubh Atrawalkar  <kaustubh@motorola.com>
+
+        The unused ScrollView* argument can and should be removed from
+        scrollRectIntoView.
+        https://bugs.webkit.org/show_bug.cgi?id=67117
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/ChromeClientWinCE.h:
+
+2011-08-17  Adam Roben  <aroben@apple.com>
+
+        Make WebCore keep track of the current device scale factor
+
+        Fixes <http://webkit.org/b/66413> WebCore requires every WebKit port to keep track of the
+        device scale factor
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/ChromeClientWinCE.cpp:
+        * WebCoreSupport/ChromeClientWinCE.h:
+        Removed deviceScaleFactor.
+
+2011-08-15  Dmitry Titov  <dimich@chromium.org>
+
+        FrameLoaderClient::transferLoadingResourceFromPage does not have enough parameters
+        https://bugs.webkit.org/show_bug.cgi?id=66165
+
+        Reviewed by Darin Fisher.
+
+        * WebCoreSupport/FrameLoaderClientWinCE.cpp:
+        (WebKit::FrameLoaderClientWinCE::transferLoadingResourceFromPage):
+        * WebCoreSupport/FrameLoaderClientWinCE.h:
+
+2011-08-10  Adam Roben  <aroben@apple.com>
+
+        Clear up scale factor terminology
+
+        WebKit by and large deals with two scale factors: one intrinsic to the device on which the
+        software is running, and one that is per-Page and can be controlled via API calls. This
+        patch names the former "deviceScaleFactor" and the latter "pageScaleFactor", and makes the
+        code use those names. It should introduce no behavior changes.
+
+        Fixes <http://webkit.org/b/55787> WebKit uses multiple conflicting names to refer to the
+        device scale factor
+
+        Reviewed by Simon Fraser.
+
+        * WebCoreSupport/ChromeClientWinCE.cpp:
+        * WebCoreSupport/ChromeClientWinCE.h:
+
 2011-08-03  Pavel Feldman  <pfeldman@chromium.org>
 
         Web Inspector: remove Node parameter from the InspectorClient::highlight

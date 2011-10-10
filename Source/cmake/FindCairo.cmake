@@ -11,7 +11,12 @@ include(LibFindMacros)
 libfind_package(Cairo Freetype)
 
 # Use pkg-config to get hints about paths
-libfind_pkg_check_modules(Cairo_PKGCONF cairo)
+set (Module cairo)
+if (Cairo_FIND_VERSION)
+  set (Module "${Module}>=${Cairo_FIND_VERSION}")
+endif ()
+
+libfind_pkg_check_modules(Cairo_PKGCONF ${Module})
 
 # Include dir
 find_path(Cairo_INCLUDE_DIR
@@ -27,7 +32,7 @@ find_library(Cairo_LIBRARY
 
 # Set the include dir variables and the libraries and let libfind_process do the rest.
 # NOTE: Singular variables for this library, plural for libraries this this lib depends on.
-set(Cairo_PROCESS_INCLUDES Cairo_INCLUDE_DIR Freetype_INCLUDE_DIRS)
-set(Cairo_PROCESS_LIBS Cairo_LIBRARY Freetype_LIBRARIES)
+set(Cairo_PROCESS_INCLUDES Cairo_INCLUDE_DIR FREETYPE_INCLUDE_DIRS)
+set(Cairo_PROCESS_LIBS Cairo_LIBRARY FREETYPE_LIBRARIES)
 libfind_process(Cairo)
 

@@ -1577,7 +1577,7 @@ def check_function_definition_and_pass_ptr(type_text, row, location_description,
     """
     match_ref_or_own_ptr = '(?=\W|^)(Ref|Own)Ptr(?=\W)'
     bad_type_usage = search(match_ref_or_own_ptr, type_text)
-    if not bad_type_usage:
+    if not bad_type_usage or type_text.endswith('&'):
         return
     type_name = bad_type_usage.group(0)
     error(row, 'readability/pass_ptr', 5,
@@ -2381,6 +2381,18 @@ def check_for_null(clean_lines, line_number, file_state, error):
     if search(r'\bgst_\w+_many\b', line):
         return
 
+    # Don't warn about NULL usage in some gst_structure_*(). See Bug 67194.
+    if search(r'\bgst_structure_[sg]et\b', line):
+        return
+    if search(r'\bgst_structure_remove_fields\b', line):
+        return
+    if search(r'\bgst_structure_new\b', line):
+        return
+    if search(r'\bgst_structure_id_new\b', line):
+        return
+    if search(r'\bgst_structure_id_[sg]et\b', line):
+        return
+
     # Don't warn about NULL usage in g_str{join,concat}(). See Bug 34834
     if search(r'\bg_str(join|concat)\b', line):
         return
@@ -3044,6 +3056,7 @@ def check_identifier_name_in_declaration(filename, line_number, line, file_state
         if not file_state.is_objective_c() and modified_identifier.find('_') >= 0:
             # Various exceptions to the rule: JavaScript op codes functions, const_iterator.
             if (not (filename.find('JavaScriptCore') >= 0 and modified_identifier.find('op_') >= 0)
+                and not (filename.find('gtk') >= 0 and modified_identifier.startswith('webkit_') >= 0)
                 and not modified_identifier.startswith('tst_')
                 and not modified_identifier.startswith('webkit_dom_object_')
                 and not modified_identifier.startswith('NPN_')
@@ -3390,6 +3403,8 @@ def process_line(filename, file_extension,
     detect_functions(clean_lines, line, function_state, error)
     check_for_function_lengths(clean_lines, line, function_state, error)
     if search(r'\bNOLINT\b', raw_lines[line]):  # ignore nolint lines
+        return
+    if match(r'\s*\b__asm\b', raw_lines[line]):  # Ignore asm lines as they format differently.
         return
     check_function_definition(filename, file_extension, clean_lines, line, function_state, error)
     check_pass_ptr_usage(clean_lines, line, function_state, error)

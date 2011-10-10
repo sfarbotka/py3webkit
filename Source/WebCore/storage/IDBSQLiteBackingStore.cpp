@@ -169,7 +169,7 @@ PassRefPtr<IDBBackingStore> IDBSQLiteBackingStore::open(SecurityOrigin* security
 {
     RefPtr<IDBSQLiteBackingStore> backingStore(adoptRef(new IDBSQLiteBackingStore(fileIdentifier, factory)));
 
-    String path = ":memory:";
+    String path = ":memory:"; // in-memory SQLite database.
     if (!pathBase.isEmpty()) {
         if (!makeAllDirectories(pathBase)) {
             // FIXME: Is there any other thing we could possibly do to recover at this point? If so, do it rather than just erroring out.
@@ -195,6 +195,20 @@ PassRefPtr<IDBBackingStore> IDBSQLiteBackingStore::open(SecurityOrigin* security
         return 0;
 
     return backingStore.release();
+}
+
+void IDBSQLiteBackingStore::getDatabaseNames(Vector<String>& foundNames)
+{
+    ASSERT(foundNames.isEmpty());
+
+    SQLiteStatement query(m_db, "SELECT name FROM Databases");
+    if (query.prepare() != SQLResultOk) {
+        ASSERT_NOT_REACHED();
+        return;
+    }
+
+    while (query.step() == SQLResultRow)
+        foundNames.append(query.getColumnText(0));
 }
 
 bool IDBSQLiteBackingStore::extractIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId)
@@ -293,10 +307,10 @@ static void doDelete(SQLiteDatabase& db, const char* sql, int64_t id)
 
 void IDBSQLiteBackingStore::deleteObjectStore(int64_t, int64_t objectStoreId)
 {
-    doDelete(m_db, "DELETE FROM ObjectStores WHERE id = ?", objectStoreId);
-    doDelete(m_db, "DELETE FROM ObjectStoreData WHERE objectStoreId = ?", objectStoreId);
     doDelete(m_db, "DELETE FROM IndexData WHERE indexId IN (SELECT id FROM Indexes WHERE objectStoreId = ?)", objectStoreId);
     doDelete(m_db, "DELETE FROM Indexes WHERE objectStoreId = ?", objectStoreId);
+    doDelete(m_db, "DELETE FROM ObjectStoreData WHERE objectStoreId = ?", objectStoreId);
+    doDelete(m_db, "DELETE FROM ObjectStores WHERE id = ?", objectStoreId);
 }
 
 namespace {
@@ -998,7 +1012,9 @@ PassRefPtr<IDBBackingStore::Cursor> IDBSQLiteBackingStore::openIndexCursor(int64
 
 bool IDBSQLiteBackingStore::backingStoreExists(SecurityOrigin* securityOrigin, const String& name, const String& pathBase)
 {
-    String path = pathByAppendingComponent(pathBase, securityOrigin->databaseIdentifier() + ".indexeddb");
+    String path = ":memory:"; // in-memory SQLite database.
+    if (!pathBase.isEmpty())
+        path = pathByAppendingComponent(pathBase, securityOrigin->databaseIdentifier() + ".indexeddb");
     SQLiteDatabase db;
     if (!db.open(path))
         return false;

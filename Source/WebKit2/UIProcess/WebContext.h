@@ -27,6 +27,7 @@
 #define WebContext_h
 
 #include "APIObject.h"
+#include "GenericCallback.h"
 #include "PluginInfoStore.h"
 #include "ProcessModel.h"
 #include "VisitedLinkProvider.h"
@@ -55,7 +56,10 @@ class WebMediaCacheManagerProxy;
 class WebPageGroup;
 class WebPageProxy;
 class WebResourceCacheManagerProxy;
+struct StatisticsData;
 struct WebProcessCreationParameters;
+    
+typedef GenericCallback<WKDictionaryRef> DictionaryCallback;
 
 class WebContext : public APIObject {
 public:
@@ -109,6 +113,7 @@ public:
     String applicationCacheDirectory();
 
     void setAlwaysUsesComplexTextCodePath(bool);
+    void setShouldUseFontSmoothing(bool);
     
     void registerURLSchemeAsEmptyDocument(const String&);
     void registerURLSchemeAsSecure(const String&);
@@ -174,7 +179,10 @@ public:
 
     // Defaults to false.
     void setHTTPPipeliningEnabled(bool);
-    bool httpPipeliningEnabled();
+    bool httpPipeliningEnabled() const;
+    
+    void getWebCoreStatistics(PassRefPtr<DictionaryCallback>);
+    void garbageCollectJavaScriptObjects();
 
 private:
     WebContext(ProcessModel, const String& injectedBundlePath);
@@ -197,6 +205,8 @@ private:
     void didGetSitesWithPluginData(const Vector<String>& sites, uint64_t callbackID);
     void didClearPluginSiteData(uint64_t callbackID);
 #endif
+    
+    void didGetWebCoreStatistics(const StatisticsData&, uint64_t callbackID);
         
     // Implemented in generated WebContextMessageReceiver.cpp
     void didReceiveWebContextMessage(CoreIPC::Connection*, CoreIPC::MessageID, CoreIPC::ArgumentDecoder*);
@@ -235,6 +245,7 @@ private:
     HashSet<String> m_schemesToSetDomainRelaxationForbiddenFor;
 
     bool m_alwaysUsesComplexTextCodePath;
+    bool m_shouldUseFontSmoothing;
 
     Vector<pair<String, RefPtr<APIObject> > > m_pendingMessagesToPostToInjectedBundle;
 
@@ -270,6 +281,8 @@ private:
     String m_overrideLocalStorageDirectory;
 
     bool m_processTerminationEnabled;
+    
+    HashMap<uint64_t, RefPtr<DictionaryCallback> > m_dictionaryCallbacks;
 };
 
 template<typename U> inline bool WebContext::sendToAllProcesses(const U& message)

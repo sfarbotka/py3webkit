@@ -363,19 +363,17 @@ WebView *getWebView(WebFrame *webFrame)
 
     Frame* coreFrame = _private->coreFrame;
     for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame)) {
-        if ([webView _usesDocumentViews]) {
-            // Don't call setDrawsBackground:YES here because it may be NO because of a load
-            // in progress; WebFrameLoaderClient keeps it set to NO during the load process.
-            WebFrame *webFrame = kit(frame);
-            if (!drawsBackground)
-                [[[webFrame frameView] _scrollView] setDrawsBackground:NO];
-            [[[webFrame frameView] _scrollView] setBackgroundColor:backgroundColor];
-            id documentView = [[webFrame frameView] documentView];
-            if ([documentView respondsToSelector:@selector(setDrawsBackground:)])
-                [documentView setDrawsBackground:drawsBackground];
-            if ([documentView respondsToSelector:@selector(setBackgroundColor:)])
-                [documentView setBackgroundColor:backgroundColor];
-        }
+        // Don't call setDrawsBackground:YES here because it may be NO because of a load
+        // in progress; WebFrameLoaderClient keeps it set to NO during the load process.
+        WebFrame *webFrame = kit(frame);
+        if (!drawsBackground)
+            [[[webFrame frameView] _scrollView] setDrawsBackground:NO];
+        [[[webFrame frameView] _scrollView] setBackgroundColor:backgroundColor];
+        id documentView = [[webFrame frameView] documentView];
+        if ([documentView respondsToSelector:@selector(setDrawsBackground:)])
+            [documentView setDrawsBackground:drawsBackground];
+        if ([documentView respondsToSelector:@selector(setBackgroundColor:)])
+            [documentView setBackgroundColor:backgroundColor];
 
         if (FrameView* view = frame->view()) {
             view->setTransparent(!drawsBackground);
@@ -415,27 +413,21 @@ WebView *getWebView(WebFrame *webFrame)
 
 - (BOOL)_hasSelection
 {
-    if ([getWebView(self) _usesDocumentViews]) {
-        id documentView = [_private->webFrameView documentView];    
+    id documentView = [_private->webFrameView documentView];    
 
-        // optimization for common case to avoid creating potentially large selection string
-        if ([documentView isKindOfClass:[WebHTMLView class]])
-            if (Frame* coreFrame = _private->coreFrame)
-                return coreFrame->selection()->isRange();
+    // optimization for common case to avoid creating potentially large selection string
+    if ([documentView isKindOfClass:[WebHTMLView class]])
+        if (Frame* coreFrame = _private->coreFrame)
+            return coreFrame->selection()->isRange();
 
-        if ([documentView conformsToProtocol:@protocol(WebDocumentText)])
-            return [[documentView selectedString] length] > 0;
-        
-        return NO;
-    }
-
-    Frame* coreFrame = _private->coreFrame;
-    return coreFrame && coreFrame->selection()->isRange();
+    if ([documentView conformsToProtocol:@protocol(WebDocumentText)])
+        return [[documentView selectedString] length] > 0;
+    
+    return NO;
 }
 
 - (void)_clearSelection
 {
-    ASSERT([getWebView(self) _usesDocumentViews]);
     id documentView = [_private->webFrameView documentView];    
     if ([documentView conformsToProtocol:@protocol(WebDocumentText)])
         [documentView deselectAll];
@@ -545,11 +537,9 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
         return NO;
 
     // If we're drawing into a bitmap, we might be snapshotting, or drawing into a layer-backed view.
-    if ([getWebView(self) _usesDocumentViews]) {
-        id documentView = [_private->webFrameView documentView];
-        if ([documentView isKindOfClass:[WebHTMLView class]] && [(WebHTMLView *)documentView _web_isDrawingIntoLayer])
-            return NO;
-    }
+    id documentView = [_private->webFrameView documentView];
+    if ([documentView isKindOfClass:[WebHTMLView class]] && [(WebHTMLView *)documentView _web_isDrawingIntoLayer])
+        return NO;
 
     return [getWebView(self) _includesFlattenedCompositingLayersWhenDrawingToBitmap];
 }
@@ -608,6 +598,7 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
 - (NSString *)_stringByEvaluatingJavaScriptFromString:(NSString *)string forceUserGesture:(BOOL)forceUserGesture
 {
     ASSERT(_private->coreFrame->document());
+    RetainPtr<WebFrame> protect(self); // Executing arbitrary JavaScript can destroy the frame.
     
     JSValue result = _private->coreFrame->script()->executeScript(string, forceUserGesture).jsValue();
 
@@ -832,7 +823,6 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
     FrameView* view = _private->coreFrame->view();
     if (!view)
         return;
-    ASSERT([getWebView(self) _usesDocumentViews]);
     // FIXME: These are fake modifier keys here, but they should be real ones instead.
     PlatformMouseEvent event(IntPoint(windowLoc), globalPoint(windowLoc, [view->platformWidget() window]),
         LeftButton, MouseEventMoved, 0, false, false, false, false, currentTime());
@@ -1168,15 +1158,12 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
     if (DOMWindow* domWindow = _private->coreFrame->domWindow()) {
         if (domWindow->hasEventListeners(eventNames().unloadEvent))
             [result setObject:[NSNumber numberWithBool:YES] forKey:WebFrameHasUnloadListener];
-            
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         if (domWindow->optionalApplicationCache())
             [result setObject:[NSNumber numberWithBool:YES] forKey:WebFrameUsesApplicationCache];
-#endif
     }
     
     if (Document* document = _private->coreFrame->document()) {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         if (document->hasOpenDatabases())
             [result setObject:[NSNumber numberWithBool:YES] forKey:WebFrameUsesDatabases];
 #endif
@@ -1211,9 +1198,11 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
     // Get the frame frome the global object we've settled on.
     Frame* frame = anyWorldGlobalObject->impl()->frame();
     ASSERT(frame->document());
+    RetainPtr<WebFrame> webFrame(kit(frame)); // Running arbitrary JavaScript can destroy the frame.
+
     JSValue result = frame->script()->executeScriptInWorld(core(world), string, true).jsValue();
 
-    if (!frame) // In case the script removed our frame from the page.
+    if (!webFrame->_private->coreFrame) // In case the script removed our frame from the page.
         return @"";
 
     // This bizarre set of rules matches behavior from WebKit for Safari 2.0.
@@ -1408,7 +1397,6 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
 
 - (WebFrameView *)frameView
 {
-    ASSERT(!getWebView(self) || [getWebView(self) _usesDocumentViews]);
     return _private->webFrameView;
 }
 

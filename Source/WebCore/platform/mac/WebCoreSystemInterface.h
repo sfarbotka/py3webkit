@@ -40,6 +40,7 @@ typedef struct CGImage *CGImageRef;
 typedef struct CGColor *CGColorRef;
 typedef struct CGFont *CGFontRef;
 typedef struct CGColorSpace *CGColorSpaceRef;
+typedef struct CGPattern *CGPatternRef;
 typedef unsigned short CGGlyph;
 typedef struct __CFReadStream * CFReadStreamRef;
 typedef struct __CFRunLoop * CFRunLoopRef;
@@ -133,6 +134,12 @@ extern "C" {
 
 extern void (*wkAdvanceDefaultButtonPulseAnimation)(NSButtonCell *);
 extern BOOL (*wkCGContextGetShouldSmoothFonts)(CGContextRef);
+typedef enum {
+    wkPatternTilingNoDistortion,
+    wkPatternTilingConstantSpacingMinimalDistortion,
+    wkPatternTilingConstantSpacing
+} wkPatternTiling;
+extern CGPatternRef (*wkCGPatternCreateWithImageAndTransform)(CGImageRef, CGAffineTransform, int);
 extern CFReadStreamRef (*wkCreateCustomCFReadStream)(void *(*formCreate)(CFReadStreamRef, void *), 
     void (*formFinalize)(CFReadStreamRef, void *), 
     Boolean (*formOpen)(CFReadStreamRef, CFStreamError *, Boolean *, void *), 
@@ -250,54 +257,7 @@ extern CTTypesetterRef (*wkCreateCTTypesetterWithUniCharProviderAndOptions)(cons
 extern CGContextRef (*wkIOSurfaceContextCreate)(IOSurfaceRef surface, unsigned width, unsigned height, CGColorSpaceRef colorSpace);
 extern CGImageRef (*wkIOSurfaceContextCreateImage)(CGContextRef context);
 
-typedef struct __WKScrollbarPainter *WKScrollbarPainterRef;
-typedef struct __WKScrollbarPainterController *WKScrollbarPainterControllerRef;
-
-extern WKScrollbarPainterRef (*wkMakeScrollbarPainter)(int controlSize, bool isHorizontal);
-extern WKScrollbarPainterRef (*wkMakeScrollbarReplacementPainter)(WKScrollbarPainterRef oldPainter, int newStyle, int controlSize, bool isHorizontal);
-extern void (*wkScrollbarPainterSetDelegate)(WKScrollbarPainterRef, id scrollbarPainterDelegate);
-extern void (*wkScrollbarPainterSetEnabled)(WKScrollbarPainterRef, bool enabled);
-extern void (*wkScrollbarPainterPaint)(WKScrollbarPainterRef, bool enabled, double value, CGFloat proportion, CGRect frameRect);
-extern void (*wkScrollbarPainterForceFlashScrollers)(WKScrollbarPainterControllerRef);
-extern int (*wkScrollbarThickness)(int controlSize);
-extern int (*wkScrollbarMinimumThumbLength)(WKScrollbarPainterRef);
-extern int (*wkScrollbarMinimumTotalLengthNeededForThumb)(WKScrollbarPainterRef);
-extern CGFloat (*wkScrollbarPainterKnobAlpha)(WKScrollbarPainterRef);
-extern void (*wkSetScrollbarPainterKnobAlpha)(WKScrollbarPainterRef, CGFloat);
-extern CGFloat (*wkScrollbarPainterTrackAlpha)(WKScrollbarPainterRef);
-extern void (*wkSetScrollbarPainterTrackAlpha)(WKScrollbarPainterRef, CGFloat);
-extern bool (*wkScrollbarPainterIsHorizontal)(WKScrollbarPainterRef);
-extern CGRect (*wkScrollbarPainterKnobRect)(WKScrollbarPainterRef);
-extern void (*wkScrollbarPainterSetOverlayState)(WKScrollbarPainterRef, int overlayScrollerState);
-
-enum {
-    wkScrollerKnobStyleDefault = 0,
-    wkScrollerKnobStyleDark = 1,
-    wkScrollerKnobStyleLight = 2
-};
-typedef uint32 wkScrollerKnobStyle;
-extern void (*wkSetScrollbarPainterKnobStyle)(WKScrollbarPainterRef, wkScrollerKnobStyle);
-    
-extern WKScrollbarPainterControllerRef (*wkMakeScrollbarPainterController)(id painterControllerDelegate);
-extern void (*wkSetPainterForPainterController)(WKScrollbarPainterControllerRef, WKScrollbarPainterRef, bool isHorizontal);
-extern WKScrollbarPainterRef (*wkVerticalScrollbarPainterForController)(WKScrollbarPainterControllerRef);
-extern WKScrollbarPainterRef (*wkHorizontalScrollbarPainterForController)(WKScrollbarPainterControllerRef);
-extern int (*wkScrollbarPainterControllerStyle)(WKScrollbarPainterControllerRef);
-extern void (*wkSetScrollbarPainterControllerStyle)(WKScrollbarPainterControllerRef, int newStyle);
-extern void (*wkContentAreaScrolled)(WKScrollbarPainterControllerRef);
-extern void (*wkContentAreaWillPaint)(WKScrollbarPainterControllerRef);
-extern void (*wkMouseEnteredContentArea)(WKScrollbarPainterControllerRef);
-extern void (*wkMouseExitedContentArea)(WKScrollbarPainterControllerRef);
-extern void (*wkMouseMovedInContentArea)(WKScrollbarPainterControllerRef);
-extern void (*wkWillStartLiveResize)(WKScrollbarPainterControllerRef);
-extern void (*wkContentAreaResized)(WKScrollbarPainterControllerRef);
-extern void (*wkWillEndLiveResize)(WKScrollbarPainterControllerRef);
-extern void (*wkContentAreaDidShow)(WKScrollbarPainterControllerRef);
-extern void (*wkContentAreaDidHide)(WKScrollbarPainterControllerRef);
-extern void (*wkDidBeginScrollGesture)(WKScrollbarPainterControllerRef);
-extern void (*wkDidEndScrollGesture)(WKScrollbarPainterControllerRef);
-
-extern bool (*wkScrollbarPainterUsesOverlayScrollers)(void);
+extern int (*wkRecommendedScrollerStyle)(void);
 
 extern bool (*wkExecutableWasLinkedOnOrBeforeSnowLeopard)(void);
 

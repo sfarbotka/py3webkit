@@ -32,10 +32,15 @@
 #include <WebKit2/WKContextPrivate.h>
 #include <WebKit2/WKNumber.h>
 #include <WebKit2/WKPageGroup.h>
+#include <WebKit2/WKPagePrivate.h>
 #include <WebKit2/WKPreferencesPrivate.h>
 #include <WebKit2/WKRetainPtr.h>
 #include <cstdio>
 #include <wtf/PassOwnPtr.h>
+
+#if PLATFORM(MAC) || PLATFORM(QT)
+#include "EventSenderProxy.h"
+#endif
 
 namespace WTR {
 
@@ -69,6 +74,9 @@ TestController::TestController(int argc, const char* argv[])
     , m_didPrintWebProcessCrashedMessage(false)
     , m_shouldExitWhenWebProcessCrashes(true)
     , m_beforeUnloadReturnValue(true)
+#if PLATFORM(MAC) || PLATFORM(QT)
+    , m_eventSenderProxy(new EventSenderProxy(this))
+#endif
 {
     initialize(argc, argv);
     controller = this;
@@ -130,7 +138,7 @@ static void closeOtherPage(WKPageRef page, const void* clientInfo)
     delete view;
 }
 
-WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKDictionaryRef, WKEventModifiers, WKEventMouseButton, const void*)
+WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKURLRequestRef, WKDictionaryRef, WKEventModifiers, WKEventMouseButton, const void*)
 {
     PlatformWebView* view = new PlatformWebView(WKPageGetContext(oldPage), WKPageGetPageGroup(oldPage));
     WKPageRef newPage = view->page();
@@ -140,7 +148,7 @@ WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKDictionaryRef, WK
     WKPageUIClient otherPageUIClient = {
         kWKPageUIClientCurrentVersion,
         view,
-        createOtherPage,
+        0, // createNewPage_deprecatedForUseWithV0
         0, // showPage
         closeOtherPage,
         0, // takeFocus
@@ -150,7 +158,7 @@ WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKDictionaryRef, WK
         0, // runJavaScriptConfirm
         0, // runJavaScriptPrompt
         0, // setStatusText
-        0, // mouseDidMoveOverElement
+        0, // mouseDidMoveOverElement_deprecatedForUseWithV0
         0, // missingPluginButtonClicked
         0, // didNotHandleKeyEvent
         0, // didNotHandleWheelEvent
@@ -179,6 +187,8 @@ WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKDictionaryRef, WK
         0, // didCompleteRubberBandForMainFrame
         0, // saveDataToFileInDownloadsFolder
         0, // shouldInterruptJavaScript
+        createOtherPage,
+        0, // mouseDidMoveOverElement
     };
     WKPageSetPageUIClient(newPage, &otherPageUIClient);
 
@@ -201,6 +211,13 @@ const char* TestController::libraryPathForTesting()
 void TestController::initialize(int argc, const char* argv[])
 {
     platformInitialize();
+
+    if (argc < 2) {
+        fputs("Usage: WebKitTestRunner [options] filename [filename2..n]\n", stderr);
+        // FIXME: Refactor option parsing to allow us to print
+        // an auto-generated list of options.
+        exit(1);
+    }
 
     bool printSupportedFeatures = false;
 
@@ -276,14 +293,14 @@ void TestController::initialize(int argc, const char* argv[])
     };
     WKContextSetInjectedBundleClient(m_context.get(), &injectedBundleClient);
 
-    _WKContextSetAdditionalPluginsDirectory(m_context.get(), testPluginDirectory());
+    WKContextSetAdditionalPluginsDirectory(m_context.get(), testPluginDirectory());
 
     m_mainWebView = adoptPtr(new PlatformWebView(m_context.get(), m_pageGroup.get()));
 
     WKPageUIClient pageUIClient = {
         kWKPageUIClientCurrentVersion,
         this,
-        createOtherPage,
+        0, // createNewPage_deprecatedForUseWithV0
         0, // showPage
         0, // close
         0, // takeFocus
@@ -293,7 +310,7 @@ void TestController::initialize(int argc, const char* argv[])
         0, // runJavaScriptConfirm
         0, // runJavaScriptPrompt
         0, // setStatusText
-        0, // mouseDidMoveOverElement
+        0, // mouseDidMoveOverElement_deprecatedForUseWithV0
         0, // missingPluginButtonClicked
         0, // didNotHandleKeyEvent
         0, // didNotHandleWheelEvent
@@ -322,6 +339,8 @@ void TestController::initialize(int argc, const char* argv[])
         0, // didCompleteRubberBandForMainFrame
         0, // saveDataToFileInDownloadsFolder
         0, // shouldInterruptJavaScript
+        createOtherPage,
+        0, // mouseDidMoveOverElement
     };
     WKPageSetPageUIClient(m_mainWebView->page(), &pageUIClient);
 
@@ -372,6 +391,8 @@ bool TestController::resetStateToConsistentValues()
 
     WKContextPostMessageToInjectedBundle(TestController::shared().context(), messageName.get(), resetMessageBody.get());
 
+    WKContextSetShouldUseFontSmoothing(TestController::shared().context(), false);
+
     // FIXME: This function should also ensure that there is only one page open.
 
     // Reset preferences
@@ -407,6 +428,8 @@ bool TestController::resetStateToConsistentValues()
     WKPreferencesSetSerifFontFamily(preferences, serifFontFamily);
 #endif
 
+    // in the case that a test using the chrome input field failed, be sure to clean up for the next test
+    m_mainWebView->removeChromeInputField();
     m_mainWebView->focus();
 
     // Reset main page back to about:blank
@@ -499,6 +522,87 @@ void TestController::didReceiveMessageFromInjectedBundle(WKStringRef messageName
 
 WKRetainPtr<WKTypeRef> TestController::didReceiveSynchronousMessageFromInjectedBundle(WKStringRef messageName, WKTypeRef messageBody)
 {
+#if PLATFORM(MAC) || PLATFORM(QT)
+    if (WKStringIsEqualToUTF8CString(messageName, "EventSender")) {
+        ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
+        WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
+
+        WKRetainPtr<WKStringRef> subMessageKey(AdoptWK, WKStringCreateWithUTF8CString("SubMessage"));
+        WKStringRef subMessageName = static_cast<WKStringRef>(WKDictionaryGetItemForKey(messageBodyDictionary, subMessageKey.get()));
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "KeyDown")) {
+            WKRetainPtr<WKStringRef> keyKey = adoptWK(WKStringCreateWithUTF8CString("Key"));
+            WKStringRef key = static_cast<WKStringRef>(WKDictionaryGetItemForKey(messageBodyDictionary, keyKey.get()));
+
+            WKRetainPtr<WKStringRef> modifiersKey = adoptWK(WKStringCreateWithUTF8CString("Modifiers"));
+            WKEventModifiers modifiers = static_cast<WKEventModifiers>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, modifiersKey.get()))));
+
+            WKRetainPtr<WKStringRef> locationKey = adoptWK(WKStringCreateWithUTF8CString("Location"));
+            unsigned location = static_cast<unsigned>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, locationKey.get()))));
+
+            // Forward to WebProcess
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->keyDown(key, modifiers, location);
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "MouseDown") || WKStringIsEqualToUTF8CString(subMessageName, "MouseUp")) {
+            WKRetainPtr<WKStringRef> buttonKey = adoptWK(WKStringCreateWithUTF8CString("Button"));
+            unsigned button = static_cast<unsigned>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, buttonKey.get()))));
+
+            WKRetainPtr<WKStringRef> modifiersKey = adoptWK(WKStringCreateWithUTF8CString("Modifiers"));
+            WKEventModifiers modifiers = static_cast<WKEventModifiers>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, modifiersKey.get()))));
+
+            // Forward to WebProcess
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            if (WKStringIsEqualToUTF8CString(subMessageName, "MouseDown"))
+                m_eventSenderProxy->mouseDown(button, modifiers);
+            else
+                m_eventSenderProxy->mouseUp(button, modifiers);
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "MouseMoveTo")) {
+            WKRetainPtr<WKStringRef> xKey = adoptWK(WKStringCreateWithUTF8CString("X"));
+            double x = WKDoubleGetValue(static_cast<WKDoubleRef>(WKDictionaryGetItemForKey(messageBodyDictionary, xKey.get())));
+
+            WKRetainPtr<WKStringRef> yKey = adoptWK(WKStringCreateWithUTF8CString("Y"));
+            double y = WKDoubleGetValue(static_cast<WKDoubleRef>(WKDictionaryGetItemForKey(messageBodyDictionary, yKey.get())));
+
+            // Forward to WebProcess
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->mouseMoveTo(x, y);
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "MouseScrollBy")) {
+            WKRetainPtr<WKStringRef> xKey = adoptWK(WKStringCreateWithUTF8CString("X"));
+            double x = WKDoubleGetValue(static_cast<WKDoubleRef>(WKDictionaryGetItemForKey(messageBodyDictionary, xKey.get())));
+
+            WKRetainPtr<WKStringRef> yKey = adoptWK(WKStringCreateWithUTF8CString("Y"));
+            double y = WKDoubleGetValue(static_cast<WKDoubleRef>(WKDictionaryGetItemForKey(messageBodyDictionary, yKey.get())));
+
+            // Forward to WebProcess
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->mouseScrollBy(x, y);
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "LeapForward")) {
+            WKRetainPtr<WKStringRef> timeKey = adoptWK(WKStringCreateWithUTF8CString("TimeInMilliseconds"));
+            unsigned time = static_cast<unsigned>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, timeKey.get()))));
+
+            m_eventSenderProxy->leapForward(time);
+            return 0;
+        }
+
+        ASSERT_NOT_REACHED();
+    }
+#endif
     return m_currentInvocation->didReceiveSynchronousMessageFromInjectedBundle(messageName, messageBody);
 }
 

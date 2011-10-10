@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Apple Inc. All rights reserved.
+ * Portions Copyright (c) 2011 Motorola Mobility, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,8 +39,8 @@
 #include <wtf/RetainPtr.h>
 
 OBJC_CLASS NSWindow;
-OBJC_CLASS WebInspectorProxyObjCAdapter;
-OBJC_CLASS WebInspectorWKView;
+OBJC_CLASS WKWebInspectorProxyObjCAdapter;
+OBJC_CLASS WKWebInspectorWKView;
 #endif
 
 #if PLATFORM(WIN)
@@ -82,6 +83,8 @@ public:
     
 #if PLATFORM(MAC)
     void inspectedViewFrameDidChange();
+#elif PLATFORM(GTK)
+    void windowDestroyed();
 #endif
 
     void showConsole();
@@ -125,6 +128,7 @@ private:
 
     // Implemented the platform WebInspectorProxy file
     String inspectorPageURL() const;
+    String inspectorBaseURL() const;
 
     // Called by WebInspectorProxy messages
     void createInspectorPage(uint64_t& inspectorPageID, WebPageCreationParameters&);
@@ -168,12 +172,15 @@ private:
     bool m_isProfilingPage;
 
 #if PLATFORM(MAC)
-    RetainPtr<WebInspectorWKView> m_inspectorView;
+    RetainPtr<WKWebInspectorWKView> m_inspectorView;
     RetainPtr<NSWindow> m_inspectorWindow;
-    RetainPtr<WebInspectorProxyObjCAdapter> m_inspectorProxyObjCAdapter;
+    RetainPtr<WKWebInspectorProxyObjCAdapter> m_inspectorProxyObjCAdapter;
 #elif PLATFORM(WIN)
     HWND m_inspectorWindow;
     RefPtr<WebView> m_inspectorView;
+#elif PLATFORM(GTK)
+    GtkWidget* m_inspectorView;
+    GtkWidget* m_inspectorWindow;
 #endif
 };
 

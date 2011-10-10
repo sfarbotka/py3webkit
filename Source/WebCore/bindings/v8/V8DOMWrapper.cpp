@@ -422,15 +422,11 @@ v8::Handle<v8::Value> V8DOMWrapper::convertEventTargetToV8Object(EventTarget* ta
         return wrapper;
     }
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     if (DOMApplicationCache* domAppCache = target->toDOMApplicationCache())
         return toV8(domAppCache);
-#endif
 
-#if ENABLE(EVENTSOURCE)
     if (EventSource* eventSource = target->toEventSource())
         return toV8(eventSource);
-#endif
 
 #if ENABLE(BLOB)
     if (FileReader* fileReader = target->toFileReader())

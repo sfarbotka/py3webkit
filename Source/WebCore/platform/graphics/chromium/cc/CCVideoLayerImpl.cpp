@@ -32,7 +32,7 @@
 #include "GraphicsContext3D.h"
 #include "LayerRendererChromium.h"
 #include "NotImplemented.h"
-#include "VideoLayerChromium.h"
+#include "cc/CCProxy.h"
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
@@ -69,30 +69,28 @@ CCVideoLayerImpl::~CCVideoLayerImpl()
     cleanupResources();
 }
 
-void CCVideoLayerImpl::setTexture(size_t i, VideoLayerChromium::Texture texture)
+void CCVideoLayerImpl::setTexture(size_t index, Platform3DObject textureId, const IntSize& size, const IntSize& visibleSize)
 {
-    ASSERT(i < 3);
-    m_textures[i] = texture;
+    ASSERT(index < 3);
+    m_textures[index].id = textureId;
+    m_textures[index].size = size;
+    m_textures[index].visibleSize = visibleSize;
 }
 
-void CCVideoLayerImpl::draw()
+void CCVideoLayerImpl::draw(LayerRendererChromium* layerRenderer)
 {
+    ASSERT(CCProxy::isImplThread());
+
     if (m_skipsDraw)
         return;
-
-    ASSERT(layerRenderer());
-    const RGBAProgram* rgbaProgram = layerRenderer()->videoLayerRGBAProgram();
-    ASSERT(rgbaProgram && rgbaProgram->initialized());
-    const YUVProgram* yuvProgram = layerRenderer()->videoLayerYUVProgram();
-    ASSERT(yuvProgram && yuvProgram->initialized());
 
     switch (m_frameFormat) {
     case VideoFrameChromium::YV12:
     case VideoFrameChromium::YV16:
-        drawYUV(yuvProgram);
+        drawYUV(layerRenderer);
         break;
     case VideoFrameChromium::RGBA:
-        drawRGBA(rgbaProgram);
+        drawRGBA(layerRenderer);
         break;
     default:
         // FIXME: Implement other paths.
@@ -101,12 +99,15 @@ void CCVideoLayerImpl::draw()
     }
 }
 
-void CCVideoLayerImpl::drawYUV(const CCVideoLayerImpl::YUVProgram* program) const
+void CCVideoLayerImpl::drawYUV(LayerRendererChromium* layerRenderer) const
 {
-    GraphicsContext3D* context = layerRenderer()->context();
-    VideoLayerChromium::Texture yTexture = m_textures[VideoFrameChromium::yPlane];
-    VideoLayerChromium::Texture uTexture = m_textures[VideoFrameChromium::uPlane];
-    VideoLayerChromium::Texture vTexture = m_textures[VideoFrameChromium::vPlane];
+    const YUVProgram* program = layerRenderer->videoLayerYUVProgram();
+    ASSERT(program && program->initialized());
+
+    GraphicsContext3D* context = layerRenderer->context();
+    CCVideoLayerImpl::Texture yTexture = m_textures[VideoFrameChromium::yPlane];
+    CCVideoLayerImpl::Texture uTexture = m_textures[VideoFrameChromium::uPlane];
+    CCVideoLayerImpl::Texture vTexture = m_textures[VideoFrameChromium::vPlane];
 
     GLC(context, context->activeTexture(GraphicsContext3D::TEXTURE1));
     GLC(context, context->bindTexture(GraphicsContext3D::TEXTURE_2D, yTexture.id));
@@ -130,19 +131,22 @@ void CCVideoLayerImpl::drawYUV(const CCVideoLayerImpl::YUVProgram* program) cons
     GLC(context, context->uniformMatrix3fv(program->fragmentShader().ccMatrixLocation(), 0, const_cast<float*>(yuv2RGB), 1));
     GLC(context, context->uniform3fv(program->fragmentShader().yuvAdjLocation(), const_cast<float*>(yuvAdjust), 1));
 
-    LayerChromium::drawTexturedQuad(context, layerRenderer()->projectionMatrix(), drawTransform(),
-                                    bounds().width(), bounds().height(), drawOpacity(),
+    layerRenderer->drawTexturedQuad(drawTransform(), bounds().width(), bounds().height(), drawOpacity(), FloatQuad(),
                                     program->vertexShader().matrixLocation(),
-                                    program->fragmentShader().alphaLocation());
+                                    program->fragmentShader().alphaLocation(),
+                                    -1);
 
     // Reset active texture back to texture 0.
     GLC(context, context->activeTexture(GraphicsContext3D::TEXTURE0));
 }
 
-void CCVideoLayerImpl::drawRGBA(const CCVideoLayerImpl::RGBAProgram* program) const
+void CCVideoLayerImpl::drawRGBA(LayerRendererChromium* layerRenderer) const
 {
-    GraphicsContext3D* context = layerRenderer()->context();
-    VideoLayerChromium::Texture texture = m_textures[VideoFrameChromium::rgbPlane];
+    const RGBAProgram* program = layerRenderer->videoLayerRGBAProgram();
+    ASSERT(program && program->initialized());
+
+    GraphicsContext3D* context = layerRenderer->context();
+    CCVideoLayerImpl::Texture texture = m_textures[VideoFrameChromium::rgbPlane];
 
     GLC(context, context->activeTexture(GraphicsContext3D::TEXTURE0));
     GLC(context, context->bindTexture(GraphicsContext3D::TEXTURE_2D, texture.id));
@@ -153,10 +157,10 @@ void CCVideoLayerImpl::drawRGBA(const CCVideoLayerImpl::RGBAProgram* program) co
 
     GLC(context, context->uniform1i(program->fragmentShader().samplerLocation(), 0));
 
-    LayerChromium::drawTexturedQuad(context, layerRenderer()->projectionMatrix(), drawTransform(),
-                                    bounds().width(), bounds().height(), drawOpacity(),
+    layerRenderer->drawTexturedQuad(drawTransform(), bounds().width(), bounds().height(), drawOpacity(), layerRenderer->sharedGeometryQuad(),
                                     program->vertexShader().matrixLocation(),
-                                    program->fragmentShader().alphaLocation());
+                                    program->fragmentShader().alphaLocation(),
+                                    -1);
 }
 
 

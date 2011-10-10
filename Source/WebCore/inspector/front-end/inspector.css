@@ -7,13 +7,13 @@
  * are met:
  *
  * 1.  Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer. 
+ *     notice, this list of conditions and the following disclaimer.
  * 2.  Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution. 
+ *     documentation and/or other materials provided with the distribution.
  * 3.  Neither the name of Apple Computer, Inc. ("Apple") nor the names of
  *     its contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission. 
+ *     from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -566,7 +566,7 @@ body.port-qt #dock-status-bar-item {
     vertical-align: -1px;
     margin-right: 2px;
 }
-    
+
 #error-count + #warning-count {
     margin-left: 6px;
 }
@@ -625,13 +625,22 @@ body.platform-linux .monospace, body.platform-linux .source-code {
     font-family: dejavu sans mono, monospace;
 }
 
+#console-view {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    overflow-y: auto;
+}
+
 #console-messages {
     position: absolute;
     z-index: 0;
     top: 0;
     left: 0;
     right: 0;
-    bottom: 23px;
+    bottom: 0;
     padding: 2px 0;
     overflow-y: overlay;
     word-wrap: break-word;
@@ -639,11 +648,15 @@ body.platform-linux .monospace, body.platform-linux .source-code {
     -webkit-text-size-adjust: auto;
 }
 
+#drawer #console-messages {
+    bottom: 23px;
+}
+
 #console-prompt {
     position: relative;
     padding: 1px 22px 1px 0px;
     margin-left: 24px;
-    min-height: 16px; 
+    min-height: 16px;
     white-space: pre-wrap;
     -webkit-user-modify: read-write-plaintext-only;
 }
@@ -1519,7 +1532,7 @@ body.inactive .placard.selected {
 .event-bars .event-bar .header .title {
     font-weight: normal;
     color: black;
-    text-shadow: white 0 1px 0; 
+    text-shadow: white 0 1px 0;
 }
 
 .event-bars .event-bar .header .subtitle {
@@ -1594,7 +1607,7 @@ li.editing .swatch, li.editing .enabled-button,  li.editing-sub-part .delete-but
 }
 
 .watch-expressions > li.editing-sub-part .name {
-    display: block; 
+    display: block;
     width: 100%;
 }
 
@@ -1856,17 +1869,11 @@ body.platform-windows .sidebar-pane-subtitle {
 
 .metrics .label {
     position: absolute;
-    margin-top: -10px;
-    font-size: 9px;
-    color: grey;
-    background-color: white;
+    font-size: 10px;
+    color: black;
     margin-left: 3px;
     padding-left: 2px;
     padding-right: 2px;
-}
-
-.metrics .hovered > .label {
-    border: 1px solid black;
 }
 
 .metrics .position {
@@ -1888,10 +1895,6 @@ body.platform-windows .sidebar-pane-subtitle {
     margin: 3px;
 }
 
-.metrics .margin.hovered {
-    background-color: rgb(139, 182, 221);
-}
-
 .metrics .border {
     border: 1px black solid;
     background-color: white;
@@ -1902,10 +1905,6 @@ body.platform-windows .sidebar-pane-subtitle {
     margin: 3px;
 }
 
-.metrics .border.hovered {
-    background-color: rgb(157, 193, 226);
-}
-
 .metrics .padding {
     border: 1px grey dashed;
     background-color: white;
@@ -1914,10 +1913,6 @@ body.platform-windows .sidebar-pane-subtitle {
     vertical-align: middle;
     padding: 3px;
     margin: 3px;
-}
-
-.metrics .padding.hovered {
-    background-color: rgb(173, 204, 231);
 }
 
 .metrics .content {
@@ -1932,10 +1927,6 @@ body.platform-windows .sidebar-pane-subtitle {
     min-width: 80px;
     text-align: center;
     overflow: visible;
-}
-
-.metrics .content.hovered {
-    background-color: rgb(190, 214, 236);
 }
 
 .metrics .content span {
@@ -2153,7 +2144,7 @@ li.selected .base-storage-tree-element-subtitle {
 .database-query-prompt {
     position: relative;
     padding: 1px 22px 1px 24px;
-    min-height: 16px; 
+    min-height: 16px;
     white-space: pre-wrap;
     -webkit-user-modify: read-write-plaintext-only;
     -webkit-user-select: text;
@@ -2179,7 +2170,7 @@ li.selected .base-storage-tree-element-subtitle {
     position: relative;
     border-bottom: 1px solid rgb(245, 245, 245);
     padding: 1px 22px 1px 24px;
-    min-height: 16px; 
+    min-height: 16px;
 }
 
 .database-user-query::before {
@@ -2393,6 +2384,14 @@ button.enable-toggle-status-bar-item.toggled-on .glyph {
     -webkit-mask-position: -96px -24px;
 }
 
+button.edit-source-status-bar-item .glyph {
+    -webkit-mask-position: -64px -48px;
+}
+
+button.edit-source-status-bar-item.toggled-on .glyph {
+    background-color: rgb(66, 129, 235);
+}
+
 .scripts-pause-on-exceptions-status-bar-item .glyph {
     -webkit-mask-position: -256px 0;
 }
@@ -2402,7 +2401,7 @@ button.enable-toggle-status-bar-item.toggled-on .glyph {
 }
 
 .scripts-pause-on-exceptions-status-bar-item.toggled-uncaught .glyph {
-    background-color: purple;   
+    background-color: purple;
 }
 
 .scripts-toggle-pretty-print-status-bar-item .glyph {
@@ -3750,20 +3749,20 @@ li.breakpoint-hit .breakpoint-hit-marker {
     padding: 4px;
     background-color: rgb(203, 226, 255);
     -webkit-border-radius: 7px;
-    border: 2px solid rgb(169, 172, 203); 
-    width: 90%; 
+    border: 2px solid rgb(169, 172, 203);
+    width: 90%;
 }
 
 .source-frame-breakpoint-message {
     background-color: transparent;
-    font-family: Lucida Grande, sans-serif; 
+    font-family: Lucida Grande, sans-serif;
     font-weight: normal;
     font-size: 11px;
     text-align: left;
     text-shadow: none;
     color: rgb(85, 85, 85);
     cursor: default;
-    margin: 0 0 2px 0; 
+    margin: 0 0 2px 0;
 }
 
 #source-frame-breakpoint-condition {
@@ -3821,7 +3820,7 @@ li.breakpoint-hit .breakpoint-hit-marker {
     margin: 0;
     padding: 0;
 }
- 
+
 .workers-list > li {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3923,6 +3922,11 @@ a.worker-item {
 
 .styles-section .properties li.parent {
     margin-left: 1px;
+}
+
+.styles-section .properties li.child-editing {
+    word-wrap: break-word !important;
+    white-space: normal !important;
 }
 
 .styles-section .properties ol {
@@ -4067,4 +4071,41 @@ a.worker-item:hover {
     width: 100%;
     height: 100%;
     position: absolute;
+}
+
+.soft-context-menu-glass-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20000;
+}
+
+.soft-context-menu {
+    position: absolute;
+    border: 1px solid rgb(180, 180, 180);
+    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.95);
+    -webkit-box-shadow: rgba(0, 0, 0, 0.5) 0 3px 10px;
+}
+
+.soft-context-menu-item {
+    width: 100%;
+    line-height: 13px;
+    font-size: 13px;
+    padding: 4px 7px;
+    margin: 3px 0;
+    white-space: nowrap;
+}
+
+.soft-context-menu-separator {
+    margin-top: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgb(180, 180, 180);
+}
+
+.soft-context-menu-item-mouse-over {
+    background-color: rgb(56, 121, 217);
+    color: white;
 }

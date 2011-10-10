@@ -38,10 +38,14 @@
 #include "Document.h"
 #include "ErrorEvent.h"
 #include "ExceptionCode.h"
+#include "InspectorInstrumentation.h"
 #include "MessageEvent.h"
+#include "NotImplemented.h"
 #include "ScriptCallStack.h"
 #include "ScriptExecutionContext.h"
 #include "Worker.h"
+#include "WorkerInspectorController.h"
+#include "WorkerScriptDebugServer.h"
 #include <wtf/MainThread.h>
 
 namespace WebCore {
@@ -208,6 +212,30 @@ private:
     bool m_hasPendingActivity;
 };
 
+class PostMessageToPageInspectorTask : public ScriptExecutionContext::Task {
+public:
+    static PassOwnPtr<PostMessageToPageInspectorTask> create(WorkerMessagingProxy* messagingProxy, const String& message)
+    {
+        return adoptPtr(new PostMessageToPageInspectorTask(messagingProxy, message));
+    }
+
+private:
+    PostMessageToPageInspectorTask(WorkerMessagingProxy* messagingProxy, const String& message)
+        : m_messagingProxy(messagingProxy)
+        , m_message(message.crossThreadString())
+    {
+    }
+
+    virtual void performTask(ScriptExecutionContext*)
+    {
+        if (WorkerContextProxy::PageInspector* pageInspector = m_messagingProxy->m_pageInspector)
+            pageInspector->dispatchMessageFromWorker(m_message);
+    }
+
+    WorkerMessagingProxy* m_messagingProxy;
+    String m_message;
+};
+
 
 #if !PLATFORM(CHROMIUM)
 WorkerContextProxy* WorkerContextProxy::create(Worker* worker)
@@ -222,6 +250,9 @@ WorkerMessagingProxy::WorkerMessagingProxy(Worker* workerObject)
     , m_unconfirmedMessageCount(0)
     , m_workerThreadHadPendingActivity(false)
     , m_askedToTerminate(false)
+#if ENABLE(INSPECTOR)
+    , m_pageInspector(0)
+#endif
 {
     ASSERT(m_workerObject);
     ASSERT((m_scriptExecutionContext->isDocument() && isMainThread())
@@ -322,6 +353,50 @@ void WorkerMessagingProxy::workerObjectDestroyed()
         workerContextDestroyedInternal();
 }
 
+#if ENABLE(INSPECTOR)
+static void connectToWorkerContextInspectorTask(ScriptExecutionContext* context, bool)
+{
+    ASSERT(context->isWorkerContext());
+    static_cast<WorkerContext*>(context)->workerInspectorController()->connectFrontend();
+}
+
+void WorkerMessagingProxy::connectToInspector(WorkerContextProxy::PageInspector* pageInspector)
+{
+    if (m_askedToTerminate)
+        return;
+    ASSERT(!m_pageInspector);
+    m_pageInspector = pageInspector;
+    m_workerThread->runLoop().postTask(createCallbackTask(connectToWorkerContextInspectorTask, true));
+}
+
+static void disconnectFromWorkerContextInspectorTask(ScriptExecutionContext* context, bool)
+{
+    ASSERT(context->isWorkerContext());
+    static_cast<WorkerContext*>(context)->workerInspectorController()->disconnectFrontend();
+}
+
+void WorkerMessagingProxy::disconnectFromInspector()
+{
+    m_pageInspector = 0;
+    if (m_askedToTerminate)
+        return;
+    m_workerThread->runLoop().postTaskForMode(createCallbackTask(disconnectFromWorkerContextInspectorTask, true), WorkerScriptDebugServer::debuggerTaskMode);
+}
+
+static void dispatchOnInspectorBackendTask(ScriptExecutionContext* context, const String& message)
+{
+    ASSERT(context->isWorkerContext());
+    static_cast<WorkerContext*>(context)->workerInspectorController()->dispatchMessageFromFrontend(message);
+}
+
+void WorkerMessagingProxy::sendMessageToInspector(const String& message)
+{
+    if (m_askedToTerminate)
+        return;
+    m_workerThread->runLoop().postTaskForMode(createCallbackTask(dispatchOnInspectorBackendTask, String(message)), WorkerScriptDebugServer::debuggerTaskMode);
+}
+#endif
+
 void WorkerMessagingProxy::workerContextDestroyed()
 {
     m_scriptExecutionContext->postTask(WorkerContextDestroyedTask::create(this));
@@ -340,6 +415,9 @@ void WorkerMessagingProxy::workerContextDestroyedInternal()
     // in either side any more. However, the Worker object may still exist, and it assumes that the proxy exists, too.
     m_askedToTerminate = true;
     m_workerThread = 0;
+
+    InspectorInstrumentation::workerContextTerminated(m_scriptExecutionContext.get(), this);
+
     if (!m_workerObject)
         delete this;
 }
@@ -352,11 +430,19 @@ void WorkerMessagingProxy::terminateWorkerContext()
 
     if (m_workerThread)
         m_workerThread->stop();
+
+    InspectorInstrumentation::workerContextTerminated(m_scriptExecutionContext.get(), this);
 }
 
 #if ENABLE(INSPECTOR)
-void WorkerMessagingProxy::postMessageToPageInspector(const String&)
+void WorkerMessagingProxy::postMessageToPageInspector(const String& message)
 {
+    m_scriptExecutionContext->postTask(PostMessageToPageInspectorTask::create(this, message));
+}
+
+void WorkerMessagingProxy::updateInspectorStateCookie(const String&)
+{
+    notImplemented();
 }
 #endif
 

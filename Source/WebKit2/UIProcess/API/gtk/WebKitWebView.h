@@ -20,10 +20,17 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#if !defined(__WEBKIT2_H_INSIDE__) && !defined(WEBKIT2_COMPILATION)
+#error "Only <webkit2/webkit2.h> can be included directly."
+#endif
+
 #ifndef WebKitWebView_h
 #define WebKitWebView_h
 
-#include <WebKit2/WebKitWebViewBase.h>
+#include <webkit2/WebKitDefines.h>
+#include <webkit2/WebKitWebContext.h>
+#include <webkit2/WebKitWebLoaderClient.h>
+#include <webkit2/WebKitWebViewBase.h>
 
 G_BEGIN_DECLS
 
@@ -59,21 +66,40 @@ struct _WebKitWebViewClass {
     void (*_webkit_reserved7) (void);
 };
 
-WK_EXPORT GType
-webkit_web_view_get_type   (void);
+WEBKIT_API GType
+webkit_web_view_get_type            (void);
 
-WK_EXPORT GtkWidget *
-webkit_web_view_new        (void);
+WEBKIT_API GtkWidget *
+webkit_web_view_new                 (void);
 
-WK_EXPORT void
-webkit_web_view_load_uri   (WebKitWebView *webView,
-                            const gchar   *uri);
+WEBKIT_API GtkWidget *
+webkit_web_view_new_with_context    (WebKitWebContext      *context);
 
-WK_EXPORT void
-webkit_web_view_go_back    (WebKitWebView *webView);
+WEBKIT_API WebKitWebContext *
+webkit_web_view_get_context         (WebKitWebView         *web_view);
 
-WK_EXPORT void
-webkit_web_view_go_forward (WebKitWebView *webView);
+WEBKIT_API WebKitWebLoaderClient *
+webkit_web_view_get_loader_client   (WebKitWebView         *web_view);
+
+WEBKIT_API void
+webkit_web_view_set_loader_client   (WebKitWebView         *web_view,
+                                     WebKitWebLoaderClient *loader_client);
+
+WEBKIT_API void
+webkit_web_view_load_uri            (WebKitWebView         *web_view,
+                                     const gchar           *uri);
+
+WEBKIT_API void
+webkit_web_view_load_alternate_html (WebKitWebView         *web_view,
+                                     const gchar           *content,
+                                     const gchar           *base_uri,
+                                     const gchar           *unreachable_uri);
+
+WEBKIT_API void
+webkit_web_view_go_back             (WebKitWebView         *web_view);
+
+WEBKIT_API void
+webkit_web_view_go_forward          (WebKitWebView         *web_view);
 
 G_END_DECLS
 

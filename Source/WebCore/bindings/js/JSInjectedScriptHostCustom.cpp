@@ -36,7 +36,7 @@
 
 #include "JSInjectedScriptHost.h"
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 #include "Database.h"
 #include "JSDatabase.h"
 #endif
@@ -85,7 +85,7 @@ JSValue JSInjectedScriptHost::evaluate(ExecState* exec)
     JSGlobalObject* globalObject = exec->lexicalGlobalObject();
     JSFunction* evalFunction = globalObject->evalFunction();
     CallData callData;
-    CallType callType = evalFunction->getCallData(callData);
+    CallType callType = evalFunction->getCallDataVirtual(callData);
     if (callType == CallTypeNone)
         return jsUndefined();
     MarkedArgumentBuffer args;
@@ -171,7 +171,7 @@ JSValue JSInjectedScriptHost::databaseId(ExecState* exec)
 {
     if (exec->argumentCount() < 1)
         return jsUndefined();
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     Database* database = toDatabase(exec->argument(0));
     if (database)
         return jsNumber(impl()->databaseIdImpl(database));

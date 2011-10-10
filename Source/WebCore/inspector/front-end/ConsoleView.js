@@ -29,27 +29,42 @@
 
 const ExpressionStopCharacters = " =:[({;,!+-*/&|^<>";
 
-WebInspector.ConsoleView = function(drawer)
+/**
+ * @extends {WebInspector.View}
+ * @constructor
+ * @param {boolean} hideContextSelector
+ */
+WebInspector.ConsoleView = function(hideContextSelector)
 {
-    WebInspector.View.call(this, document.getElementById("console-view"));
+    WebInspector.View.call(this);
 
+    this.element.id = "console-view";
     this.messages = [];
-    this.drawer = drawer;
 
-    this.clearButton = document.getElementById("clear-console-status-bar-item");
-    this.clearButton.title = WebInspector.UIString("Clear console log.");
-    this.clearButton.addEventListener("click", this._clearButtonClicked.bind(this), false);
+    this._clearConsoleButton = new WebInspector.StatusBarButton(WebInspector.UIString("Clear console log."), "clear-status-bar-item");
+    this._clearConsoleButton.addEventListener("click", this._requestClearMessages.bind(this), false);
 
-    this._contextSelectElement = document.getElementById("console-context");
-    if (WebInspector.WorkerManager.isWorkerFrontend())
+    this._contextSelectElement = document.createElement("select");
+    this._contextSelectElement.id = "console-context";
+    this._contextSelectElement.className = "status-bar-item";
+
+    if (hideContextSelector)
         this._contextSelectElement.addStyleClass("hidden");
 
-    this.messagesElement = document.getElementById("console-messages");
+    this.messagesElement = document.createElement("div");
+    this.messagesElement.id = "console-messages";
+    this.messagesElement.className = "monospace";
     this.messagesElement.addEventListener("click", this._messagesClicked.bind(this), true);
+    this.element.appendChild(this.messagesElement);
 
-    this.promptElement = document.getElementById("console-prompt");
+    this.promptElement = document.createElement("div");
+    this.promptElement.id = "console-prompt";
     this.promptElement.className = "source-code";
+    this.promptElement.spellcheck = false;
     this.promptElement.addEventListener("keydown", this._promptKeyDown.bind(this), true);
+    this.messagesElement.appendChild(this.promptElement);
+    this.messagesElement.appendChild(document.createElement("br"));
+
     this.prompt = new WebInspector.TextPrompt(this.promptElement, this.completions.bind(this), ExpressionStopCharacters + ".");
     this.prompt.history = WebInspector.settings.consoleHistory.get();
 
@@ -57,16 +72,14 @@ WebInspector.ConsoleView = function(drawer)
     this.messagesElement.insertBefore(this.topGroup.element, this.promptElement);
     this.currentGroup = this.topGroup;
 
-    this.toggleConsoleButton = new WebInspector.StatusBarButton(WebInspector.UIString("Show console."), "console-status-bar-item");
-    this.toggleConsoleButton.addEventListener("click", this._toggleConsoleButtonClicked.bind(this), false);
-
-    // Will hold the list of filter elements
-    this.filterBarElement = document.getElementById("console-filter");
+    this._filterBarElement = document.createElement("div");
+    this._filterBarElement.id = "console-filter";
+    this._filterBarElement.className = "scope-bar status-bar-item";
 
     function createDividerElement() {
         var dividerElement = document.createElement("div");
         dividerElement.addStyleClass("scope-bar-divider");
-        this.filterBarElement.appendChild(dividerElement);
+        this._filterBarElement.appendChild(dividerElement);
     }
 
     var updateFilterHandler = this._updateFilter.bind(this);
@@ -77,7 +90,7 @@ WebInspector.ConsoleView = function(drawer)
         categoryElement.addEventListener("click", updateFilterHandler, false);
         categoryElement.textContent = label;
 
-        this.filterBarElement.appendChild(categoryElement);
+        this._filterBarElement.appendChild(categoryElement);
 
         return categoryElement;
     }
@@ -93,79 +106,23 @@ WebInspector.ConsoleView = function(drawer)
 
     this.messagesElement.addEventListener("contextmenu", this._handleContextMenuEvent.bind(this), false);
 
-    this._customFormatters = {
-        "object": this._formatobject,
-        "array":  this._formatarray,
-        "node":   this._formatnode,
-        "string": this._formatstring
-    };
-
-    this._registerConsoleDomainDispatcher();
-
     WebInspector.settings.monitoringXHREnabled.addChangeListener(this._monitoringXHREnabledSettingChanged.bind(this));
+
+    WebInspector.console.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._consoleMessageAdded, this);
+    WebInspector.console.addEventListener(WebInspector.ConsoleModel.Events.ConsoleCleared, this._consoleCleared, this);
+
+    this._linkifier = WebInspector.debuggerPresentationModel.createLinkifier();
 }
 
 WebInspector.ConsoleView.Events = {
   ConsoleCleared: "console-cleared",
   EntryAdded: "console-entry-added",
-  MessageAdded: "console-message-added"
 }
 
 WebInspector.ConsoleView.prototype = {
-    _registerConsoleDomainDispatcher: function() {
-        var console = this;
-        var dispatcher = {
-            messageAdded: function(payload)
-            {
-                var consoleMessage = new WebInspector.ConsoleMessage(
-                    payload.source,
-                    payload.type,
-                    payload.level,
-                    payload.line,
-                    payload.url,
-                    payload.repeatCount,
-                    payload.text,
-                    payload.parameters,
-                    payload.stackTrace,
-                    payload.networkRequestId);
-                console.addMessage(consoleMessage);
-            },
-
-            messageRepeatCountUpdated: function(count)
-            {
-                var msg = console.previousMessage;
-                var prevRepeatCount = msg.totalRepeatCount;
-
-                if (!console.commandSincePreviousMessage) {
-                    msg.repeatDelta = count - prevRepeatCount;
-                    msg.repeatCount = msg.repeatCount + msg.repeatDelta;
-                    msg.totalRepeatCount = count;
-                    msg._updateRepeatCount();
-                    console._incrementErrorWarningCount(msg);
-                    console.dispatchEventToListeners(WebInspector.ConsoleView.Events.MessageAdded, msg);
-                } else {
-                    var msgCopy = new WebInspector.ConsoleMessage(msg.source, msg.type, msg.level, msg.line, msg.url, count - prevRepeatCount, msg._messageText, msg._parameters, msg._stackTrace, msg._requestId);
-                    msgCopy.totalRepeatCount = count;
-                    msgCopy._formatMessage();
-                    console.addMessage(msgCopy);
-                }
-            },
-
-            messagesCleared: function()
-            {
-                if (!WebInspector.settings.preserveConsoleLog.get())
-                    console.clearMessages();
-            },
-        }
-        InspectorBackend.registerDomainDispatcher("Console", dispatcher);
-    },
-
-    setConsoleMessageExpiredCount: function(count)
+    get statusBarItems()
     {
-        if (count) {
-            var message = String.sprintf(WebInspector.UIString("%d console messages are not shown."), count);
-            this.addMessage(WebInspector.ConsoleMessage.createTextMessage(message, WebInspector.ConsoleMessage.MessageLevel.Warning));
-        }
+        return [this._clearConsoleButton.element, this._contextSelectElement, this._filterBarElement];
     },
 
     addContext: function(context)
@@ -267,22 +224,9 @@ WebInspector.ConsoleView.prototype = {
         }
     },
 
-    _toggleConsoleButtonClicked: function()
+    wasShown: function()
     {
-        this.drawer.visibleView = this;
-    },
-
-    attach: function(mainElement, statusBarElement)
-    {
-        mainElement.appendChild(this.element);
-        statusBarElement.appendChild(this.clearButton);
-        statusBarElement.appendChild(this.filterBarElement);
-    },
-
-    show: function()
-    {
-        this.toggleConsoleButton.toggled = true;
-        this.toggleConsoleButton.title = WebInspector.UIString("Hide console.");
+        WebInspector.View.prototype.wasShown.call(this);
         if (!this.prompt.isCaretInsidePrompt())
             this.prompt.moveCaretToEndOfPrompt();
     },
@@ -292,10 +236,28 @@ WebInspector.ConsoleView.prototype = {
         WebInspector.currentFocusElement = this.promptElement;
     },
 
-    hide: function()
+    storeScrollPositions: function()
     {
-        this.toggleConsoleButton.toggled = false;
-        this.toggleConsoleButton.title = WebInspector.UIString("Show console.");
+        WebInspector.View.prototype.storeScrollPositions.call(this);
+        this._scrolledToBottom = this.messagesElement.isScrolledToBottom();
+    },
+
+    restoreScrollPositions: function()
+    {
+        if (this._scrolledToBottom)
+            this._immediatelyScrollIntoView();
+        else
+            WebInspector.View.prototype.restoreScrollPositions.call(this);
+    },
+
+    onResize: function()
+    {
+        this.restoreScrollPositions();
+    },
+
+    _isScrollIntoViewScheduled: function()
+    {
+        return !!this._scrollIntoViewTimer;
     },
 
     _scheduleScrollIntoView: function()
@@ -311,20 +273,32 @@ WebInspector.ConsoleView.prototype = {
         this._scrollIntoViewTimer = setTimeout(scrollIntoView.bind(this), 20);
     },
 
-    addMessage: function(msg)
+    _immediatelyScrollIntoView: function()
     {
-        var shouldScrollToLastMessage = this.messagesElement.isScrolledToBottom();
+        this.promptElement.scrollIntoView(true);
+        this._cancelScheduledScrollIntoView();
+    },
 
-        if (msg instanceof WebInspector.ConsoleMessage && !(msg instanceof WebInspector.ConsoleCommandResult)) {
-            this._incrementErrorWarningCount(msg);
-            this.dispatchEventToListeners(WebInspector.ConsoleView.Events.MessageAdded, msg);
-            this.commandSincePreviousMessage = false;
-            this.previousMessage = msg;
-        } else if (msg instanceof WebInspector.ConsoleCommand) {
-            if (this.previousMessage) {
-                this.commandSincePreviousMessage = true;
-            }
-        }
+    _cancelScheduledScrollIntoView: function()
+    {
+        if (!this._isScrollIntoViewScheduled())
+            return;
+
+        clearTimeout(this._scrollIntoViewTimer);
+        delete this._scrollIntoViewTimer;
+    },
+
+    _consoleMessageAdded: function(event)
+    {
+        this._appendConsoleMessage(event.data);
+    },
+
+    _appendConsoleMessage: function(msg)
+    {
+        // this.messagesElement.isScrolledToBottom() is forcing style recalculation.
+        // We just skip it if the scroll action has been scheduled.
+        if (!this._isScrollIntoViewScheduled() && ((msg instanceof WebInspector.ConsoleCommandResult) || this.messagesElement.isScrolledToBottom()))
+            this._scheduleScrollIntoView();
 
         this.messages.push(msg);
 
@@ -342,45 +316,20 @@ WebInspector.ConsoleView.prototype = {
             this.currentGroup.addMessage(msg);
         }
 
-        // Always scroll when command result arrives.
-        if (shouldScrollToLastMessage || (msg instanceof WebInspector.ConsoleCommandResult))
-            this._scheduleScrollIntoView();
-
         this.dispatchEventToListeners(WebInspector.ConsoleView.Events.EntryAdded, msg);
     },
 
-    _incrementErrorWarningCount: function(msg)
+    _consoleCleared: function()
     {
-        switch (msg.level) {
-            case WebInspector.ConsoleMessage.MessageLevel.Warning:
-                WebInspector.warnings += msg.repeatDelta;
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Error:
-                WebInspector.errors += msg.repeatDelta;
-                break;
-        }
-    },
-
-    requestClearMessages: function()
-    {
-        ConsoleAgent.clearConsoleMessages();
-        this.clearMessages();
-    },
-
-    clearMessages: function()
-    {
-        this.dispatchEventToListeners(WebInspector.ConsoleView.Events.ConsoleCleared);
-
+        this._scrolledToBottom = true;
         this.messages = [];
 
         this.currentGroup = this.topGroup;
         this.topGroup.messagesElement.removeChildren();
 
-        WebInspector.errors = 0;
-        WebInspector.warnings = 0;
+        this.dispatchEventToListeners(WebInspector.ConsoleView.Events.ConsoleCleared);
 
-        delete this.commandSincePreviousMessage;
-        delete this.previousMessage;
+        this._linkifier.reset();
     },
 
     completions: function(wordRange, bestMatchOnly, completionsReadyCallback)
@@ -407,7 +356,7 @@ WebInspector.ConsoleView.prototype = {
             return;
         }
 
-        if (parseInt(expressionString) == expressionString) {
+        if (parseInt(expressionString, 10) == expressionString) {
             // User is entering float value, do not suggest anything.
             completionsReadyCallback([]);
             return;
@@ -429,11 +378,11 @@ WebInspector.ConsoleView.prototype = {
             {
                 var object;
                 if (primitiveType === "string")
-                    object = new String();
+                    object = new String("");
                 else if (primitiveType === "number")
-                    object = new Number();
+                    object = new Number(0);
                 else if (primitiveType === "boolean")
-                    object = new Boolean();
+                    object = new Boolean(false);
                 else
                     object = this;
 
@@ -515,11 +464,6 @@ WebInspector.ConsoleView.prototype = {
         completionsReadyCallback(results);
     },
 
-    _clearButtonClicked: function()
-    {
-        this.requestClearMessages();
-    },
-
     _handleContextMenuEvent: function(event)
     {
         if (!window.getSelection().isCollapsed) {
@@ -529,6 +473,9 @@ WebInspector.ConsoleView.prototype = {
         }
 
         var contextMenu = new WebInspector.ContextMenu();
+
+        if (WebInspector.populateHrefContextMenu(contextMenu, null, event))
+            contextMenu.appendSeparator();
 
         function monitoringXHRItemAction()
         {
@@ -542,7 +489,8 @@ WebInspector.ConsoleView.prototype = {
         }
         contextMenu.appendCheckboxItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Preserve log upon navigation" : "Preserve Log upon Navigation"), preserveLogItemAction.bind(this), WebInspector.settings.preserveConsoleLog.get());
 
-        contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Clear console" : "Clear Console"), this.requestClearMessages.bind(this));
+        contextMenu.appendSeparator();
+        contextMenu.appendItem(WebInspector.UIString(WebInspector.useLowerCaseMenuTitles() ? "Clear console" : "Clear Console"), this._requestClearMessages.bind(this));
         contextMenu.show(event);
     },
 
@@ -553,16 +501,8 @@ WebInspector.ConsoleView.prototype = {
 
     _messagesClicked: function(event)
     {
-        var link = event.target.enclosingNodeOrSelfWithNodeName("a");
-        if (!link || !link.representedNode) {
-            if (!this.prompt.isCaretInsidePrompt() && window.getSelection().isCollapsed)
-                this.prompt.moveCaretToEndOfPrompt();
-            return;
-        }
-
-        WebInspector.updateFocusedNode(link.representedNode.id);
-        event.stopPropagation();
-        event.preventDefault();
+        if (!this.prompt.isCaretInsidePrompt() && window.getSelection().isCollapsed)
+            this.prompt.moveCaretToEndOfPrompt();
     },
 
     _registerShortcuts: function()
@@ -570,14 +510,14 @@ WebInspector.ConsoleView.prototype = {
         this._shortcuts = {};
 
         var shortcut = WebInspector.KeyboardShortcut;
-        var shortcutK = shortcut.makeDescriptor("k", WebInspector.KeyboardShortcut.Modifiers.Meta);
-        // This case requires a separate bound function as its isMacOnly property should not be shared among different shortcut handlers.
-        this._shortcuts[shortcutK.key] = this.requestClearMessages.bind(this);
-        this._shortcuts[shortcutK.key].isMacOnly = true;
 
-        var clearConsoleHandler = this.requestClearMessages.bind(this);
+        if (WebInspector.isMac()) {
+            var shortcutK = shortcut.makeDescriptor("k", WebInspector.KeyboardShortcut.Modifiers.Meta);
+            this._shortcuts[shortcutK.key] = this._requestClearMessages.bind(this);
+        }
+
         var shortcutL = shortcut.makeDescriptor("l", WebInspector.KeyboardShortcut.Modifiers.Ctrl);
-        this._shortcuts[shortcutL.key] = clearConsoleHandler;
+        this._shortcuts[shortcutL.key] = this._requestClearMessages.bind(this);
 
         var section = WebInspector.shortcutsScreen.section(WebInspector.UIString("Console"));
         var keys = WebInspector.isMac() ? [ shortcutK.name, shortcutL.name ] : [ shortcutL.name ];
@@ -603,6 +543,11 @@ WebInspector.ConsoleView.prototype = {
         section.addKey(shortcut.shortcutToString(shortcut.Keys.Enter), WebInspector.UIString("Execute command"));
     },
 
+    _requestClearMessages: function()
+    {
+        WebInspector.console.requestClearMessages();
+    },
+
     _promptKeyDown: function(event)
     {
         if (isEnterKey(event)) {
@@ -613,17 +558,15 @@ WebInspector.ConsoleView.prototype = {
         var shortcut = WebInspector.KeyboardShortcut.makeKeyFromEvent(event);
         var handler = this._shortcuts[shortcut];
         if (handler) {
-            if (!this._shortcuts[shortcut].isMacOnly || WebInspector.isMac()) {
-                handler();
-                event.preventDefault();
-                return;
-            }
+            handler();
+            event.preventDefault();
+            return;
         }
     },
 
     evalInInspectedWindow: function(expression, objectGroup, includeCommandLineAPI, doNotPauseOnExceptions, returnByValue, callback)
     {
-        if (WebInspector.panels.scripts && WebInspector.panels.scripts.paused) {
+        if (WebInspector.panels.scripts.paused) {
             WebInspector.panels.scripts.evaluateInSelectedCallFrame(expression, objectGroup, includeCommandLineAPI, returnByValue, callback);
             return;
         }
@@ -664,600 +607,38 @@ WebInspector.ConsoleView.prototype = {
             return;
 
         var commandMessage = new WebInspector.ConsoleCommand(str);
-        this.addMessage(commandMessage);
+        WebInspector.console.interruptRepeatCount();
+        this._appendConsoleMessage(commandMessage);
 
-        var self = this;
         function printResult(result, wasThrown)
         {
             if (!result)
                 return;
 
-            self.prompt.history.push(str);
-            self.prompt.historyOffset = 0;
-            self.prompt.text = "";
+            this.prompt.history.push(str);
+            this.prompt.historyOffset = 0;
+            this.prompt.text = "";
 
-            WebInspector.settings.consoleHistory.set(self.prompt.history.slice(-30));
+            WebInspector.settings.consoleHistory.set(this.prompt.history.slice(-30));
 
-            self.addMessage(new WebInspector.ConsoleCommandResult(result, wasThrown, commandMessage));
+            this._appendConsoleMessage(new WebInspector.ConsoleCommandResult(result, wasThrown, commandMessage, this._linkifier));
         }
-        this.evalInInspectedWindow(str, "console", true, undefined, undefined, printResult);
+        this.evalInInspectedWindow(str, "console", true, undefined, undefined, printResult.bind(this));
 
         WebInspector.userMetrics.ConsoleEvaluated.record();
     },
 
-    _format: function(output, forceObjectFormat)
+    elementsToRestoreScrollPositionsFor: function()
     {
-        var type;
-        if (forceObjectFormat)
-            type = "object";
-        else if (output instanceof WebInspector.RemoteObject)
-            type = output.subtype || output.type;
-        else
-            type = typeof output;
-
-        var formatter = this._customFormatters[type];
-        if (!formatter) {
-            formatter = this._formatvalue;
-            output = output.description;
-        }
-
-        var span = document.createElement("span");
-        span.className = "console-formatted-" + type + " source-code";
-        formatter.call(this, output, span);
-        return span;
-    },
-
-    _formatvalue: function(val, elem)
-    {
-        elem.appendChild(document.createTextNode(val));
-    },
-
-    _formatobject: function(obj, elem)
-    {
-        elem.appendChild(new WebInspector.ObjectPropertiesSection(obj, obj.description).element);
-    },
-
-    _formatnode: function(object, elem)
-    {
-        function printNode(nodeId)
-        {
-            if (!nodeId) {
-                // Sometimes DOM is loaded after the sync message is being formatted, so we get no
-                // nodeId here. So we fall back to object formatting here.
-                this._formatobject(object, elem);
-                return;
-            }
-            var treeOutline = new WebInspector.ElementsTreeOutline();
-            treeOutline.showInElementsPanelEnabled = true;
-            treeOutline.rootDOMNode = WebInspector.domAgent.nodeForId(nodeId);
-            treeOutline.element.addStyleClass("outline-disclosure");
-            if (!treeOutline.children[0].hasChildren)
-                treeOutline.element.addStyleClass("single-node");
-            elem.appendChild(treeOutline.element);
-        }
-        object.pushNodeToFrontend(printNode.bind(this));
-    },
-
-    _formatarray: function(arr, elem)
-    {
-        arr.getOwnProperties(this._printArray.bind(this, elem));
-    },
-
-    _formatstring: function(output, elem)
-    {
-        var span = document.createElement("span");
-        span.className = "console-formatted-string source-code";
-        span.appendChild(WebInspector.linkifyStringAsFragment(output.description));
-
-        // Make black quotes.
-        elem.removeStyleClass("console-formatted-string");
-        elem.appendChild(document.createTextNode("\""));
-        elem.appendChild(span);
-        elem.appendChild(document.createTextNode("\""));
-    },
-
-    _printArray: function(elem, properties)
-    {
-        if (!properties)
-            return;
-
-        var elements = [];
-        for (var i = 0; i < properties.length; ++i) {
-            var name = properties[i].name;
-            if (name == parseInt(name))
-                elements[name] = this._formatAsArrayEntry(properties[i].value);
-        }
-
-        elem.appendChild(document.createTextNode("["));
-        for (var i = 0; i < elements.length; ++i) {
-            var element = elements[i];
-            if (element)
-                elem.appendChild(element);
-            else
-                elem.appendChild(document.createTextNode("undefined"))
-            if (i < elements.length - 1)
-                elem.appendChild(document.createTextNode(", "));
-        }
-        elem.appendChild(document.createTextNode("]"));
-    },
-
-    _formatAsArrayEntry: function(output)
-    {
-        // Prevent infinite expansion of cross-referencing arrays.
-        return this._format(output, output.subtype && output.subtype === "array");
-    },
-
-    get scrollLeft()
-    {
-        return this.messagesElement.scrollLeft;
-    },
-
-    set scrollLeft(scrollLeft)
-    {
-        this.messagesElement.scrollLeft = scrollLeft;
-    },
-
-    get scrollTop()
-    {
-        return this.messagesElement.scrollTop;
-    },
-
-    set scrollTop(scrollTop)
-    {
-        this.messagesElement.scrollTop = scrollTop;
+        return [this.messagesElement];
     }
 }
 
 WebInspector.ConsoleView.prototype.__proto__ = WebInspector.View.prototype;
 
-WebInspector.ConsoleMessage = function(source, type, level, line, url, repeatCount, message, parameters, stackTrace, requestId)
-{
-    this.source = source;
-    this.type = type;
-    this.level = level;
-    this.line = line;
-    this.url = url;
-    this.repeatCount = repeatCount;
-    this.repeatDelta = repeatCount;
-    this.totalRepeatCount = repeatCount;
-    this._messageText = message;
-    this._parameters = parameters;
-    this._stackTrace = stackTrace;
-    this._requestId = requestId;
-
-    if (stackTrace && stackTrace.length) {
-        var topCallFrame = stackTrace[0];
-        if (!this.url)
-            this.url = topCallFrame.url;
-        if (!this.line)
-            this.line = topCallFrame.lineNumber;
-    }
-
-    this._formatMessage();
-}
-
-WebInspector.ConsoleMessage.createTextMessage = function(text, level)
-{
-    level = level || WebInspector.ConsoleMessage.MessageLevel.Log;
-    return new WebInspector.ConsoleMessage(WebInspector.ConsoleMessage.MessageSource.JS, WebInspector.ConsoleMessage.MessageType.Log, level, 0, null, 1, null, [text], null);
-}
-
-WebInspector.ConsoleMessage.prototype = {
-    _formatMessage: function()
-    {
-        var stackTrace = this._stackTrace;
-        var messageText;
-        switch (this.type) {
-            case WebInspector.ConsoleMessage.MessageType.Trace:
-                messageText = document.createTextNode("console.trace()");
-                break;
-            case WebInspector.ConsoleMessage.MessageType.UncaughtException:
-                messageText = document.createTextNode(this._messageText);
-                break;
-            case WebInspector.ConsoleMessage.MessageType.NetworkError:
-                var resource = this._requestId && WebInspector.networkResourceById(this._requestId);
-                if (resource) {
-                    stackTrace = resource.stackTrace;
-
-                    messageText = document.createElement("span");
-                    messageText.appendChild(document.createTextNode(resource.requestMethod + " "));
-                    messageText.appendChild(WebInspector.linkifyURLAsNode(resource.url));
-                    if (resource.failed)
-                        messageText.appendChild(document.createTextNode(" " + resource.localizedFailDescription));
-                    else
-                        messageText.appendChild(document.createTextNode(" " + resource.statusCode + " (" + resource.statusText + ")"));
-                } else
-                    messageText = this._format([this._messageText]);
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Assert:
-                var args = [WebInspector.UIString("Assertion failed:")];
-                if (this._parameters)
-                    args = args.concat(this._parameters);
-                messageText = this._format(args);
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Object:
-                var obj = this._parameters ? this._parameters[0] : undefined;
-                var args = ["%O", obj];
-                messageText = this._format(args);
-                break;
-            default:
-                var args = this._parameters || [this._messageText];
-                messageText = this._format(args);
-                break;
-        }
-
-        this._formattedMessage = document.createElement("span");
-        this._formattedMessage.className = "console-message-text source-code";
-
-        if (this._stackTrace && this._stackTrace.length && this._stackTrace[0].url) {
-            var urlElement = this._linkifyCallFrame(this._stackTrace[0]);
-            this._formattedMessage.appendChild(urlElement);
-        } else if (this.url && this.url !== "undefined") {
-            var urlElement = this._linkifyLocation(this.url, this.line, 0);
-            this._formattedMessage.appendChild(urlElement);
-        }
-
-        this._formattedMessage.appendChild(messageText);
-
-        if (this._stackTrace) {
-            switch (this.type) {
-                case WebInspector.ConsoleMessage.MessageType.Trace:
-                case WebInspector.ConsoleMessage.MessageType.UncaughtException:
-                case WebInspector.ConsoleMessage.MessageType.NetworkError:
-                case WebInspector.ConsoleMessage.MessageType.Assert: {
-                    var ol = document.createElement("ol");
-                    ol.className = "outline-disclosure";
-                    var treeOutline = new TreeOutline(ol);
-
-                    var content = this._formattedMessage;
-                    var root = new TreeElement(content, null, true);
-                    content.treeElementForTest = root;
-                    treeOutline.appendChild(root);
-                    if (this.type === WebInspector.ConsoleMessage.MessageType.Trace)
-                        root.expand();
-
-                    this._populateStackTraceTreeElement(root);
-                    this._formattedMessage = ol;
-                }
-            }
-        }
-
-        // This is used for inline message bubbles in SourceFrames, or other plain-text representations.
-        this.message = (urlElement ? urlElement.textContent + " " : "") + messageText.textContent;
-    },
-
-    _linkifyLocation: function(url, lineNumber, columnNumber)
-    {
-        // FIXME(62725): stack trace line/column numbers are one-based.
-        lineNumber = lineNumber ? lineNumber - 1 : undefined;
-        columnNumber = columnNumber ? columnNumber - 1 : 0;
-        return WebInspector.debuggerPresentationModel.linkifyLocation(url, lineNumber, columnNumber, "console-message-url");
-    },
-
-    _linkifyCallFrame: function(callFrame)
-    {
-        return this._linkifyLocation(callFrame.url, callFrame.lineNumber, callFrame.columnNumber);
-    },
-
-    isErrorOrWarning: function()
-    {
-        return (this.level === WebInspector.ConsoleMessage.MessageLevel.Warning || this.level === WebInspector.ConsoleMessage.MessageLevel.Error);
-    },
-
-    _format: function(parameters)
-    {
-        // This node is used like a Builder. Values are continually appended onto it.
-        var formattedResult = document.createElement("span");
-        if (!parameters.length)
-            return formattedResult;
-
-        // Formatting code below assumes that parameters are all wrappers whereas frontend console
-        // API allows passing arbitrary values as messages (strings, numbers, etc.). Wrap them here.
-        for (var i = 0; i < parameters.length; ++i) {
-            // FIXME: Only pass runtime wrappers here.
-            if (parameters[i] instanceof WebInspector.RemoteObject)
-                continue;
-
-            if (typeof parameters[i] === "object")
-                parameters[i] = WebInspector.RemoteObject.fromPayload(parameters[i]);
-            else
-                parameters[i] = WebInspector.RemoteObject.fromPrimitiveValue(parameters[i]);
-        }
-
-        // There can be string log and string eval result. We distinguish between them based on message type.
-        var shouldFormatMessage = WebInspector.RemoteObject.type(parameters[0]) === "string" && this.type !== WebInspector.ConsoleMessage.MessageType.Result;
-
-        // Multiple parameters with the first being a format string. Save unused substitutions.
-        if (shouldFormatMessage) {
-            // Multiple parameters with the first being a format string. Save unused substitutions.
-            var result = this._formatWithSubstitutionString(parameters, formattedResult);
-            parameters = result.unusedSubstitutions;
-            if (parameters.length)
-                formattedResult.appendChild(document.createTextNode(" "));
-        }
-
-        // Single parameter, or unused substitutions from above.
-        for (var i = 0; i < parameters.length; ++i) {
-            // Inline strings when formatting.
-            if (shouldFormatMessage && parameters[i].type === "string")
-                formattedResult.appendChild(document.createTextNode(parameters[i].description));
-            else
-                formattedResult.appendChild(WebInspector.console._format(parameters[i]));
-            if (i < parameters.length - 1)
-                formattedResult.appendChild(document.createTextNode(" "));
-        }
-        return formattedResult;
-    },
-
-    _formatWithSubstitutionString: function(parameters, formattedResult)
-    {
-        var formatters = {}
-        for (var i in String.standardFormatters)
-            formatters[i] = String.standardFormatters[i];
-
-        function consoleFormatWrapper(force)
-        {
-            return function(obj) {
-                return WebInspector.console._format(obj, force);
-            };
-        }
-
-        // Firebug uses %o for formatting objects.
-        formatters.o = consoleFormatWrapper();
-        // Firebug allows both %i and %d for formatting integers.
-        formatters.i = formatters.d;
-        // Support %O to force object formatting, instead of the type-based %o formatting.
-        formatters.O = consoleFormatWrapper(true);
-
-        function append(a, b)
-        {
-            if (!(b instanceof Node))
-                a.appendChild(WebInspector.linkifyStringAsFragment(b.toString()));
-            else
-                a.appendChild(b);
-            return a;
-        }
-
-        // String.format does treat formattedResult like a Builder, result is an object.
-        return String.format(parameters[0].description, parameters.slice(1), formatters, formattedResult, append);
-    },
-
-    clearHighlight: function()
-    {
-        var highlightedMessage = this._formattedMessage;
-        delete this._formattedMessage;
-        this._formatMessage();
-        this._element.replaceChild(this._formattedMessage, highlightedMessage);
-    },
-
-    highlightSearchResults: function(regexObject)
-    {
-        regexObject.lastIndex = 0;
-        var text = this.message;
-        var match = regexObject.exec(text);
-        var offset = 0;
-        var matchRanges = [];
-        while (match) {
-            matchRanges.push({ offset: match.index, length: match[0].length });
-            match = regexObject.exec(text);
-        }
-        highlightSearchResults(this._formattedMessage, matchRanges);
-        this._element.scrollIntoViewIfNeeded();
-    },
-
-    matchesRegex: function(regexObject)
-    {
-        return regexObject.test(this.message);
-    },
-
-    toMessageElement: function()
-    {
-        if (this._element)
-            return this._element;
-
-        var element = document.createElement("div");
-        element.message = this;
-        element.className = "console-message";
-
-        this._element = element;
-
-        switch (this.level) {
-            case WebInspector.ConsoleMessage.MessageLevel.Tip:
-                element.addStyleClass("console-tip-level");
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Log:
-                element.addStyleClass("console-log-level");
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Debug:
-                element.addStyleClass("console-debug-level");
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Warning:
-                element.addStyleClass("console-warning-level");
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Error:
-                element.addStyleClass("console-error-level");
-                break;
-        }
-
-        if (this.type === WebInspector.ConsoleMessage.MessageType.StartGroup || this.type === WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed)
-            element.addStyleClass("console-group-title");
-
-        element.appendChild(this._formattedMessage);
-
-        if (this.repeatCount > 1)
-            this._updateRepeatCount();
-
-        return element;
-    },
-
-    _populateStackTraceTreeElement: function(parentTreeElement)
-    {
-        for (var i = 0; i < this._stackTrace.length; i++) {
-            var frame = this._stackTrace[i];
-
-            var content = document.createElement("div");
-            var messageTextElement = document.createElement("span");
-            messageTextElement.className = "console-message-text source-code";
-            var functionName = frame.functionName || WebInspector.UIString("(anonymous function)");
-            messageTextElement.appendChild(document.createTextNode(functionName));
-            content.appendChild(messageTextElement);
-
-            if (frame.url) {
-                var urlElement = this._linkifyCallFrame(frame);
-                content.appendChild(urlElement);
-            }
-
-            var treeElement = new TreeElement(content);
-            parentTreeElement.appendChild(treeElement);
-        }
-    },
-
-    _updateRepeatCount: function() {
-        if (!this.repeatCountElement) {
-            this.repeatCountElement = document.createElement("span");
-            this.repeatCountElement.className = "bubble";
-
-            this._element.insertBefore(this.repeatCountElement, this._element.firstChild);
-            this._element.addStyleClass("repeated-message");
-        }
-        this.repeatCountElement.textContent = this.repeatCount;
-    },
-
-    toString: function()
-    {
-        var sourceString;
-        switch (this.source) {
-            case WebInspector.ConsoleMessage.MessageSource.HTML:
-                sourceString = "HTML";
-                break;
-            case WebInspector.ConsoleMessage.MessageSource.XML:
-                sourceString = "XML";
-                break;
-            case WebInspector.ConsoleMessage.MessageSource.JS:
-                sourceString = "JS";
-                break;
-            case WebInspector.ConsoleMessage.MessageSource.CSS:
-                sourceString = "CSS";
-                break;
-            case WebInspector.ConsoleMessage.MessageSource.Other:
-                sourceString = "Other";
-                break;
-        }
-
-        var typeString;
-        switch (this.type) {
-            case WebInspector.ConsoleMessage.MessageType.Log:
-            case WebInspector.ConsoleMessage.MessageType.UncaughtException:
-            case WebInspector.ConsoleMessage.MessageType.NetworkError:
-                typeString = "Log";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Object:
-                typeString = "Object";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Trace:
-                typeString = "Trace";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.StartGroupCollapsed:
-            case WebInspector.ConsoleMessage.MessageType.StartGroup:
-                typeString = "Start Group";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.EndGroup:
-                typeString = "End Group";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Assert:
-                typeString = "Assert";
-                break;
-            case WebInspector.ConsoleMessage.MessageType.Result:
-                typeString = "Result";
-                break;
-        }
-
-        var levelString;
-        switch (this.level) {
-            case WebInspector.ConsoleMessage.MessageLevel.Tip:
-                levelString = "Tip";
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Log:
-                levelString = "Log";
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Warning:
-                levelString = "Warning";
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Debug:
-                levelString = "Debug";
-                break;
-            case WebInspector.ConsoleMessage.MessageLevel.Error:
-                levelString = "Error";
-                break;
-        }
-
-        return sourceString + " " + typeString + " " + levelString + ": " + this._formattedMessage.textContent + "\n" + this.url + " line " + this.line;
-    },
-
-    isEqual: function(msg)
-    {
-        if (!msg)
-            return false;
-
-        if (this._stackTrace) {
-            if (!msg._stackTrace)
-                return false;
-            var l = this._stackTrace;
-            var r = msg._stackTrace;
-            for (var i = 0; i < l.length; i++) {
-                if (l[i].url !== r[i].url ||
-                    l[i].functionName !== r[i].functionName ||
-                    l[i].lineNumber !== r[i].lineNumber ||
-                    l[i].columnNumber !== r[i].columnNumber)
-                    return false;
-            }
-        }
-
-        return (this.source === msg.source)
-            && (this.type === msg.type)
-            && (this.level === msg.level)
-            && (this.line === msg.line)
-            && (this.url === msg.url)
-            && (this.message === msg.message)
-            && (this._requestId === msg._requestId);
-    },
-
-    get stackTrace()
-    {
-        return this._stackTrace;
-    }
-}
-
-// Note: Keep these constants in sync with the ones in Console.h
-WebInspector.ConsoleMessage.MessageSource = {
-    HTML: "html",
-    XML: "xml",
-    JS: "javascript",
-    CSS: "css",
-    Other: "other"
-}
-
-WebInspector.ConsoleMessage.MessageType = {
-    Log: "log",
-    Object: "other",
-    Trace: "trace",
-    StartGroup: "startGroup",
-    StartGroupCollapsed: "startGroupCollapsed",
-    EndGroup: "endGroup",
-    Assert: "assert",
-    UncaughtException: "uncaughtException",
-    NetworkError: "networkError",
-    Result: "result"
-}
-
-WebInspector.ConsoleMessage.MessageLevel = {
-    Tip: "tip",
-    Log: "log",
-    Warning: "warning",
-    Error: "error",
-    Debug: "debug"
-}
-
+/**
+ * @constructor
+ */
 WebInspector.ConsoleCommand = function(command)
 {
     this.command = command;
@@ -1313,24 +694,31 @@ WebInspector.ConsoleCommand.prototype = {
     },
 }
 
-WebInspector.ConsoleCommandResult = function(result, wasThrown, originatingCommand)
+/**
+ * @extends {WebInspector.ConsoleMessageImpl}
+ * @constructor
+ */
+WebInspector.ConsoleCommandResult = function(result, wasThrown, originatingCommand, linkifier)
 {
     var level = (wasThrown ? WebInspector.ConsoleMessage.MessageLevel.Error : WebInspector.ConsoleMessage.MessageLevel.Log);
     this.originatingCommand = originatingCommand;
-    WebInspector.ConsoleMessage.call(this, WebInspector.ConsoleMessage.MessageSource.JS, WebInspector.ConsoleMessage.MessageType.Result, level, -1, null, 1, null, [result]);
+    WebInspector.ConsoleMessageImpl.call(this, WebInspector.ConsoleMessage.MessageSource.JS, WebInspector.ConsoleMessage.MessageType.Result, level, -1, null, 1, null, linkifier, [result]);
 }
 
 WebInspector.ConsoleCommandResult.prototype = {
     toMessageElement: function()
     {
-        var element = WebInspector.ConsoleMessage.prototype.toMessageElement.call(this);
+        var element = WebInspector.ConsoleMessageImpl.prototype.toMessageElement.call(this);
         element.addStyleClass("console-user-command-result");
         return element;
     }
 }
 
-WebInspector.ConsoleCommandResult.prototype.__proto__ = WebInspector.ConsoleMessage.prototype;
+WebInspector.ConsoleCommandResult.prototype.__proto__ = WebInspector.ConsoleMessageImpl.prototype;
 
+/**
+ * @constructor
+ */
 WebInspector.ConsoleGroup = function(parentGroup)
 {
     this.parentGroup = parentGroup;
@@ -1388,3 +776,18 @@ WebInspector.ConsoleGroup.prototype = {
     }
 }
 
+/**
+ * @type {?WebInspector.ConsoleView}
+ */
+WebInspector.consoleView = null;
+
+WebInspector.ConsoleMessage.create = function(source, type, level, line, url, repeatCount, message, parameters, stackTrace, request)
+{
+    return new WebInspector.ConsoleMessageImpl(source, type, level, line, url, repeatCount, message, WebInspector.consoleView._linkifier, parameters, stackTrace, request);
+}
+
+WebInspector.ConsoleMessage.createTextMessage = function(text, level)
+{
+    level = level || WebInspector.ConsoleMessage.MessageLevel.Log;
+    return new WebInspector.ConsoleMessageImpl(WebInspector.ConsoleMessage.MessageSource.ConsoleAPI, WebInspector.ConsoleMessage.MessageType.Log, level, 0, null, 1, null, WebInspector.consoleView._linkifier, [text], null);
+}

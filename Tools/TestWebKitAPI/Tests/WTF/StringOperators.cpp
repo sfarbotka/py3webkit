@@ -23,14 +23,13 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "Test.h"
+#include "config.h"
 
-#define JS_EXPORTDATA
 #define WTF_STRINGTYPEADAPTER_COPIED_WTF_STRING() (++wtfStringCopyCount)
 
 static int wtfStringCopyCount;
 
-#include <JavaScriptCore/WTFString.h>
+#include <wtf/text/WTFString.h>
 
 namespace TestWebKitAPI {
 

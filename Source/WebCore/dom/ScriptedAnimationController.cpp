@@ -31,7 +31,18 @@
 #include "Document.h"
 #include "Element.h"
 #include "FrameView.h"
+#include "InspectorInstrumentation.h"
 #include "RequestAnimationFrameCallback.h"
+
+#if USE(REQUEST_ANIMATION_FRAME_TIMER)
+#include <algorithm>
+#include <wtf/CurrentTime.h>
+
+using namespace std;
+
+// Allow a little more than 60fps to make sure we can at least hit that frame rate.
+#define MinimumAnimationInterval 0.015
+#endif
 
 namespace WebCore {
 
@@ -39,6 +50,10 @@ ScriptedAnimationController::ScriptedAnimationController(Document* document)
     : m_document(document)
     , m_nextCallbackId(0)
     , m_suspendCount(0)
+#if USE(REQUEST_ANIMATION_FRAME_TIMER)
+    , m_animationTimer(this, &ScriptedAnimationController::animationTimerFired)
+    , m_lastAnimationFrameTime(0)
+#endif
 {
 }
 
@@ -51,8 +66,7 @@ void ScriptedAnimationController::resume()
 {
     --m_suspendCount;
     if (!m_suspendCount && m_callbacks.size())
-        if (FrameView* fv = m_document->view())
-            fv->scheduleAnimation();
+        scheduleAnimation();
 }
 
 ScriptedAnimationController::CallbackId ScriptedAnimationController::registerCallback(PassRefPtr<RequestAnimationFrameCallback> callback, Element* animationElement)
@@ -62,9 +76,11 @@ ScriptedAnimationController::CallbackId ScriptedAnimationController::registerCal
     callback->m_id = id;
     callback->m_element = animationElement;
     m_callbacks.append(callback);
+
+    InspectorInstrumentation::didRegisterAnimationFrameCallback(m_document, id);
+
     if (!m_suspendCount)
-        if (FrameView* view = m_document->view())
-            view->scheduleAnimation();
+        scheduleAnimation();
     return id;
 }
 
@@ -73,6 +89,7 @@ void ScriptedAnimationController::cancelCallback(CallbackId id)
     for (size_t i = 0; i < m_callbacks.size(); ++i) {
         if (m_callbacks[i]->m_id == id) {
             m_callbacks[i]->m_firedOrCancelled = true;
+            InspectorInstrumentation::didCancelAnimationFrameCallback(m_document, id);
             m_callbacks.remove(i);
             return;
         }
@@ -107,7 +124,9 @@ void ScriptedAnimationController::serviceScriptedAnimations(DOMTimeStamp time)
             RequestAnimationFrameCallback* callback = callbacks[i].get();
             if (!callback->m_firedOrCancelled && (!callback->m_element || callback->m_element->renderer())) {
                 callback->m_firedOrCancelled = true;
+                InspectorInstrumentationCookie cookie = InspectorInstrumentation::willFireAnimationFrameEvent(m_document, callback->m_id);
                 callback->handleEvent(time);
+                InspectorInstrumentation::didFireAnimationFrameEvent(cookie);
                 firedCallback = true;
                 callbacks.remove(i);
                 break;
@@ -124,9 +143,27 @@ void ScriptedAnimationController::serviceScriptedAnimations(DOMTimeStamp time)
     }
 
     if (m_callbacks.size())
-        if (FrameView* view = m_document->view())
-            view->scheduleAnimation();
+        scheduleAnimation();
 }
+    
+void ScriptedAnimationController::scheduleAnimation()
+{
+#if USE(REQUEST_ANIMATION_FRAME_TIMER)
+    double scheduleDelay = max<double>(MinimumAnimationInterval - (currentTime() - m_lastAnimationFrameTime), 0);
+    m_animationTimer.startOneShot(scheduleDelay);
+#else
+    if (FrameView* frameView = m_document->view())
+        frameView->scheduleAnimation();
+#endif
+}
+
+#if USE(REQUEST_ANIMATION_FRAME_TIMER)
+void ScriptedAnimationController::animationTimerFired(Timer<ScriptedAnimationController>*)
+{
+    m_lastAnimationFrameTime = currentTime();
+    serviceScriptedAnimations(convertSecondsToDOMTimeStamp(m_lastAnimationFrameTime));
+}
+#endif
 
 }
 

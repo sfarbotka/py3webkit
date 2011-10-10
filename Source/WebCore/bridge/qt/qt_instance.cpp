@@ -54,35 +54,39 @@ public:
 
     static QtRuntimeObject* create(ExecState* exec, JSGlobalObject* globalObject, PassRefPtr<Instance> instance)
     {
-        return new (allocateCell<QtRuntimeObject>(*exec->heap())) QtRuntimeObject(exec, globalObject, instance);
+        Structure* domStructure = WebCore::deprecatedGetDOMStructure<QtRuntimeObject>(exec);
+        QtRuntimeObject* object = new (allocateCell<QtRuntimeObject>(*exec->heap())) QtRuntimeObject(exec, globalObject, domStructure, instance);
+        object->finishCreation(globalObject);
+        return object;
     }
     
     static const ClassInfo s_info;
 
-    virtual void visitChildren(SlotVisitor& visitor)
+    static void visitChildren(JSCell* cell, SlotVisitor& visitor)
     {
-        RuntimeObject::visitChildren(visitor);
-        QtInstance* instance = static_cast<QtInstance*>(getInternalInstance());
+        QtRuntimeObject* thisObject = static_cast<QtRuntimeObject*>(cell);
+        RuntimeObject::visitChildren(thisObject, visitor);
+        QtInstance* instance = static_cast<QtInstance*>(thisObject->getInternalInstance());
         if (instance)
             instance->visitAggregate(visitor);
     }
 
-    static Structure* createStructure(JSGlobalData& globalData, JSValue prototype)
+    static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
     {
-        return Structure::create(globalData, prototype, TypeInfo(ObjectType,  StructureFlags), AnonymousSlotCount, &s_info);
+        return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType,  StructureFlags), &s_info);
     }
 
 protected:
     static const unsigned StructureFlags = RuntimeObject::StructureFlags | OverridesVisitChildren;
 
 private:
-    QtRuntimeObject(ExecState*, JSGlobalObject*, PassRefPtr<Instance>);
+    QtRuntimeObject(ExecState*, JSGlobalObject*, Structure*, PassRefPtr<Instance>);
 };
 
-const ClassInfo QtRuntimeObject::s_info = { "QtRuntimeObject", &RuntimeObject::s_info, 0, 0 };
+const ClassInfo QtRuntimeObject::s_info = { "QtRuntimeObject", &RuntimeObject::s_info, 0, 0, CREATE_METHOD_TABLE(QtRuntimeObject) };
 
-QtRuntimeObject::QtRuntimeObject(ExecState* exec, JSGlobalObject* globalObject, PassRefPtr<Instance> instance)
-    : RuntimeObject(exec, globalObject, WebCore::deprecatedGetDOMStructure<QtRuntimeObject>(exec), instance)
+QtRuntimeObject::QtRuntimeObject(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, PassRefPtr<Instance> instance)
+    : RuntimeObject(exec, globalObject, structure, instance)
 {
 }
 
@@ -115,11 +119,11 @@ QtInstance::~QtInstance()
         case QScriptEngine::QtOwnership:
             break;
         case QScriptEngine::AutoOwnership:
-            if (m_object->parent())
+            if (m_object.data()->parent())
                 break;
             // fall through!
         case QScriptEngine::ScriptOwnership:
-            delete m_object;
+            delete m_object.data();
             break;
         }
     }
@@ -181,7 +185,7 @@ Class* QtInstance::getClass() const
     if (!m_class) {
         if (!m_object)
             return 0;
-        m_class = QtClass::classForObject(m_object);
+        m_class = QtClass::classForObject(m_object.data());
     }
     return m_class;
 }
@@ -341,7 +345,7 @@ QByteArray QtField::name() const
     if (m_type == MetaProperty)
         return m_property.name();
     if (m_type == ChildObject && m_childObject)
-        return m_childObject->objectName().toLatin1();
+        return m_childObject.data()->objectName().toLatin1();
 #ifndef QT_NO_PROPERTIES
     if (m_type == DynamicProperty)
         return m_dynamicProperty;
@@ -362,7 +366,7 @@ JSValue QtField::valueFromInstance(ExecState* exec, const Instance* inst) const
             else
                 return jsUndefined();
         } else if (m_type == ChildObject)
-            val = QVariant::fromValue((QObject*) m_childObject);
+            val = QVariant::fromValue((QObject*) m_childObject.data());
 #ifndef QT_NO_PROPERTIES
         else if (m_type == DynamicProperty)
             val = obj->property(m_dynamicProperty);

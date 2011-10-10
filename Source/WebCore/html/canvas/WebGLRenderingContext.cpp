@@ -363,6 +363,8 @@ PassOwnPtr<WebGLRenderingContext> WebGLRenderingContext::create(HTMLCanvasElemen
     }
 
     attributes.noExtensions = true;
+    attributes.shareResources = false;
+
     RefPtr<GraphicsContext3D> context(GraphicsContext3D::create(attributes, hostWindow));
 
     if (!context) {
@@ -1898,7 +1900,7 @@ PassRefPtr<WebGLActiveInfo> WebGLRenderingContext::getActiveUniform(WebGLProgram
     return WebGLActiveInfo::create(info.name, info.type, info.size);
 }
 
-bool WebGLRenderingContext::getAttachedShaders(WebGLProgram* program, Vector<WebGLShader*>& shaderObjects, ExceptionCode& ec)
+bool WebGLRenderingContext::getAttachedShaders(WebGLProgram* program, Vector<RefPtr<WebGLShader> >& shaderObjects, ExceptionCode& ec)
 {
     UNUSED_PARAM(ec);
     shaderObjects.clear();
@@ -2169,7 +2171,7 @@ WebGLGetInfo WebGLRenderingContext::getParameter(GC3Denum pname, ExceptionCode& 
     case GraphicsContext3D::RENDERBUFFER_BINDING:
         return WebGLGetInfo(PassRefPtr<WebGLRenderbuffer>(m_renderbufferBinding));
     case GraphicsContext3D::RENDERER:
-        return WebGLGetInfo(m_context->getString(GraphicsContext3D::RENDERER));
+        return WebGLGetInfo(String("WebKit WebGL"));
     case GraphicsContext3D::SAMPLE_BUFFERS:
         return getIntParameter(pname);
     case GraphicsContext3D::SAMPLE_COVERAGE_INVERT:
@@ -2233,7 +2235,7 @@ WebGLGetInfo WebGLRenderingContext::getParameter(GC3Denum pname, ExceptionCode& 
     case GraphicsContext3D::UNPACK_COLORSPACE_CONVERSION_WEBGL:
         return WebGLGetInfo(m_unpackColorspaceConversion);
     case GraphicsContext3D::VENDOR:
-        return WebGLGetInfo("Webkit (" + m_context->getString(GraphicsContext3D::VENDOR) + ")");
+        return WebGLGetInfo(String("WebKit"));
     case GraphicsContext3D::VERSION:
         return WebGLGetInfo("WebGL 1.0 (" + m_context->getString(GraphicsContext3D::VERSION) + ")");
     case GraphicsContext3D::VIEWPORT:
@@ -3897,14 +3899,6 @@ void WebGLRenderingContext::viewport(GC3Dint x, GC3Dint y, GC3Dsizei width, GC3D
 {
     if (isContextLost())
         return;
-    if (isnan(x))
-        x = 0;
-    if (isnan(y))
-        y = 0;
-    if (isnan(width))
-        width = 100;
-    if (isnan(height))
-        height = 100;
     if (!validateSize(width, height))
         return;
     m_context->viewport(x, y, width, height);

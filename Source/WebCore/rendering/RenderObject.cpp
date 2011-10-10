@@ -45,6 +45,7 @@
 #include "RenderCounter.h"
 #include "RenderDeprecatedFlexibleBox.h"
 #include "RenderFlexibleBox.h"
+#include "RenderFlowThread.h"
 #include "RenderImage.h"
 #include "RenderImageResourceStyleImage.h"
 #include "RenderInline.h"
@@ -158,12 +159,6 @@ RenderObject* RenderObject::createObject(Node* node, RenderStyle* style)
         case TABLE_CELL:
             return new (arena) RenderTableCell(node);
         case TABLE_CAPTION:
-#if ENABLE(WCSS)
-        // As per the section 17.1 of the spec WAP-239-WCSS-20011026-a.pdf, 
-        // the marquee box inherits and extends the characteristics of the 
-        // principal block box ([CSS2] section 9.2.1).
-        case WAP_MARQUEE:
-#endif
             return new (arena) RenderBlock(node);
         case BOX:
         case INLINE_BOX:
@@ -178,9 +173,7 @@ RenderObject* RenderObject::createObject(Node* node, RenderStyle* style)
     return 0;
 }
 
-#ifndef NDEBUG 
-static WTF::RefCountedLeakCounter renderObjectCounter("RenderObject");
-#endif
+DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, renderObjectCounter, ("RenderObject"));
 
 RenderObject::RenderObject(Node* node)
     : CachedResourceClient()
@@ -214,7 +207,6 @@ RenderObject::RenderObject(Node* node)
     , m_hasOverflowClip(false)
     , m_hasTransform(false)
     , m_hasReflection(false)
-    , m_hasOverrideSize(false)
     , m_hasCounterNodeMap(false)
     , m_everHadLayout(false)
     , m_childrenInline(false)
@@ -223,6 +215,7 @@ RenderObject::RenderObject(Node* node)
     , m_hasMarkupTruncation(false)
     , m_selectionState(SelectionNone)
     , m_hasColumns(false)
+    , m_inRenderFlowThread(false)
 {
 #ifndef NDEBUG
     renderObjectCounter.increment();
@@ -282,6 +275,17 @@ void RenderObject::addChild(RenderObject* newChild, RenderObject* beforeChild)
     if (!children)
         return;
 
+    RenderObject* beforeContent = 0;
+    bool beforeChildHasBeforeAndAfterContent = false;
+    if (beforeChild && (beforeChild->isTable() || beforeChild->isTableSection() || beforeChild->isTableRow())) {
+        beforeContent = beforeChild->findBeforeContentRenderer();
+        RenderObject* afterContent = beforeChild->findAfterContentRenderer();
+        if (beforeContent && afterContent) {
+            beforeChildHasBeforeAndAfterContent = true;
+            beforeContent->destroy();
+        }
+    }
+
     bool needsTable = false;
 
     if (newChild->isTableCol() && newChild->style()->display() == TABLE_COLUMN_GROUP)
@@ -320,11 +324,15 @@ void RenderObject::addChild(RenderObject* newChild, RenderObject* beforeChild)
         // Just add it...
         children->insertChildNode(this, newChild, beforeChild);
     }
+
     if (newChild->isText() && newChild->style()->textTransform() == CAPITALIZE) {
         RefPtr<StringImpl> textToTransform = toRenderText(newChild)->originalText();
         if (textToTransform)
             toRenderText(newChild)->setText(textToTransform.release(), true);
     }
+
+    if (beforeChildHasBeforeAndAfterContent)
+        children->updateBeforeAfterContent(this, BEFORE);
 }
 
 void RenderObject::removeChild(RenderObject* oldChild)
@@ -568,9 +576,92 @@ RenderBoxModelObject* RenderObject::enclosingBoxModelObject() const
     return 0;
 }
 
+RenderFlowThread* RenderObject::enclosingRenderFlowThread() const
+{   
+    if (!inRenderFlowThread())
+        return 0;
+    
+    // See if we have the thread cached because we're in the middle of layout.
+    RenderFlowThread* flowThread = view()->currentRenderFlowThread();
+    if (flowThread)
+        return flowThread;
+    
+    // Not in the middle of layout so have to find the thread the slow way.
+    RenderObject* curr = const_cast<RenderObject*>(this);
+    while (curr) {
+        if (curr->isRenderFlowThread())
+            return toRenderFlowThread(curr);
+        curr = curr->parent();
+    }
+    return 0;
+}
+
 RenderBlock* RenderObject::firstLineBlock() const
 {
     return 0;
+}
+
+static inline bool objectIsRelayoutBoundary(const RenderObject* object)
+{
+    // FIXME: In future it may be possible to broaden this condition in order to improve performance.
+    // Table cells are excluded because even when their CSS height is fixed, their height()
+    // may depend on their contents.
+    return object->isTextControl()
+#if ENABLE(SVG)
+        || object->isSVGRoot()
+#endif
+        || (object->hasOverflowClip() && !object->style()->width().isIntrinsicOrAuto() && !object->style()->height().isIntrinsicOrAuto() && !object->style()->height().isPercent() && !object->isTableCell());
+}
+
+void RenderObject::markContainingBlocksForLayout(bool scheduleRelayout, RenderObject* newRoot)
+{
+    ASSERT(!scheduleRelayout || !newRoot);
+
+    RenderObject* object = container();
+    RenderObject* last = this;
+
+    bool simplifiedNormalFlowLayout = needsSimplifiedNormalFlowLayout() && !selfNeedsLayout() && !normalChildNeedsLayout();
+
+    while (object) {
+        // Don't mark the outermost object of an unrooted subtree. That object will be
+        // marked when the subtree is added to the document.
+        RenderObject* container = object->container();
+        if (!container && !object->isRenderView())
+            return;
+        if (!last->isText() && (last->style()->position() == FixedPosition || last->style()->position() == AbsolutePosition)) {
+            bool willSkipRelativelyPositionedInlines = !object->isRenderBlock();
+            while (object && !object->isRenderBlock()) // Skip relatively positioned inlines and get to the enclosing RenderBlock.
+                object = object->container();
+            if (!object || object->m_posChildNeedsLayout)
+                return;
+            if (willSkipRelativelyPositionedInlines)
+                container = object->container();
+            object->m_posChildNeedsLayout = true;
+            simplifiedNormalFlowLayout = true;
+            ASSERT(!object->isSetNeedsLayoutForbidden());
+        } else if (simplifiedNormalFlowLayout) {
+            if (object->m_needsSimplifiedNormalFlowLayout)
+                return;
+            object->m_needsSimplifiedNormalFlowLayout = true;
+            ASSERT(!object->isSetNeedsLayoutForbidden());
+        } else {
+            if (object->m_normalChildNeedsLayout)
+                return;
+            object->m_normalChildNeedsLayout = true;
+            ASSERT(!object->isSetNeedsLayoutForbidden());
+        }
+
+        if (object == newRoot)
+            return;
+
+        last = object;
+        if (scheduleRelayout && objectIsRelayoutBoundary(last))
+            break;
+        object = container;
+    }
+
+    if (scheduleRelayout)
+        last->scheduleRelayout();
 }
 
 void RenderObject::setPreferredLogicalWidthsDirty(bool b, bool markParents)
@@ -610,9 +701,6 @@ void RenderObject::setLayerNeedsFullRepaint()
 
 RenderBlock* RenderObject::containingBlock() const
 {
-    ASSERT(!isTableCell());
-    ASSERT(!isRenderView());
-
     RenderObject* o = parent();
     if (!isText() && m_style->position() == FixedPosition) {
         while (o && !o->isRenderView() && !(o->hasTransform() && o->isRenderBlock()))
@@ -1075,7 +1163,7 @@ void RenderObject::paintOutline(GraphicsContext* graphicsContext, const LayoutRe
         graphicsContext->endTransparencyLayer();
 }
 
-IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms)
+IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
 {
     if (useTransforms) {
         Vector<FloatQuad> quads;
@@ -1125,14 +1213,14 @@ void RenderObject::absoluteFocusRingQuads(Vector<FloatQuad>& quads)
 void RenderObject::addAbsoluteRectForLayer(IntRect& result)
 {
     if (hasLayer())
-        result.unite(absoluteBoundingBoxRect());
+        result.unite(absoluteBoundingBoxRectIgnoringTransforms());
     for (RenderObject* current = firstChild(); current; current = current->nextSibling())
         current->addAbsoluteRectForLayer(result);
 }
 
 LayoutRect RenderObject::paintingRootRect(LayoutRect& topLevelRect)
 {
-    LayoutRect result = absoluteBoundingBoxRect();
+    LayoutRect result = absoluteBoundingBoxRectIgnoringTransforms();
     topLevelRect = result;
     for (RenderObject* current = firstChild(); current; current = current->nextSibling())
         current->addAbsoluteRectForLayer(result);
@@ -1145,16 +1233,28 @@ void RenderObject::paint(PaintInfo&, const LayoutPoint&)
 
 RenderBoxModelObject* RenderObject::containerForRepaint() const
 {
+    RenderView* v = view();
+    if (!v)
+        return 0;
+    
+    RenderBoxModelObject* repaintContainer = 0;
+
 #if USE(ACCELERATED_COMPOSITING)
-    if (RenderView* v = view()) {
-        if (v->usesCompositing()) {
-            RenderLayer* compLayer = enclosingLayer()->enclosingCompositingLayer();
-            return compLayer ? compLayer->renderer() : 0;
-        }
+    if (v->usesCompositing()) {
+        RenderLayer* compLayer = enclosingLayer()->enclosingCompositingLayer();
+        if (compLayer)
+            repaintContainer = compLayer->renderer();
     }
 #endif
-    // Do root-relative repaint.
-    return 0;
+
+    // If we have a flow thread, then we need to do individual repaints within the RenderRegions instead.
+    // Return the flow thread as a repaint container in order to create a chokepoint that allows us to change
+    // repainting to do individual region repaints.
+    // FIXME: Composited layers inside a flow thread will bypass this mechanism and will malfunction. It's not
+    // clear how to address this problem for composited descendants of a RenderFlowThread.
+    if (!repaintContainer && inRenderFlowThread())
+        repaintContainer = enclosingRenderFlowThread();
+    return repaintContainer;
 }
 
 void RenderObject::repaintUsingContainer(RenderBoxModelObject* repaintContainer, const LayoutRect& r, bool immediate)
@@ -1163,6 +1263,9 @@ void RenderObject::repaintUsingContainer(RenderBoxModelObject* repaintContainer,
         view()->repaintViewRectangle(r, immediate);
         return;
     }
+
+    if (repaintContainer->isRenderFlowThread())
+        return toRenderFlowThread(repaintContainer)->repaintRectangleInRegions(r, immediate);
 
 #if USE(ACCELERATED_COMPOSITING)
     RenderView* v = view();
@@ -1783,6 +1886,33 @@ void RenderObject::styleDidChange(StyleDifference diff, const RenderStyle* oldSt
     }
 }
 
+void RenderObject::propagateStyleToAnonymousChildren(bool blockChildrenOnly)
+{
+    // FIXME: We could save this call when the change only affected non-inherited properties.
+    for (RenderObject* child = firstChild(); child; child = child->nextSibling()) {
+        if (!child->isAnonymous() || child->style()->styleType() != NOPSEUDO)
+            continue;
+
+        if (blockChildrenOnly && !child->isRenderBlock())
+            continue;
+
+#if ENABLE(FULLSCREEN_API)
+        if (child->isRenderFullScreen() || child->isRenderFullScreenPlaceholder())
+            continue;
+#endif
+
+        RefPtr<RenderStyle> newStyle = RenderStyle::createAnonymousStyle(style());
+        if (style()->specifiesColumns()) {
+            if (child->style()->specifiesColumns())
+                newStyle->inheritColumnPropertiesFrom(style());
+            if (child->style()->columnSpan())
+                newStyle->setColumnSpan(true);
+        }
+        newStyle->setDisplay(child->style()->display());
+        child->setStyle(newStyle.release());
+    }
+}
+
 void RenderObject::updateFillImages(const FillLayer* oldLayers, const FillLayer* newLayers)
 {
     // Optimize the common case
@@ -2180,10 +2310,13 @@ void RenderObject::scheduleRelayout()
         FrameView* view = toRenderView(this)->frameView();
         if (view)
             view->scheduleRelayout();
-    } else if (parent()) {
-        FrameView* v = view() ? view()->frameView() : 0;
-        if (v)
-            v->scheduleRelayoutOfSubtree(this);
+    } else {
+        if (isRooted()) {
+            if (RenderView* renderView = view()) {
+                if (FrameView* frameView = renderView->frameView())
+                    frameView->scheduleRelayoutOfSubtree(this);
+            }
+        }
     }
 }
 
@@ -2369,10 +2502,10 @@ void RenderObject::addDashboardRegions(Vector<DashboardRegionValue>& regions)
         region.bounds.setY(absPos.y() + styleRegion.offset.top().value());
 
         if (frame()) {
-            float pageScaleFactor = frame()->page()->chrome()->scaleFactor();
-            if (pageScaleFactor != 1.0f) {
-                region.bounds.scale(pageScaleFactor);
-                region.clip.scale(pageScaleFactor);
+            float deviceScaleFactor = frame()->page()->deviceScaleFactor();
+            if (deviceScaleFactor != 1.0f) {
+                region.bounds.scale(deviceScaleFactor);
+                region.clip.scale(deviceScaleFactor);
             }
         }
 
@@ -2422,11 +2555,6 @@ int RenderObject::caretMaxOffset() const
         return node() ? max(1U, node()->childNodeCount()) : 1;
     if (isHR())
         return 1;
-    return 0;
-}
-
-unsigned RenderObject::caretMaxRenderedOffset() const
-{
     return 0;
 }
 
@@ -2567,7 +2695,13 @@ VisiblePosition RenderObject::createVisiblePosition(const Position& position)
     return createVisiblePosition(0, DOWNSTREAM);
 }
 
+CursorDirective RenderObject::getCursor(const LayoutPoint&, Cursor&) const
+{
+    return SetCursorBasedOnStyle;
+}
+
 #if ENABLE(SVG)
+
 RenderSVGResourceContainer* RenderObject::toRenderSVGResourceContainer()
 {
     ASSERT_NOT_REACHED();

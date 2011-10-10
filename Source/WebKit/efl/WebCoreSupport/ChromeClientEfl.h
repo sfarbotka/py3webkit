@@ -45,8 +45,6 @@ public:
 
     virtual FloatRect pageRect();
 
-    virtual float scaleFactor();
-
     virtual void focus();
     virtual void unfocus();
 
@@ -108,7 +106,7 @@ public:
 
     virtual void print(Frame*);
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     virtual void exceededDatabaseQuota(Frame*, const String&);
 #endif
 
@@ -116,10 +114,8 @@ public:
     virtual NotificationPresenter* notificationPresenter() const;
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     virtual void reachedMaxAppCacheSize(int64_t spaceNeeded);
     virtual void reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_t totalSpaceNeeded);
-#endif
 
 #if ENABLE(CONTEXT_MENUS)
     virtual void showContextMenu() { }
@@ -149,7 +145,7 @@ public:
     virtual void setCursor(const Cursor&);
     virtual void setCursorHiddenUntilMouseMoves(bool);
 
-    virtual void scrollRectIntoView(const IntRect&, const ScrollView*) const { }
+    virtual void scrollRectIntoView(const IntRect&) const { }
 
     virtual void requestGeolocationPermissionForFrame(Frame*, Geolocation*);
     virtual void cancelGeolocationPermissionRequestForFrame(Frame*, Geolocation*);

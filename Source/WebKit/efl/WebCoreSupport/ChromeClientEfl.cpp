@@ -34,7 +34,8 @@
 #include "config.h"
 #include "ChromeClientEfl.h"
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
+
 #include "DatabaseDetails.h"
 #include "DatabaseTracker.h"
 #endif
@@ -126,12 +127,6 @@ void ChromeClientEfl::setWindowRect(const FloatRect& rect)
 FloatRect ChromeClientEfl::pageRect()
 {
     return ewk_view_page_rect_get(m_view);
-}
-
-float ChromeClientEfl::scaleFactor()
-{
-    notImplemented();
-    return 1.0;
 }
 
 void ChromeClientEfl::focus()
@@ -241,11 +236,15 @@ void ChromeClientEfl::closeWindowSoon()
     ewk_view_window_close(m_view);
 }
 
-bool ChromeClientEfl::canTakeFocus(FocusDirection)
+bool ChromeClientEfl::canTakeFocus(FocusDirection coreDirection)
 {
     // This is called when cycling through links/focusable objects and we
     // reach the last focusable object.
-    return false;
+    ASSERT(coreDirection == FocusDirectionForward || coreDirection == FocusDirectionBackward);
+
+    Ewk_Focus_Direction direction = static_cast<Ewk_Focus_Direction>(coreDirection);
+
+    return !ewk_view_focus_can_cycle(m_view, direction);
 }
 
 void ChromeClientEfl::takeFocus(FocusDirection)
@@ -379,7 +378,6 @@ void ChromeClientEfl::print(Frame* frame)
     notImplemented();
 }
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClientEfl::reachedMaxAppCacheSize(int64_t spaceNeeded)
 {
     // FIXME: Free some space.
@@ -390,7 +388,6 @@ void ChromeClientEfl::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_
 {
     notImplemented();
 }
-#endif
 
 #if ENABLE(TOUCH_EVENTS)
 void ChromeClientEfl::needTouchEvents(bool needed)
@@ -399,7 +396,7 @@ void ChromeClientEfl::needTouchEvents(bool needed)
 }
 #endif
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void ChromeClientEfl::exceededDatabaseQuota(Frame* frame, const String& databaseName)
 {
     uint64_t quota;
@@ -407,8 +404,8 @@ void ChromeClientEfl::exceededDatabaseQuota(Frame* frame, const String& database
 
     DatabaseDetails details = DatabaseTracker::tracker().detailsForNameAndOrigin(databaseName, origin);
     quota = ewk_view_exceeded_database_quota(m_view,
-            kit(frame), databaseName.utf8().data(),
-            details.currentUsage(), details.expectedUsage());
+                                             kit(frame), databaseName.utf8().data(),
+                                             details.currentUsage(), details.expectedUsage());
 
     /* if client did not set quota, and database is being created now, the
      * default quota is applied
@@ -443,7 +440,7 @@ void ChromeClientEfl::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> prpFile
         return;
 
     EINA_LIST_FREE(selectedFilenames, filename) {
-        filenames.append((char *)filename);
+        filenames.append((char*)filename);
         free(filename);
     }
 

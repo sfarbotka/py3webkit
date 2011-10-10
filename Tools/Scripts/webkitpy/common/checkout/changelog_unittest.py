@@ -153,6 +153,14 @@ class ChangeLogTest(unittest.TestCase):
 
         self.assertEquals(57354, parse_bug_id_from_changelog(commit_text))
 
+    def test_parse_log_entries_from_changelog(self):
+        changelog_file = StringIO(self._example_changelog)
+        parsed_entries = list(ChangeLog.parse_entries_from_file(changelog_file))
+        self.assertEquals(len(parsed_entries), 3)
+        self.assertEquals(parsed_entries[0].reviewer_text(), "David Levin")
+        self.assertEquals(parsed_entries[1].author_email(), "ddkilzer@apple.com")
+        self.assertEquals(parsed_entries[2].touched_files(), ["DumpRenderTree/mac/DumpRenderTreeWindow.mm"])
+
     def test_latest_entry_parse(self):
         changelog_contents = u"%s\n%s" % (self._example_entry, self._example_changelog)
         changelog_file = StringIO(changelog_contents)
@@ -161,6 +169,8 @@ class ChangeLogTest(unittest.TestCase):
         self.assertEquals(latest_entry.author_name(), "Peter Kasting")
         self.assertEquals(latest_entry.author_email(), "pkasting@google.com")
         self.assertEquals(latest_entry.reviewer_text(), u"Tor Arne Vestb\xf8")
+        self.assertEquals(latest_entry.touched_files(), ["DumpRenderTree/win/DumpRenderTree.vcproj", "DumpRenderTree/win/ImageDiff.vcproj", "DumpRenderTree/win/TestNetscapePlugin/TestNetscapePlugin.vcproj"])
+
         self.assertTrue(latest_entry.reviewer())  # Make sure that our UTF8-based lookup of Tor works.
 
     def test_latest_entry_parse_single_entry(self):

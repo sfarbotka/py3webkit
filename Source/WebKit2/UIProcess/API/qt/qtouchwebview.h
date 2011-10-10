@@ -35,7 +35,7 @@ class TouchViewInterface;
 class QWEBKIT_EXPORT QTouchWebView : public QSGItem
 {
     Q_OBJECT
-    Q_PROPERTY(QTouchWebPage* page READ page CONSTANT)
+    Q_PROPERTY(QTouchWebPage* page READ page CONSTANT FINAL)
 
 public:
     QTouchWebView(QSGItem* parent = 0);
@@ -47,6 +47,9 @@ protected:
     virtual void geometryChanged(const QRectF&, const QRectF&);
 
 private:
+    Q_PRIVATE_SLOT(d, void _q_viewportUpdated());
+    Q_PRIVATE_SLOT(d, void _q_viewportTrajectoryVectorChanged(const QPointF&));
+
     friend class WebKit::TouchViewInterface;
     QTouchWebViewPrivate *d;
 };

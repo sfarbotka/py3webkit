@@ -31,9 +31,10 @@ unix:!mac:!symbian:!embedded {
     PKGCONFIG += fontconfig
 }
 
-QT = core gui network declarative
+QT = core gui widgets network declarative testlib
 
 HEADERS = \
+    $$BASEDIR/EventSenderProxy.h \
     $$BASEDIR/PlatformWebView.h \
     $$BASEDIR/StringFunctions.h \
     $$BASEDIR/TestController.h \
@@ -41,6 +42,7 @@ HEADERS = \
 
 SOURCES = \
     main.cpp \
+    EventSenderProxyQt.cpp \
     PlatformWebViewQt.cpp \
     TestControllerQt.cpp \
     TestInvocationQt.cpp \
@@ -65,3 +67,5 @@ linux-* {
 
 include(../../../Source/JavaScriptCore/JavaScriptCore.pri)
 prependJavaScriptCoreLib(../../JavaScriptCore)
+
+RESOURCES = WebKitTestRunner.qrc

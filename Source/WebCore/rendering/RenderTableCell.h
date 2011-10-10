@@ -86,9 +86,8 @@ public:
     CollapsedBorderValue collapsedTopBorder() const;
     CollapsedBorderValue collapsedBottomBorder() const;
 
-    typedef Vector<CollapsedBorderValue, 100> CollapsedBorderStyles;
-    void collectBorderStyles(CollapsedBorderStyles&) const;
-    static void sortBorderStyles(CollapsedBorderStyles&);
+    void collectBorderValues(RenderTable::CollapsedBorderValues&) const;
+    static void sortBorderValues(RenderTable::CollapsedBorderValues&);
 
     virtual void updateFromElement();
 
@@ -119,9 +118,7 @@ public:
     virtual LayoutUnit paddingBefore(bool includeIntrinsicPadding = true) const;
     virtual LayoutUnit paddingAfter(bool includeIntrinsicPadding = true) const;
 
-    void setOverrideSizeFromRowHeight(int);
-
-    bool hasVisualOverflow() const { return m_overflow && !borderBoxRect().contains(m_overflow->visualOverflowRect()); }
+    void setOverrideHeightFromRowHeight(int);
 
     virtual void scrollbarsChanged(bool horizontalScrollbarChanged, bool verticalScrollbarChanged);
 
@@ -136,8 +133,6 @@ private:
     virtual const char* renderName() const { return isAnonymous() ? "RenderTableCell (anonymous)" : "RenderTableCell"; }
 
     virtual bool isTableCell() const { return true; }
-
-    virtual RenderBlock* containingBlock() const;
 
     virtual void willBeDestroyed();
 

@@ -29,7 +29,6 @@
 
 class QTouchWebPagePrivate;
 class QTouchWebPageProxy;
-class QWebError;
 class QWebNavigationController;
 
 namespace WebKit {
@@ -41,9 +40,15 @@ class QWEBKIT_EXPORT QTouchWebPage : public QSGItem {
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QUrl url READ url NOTIFY urlChanged)
     Q_PROPERTY(int loadProgress READ loadProgress NOTIFY loadProgressChanged)
-    Q_PROPERTY(QWebNavigationController* navigation READ navigationController CONSTANT)
-
+    Q_PROPERTY(QWebNavigationController* navigation READ navigationController CONSTANT FINAL)
+    Q_ENUMS(ErrorType)
 public:
+    enum ErrorType {
+        EngineError,
+        NetworkError,
+        HttpError
+    };
+
     QTouchWebPage(QSGItem* parent = 0);
 
     virtual ~QTouchWebPage();
@@ -60,12 +65,15 @@ public:
     virtual bool event(QEvent*);
 
 Q_SIGNALS:
-    void urlChanged(const QUrl&);
-    void titleChanged(const QString&);
+    void urlChanged(const QUrl& url);
+    void titleChanged(const QString& title);
     void loadStarted();
     void loadSucceeded();
-    void loadFailed(const QWebError&);
+    void loadFailed(QTouchWebPage::ErrorType errorType, int errorCode, const QUrl& url);
     void loadProgressChanged(int progress);
+
+protected Q_SLOTS:
+    void onVisibleChanged();
 
 protected:
     virtual void keyPressEvent(QKeyEvent*);
@@ -79,9 +87,8 @@ protected:
 
 private:
     QTouchWebPagePrivate* d;
-    friend class QTouchWebPagePrivate;
+    friend class QTouchWebViewPrivate;
     friend class WebKit::TouchViewInterface;
-    friend class TiledDrawingAreaProxy;
 };
 
 #endif /* qtouchwebpage_h */

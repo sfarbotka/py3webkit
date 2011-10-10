@@ -52,7 +52,7 @@ public:
     void scrollToXOffsetWithoutAnimation(float x);
     void scrollToYOffsetWithoutAnimation(float x);
 
-    void handleWheelEvent(PlatformWheelEvent&);
+    bool handleWheelEvent(const PlatformWheelEvent&);
 #if ENABLE(GESTURE_EVENTS)
     void handleGestureEvent(const PlatformGestureEvent&);
 #endif
@@ -89,7 +89,7 @@ public:
     void invalidateScrollbar(Scrollbar*, const IntRect&);
     virtual bool isScrollCornerVisible() const = 0;
     virtual IntRect scrollCornerRect() const = 0;
-    void invalidateScrollCorner();
+    void invalidateScrollCorner(const IntRect&);
     virtual void getTickmarks(Vector<IntRect>&) const { }
 
     // This function should be overriden by subclasses to perform the actual
@@ -158,11 +158,14 @@ public:
 
     virtual bool scrollAnimatorEnabled() const { return false; }
 
+    // NOTE: Only called from Internals for testing.
+    void setScrollOffsetFromInternals(const IntPoint&);
+
 private:
     // NOTE: Only called from the ScrollAnimator.
     friend class ScrollAnimator;
     void setScrollOffsetFromAnimation(const IntPoint&);
-    
+
     mutable OwnPtr<ScrollAnimator> m_scrollAnimator;
     bool m_constrainsScrollingToContentEdge;
 
@@ -181,6 +184,9 @@ protected:
     virtual GraphicsLayer* layerForHorizontalScrollbar() const { return 0; }
     virtual GraphicsLayer* layerForVerticalScrollbar() const { return 0; }
     virtual GraphicsLayer* layerForScrollCorner() const { return 0; }
+#if PLATFORM(CHROMIUM) && ENABLE(RUBBER_BANDING)
+    virtual GraphicsLayer* layerForOverhangAreas() const { return 0; }
+#endif
 #endif
     bool hasLayerForHorizontalScrollbar() const;
     bool hasLayerForVerticalScrollbar() const;

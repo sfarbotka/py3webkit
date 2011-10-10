@@ -23,12 +23,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "Test.h"
-
+#include "config.h"
 #include "PlatformUtilities.h"
 #include "PlatformWebView.h"
 #include <WebKit2/WKContextPrivate.h>
-#include <WebKit2/WKNumber.h>
 
 namespace TestWebKitAPI {
 
@@ -59,7 +57,7 @@ TEST(WebKit2, CanHandleRequest)
     WKRetainPtr<WKContextRef> context = adoptWK(Util::createContextForInjectedBundleTest("CanHandleRequestTest"));
     setInjectedBundleClient(context.get());
 
-    _WKContextRegisterURLSchemeAsEmptyDocument(context.get(), Util::toWK("emptyscheme").get());
+    WKContextRegisterURLSchemeAsEmptyDocument(context.get(), Util::toWK("emptyscheme").get());
 
     PlatformWebView webView(context.get());
 

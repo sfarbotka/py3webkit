@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.Object}
+ */
 WebInspector.TimelineManager = function()
 {
     WebInspector.Object.call(this);
@@ -63,10 +67,14 @@ WebInspector.TimelineManager.prototype = {
 
 WebInspector.TimelineManager.prototype.__proto__ = WebInspector.Object.prototype;
 
+/**
+ * @constructor
+ * @implements {TimelineAgent.Dispatcher}
+ */
 WebInspector.TimelineDispatcher = function(manager)
 {
     this._manager = manager;
-    InspectorBackend.registerDomainDispatcher("Timeline", this);
+    InspectorBackend.registerTimelineDispatcher(this);
 }
 
 WebInspector.TimelineDispatcher.prototype = {

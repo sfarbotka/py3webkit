@@ -34,6 +34,9 @@
 #include "ScaleTransformOperation.h"
 #include "ShadowData.h"
 #include "StyleImage.h"
+#if ENABLE(TOUCH_EVENTS)
+#include "RenderTheme.h"
+#endif
 #include <wtf/StdLibExtras.h>
 #include <algorithm>
 
@@ -43,7 +46,7 @@ namespace WebCore {
 
 inline RenderStyle* defaultStyle()
 {
-    static RenderStyle* s_defaultStyle = RenderStyle::createDefaultStyle().releaseRef();
+    static RenderStyle* s_defaultStyle = RenderStyle::createDefaultStyle().leakRef();
     return s_defaultStyle;
 }
 
@@ -71,17 +74,17 @@ PassRefPtr<RenderStyle> RenderStyle::clone(const RenderStyle* other)
 }
 
 ALWAYS_INLINE RenderStyle::RenderStyle()
-    : m_affectedByAttributeSelectors(false)
+    : m_affectedByUncommonAttributeSelectors(false)
     , m_unique(false)
     , m_affectedByEmpty(false)
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
-    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
+    , m_affectedByDirectAdjacentRules(false)
     , m_childIndex(0)
     , m_box(defaultStyle()->m_box)
     , visual(defaultStyle()->visual)
@@ -98,17 +101,17 @@ ALWAYS_INLINE RenderStyle::RenderStyle()
 }
 
 ALWAYS_INLINE RenderStyle::RenderStyle(bool)
-    : m_affectedByAttributeSelectors(false)
+    : m_affectedByUncommonAttributeSelectors(false)
     , m_unique(false)
     , m_affectedByEmpty(false)
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
-    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
+    , m_affectedByDirectAdjacentRules(false)
     , m_childIndex(0)
 {
     setBitDefaults();
@@ -125,6 +128,9 @@ ALWAYS_INLINE RenderStyle::RenderStyle(bool)
     rareNonInheritedData.access()->m_marquee.init();
     rareNonInheritedData.access()->m_multiCol.init();
     rareNonInheritedData.access()->m_transform.init();
+#if ENABLE(CSS_FILTERS)
+    rareNonInheritedData.access()->m_filter.init();
+#endif
     rareInheritedData.init();
     inherited.init();
 
@@ -135,17 +141,17 @@ ALWAYS_INLINE RenderStyle::RenderStyle(bool)
 
 ALWAYS_INLINE RenderStyle::RenderStyle(const RenderStyle& o)
     : RefCounted<RenderStyle>()
-    , m_affectedByAttributeSelectors(false)
+    , m_affectedByUncommonAttributeSelectors(false)
     , m_unique(false)
     , m_affectedByEmpty(false)
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
-    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
+    , m_affectedByDirectAdjacentRules(false)
     , m_childIndex(0)
     , m_box(o.m_box)
     , visual(o.visual)
@@ -1115,7 +1121,7 @@ void RenderStyle::getShadowVerticalExtent(const ShadowData* shadow, LayoutUnit &
     }
 }
 
-const Color RenderStyle::colorIncludingFallback(int colorProperty) const
+Color RenderStyle::colorIncludingFallback(int colorProperty) const
 {
     Color result;
     EBorderStyle borderStyle = BNONE;
@@ -1171,7 +1177,7 @@ const Color RenderStyle::colorIncludingFallback(int colorProperty) const
     return result;
 }
 
-const Color RenderStyle::visitedDependentColor(int colorProperty) const
+Color RenderStyle::visitedDependentColor(int colorProperty) const
 {
     Color unvisitedColor = colorIncludingFallback(colorProperty);
     if (insideLink() != InsideVisitedLink)
@@ -1506,6 +1512,33 @@ TextEmphasisMark RenderStyle::textEmphasisMark() const
         return TextEmphasisMarkDot;
 
     return TextEmphasisMarkSesame;
+}
+
+#if ENABLE(TOUCH_EVENTS)
+Color RenderStyle::initialTapHighlightColor()
+{
+    return RenderTheme::tapHighlightColor();
+}
+#endif
+
+void RenderStyle::getImageOutsets(const NinePieceImage& image, LayoutUnit& top, LayoutUnit& right, LayoutUnit& bottom, LayoutUnit& left) const
+{
+    top = NinePieceImage::computeOutset(image.outset().top(), borderTopWidth());
+    right = NinePieceImage::computeOutset(image.outset().right(), borderRightWidth());
+    bottom = NinePieceImage::computeOutset(image.outset().bottom(), borderBottomWidth());
+    left = NinePieceImage::computeOutset(image.outset().left(), borderLeftWidth());
+}
+
+void RenderStyle::getImageHorizontalOutsets(const NinePieceImage& image, LayoutUnit& left, LayoutUnit& right) const
+{
+    right = NinePieceImage::computeOutset(image.outset().right(), borderRightWidth());
+    left = NinePieceImage::computeOutset(image.outset().left(), borderLeftWidth());
+}
+
+void RenderStyle::getImageVerticalOutsets(const NinePieceImage& image, LayoutUnit& top, LayoutUnit& bottom) const
+{
+    top = NinePieceImage::computeOutset(image.outset().top(), borderTopWidth());
+    bottom = NinePieceImage::computeOutset(image.outset().bottom(), borderBottomWidth());
 }
 
 } // namespace WebCore

@@ -63,12 +63,16 @@ namespace JSC {
 
         static Arguments* create(JSGlobalData& globalData, CallFrame* callFrame)
         {
-            return new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame);
+            Arguments* arguments = new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame);
+            arguments->finishCreation(callFrame);
+            return arguments;
         }
         
         static Arguments* createNoParameters(JSGlobalData& globalData, CallFrame* callFrame)
         {
-            return new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame, NoParameters);
+            Arguments* arguments = new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame, NoParameters);
+            arguments->finishCreation(callFrame, NoParameters);
+            return arguments;
         }
 
         // Use an enum because otherwise gcc insists on doing a memory
@@ -86,7 +90,7 @@ namespace JSC {
 
         static const ClassInfo s_info;
 
-        virtual void visitChildren(SlotVisitor&);
+        static void visitChildren(JSCell*, SlotVisitor&);
 
         void fillArgList(ExecState*, MarkedArgumentBuffer&);
 
@@ -107,13 +111,16 @@ namespace JSC {
             d->registers = &activation->registerAt(0);
         }
 
-        static Structure* createStructure(JSGlobalData& globalData, JSValue prototype) 
+        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype) 
         { 
-            return Structure::create(globalData, prototype, TypeInfo(ObjectType, StructureFlags), AnonymousSlotCount, &s_info); 
+            return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info); 
         }
 
     protected:
         static const unsigned StructureFlags = OverridesGetOwnPropertySlot | OverridesVisitChildren | OverridesGetPropertyNames | JSObject::StructureFlags;
+
+        void finishCreation(CallFrame*);
+        void finishCreation(CallFrame*, NoParametersType);
 
     private:
         void getArgumentsData(CallFrame*, JSFunction*&, ptrdiff_t& firstParameterIndex, Register*& argv, int& argc);
@@ -122,9 +129,13 @@ namespace JSC {
         virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
         virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
         virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+        static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
         virtual void put(ExecState*, unsigned propertyName, JSValue);
+        static void put(JSCell*, ExecState*, unsigned propertyName, JSValue);
         virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
+        static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
         virtual bool deleteProperty(ExecState*, unsigned propertyName);
+        static bool deleteProperty(JSCell*, ExecState*, unsigned propertyName);
         void createStrictModeCallerIfNecessary(ExecState*);
         void createStrictModeCalleeIfNecessary(ExecState*);
 
@@ -161,6 +172,17 @@ namespace JSC {
         : JSNonFinalObject(callFrame->globalData(), callFrame->lexicalGlobalObject()->argumentsStructure())
         , d(adoptPtr(new ArgumentsData))
     {
+    }
+
+    inline Arguments::Arguments(CallFrame* callFrame, NoParametersType)
+        : JSNonFinalObject(callFrame->globalData(), callFrame->lexicalGlobalObject()->argumentsStructure())
+        , d(adoptPtr(new ArgumentsData))
+    {
+    }
+    
+    inline void Arguments::finishCreation(CallFrame* callFrame)
+    {
+        Base::finishCreation(callFrame->globalData());
         ASSERT(inherits(&s_info));
 
         JSFunction* callee;
@@ -199,10 +221,9 @@ namespace JSC {
             copyRegisters(callFrame->globalData());
     }
 
-    inline Arguments::Arguments(CallFrame* callFrame, NoParametersType)
-        : JSNonFinalObject(callFrame->globalData(), callFrame->lexicalGlobalObject()->argumentsStructure())
-        , d(adoptPtr(new ArgumentsData))
+    inline void Arguments::finishCreation(CallFrame* callFrame, NoParametersType)
     {
+        Base::finishCreation(callFrame->globalData());
         ASSERT(inherits(&s_info));
         ASSERT(!asFunction(callFrame->callee())->jsExecutable()->parameterCount());
 

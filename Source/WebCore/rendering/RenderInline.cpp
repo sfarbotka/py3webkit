@@ -466,7 +466,7 @@ void RenderInline::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
     m_lineBoxes.paint(this, paintInfo, paintOffset);
 }
 
-void RenderInline::absoluteRects(Vector<LayoutRect>& rects, const LayoutPoint& accumulatedOffset)
+void RenderInline::absoluteRects(Vector<LayoutRect>& rects, const LayoutPoint& accumulatedOffset) const
 {
     if (!alwaysCreateLineBoxes())
         culledInlineAbsoluteRects(this, rects, toLayoutSize(accumulatedOffset));
@@ -485,7 +485,7 @@ void RenderInline::absoluteRects(Vector<LayoutRect>& rects, const LayoutPoint& a
     }
 }
 
-void RenderInline::culledInlineAbsoluteRects(const RenderInline* container, Vector<IntRect>& rects, const IntSize& offset)
+void RenderInline::culledInlineAbsoluteRects(const RenderInline* container, Vector<LayoutRect>& rects, const LayoutSize& offset) const
 {
     if (!culledInlineFirstLineBox()) {
         rects.append(IntRect(offset.width(), offset.height(), 0, 0));
@@ -553,7 +553,7 @@ void RenderInline::culledInlineAbsoluteRects(const RenderInline* container, Vect
     }
 }
 
-void RenderInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed)
+void RenderInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed) const
 {
     if (!alwaysCreateLineBoxes())
         culledInlineAbsoluteQuads(this, quads);
@@ -569,7 +569,7 @@ void RenderInline::absoluteQuads(Vector<FloatQuad>& quads, bool* wasFixed)
         continuation()->absoluteQuads(quads, wasFixed);
 }
 
-void RenderInline::culledInlineAbsoluteQuads(const RenderInline* container, Vector<FloatQuad>& quads)
+void RenderInline::culledInlineAbsoluteQuads(const RenderInline* container, Vector<FloatQuad>& quads) const
 {
     if (!culledInlineFirstLineBox()) {
         quads.append(localToAbsoluteQuad(FloatRect()));
@@ -660,7 +660,7 @@ static LayoutUnit computeMargin(const RenderInline* renderer, const Length& marg
     if (margin.isFixed())
         return margin.value();
     if (margin.isPercent())
-        return margin.calcMinValue(max(0, renderer->containingBlock()->availableLogicalWidth()));
+        return margin.calcMinValue(max<LayoutUnit>(0, renderer->containingBlock()->availableLogicalWidth()));
     return 0;
 }
 
@@ -837,7 +837,7 @@ FloatRect RenderInline::culledInlineBoundingBox(const RenderInline* container) c
             }
         }
     }
-    return enclosingIntRect(result);
+    return enclosingLayoutRect(result);
 }
 
 InlineBox* RenderInline::culledInlineFirstLineBox() const
@@ -888,9 +888,9 @@ InlineBox* RenderInline::culledInlineLastLineBox() const
     return 0;
 }
 
-IntRect RenderInline::culledInlineVisualOverflowBoundingBox() const
+LayoutRect RenderInline::culledInlineVisualOverflowBoundingBox() const
 {
-    IntRect result(culledInlineBoundingBox(this));
+    LayoutRect result(culledInlineBoundingBox(this));
     bool isHorizontal = style()->isHorizontalWritingMode();
     for (RenderObject* curr = firstChild(); curr; curr = curr->nextSibling()) {
         if (curr->isFloatingOrPositioned())
@@ -900,7 +900,7 @@ IntRect RenderInline::culledInlineVisualOverflowBoundingBox() const
         if (curr->isBox()) {
             RenderBox* currBox = toRenderBox(curr);
             if (!currBox->hasSelfPaintingLayer() && currBox->inlineBoxWrapper()) {
-                IntRect logicalRect = currBox->logicalVisualOverflowRectForPropagation(style());
+                LayoutRect logicalRect = currBox->logicalVisualOverflowRectForPropagation(style());
                 if (isHorizontal) {
                     logicalRect.moveBy(currBox->location());
                     result.uniteIfNonZero(logicalRect);
@@ -926,17 +926,17 @@ IntRect RenderInline::culledInlineVisualOverflowBoundingBox() const
     return result;
 }
 
-IntRect RenderInline::linesVisualOverflowBoundingBox() const
+LayoutRect RenderInline::linesVisualOverflowBoundingBox() const
 {
     if (!alwaysCreateLineBoxes())
         return culledInlineVisualOverflowBoundingBox();
 
     if (!firstLineBox() || !lastLineBox())
-        return IntRect();
+        return LayoutRect();
 
     // Return the width of the minimal left side and the maximal right side.
-    int logicalLeftSide = numeric_limits<int>::max();
-    int logicalRightSide = numeric_limits<int>::min();
+    LayoutUnit logicalLeftSide = numeric_limits<LayoutUnit>::max();
+    LayoutUnit logicalRightSide = numeric_limits<LayoutUnit>::min();
     for (InlineFlowBox* curr = firstLineBox(); curr; curr = curr->nextLineBox()) {
         logicalLeftSide = min(logicalLeftSide, curr->logicalLeftVisualOverflow());
         logicalRightSide = max(logicalRightSide, curr->logicalRightVisualOverflow());
@@ -945,31 +945,31 @@ IntRect RenderInline::linesVisualOverflowBoundingBox() const
     RootInlineBox* firstRootBox = firstLineBox()->root();
     RootInlineBox* lastRootBox = lastLineBox()->root();
     
-    int logicalTop = firstLineBox()->logicalTopVisualOverflow(firstRootBox->lineTop());
-    int logicalWidth = logicalRightSide - logicalLeftSide;
-    int logicalHeight = lastLineBox()->logicalBottomVisualOverflow(lastRootBox->lineBottom()) - logicalTop;
+    LayoutUnit logicalTop = firstLineBox()->logicalTopVisualOverflow(firstRootBox->lineTop());
+    LayoutUnit logicalWidth = logicalRightSide - logicalLeftSide;
+    LayoutUnit logicalHeight = lastLineBox()->logicalBottomVisualOverflow(lastRootBox->lineBottom()) - logicalTop;
     
-    IntRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
+    LayoutRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
     if (!style()->isHorizontalWritingMode())
         rect = rect.transposedRect();
     return rect;
 }
 
-IntRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     // Only run-ins are allowed in here during layout.
     ASSERT(!view() || !view()->layoutStateEnabled() || isRunIn());
 
     if (!firstLineBoxIncludingCulling() && !continuation())
-        return IntRect();
+        return LayoutRect();
 
     // Find our leftmost position.
-    IntRect boundingBox(linesVisualOverflowBoundingBox());
-    int left = boundingBox.x();
-    int top = boundingBox.y();
+    LayoutRect boundingBox(linesVisualOverflowBoundingBox());
+    LayoutUnit left = boundingBox.x();
+    LayoutUnit top = boundingBox.y();
 
     // Now invalidate a rectangle.
-    int ow = style() ? style()->outlineSize() : 0;
+    LayoutUnit ow = style() ? style()->outlineSize() : 0;
     
     // We need to add in the relative position offsets of any inlines (including us) up to our
     // containing block.
@@ -980,7 +980,7 @@ IntRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repain
             toRenderInline(inlineFlow)->layer()->relativePositionOffset(left, top);
     }
 
-    IntRect r(-ow + left, -ow + top, boundingBox.width() + ow * 2, boundingBox.height() + ow * 2);
+    LayoutRect r(-ow + left, -ow + top, boundingBox.width() + ow * 2, boundingBox.height() + ow * 2);
 
     if (cb->hasColumns())
         cb->adjustRectForColumns(r);
@@ -989,10 +989,10 @@ IntRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repain
         // cb->height() is inaccurate if we're in the middle of a layout of |cb|, so use the
         // layer's size instead.  Even if the layer's size is wrong, the layer itself will repaint
         // anyway if its size does change.
-        IntRect repaintRect(r);
+        LayoutRect repaintRect(r);
         repaintRect.move(-cb->layer()->scrolledContentOffset()); // For overflow:auto/scroll/hidden.
 
-        IntRect boxRect(IntPoint(), cb->layer()->size());
+        LayoutRect boxRect(LayoutPoint(), cb->layer()->size());
         r = intersection(repaintRect, boxRect);
     }
     
@@ -1004,13 +1004,13 @@ IntRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repain
     if (ow) {
         for (RenderObject* curr = firstChild(); curr; curr = curr->nextSibling()) {
             if (!curr->isText()) {
-                IntRect childRect = curr->rectWithOutlineForRepaint(repaintContainer, ow);
+                LayoutRect childRect = curr->rectWithOutlineForRepaint(repaintContainer, ow);
                 r.unite(childRect);
             }
         }
 
         if (continuation() && !continuation()->isInline()) {
-            IntRect contRect = continuation()->rectWithOutlineForRepaint(repaintContainer, ow);
+            LayoutRect contRect = continuation()->rectWithOutlineForRepaint(repaintContainer, ow);
             r.unite(contRect);
         }
     }
@@ -1018,9 +1018,9 @@ IntRect RenderInline::clippedOverflowRectForRepaint(RenderBoxModelObject* repain
     return r;
 }
 
-IntRect RenderInline::rectWithOutlineForRepaint(RenderBoxModelObject* repaintContainer, int outlineWidth) const
+LayoutRect RenderInline::rectWithOutlineForRepaint(RenderBoxModelObject* repaintContainer, LayoutUnit outlineWidth) const
 {
-    IntRect r(RenderBoxModelObject::rectWithOutlineForRepaint(repaintContainer, outlineWidth));
+    LayoutRect r(RenderBoxModelObject::rectWithOutlineForRepaint(repaintContainer, outlineWidth));
     for (RenderObject* curr = firstChild(); curr; curr = curr->nextSibling()) {
         if (!curr->isText())
             r.unite(curr->rectWithOutlineForRepaint(repaintContainer, outlineWidth));
@@ -1028,7 +1028,7 @@ IntRect RenderInline::rectWithOutlineForRepaint(RenderBoxModelObject* repaintCon
     return r;
 }
 
-void RenderInline::computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect& rect, bool fixed) const
+void RenderInline::computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect& rect, bool fixed) const
 {
     if (RenderView* v = view()) {
         // LayoutState is only valid for root-relative repainting
@@ -1051,12 +1051,12 @@ void RenderInline::computeRectForRepaint(RenderBoxModelObject* repaintContainer,
     if (!o)
         return;
 
-    IntPoint topLeft = rect.location();
+    LayoutPoint topLeft = rect.location();
 
     if (o->isBlockFlow() && style()->position() != AbsolutePosition && style()->position() != FixedPosition) {
         RenderBlock* cb = toRenderBlock(o);
         if (cb->hasColumns()) {
-            IntRect repaintRect(topLeft, rect.size());
+            LayoutRect repaintRect(topLeft, rect.size());
             cb->adjustRectForColumns(repaintRect);
             topLeft = repaintRect.location();
             rect = repaintRect;
@@ -1081,8 +1081,8 @@ void RenderInline::computeRectForRepaint(RenderBoxModelObject* repaintContainer,
         // anyway if its size does change.
         topLeft -= containerBox->layer()->scrolledContentOffset(); // For overflow:auto/scroll/hidden.
 
-        IntRect repaintRect(topLeft, rect.size());
-        IntRect boxRect(IntPoint(), containerBox->layer()->size());
+        LayoutRect repaintRect(topLeft, rect.size());
+        LayoutRect boxRect(LayoutPoint(), containerBox->layer()->size());
         rect = intersection(repaintRect, boxRect);
         if (rect.isEmpty())
             return;
@@ -1091,7 +1091,7 @@ void RenderInline::computeRectForRepaint(RenderBoxModelObject* repaintContainer,
 
     if (containerSkipped) {
         // If the repaintContainer is below o, then we need to map the rect into repaintContainer's coordinates.
-        IntSize containerOffset = repaintContainer->offsetFromAncestorContainer(o);
+        LayoutSize containerOffset = repaintContainer->offsetFromAncestorContainer(o);
         rect.move(-containerOffset);
         return;
     }
@@ -1153,7 +1153,7 @@ void RenderInline::mapLocalToContainer(RenderBoxModelObject* repaintContainer, b
     if (containerSkipped) {
         // There can't be a transform between repaintContainer and o, because transforms create containers, so it should be safe
         // to just subtract the delta between the repaintContainer and o.
-        IntSize containerOffset = repaintContainer->offsetFromAncestorContainer(o);
+        LayoutSize containerOffset = repaintContainer->offsetFromAncestorContainer(o);
         transformState.move(-containerOffset.width(), -containerOffset.height(), preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
         return;
     }
@@ -1180,7 +1180,7 @@ void RenderInline::mapAbsoluteToLocalPoint(bool fixed, bool useTransforms, Trans
         getTransformFromContainer(o, containerOffset, t);
         transformState.applyTransform(t, preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
     } else
-        transformState.move(-containerOffset.width(), -containerOffset.height(), preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
+        transformState.move(containerOffset.width(), containerOffset.height(), preserve3D ? TransformState::AccumulateTransform : TransformState::FlattenTransform);
 }
 
 void RenderInline::updateDragState(bool dragOn)
@@ -1271,7 +1271,7 @@ InlineFlowBox* RenderInline::createAndAppendInlineFlowBox()
     return flowBox;
 }
 
-int RenderInline::lineHeight(bool firstLine, LineDirectionMode /*direction*/, LinePositionMode /*linePositionMode*/) const
+LayoutUnit RenderInline::lineHeight(bool firstLine, LineDirectionMode /*direction*/, LinePositionMode /*linePositionMode*/) const
 {
     if (firstLine && document()->usesFirstLineRules()) {
         RenderStyle* s = style(firstLine);
@@ -1285,7 +1285,7 @@ int RenderInline::lineHeight(bool firstLine, LineDirectionMode /*direction*/, Li
     return m_lineHeight;
 }
 
-int RenderInline::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
+LayoutUnit RenderInline::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
 {
     const FontMetrics& fontMetrics = style(firstLine)->fontMetrics();
     return fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2;
@@ -1421,8 +1421,7 @@ void RenderInline::paintOutlineForLine(GraphicsContext* graphicsContext, const L
     LayoutUnit outlineWidth = styleToUse->outlineWidth();
     EBorderStyle outlineStyle = styleToUse->outlineStyle();
 
-    const AffineTransform& currentCTM = graphicsContext->getCTM();
-    bool antialias = !currentCTM.isIdentityOrTranslationOrFlipped();
+    bool antialias = shouldAntialiasLines(graphicsContext);
 
     LayoutUnit offset = style()->outlineOffset();
 
@@ -1475,7 +1474,18 @@ void RenderInline::paintOutlineForLine(GraphicsContext* graphicsContext, const L
             BSTop, outlineColor, outlineStyle,
             (!lastline.isEmpty() && left - outlineWidth < paintOffset.x() + lastline.maxX()) ? -outlineWidth : outlineWidth,
             outlineWidth, antialias);
-    
+
+    if (thisline.x() == thisline.maxX())
+          drawLineForBoxSide(graphicsContext,
+            left - outlineWidth,
+            top - outlineWidth,
+            right + outlineWidth,
+            top,
+            BSTop, outlineColor, outlineStyle,
+            outlineWidth,
+            outlineWidth,
+            antialias);
+
     // lower edge
     if (thisline.x() < nextline.x())
         drawLineForBoxSide(graphicsContext,
@@ -1497,6 +1507,17 @@ void RenderInline::paintOutlineForLine(GraphicsContext* graphicsContext, const L
             BSBottom, outlineColor, outlineStyle,
             (!nextline.isEmpty() && left - outlineWidth < paintOffset.x() + nextline.maxX()) ? -outlineWidth : outlineWidth,
             outlineWidth, antialias);
+
+    if (thisline.x() == thisline.maxX())
+          drawLineForBoxSide(graphicsContext,
+            left - outlineWidth,
+            bottom,
+            right + outlineWidth,
+            bottom + outlineWidth,
+            BSBottom, outlineColor, outlineStyle,
+            outlineWidth,
+            outlineWidth,
+            antialias);
 }
 
 #if ENABLE(DASHBOARD_SUPPORT)
@@ -1511,13 +1532,13 @@ void RenderInline::addDashboardRegions(Vector<DashboardRegionValue>& regions)
     for (i = 0; i < count; i++) {
         StyleDashboardRegion styleRegion = styleRegions[i];
 
-        IntRect linesBoundingBox = this->linesBoundingBox();
-        int w = linesBoundingBox.width();
-        int h = linesBoundingBox.height();
+        LayoutRect linesBoundingBox = this->linesBoundingBox();
+        LayoutUnit w = linesBoundingBox.width();
+        LayoutUnit h = linesBoundingBox.height();
 
         DashboardRegionValue region;
         region.label = styleRegion.label;
-        region.bounds = IntRect(linesBoundingBox.x() + styleRegion.offset.left().value(),
+        region.bounds = LayoutRect(linesBoundingBox.x() + styleRegion.offset.left().value(),
                                 linesBoundingBox.y() + styleRegion.offset.top().value(),
                                 w - styleRegion.offset.left().value() - styleRegion.offset.right().value(),
                                 h - styleRegion.offset.top().value() - styleRegion.offset.bottom().value());
@@ -1539,10 +1560,10 @@ void RenderInline::addDashboardRegions(Vector<DashboardRegionValue>& regions)
         region.bounds.setY(absPos.y() + region.bounds.y());
 
         if (frame()) {
-            float pageScaleFactor = frame()->page()->chrome()->scaleFactor();
-            if (pageScaleFactor != 1.0f) {
-                region.bounds.scale(pageScaleFactor);
-                region.clip.scale(pageScaleFactor);
+            float deviceScaleFactor = frame()->page()->deviceScaleFactor();
+            if (deviceScaleFactor != 1.0f) {
+                region.bounds.scale(deviceScaleFactor);
+                region.clip.scale(deviceScaleFactor);
             }
         }
 

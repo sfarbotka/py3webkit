@@ -23,11 +23,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
 #include "InjectedBundleController.h"
 
 #include "InjectedBundleTest.h"
 #include "PlatformUtilities.h"
-#include <WebKit2/WebKit2.h>
 #include <algorithm>
 #include <assert.h>
 

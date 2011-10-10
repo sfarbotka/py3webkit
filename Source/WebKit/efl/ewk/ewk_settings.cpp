@@ -22,7 +22,7 @@
 #include "ewk_settings.h"
 
 #include "EWebKit.h"
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 #include "DatabaseTracker.h"
 #endif
 #include "FrameView.h"
@@ -44,14 +44,13 @@
 #include <wtf/text/CString.h>
 #include <wtf/text/StringConcatenate.h>
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
+// FIXME: Why is there a directory in this include?
 #include "appcache/ApplicationCacheStorage.h"
 
 static const char* _ewk_cache_directory_path = 0;
-#endif
 
 static const char* _ewk_icon_database_path = 0;
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 static const char* _ewk_default_web_database_path = 0;
 static uint64_t _ewk_default_web_database_quota = 1 * 1024 * 1024;
 #endif
@@ -80,18 +79,18 @@ static WTF::String _ewk_settings_webkit_os_version_get()
     return ua_os_version;
 }
 
-uint64_t ewk_settings_web_database_default_quota_get(void)
+uint64_t ewk_settings_web_database_default_quota_get()
 {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     return _ewk_default_web_database_quota;
 #else
     return 0;
 #endif
 }
 
-void ewk_settings_web_database_path_set(const char *path)
+void ewk_settings_web_database_path_set(const char* path)
 {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     WTF::String corePath = WTF::String::fromUTF8(path);
     WebCore::DatabaseTracker::tracker().setDatabaseDirectoryPath(corePath);
     if (!_ewk_default_web_database_path)
@@ -102,16 +101,16 @@ void ewk_settings_web_database_path_set(const char *path)
 #endif
 }
 
-const char *ewk_settings_web_database_path_get(void)
+const char* ewk_settings_web_database_path_get(void)
 {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     return _ewk_default_web_database_path;
 #else
     return 0;
 #endif
 }
 
-Eina_Bool ewk_settings_icon_database_path_set(const char *directory)
+Eina_Bool ewk_settings_icon_database_path_set(const char* directory)
 {
     WebCore::IconDatabase::delayDatabaseCleanup();
 
@@ -156,7 +155,7 @@ Eina_Bool ewk_settings_icon_database_path_set(const char *directory)
     return EINA_TRUE;
 }
 
-const char *ewk_settings_icon_database_path_get(void)
+const char* ewk_settings_icon_database_path_get(void)
 {
     if (!WebCore::iconDatabase().isEnabled())
         return 0;
@@ -177,12 +176,12 @@ Eina_Bool ewk_settings_icon_database_clear(void)
     return EINA_TRUE;
 }
 
-cairo_surface_t *ewk_settings_icon_database_icon_surface_get(const char *url)
+cairo_surface_t* ewk_settings_icon_database_icon_surface_get(const char* url)
 {
     EINA_SAFETY_ON_NULL_RETURN_VAL(url, 0);
 
     WebCore::KURL kurl(WebCore::KURL(), WTF::String::fromUTF8(url));
-    WebCore::Image *icon = WebCore::iconDatabase().synchronousIconForPageURL(kurl.string(), WebCore::IntSize(16, 16));
+    WebCore::Image* icon = WebCore::iconDatabase().synchronousIconForPageURL(kurl.string(), WebCore::IntSize(16, 16));
 
     if (!icon) {
         ERR("no icon for url %s", url);
@@ -192,14 +191,14 @@ cairo_surface_t *ewk_settings_icon_database_icon_surface_get(const char *url)
     return icon->nativeImageForCurrentFrame();
 }
 
-Evas_Object *ewk_settings_icon_database_icon_object_add(const char *url, Evas *canvas)
+Evas_Object* ewk_settings_icon_database_icon_object_add(const char* url, Evas* canvas)
 {
     EINA_SAFETY_ON_NULL_RETURN_VAL(url, 0);
     EINA_SAFETY_ON_NULL_RETURN_VAL(canvas, 0);
 
     WebCore::KURL kurl(WebCore::KURL(), WTF::String::fromUTF8(url));
-    WebCore::Image *icon = WebCore::iconDatabase().synchronousIconForPageURL(kurl.string(), WebCore::IntSize(16, 16));
-    cairo_surface_t *surface;
+    WebCore::Image* icon = WebCore::iconDatabase().synchronousIconForPageURL(kurl.string(), WebCore::IntSize(16, 16));
+    cairo_surface_t* surface;
 
     if (!icon) {
         ERR("no icon for url %s", url);
@@ -245,7 +244,7 @@ void ewk_settings_repaint_throttling_set(double deferred_repaint_delay, double i
  *
  * @return a pointer to an eina_stringshare containing the user agent string
  */
-const char *ewk_settings_default_user_agent_get(void)
+const char* ewk_settings_default_user_agent_get(void)
 {
     WTF::String ua_version = makeString(String::number(WEBKIT_USER_AGENT_MAJOR_VERSION), '.', String::number(WEBKIT_USER_AGENT_MINOR_VERSION), '+');
     WTF::String static_ua = makeString("Mozilla/5.0 (", _ewk_settings_webkit_platform_get(), "; ", _ewk_settings_webkit_os_version_get(), ") AppleWebKit/", ua_version) + makeString(" (KHTML, like Gecko) Version/5.0 Safari/", ua_version);
@@ -253,9 +252,8 @@ const char *ewk_settings_default_user_agent_get(void)
     return eina_stringshare_add(static_ua.utf8().data());
 }
 
-Eina_Bool ewk_settings_cache_directory_path_set(const char *path)
+Eina_Bool ewk_settings_cache_directory_path_set(const char* path)
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     if (!path)
         return EINA_FALSE;
 
@@ -265,16 +263,14 @@ Eina_Bool ewk_settings_cache_directory_path_set(const char *path)
     else
         eina_stringshare_replace(&_ewk_cache_directory_path, path);
     return EINA_TRUE;
-#else
-    EINA_SAFETY_ON_TRUE_RETURN_VAL(1, EINA_FALSE);
-#endif
 }
 
-const char *ewk_settings_cache_directory_path_get()
+const char* ewk_settings_cache_directory_path_get()
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     return _ewk_cache_directory_path;
-#else
-    EINA_SAFETY_ON_TRUE_RETURN_VAL(1, 0);
-#endif
+}
+
+double ewk_settings_default_timer_interval_get(void)
+{
+    return WebCore::Settings::defaultMinDOMTimerInterval();
 }

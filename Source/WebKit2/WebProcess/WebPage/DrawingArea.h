@@ -27,6 +27,7 @@
 #define DrawingArea_h
 
 #include "DrawingAreaInfo.h"
+#include <WebCore/FloatPoint.h>
 #include <WebCore/IntRect.h>
 #include <wtf/Noncopyable.h>
 #include <wtf/PassOwnPtr.h>
@@ -92,15 +93,17 @@ protected:
 private:
     // CoreIPC message handlers.
     // FIXME: These should be pure virtual.
-    virtual void updateBackingStoreState(uint64_t backingStoreStateID, bool respondImmediately, const WebCore::IntSize& size, const WebCore::IntSize& scrollOffset) { }
+    virtual void updateBackingStoreState(uint64_t backingStoreStateID, bool respondImmediately, float deviceScaleFactor, const WebCore::IntSize& size, const WebCore::IntSize& scrollOffset) { }
     virtual void didUpdate() { }
     virtual void suspendPainting() { }
     virtual void resumePainting() { }
 
 #if ENABLE(TILED_BACKING_STORE)
     virtual void setSize(const WebCore::IntSize& viewSize) { }
-    virtual void cancelTileUpdate(int tileID) { }
-    virtual void requestTileUpdate(int tileID, const WebCore::IntRect& dirtyRect, float scale) { }
+    virtual void setVisibleContentRectAndScale(const WebCore::IntRect&, float) { }
+    virtual void setVisibleContentRectTrajectoryVector(const WebCore::FloatPoint&) { }
+    virtual void setContentsScale(float scale) { }
+    virtual void renderNextFrame() { }
     virtual void takeSnapshot(const WebCore::IntSize& targetSize, const WebCore::IntRect& contentsRect) { }
 #endif
 };

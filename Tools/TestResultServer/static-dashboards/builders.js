@@ -98,7 +98,10 @@ var CHROMIUM_DEPS_BUILDERS = [
     ['Webkit Linux (deps)(dbg)(2)'],
     ['Webkit Mac10.6 (deps)'],
     ['Webkit Mac10.6 (deps)(dbg)(1)'],
-    ['Webkit Mac10.6 (deps)(dbg)(2)']
+    ['Webkit Mac10.6 (deps)(dbg)(2)'],
+    ['Webkit Mac10.6 (CG)(deps)'],
+    ['Webkit Mac10.6 (CG)(deps)(dbg)(1)'],
+    ['Webkit Mac10.6 (CG)(deps)(dbg)(2)']
 ];
 associateBuildersWithMaster(CHROMIUM_DEPS_BUILDERS, CHROMIUM_WEBKIT_BUILDER_MASTER);
 
@@ -116,7 +119,12 @@ var CHROMIUM_TOT_BUILDERS = [
     ['Webkit Mac10.5 (dbg)(1)'],
     ['Webkit Mac10.5 (dbg)(2)'],
     ['Webkit Mac10.6'],
-    ['Webkit Mac10.6 (dbg)']
+    ['Webkit Mac10.6 (dbg)'],
+    ['Webkit Mac10.5 (CG)'],
+    ['Webkit Mac10.5 (CG)(dbg)(1)'],
+    ['Webkit Mac10.5 (CG)(dbg)(2)'],
+    ['Webkit Mac10.6 (CG)'],
+    ['Webkit Mac10.6 (CG)(dbg)']
 ];
 associateBuildersWithMaster(CHROMIUM_TOT_BUILDERS, CHROMIUM_WEBKIT_BUILDER_MASTER);
 
@@ -144,6 +152,11 @@ var CHROMIUM_GPU_MESA_BUILDERS = [
     ['Webkit Linux 32 - GPU'],
     ['Webkit Linux (dbg)(1) - GPU'],
     ['Webkit Linux (dbg)(2) - GPU'],
+    ['Webkit Mac10.5 (CG) - GPU'],
+    ['Webkit Mac10.5 (CG)(dbg)(1) - GPU'],
+    ['Webkit Mac10.5 (CG)(dbg)(2) - GPU'],
+    ['Webkit Mac10.6 (CG) - GPU'],
+    ['Webkit Mac10.6 (CG)(dbg) - GPU'],
     ['Webkit Mac10.5 - GPU'],
     ['Webkit Mac10.5 (dbg)(1) - GPU'],
     ['Webkit Mac10.5 (dbg)(2) - GPU'],

@@ -18,7 +18,7 @@ basefont interfaceName=HTMLBaseFontElement
 bdo interfaceName=HTMLElement
 bgsound interfaceName=HTMLElement
 big interfaceName=HTMLElement
-blockquote
+blockquote interfaceName=HTMLQuoteElement
 body
 br interfaceName=HTMLBRElement
 button constructorNeedsFormElement
@@ -107,7 +107,7 @@ section interfaceName=HTMLElement
 select constructorNeedsFormElement
 small interfaceName=HTMLElement
 source wrapperOnlyIfMediaIsAvailable, conditional=VIDEO
-span interfaceName=HTMLElement
+span
 strike interfaceName=HTMLElement
 strong interfaceName=HTMLElement
 style constructorNeedsCreatedByParser

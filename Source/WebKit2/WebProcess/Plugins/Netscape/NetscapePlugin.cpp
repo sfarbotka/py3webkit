@@ -68,6 +68,7 @@ NetscapePlugin::NetscapePlugin(PassRefPtr<NetscapePluginModule> pluginModule)
     , m_isTransparent(false)
     , m_inNPPNew(false)
     , m_loadManually(false)
+    , m_nextTimerID(0)
 #if PLATFORM(MAC)
     , m_drawingModel(static_cast<NPDrawingModel>(-1))
     , m_eventModel(static_cast<NPEventModel>(-1))
@@ -75,6 +76,10 @@ NetscapePlugin::NetscapePlugin(PassRefPtr<NetscapePluginModule> pluginModule)
     , m_currentMouseEvent(0)
     , m_pluginHasFocus(false)
     , m_windowHasFocus(false)
+    , m_pluginWantsLegacyCocoaTextInput(true)
+    , m_isComplexTextInputEnabled(false)
+    , m_hasHandledAKeyDownEvent(false)
+    , m_ignoreNextKeyUpEventCounter(0)
 #ifndef NP_NO_CARBON
     , m_nullEventTimer(RunLoop::main(), this, &NetscapePlugin::nullEventTimerFired)
     , m_npCGContext()
@@ -93,6 +98,7 @@ NetscapePlugin::NetscapePlugin(PassRefPtr<NetscapePluginModule> pluginModule)
 NetscapePlugin::~NetscapePlugin()
 {
     ASSERT(!m_isStarted);
+    ASSERT(m_timers.isEmpty());
 
     m_pluginModule->decrementLoadCount();
 }
@@ -219,14 +225,18 @@ void NetscapePlugin::setStatusbarText(const String& statusbarText)
     controller()->setStatusbarText(statusbarText);
 }
 
+static void (*setExceptionFunction)(const String&);
+
+void NetscapePlugin::setSetExceptionFunction(void (*function)(const String&))
+{
+    ASSERT(!setExceptionFunction || setExceptionFunction == function);
+    setExceptionFunction = function;
+}
+
 void NetscapePlugin::setException(const String& exceptionString)
 {
-#if ENABLE(PLUGIN_PROCESS)
-    // FIXME: If the plug-in is running in its own process, this needs to send a CoreIPC message instead of
-    // calling the runtime object map directly.
-#else
-    NPRuntimeObjectMap::setGlobalException(exceptionString);
-#endif
+    ASSERT(setExceptionFunction);
+    setExceptionFunction(exceptionString);
 }
 
 bool NetscapePlugin::evaluate(NPObject* npObject, const String& scriptString, NPVariant* result)
@@ -308,6 +318,77 @@ void NetscapePlugin::handlePluginThreadAsyncCall(void (*function)(void*), void* 
         return;
 
     function(userData);
+}
+
+PassOwnPtr<NetscapePlugin::Timer> NetscapePlugin::Timer::create(NetscapePlugin* netscapePlugin, unsigned timerID, unsigned interval, bool repeat, TimerFunc timerFunc)
+{
+    return adoptPtr(new Timer(netscapePlugin, timerID, interval, repeat, timerFunc));
+}
+
+NetscapePlugin::Timer::Timer(NetscapePlugin* netscapePlugin, unsigned timerID, unsigned interval, bool repeat, TimerFunc timerFunc)
+    : m_netscapePlugin(netscapePlugin)
+    , m_timerID(timerID)
+    , m_interval(interval)
+    , m_repeat(repeat)
+    , m_timerFunc(timerFunc)
+    , m_timer(RunLoop::main(), this, &Timer::timerFired)
+{
+}
+
+NetscapePlugin::Timer::~Timer()
+{
+}
+
+void NetscapePlugin::Timer::start()
+{
+    double timeInterval = m_interval / 1000.0;
+
+    if (m_repeat)
+        m_timer.startRepeating(timeInterval);
+    else
+        m_timer.startOneShot(timeInterval);
+}
+
+void NetscapePlugin::Timer::stop()
+{
+    m_timer.stop();
+}
+
+void NetscapePlugin::Timer::timerFired()
+{
+    m_timerFunc(&m_netscapePlugin->m_npp, m_timerID);
+
+    if (!m_repeat)
+        m_netscapePlugin->unscheduleTimer(m_timerID);
+}
+
+uint32_t NetscapePlugin::scheduleTimer(unsigned interval, bool repeat, void (*timerFunc)(NPP, unsigned timerID))
+{
+    if (!timerFunc)
+        return 0;
+
+    // FIXME: Handle wrapping around.
+    unsigned timerID = ++m_nextTimerID;
+
+    OwnPtr<Timer> timer = Timer::create(this, timerID, interval, repeat, timerFunc);
+    
+    // FIXME: Based on the plug-in visibility, figure out if we should throttle the timer, or if we should start it at all.
+    timer->start();
+    m_timers.set(timerID, timer.leakPtr());
+
+    return timerID;
+}
+
+void NetscapePlugin::unscheduleTimer(unsigned timerID)
+{
+    TimerMap::iterator it = m_timers.find(timerID);
+    if (it == m_timers.end())
+        return;
+
+    OwnPtr<Timer> timer = adoptPtr(it->second);
+    m_timers.remove(it);
+
+    timer->stop();
 }
 
 String NetscapePlugin::proxiesForURL(const String& urlString)
@@ -545,6 +626,9 @@ void NetscapePlugin::destroy()
     m_isStarted = false;
 
     platformDestroy();
+
+    deleteAllValues(m_timers);
+    m_timers.clear();
 }
     
 void NetscapePlugin::paint(GraphicsContext* context, const IntRect& dirtyRect)
@@ -794,6 +878,21 @@ bool NetscapePlugin::getFormValue(String& formValue)
     // The plug-in allocates the form value string with NPN_MemAlloc so it needs to be freed with NPN_MemFree.
     npnMemFree(formValueString);
     return true;
+}
+
+bool NetscapePlugin::handleScroll(ScrollDirection, ScrollGranularity)
+{
+    return false;
+}
+
+Scrollbar* NetscapePlugin::horizontalScrollbar()
+{
+    return 0;
+}
+
+Scrollbar* NetscapePlugin::verticalScrollbar()
+{
+    return 0;
 }
 
 bool NetscapePlugin::supportsSnapshotting() const

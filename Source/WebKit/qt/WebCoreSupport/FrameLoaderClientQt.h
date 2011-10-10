@@ -160,9 +160,6 @@ public:
     virtual void updateGlobalHistoryRedirectLinks();
     virtual bool shouldGoToHistoryItem(HistoryItem*) const;
     virtual bool shouldStopLoadingForHistoryItem(HistoryItem*) const;
-    virtual void dispatchDidAddBackForwardItem(HistoryItem*) const;
-    virtual void dispatchDidRemoveBackForwardItem(HistoryItem*) const;
-    virtual void dispatchDidChangeBackForwardIndex() const;
     virtual void didDisplayInsecureContent();
     virtual void didRunInsecureContent(SecurityOrigin*, const KURL&);
 
@@ -210,7 +207,7 @@ public:
     virtual PassRefPtr<Frame> createFrame(const KURL& url, const String& name, HTMLFrameOwnerElement* ownerElement,
                                const String& referrer, bool allowsScrolling, int marginWidth, int marginHeight);
     virtual void didTransferChildFrameToNewDocument(WebCore::Page*);
-    virtual void transferLoadingResourceFromPage(unsigned long, WebCore::DocumentLoader*, const WebCore::ResourceRequest&, WebCore::Page*);
+    virtual void transferLoadingResourceFromPage(WebCore::ResourceLoader*, const WebCore::ResourceRequest&, WebCore::Page*);
     virtual PassRefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool);
     virtual void redirectDataToPlugin(Widget* pluginWidget);
 
@@ -247,6 +244,7 @@ public:
     const KURL& lastRequestedUrl() const { return m_lastRequestedUrl; }
 
     static bool dumpFrameLoaderCallbacks;
+    static bool dumpProgressFinishedCallback;
     static bool dumpUserGestureInFrameLoaderCallbacks;
     static bool dumpResourceLoadCallbacks;
     static bool dumpResourceResponseMIMETypes;

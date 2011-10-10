@@ -51,11 +51,15 @@ void MarkStack::append(ConservativeRoots& conservativeRoots)
         internalAppend(roots[i]);
 }
 
-inline void SlotVisitor::visitChildren(JSCell* cell)
+void SlotVisitor::visitChildren(JSCell* cell)
 {
+#if ENABLE(SIMPLE_HEAP_PROFILING)
+    m_visitedTypeCounts.count(cell);
+#endif
+
     ASSERT(Heap::isMarked(cell));
     if (cell->structure()->typeInfo().type() < CompoundType) {
-        cell->JSCell::visitChildren(*this);
+        JSCell::visitChildren(cell, *this);
         return;
     }
 
@@ -66,7 +70,7 @@ inline void SlotVisitor::visitChildren(JSCell* cell)
 #else
         ASSERT(!m_isCheckingForDefaultMarkViolation);
         m_isCheckingForDefaultMarkViolation = true;
-        cell->visitChildren(*this);
+        cell->methodTable()->visitChildren(cell, *this);
         ASSERT(m_isCheckingForDefaultMarkViolation);
         m_isCheckingForDefaultMarkViolation = false;
 #endif
@@ -76,7 +80,7 @@ inline void SlotVisitor::visitChildren(JSCell* cell)
         asArray(cell)->visitChildrenDirect(*this);
         return;
     }
-    cell->visitChildren(*this);
+    cell->methodTable()->visitChildren(cell, *this);
 }
 
 void SlotVisitor::drain()
@@ -108,7 +112,10 @@ void SlotVisitor::drain()
             }
 
             if (cell->structure()->typeInfo().type() < CompoundType) {
-                cell->JSCell::visitChildren(*this);
+#if ENABLE(SIMPLE_HEAP_PROFILING)
+                m_visitedTypeCounts.count(cell);
+#endif
+                JSCell::visitChildren(cell, *this);
                 if (current.m_values == end) {
                     m_markSets.removeLast();
                     continue;
@@ -127,6 +134,17 @@ void SlotVisitor::drain()
 #if !ASSERT_DISABLED
     m_isDraining = false;
 #endif
+}
+
+void SlotVisitor::harvestWeakReferences()
+{
+    while (m_firstWeakReferenceHarvester) {
+        WeakReferenceHarvester* current = m_firstWeakReferenceHarvester;
+        WeakReferenceHarvester* next = reinterpret_cast<WeakReferenceHarvester*>(current->m_nextAndFlag & ~1);
+        current->m_nextAndFlag = 0;
+        m_firstWeakReferenceHarvester = next;
+        current->visitWeakReferences(*this);
+    }
 }
 
 #if ENABLE(GC_VALIDATION)
@@ -156,6 +174,10 @@ void MarkStack::validateValue(JSValue value)
     if (cell->structure()->structure()->JSCell::classInfo() != cell->structure()->JSCell::classInfo())
         CRASH();
 }
+#else
+void MarkStack::validateValue(JSValue)
+{
+} 
 #endif
 
 } // namespace JSC

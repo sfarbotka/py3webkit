@@ -41,10 +41,9 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
-ApplyBlockElementCommand::ApplyBlockElementCommand(Document* document, const QualifiedName& tagName, const AtomicString& className, const AtomicString& inlineStyle)
+ApplyBlockElementCommand::ApplyBlockElementCommand(Document* document, const QualifiedName& tagName, const AtomicString& inlineStyle)
     : CompositeEditCommand(document)
     , m_tagName(tagName)
-    , m_className(className)
     , m_inlineStyle(inlineStyle)
 {
 }
@@ -74,7 +73,7 @@ void ApplyBlockElementCommand::doApply()
     // margin/padding, but not others.  We should make the gap painting more consistent and 
     // then use a left margin/padding rule here.
     if (visibleEnd != visibleStart && isStartOfParagraph(visibleEnd))
-        setEndingSelection(VisibleSelection(visibleStart, visibleEnd.previous(CannotCrossEditingBoundary)));
+        setEndingSelection(VisibleSelection(visibleStart, visibleEnd.previous(CannotCrossEditingBoundary), endingSelection().isDirectional()));
 
     VisibleSelection selection = selectionForParagraphIteration(endingSelection());
     VisiblePosition startOfSelection = selection.visibleStart();
@@ -97,7 +96,7 @@ void ApplyBlockElementCommand::doApply()
         VisiblePosition start(visiblePositionForIndex(startIndex, startScope));
         VisiblePosition end(visiblePositionForIndex(endIndex, endScope));
         if (start.isNotNull() && end.isNotNull())
-            setEndingSelection(VisibleSelection(start, end));
+            setEndingSelection(VisibleSelection(start, end, endingSelection().isDirectional()));
     }
 }
 
@@ -111,7 +110,7 @@ void ApplyBlockElementCommand::formatSelection(const VisiblePosition& startOfSel
         insertNodeAt(blockquote, start);
         RefPtr<Element> placeholder = createBreakElement(document());
         appendNode(placeholder, blockquote);
-        setEndingSelection(VisibleSelection(positionBeforeNode(placeholder.get()), DOWNSTREAM));
+        setEndingSelection(VisibleSelection(positionBeforeNode(placeholder.get()), DOWNSTREAM, endingSelection().isDirectional()));
         return;
     }
 
@@ -280,8 +279,6 @@ VisiblePosition ApplyBlockElementCommand::endOfNextParagrahSplittingTextNodesIfN
 PassRefPtr<Element> ApplyBlockElementCommand::createBlockElement() const
 {
     RefPtr<Element> element = createHTMLElement(document(), m_tagName);
-    if (m_className.length())
-        element->setAttribute(classAttr, m_className);
     if (m_inlineStyle.length())
         element->setAttribute(styleAttr, m_inlineStyle);
     return element.release();

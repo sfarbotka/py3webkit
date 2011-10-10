@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Google Inc.  All rights reserved.
+ * Copyright (C) 2011 Google Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,6 +33,10 @@
 
 #if ENABLE(WEB_SOCKETS)
 
+#include <wtf/Forward.h>
+#include <wtf/PassOwnPtr.h>
+#include <wtf/Vector.h>
+
 namespace WebCore {
 
     class WebSocketChannelClient {
@@ -40,13 +44,14 @@ namespace WebCore {
         virtual ~WebSocketChannelClient() { }
         virtual void didConnect() { }
         virtual void didReceiveMessage(const String&) { }
+        virtual void didReceiveBinaryData(PassOwnPtr<Vector<char> >) { }
         virtual void didReceiveMessageError() { }
         virtual void didStartClosingHandshake() { }
         enum ClosingHandshakeCompletionStatus {
             ClosingHandshakeIncomplete,
             ClosingHandshakeComplete
         };
-        virtual void didClose(unsigned long /* unhandledBufferedAmount */, ClosingHandshakeCompletionStatus) { }
+        virtual void didClose(unsigned long /* unhandledBufferedAmount */, ClosingHandshakeCompletionStatus, unsigned short /* code */, const String& /* reason */) { }
 
     protected:
         WebSocketChannelClient() { }

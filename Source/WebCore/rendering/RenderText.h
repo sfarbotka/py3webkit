@@ -54,14 +54,14 @@ public:
     InlineTextBox* createInlineTextBox();
     void dirtyLineBoxes(bool fullLayout);
 
-    virtual void absoluteRects(Vector<LayoutRect>&, const LayoutPoint& accumulatedOffset);
+    virtual void absoluteRects(Vector<LayoutRect>&, const LayoutPoint& accumulatedOffset) const;
     void absoluteRectsForRange(Vector<IntRect>&, unsigned startOffset = 0, unsigned endOffset = UINT_MAX, bool useSelectionHeight = false, bool* wasFixed = 0);
 
-    virtual void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed);
+    virtual void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed) const;
     void absoluteQuadsForRange(Vector<FloatQuad>&, unsigned startOffset = 0, unsigned endOffset = UINT_MAX, bool useSelectionHeight = false, bool* wasFixed = 0);
 
     enum ClippingOption { NoClipping, ClipToEllipsis };
-    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed = 0, ClippingOption = NoClipping);
+    void absoluteQuads(Vector<FloatQuad>&, bool* wasFixed = 0, ClippingOption = NoClipping) const;
 
     virtual VisiblePosition positionForPoint(const LayoutPoint&);
 
@@ -107,13 +107,16 @@ public:
 
     virtual int caretMinOffset() const;
     virtual int caretMaxOffset() const;
-    virtual unsigned caretMaxRenderedOffset() const;
+    virtual unsigned renderedTextLength() const;
 
     virtual int previousOffset(int current) const;
     virtual int previousOffsetForBackwardDeletion(int current) const;
     virtual int nextOffset(int current) const;
 
     bool containsReversedText() const { return m_containsReversedText; }
+
+    bool isSecure() const { return style()->textSecurity() != TSNONE; }
+    void momentarilyRevealLastTypedCharacter(unsigned lastTypedCharacterOffset);
 
     InlineTextBox* findNextInlineTextBox(int offset, int& pos) const;
 
@@ -158,6 +161,7 @@ private:
     void updateNeedsTranscoding();
 
     inline void transformText(String&) const;
+    void secureText(UChar mask);
 
     float m_minWidth; // here to minimize padding in 64-bit.
 
@@ -205,6 +209,8 @@ inline void RenderText::checkConsistency() const
 {
 }
 #endif
+
+void applyTextTransform(const RenderStyle*, String&, UChar);
 
 } // namespace WebCore
 

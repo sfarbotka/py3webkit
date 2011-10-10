@@ -27,27 +27,18 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(StringObject);
 
-const ClassInfo StringObject::s_info = { "String", &JSWrapperObject::s_info, 0, 0 };
+const ClassInfo StringObject::s_info = { "String", &JSWrapperObject::s_info, 0, 0, CREATE_METHOD_TABLE(StringObject) };
 
-StringObject::StringObject(ExecState* exec, Structure* structure)
-    : JSWrapperObject(exec->globalData(), structure)
-{
-    ASSERT(inherits(&s_info));
-    setInternalValue(exec->globalData(), jsEmptyString(exec));
-}
-
-StringObject::StringObject(JSGlobalData& globalData, Structure* structure, JSString* string)
+StringObject::StringObject(JSGlobalData& globalData, Structure* structure)
     : JSWrapperObject(globalData, structure)
 {
-    ASSERT(inherits(&s_info));
-    setInternalValue(globalData, string);
 }
 
-StringObject::StringObject(ExecState* exec, Structure* structure, const UString& string)
-    : JSWrapperObject(exec->globalData(), structure)
+void StringObject::finishCreation(JSGlobalData& globalData, JSString* string)
 {
+    Base::finishCreation(globalData);
     ASSERT(inherits(&s_info));
-    setInternalValue(exec->globalData(), jsString(exec, string));
+    setInternalValue(globalData, string);
 }
 
 bool StringObject::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
@@ -73,20 +64,31 @@ bool StringObject::getOwnPropertyDescriptor(ExecState* exec, const Identifier& p
 
 void StringObject::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
+    put(this, exec, propertyName, value, slot);
+}
+
+void StringObject::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
     if (propertyName == exec->propertyNames().length)
         return;
-    JSObject::put(exec, propertyName, value, slot);
+    JSObject::put(cell, exec, propertyName, value, slot);
 }
 
 bool StringObject::deleteProperty(ExecState* exec, const Identifier& propertyName)
 {
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool StringObject::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
+{
+    StringObject* thisObject = static_cast<StringObject*>(cell);
     if (propertyName == exec->propertyNames().length)
         return false;
     bool isStrictUInt32;
     unsigned i = propertyName.toUInt32(isStrictUInt32);
-    if (isStrictUInt32 && internalValue()->canGetIndex(i))
+    if (isStrictUInt32 && thisObject->internalValue()->canGetIndex(i))
         return false;
-    return JSObject::deleteProperty(exec, propertyName);
+    return JSObject::deleteProperty(thisObject, exec, propertyName);
 }
 
 void StringObject::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)

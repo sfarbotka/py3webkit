@@ -74,6 +74,9 @@ class ChangeLogEntry(object):
     # e.g. 2009-06-03  Eric Seidel  <eric@webkit.org>
     date_line_regexp = r'^(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<name>.+?)\s+<(?P<email>[^<>]+)>$'
 
+    # e.g. * Source/WebCore/page/EventHandler.cpp: Implement FooBarQuux.
+    touched_files_regexp = r'\s*\*\s*(?P<file>.+)\:'
+
     # e.g. == Rolled over to ChangeLog-2011-02-16 ==
     rolled_over_regexp = r'^== Rolled over to ChangeLog-\d{4}-\d{2}-\d{2} ==$'
 
@@ -97,6 +100,8 @@ class ChangeLogEntry(object):
         self._reviewer = self._committer_list.committer_by_name(self._reviewer_text)
         self._author = self._committer_list.contributor_by_email(self._author_email) or self._committer_list.contributor_by_name(self._author_name)
 
+        self._touched_files = re.findall(self.touched_files_regexp, self._contents, re.MULTILINE)
+
     def author_name(self):
         return self._author_name
 
@@ -119,6 +124,9 @@ class ChangeLogEntry(object):
 
     def bug_id(self):
         return parse_bug_id_from_changelog(self._contents)
+
+    def touched_files(self):
+        return self._touched_files
 
 
 # FIXME: Various methods on ChangeLog should move into ChangeLogEntry instead.
@@ -151,6 +159,28 @@ class ChangeLog(object):
                 return ChangeLogEntry(''.join(entry_lines[:-1]))
             entry_lines.append(line)
         return None # We never found a date line!
+
+    @staticmethod
+    def parse_entries_from_file(changelog_file):
+        """changelog_file must be a file-like object which returns
+        unicode strings.  Use codecs.open or StringIO(unicode())
+        to pass file objects to this class."""
+        date_line_regexp = re.compile(ChangeLogEntry.date_line_regexp)
+        rolled_over_regexp = re.compile(ChangeLogEntry.rolled_over_regexp)
+        entry_lines = []
+        # The first line should be a date line.
+        first_line = changelog_file.readline()
+        assert(isinstance(first_line, unicode))
+        if not date_line_regexp.match(first_line):
+            raise StopIteration
+        entry_lines.append(first_line)
+
+        for line in changelog_file:
+            if date_line_regexp.match(line) or rolled_over_regexp.match(line):
+                # Remove the extra newline at the end
+                yield ChangeLogEntry(''.join(entry_lines[:-1]))
+                entry_lines = []
+            entry_lines.append(line)
 
     def latest_entry(self):
         # ChangeLog files are always UTF-8, we read them in as such to support Reviewers with unicode in their names.

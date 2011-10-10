@@ -137,6 +137,11 @@ WK_EXPORT WKKeyValueStorageManagerRef WKContextGetKeyValueStorageManager(WKConte
 WK_EXPORT WKMediaCacheManagerRef WKContextGetMediaCacheManager(WKContextRef context);
 WK_EXPORT WKPluginSiteDataManagerRef WKContextGetPluginSiteDataManager(WKContextRef context);
 WK_EXPORT WKResourceCacheManagerRef WKContextGetResourceCacheManager(WKContextRef context);
+    
+typedef void (*WKContextGetStatisticsFunction)(WKDictionaryRef statistics, WKErrorRef error, void* functionContext);
+WK_EXPORT void WKContextGetStatistics(WKContextRef context, void* functionContext, WKContextGetStatisticsFunction function);
+    
+WK_EXPORT void WKContextGarbageCollectJavaScriptObjects(WKContextRef context);
 
 #ifdef __cplusplus
 }

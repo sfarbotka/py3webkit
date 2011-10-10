@@ -45,10 +45,10 @@ using namespace WebKit;
 // The height needed to match a typical NSToolbar.
 static const CGFloat windowContentBorderThickness = 55;
 
-// WebInspectorProxyObjCAdapter is a helper ObjC object used as a delegate or notification observer
+// WKWebInspectorProxyObjCAdapter is a helper ObjC object used as a delegate or notification observer
 // for the sole purpose of getting back into the C++ code from an ObjC caller.
 
-@interface WebInspectorProxyObjCAdapter : NSObject <NSWindowDelegate> {
+@interface WKWebInspectorProxyObjCAdapter : NSObject <NSWindowDelegate> {
     WebInspectorProxy* _inspectorProxy; // Not retained to prevent cycles
 }
 
@@ -56,7 +56,7 @@ static const CGFloat windowContentBorderThickness = 55;
 
 @end
 
-@implementation WebInspectorProxyObjCAdapter
+@implementation WKWebInspectorProxyObjCAdapter
 
 - (id)initWithWebInspectorProxy:(WebInspectorProxy*)inspectorProxy
 {
@@ -82,10 +82,10 @@ static const CGFloat windowContentBorderThickness = 55;
 
 @end
 
-@interface WebInspectorWKView : WKView
+@interface WKWebInspectorWKView : WKView
 @end
 
-@implementation WebInspectorWKView
+@implementation WKWebInspectorWKView
 
 - (NSInteger)tag
 {
@@ -101,7 +101,7 @@ WebPageProxy* WebInspectorProxy::platformCreateInspectorPage()
     ASSERT(m_page);
     ASSERT(!m_inspectorView);
 
-    m_inspectorView.adoptNS([[WebInspectorWKView alloc] initWithFrame:NSMakeRect(0, 0, initialWindowWidth, initialWindowHeight) contextRef:toAPI(page()->process()->context()) pageGroupRef:toAPI(inspectorPageGroup())]);
+    m_inspectorView.adoptNS([[WKWebInspectorWKView alloc] initWithFrame:NSMakeRect(0, 0, initialWindowWidth, initialWindowHeight) contextRef:toAPI(page()->process()->context()) pageGroupRef:toAPI(inspectorPageGroup())]);
     ASSERT(m_inspectorView);
 
     [m_inspectorView.get() setDrawsBackground:NO];
@@ -113,7 +113,7 @@ void WebInspectorProxy::platformOpen()
 {
     ASSERT(!m_inspectorWindow);
 
-    m_inspectorProxyObjCAdapter.adoptNS([[WebInspectorProxyObjCAdapter alloc] initWithWebInspectorProxy:this]);
+    m_inspectorProxyObjCAdapter.adoptNS([[WKWebInspectorProxyObjCAdapter alloc] initWithWebInspectorProxy:this]);
 
     NSUInteger styleMask = (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask | NSTexturedBackgroundWindowMask);
     NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, initialWindowWidth, initialWindowHeight) styleMask:styleMask backing:NSBackingStoreBuffered defer:NO];
@@ -249,6 +249,15 @@ void WebInspectorProxy::platformSetAttachedWindowHeight(unsigned height)
 String WebInspectorProxy::inspectorPageURL() const
 {
     NSString *path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] pathForResource:@"inspector" ofType:@"html" inDirectory:@"inspector"];
+    ASSERT(path);
+
+    return [[NSURL fileURLWithPath:path] absoluteString];
+}
+
+String WebInspectorProxy::inspectorBaseURL() const
+{
+    // Web Inspector uses localized strings, so it's not contained within inspector directory.
+    NSString *path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] resourcePath];
     ASSERT(path);
 
     return [[NSURL fileURLWithPath:path] absoluteString];

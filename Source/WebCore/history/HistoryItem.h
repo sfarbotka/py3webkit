@@ -43,10 +43,6 @@ typedef struct objc_object* id;
 #include <QDataStream>
 #endif
 
-#if PLATFORM(ANDROID)
-#include "AndroidWebHistoryBridge.h"
-#endif
-
 namespace WebCore {
 
 class CachedPage;
@@ -202,11 +198,6 @@ public:
     QDataStream& saveState(QDataStream& out, int version) const;
 #endif
 
-#if PLATFORM(ANDROID)
-    void setBridge(AndroidWebHistoryBridge* bridge);
-    AndroidWebHistoryBridge* bridge() const;
-#endif
-
 #ifndef NDEBUG
     int showTree() const;
     int showTreeWithIndent(unsigned indentLevel) const;
@@ -215,6 +206,8 @@ public:
     void adoptVisitCounts(Vector<int>& dailyCounts, Vector<int>& weeklyCounts);
     const Vector<int>& dailyVisitCounts() const { return m_dailyVisitCounts; }
     const Vector<int>& weeklyVisitCounts() const { return m_weeklyVisitCounts; }
+
+    void markForFullStyleRecalc();
 
 private:
     HistoryItem();
@@ -293,10 +286,6 @@ private:
 
 #if PLATFORM(QT)
     QVariant m_userData;
-#endif
-
-#if PLATFORM(ANDROID)
-    RefPtr<AndroidWebHistoryBridge> m_bridge;
 #endif
 
 }; //class HistoryItem

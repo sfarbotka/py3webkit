@@ -23,7 +23,8 @@
 
 #include <QtCore/QSharedPointer>
 #include <QtCore/QSize>
-#include <QtGui/QMenu>
+#include <QMenu>
+#include <WebKit2/WKBase.h>
 
 class QWebError;
 
@@ -31,6 +32,7 @@ QT_BEGIN_NAMESPACE
 class QCursor;
 class QGraphicsWidget;
 class QImage;
+class QJSEngine;
 class QMimeData;
 class QPoint;
 class QRect;
@@ -47,6 +49,11 @@ namespace WebKit {
 class ViewInterface
 {
 public:
+    enum FileChooserType {
+        SingleFileSelection,
+        MultipleFilesSelection
+    };
+
     virtual void setViewNeedsDisplay(const QRect&) = 0;
 
     virtual QSize drawingAreaSize() = 0;
@@ -67,6 +74,7 @@ public:
     virtual void didChangeStatusText(const QString&) = 0;
     virtual void didChangeCursor(const QCursor&) = 0;
     virtual void loadDidBegin() = 0;
+    virtual void loadDidCommit() = 0;
     virtual void loadDidSucceed() = 0;
     virtual void loadDidFail(const QWebError&) = 0;
     virtual void didChangeLoadProgress(int) = 0;
@@ -74,8 +82,18 @@ public:
     virtual void showContextMenu(QSharedPointer<QMenu>) = 0;
     virtual void hideContextMenu() = 0;
 
+    virtual void runJavaScriptAlert(const QString&) = 0;
+    virtual bool runJavaScriptConfirm(const QString&) = 0;
+    virtual QString runJavaScriptPrompt(const QString&, const QString& defaultValue, bool& ok) = 0;
+
     virtual void processDidCrash() = 0;
     virtual void didRelaunchProcess() = 0;
+
+    virtual QJSEngine* engine() = 0;
+
+    virtual void chooseFiles(WKOpenPanelResultListenerRef, const QStringList& selectedFileNames, FileChooserType) = 0;
+
+    virtual void didMouseMoveOverElement(const QUrl&, const QString&) = 0;
 };
 
 }

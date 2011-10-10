@@ -29,19 +29,23 @@
 #include "JSDOMBinding.h"
 #include "runtime_method.h"
 #include <runtime/Error.h>
-#include <runtime/ObjectPrototype.h>
 
 using namespace WebCore;
 
 namespace JSC {
 namespace Bindings {
 
-const ClassInfo RuntimeObject::s_info = { "RuntimeObject", &JSObjectWithGlobalObject::s_info, 0, 0 };
+const ClassInfo RuntimeObject::s_info = { "RuntimeObject", &JSNonFinalObject::s_info, 0, 0, CREATE_METHOD_TABLE(RuntimeObject) };
 
 RuntimeObject::RuntimeObject(ExecState*, JSGlobalObject* globalObject, Structure* structure, PassRefPtr<Instance> instance)
-    : JSObjectWithGlobalObject(globalObject, structure)
+    : JSNonFinalObject(globalObject->globalData(), structure)
     , m_instance(instance)
 {
+}
+
+void RuntimeObject::finishCreation(JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 }
 
@@ -208,12 +212,18 @@ bool RuntimeObject::getOwnPropertyDescriptor(ExecState *exec, const Identifier& 
 
 void RuntimeObject::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    if (!m_instance) {
+    put(this, exec, propertyName, value, slot);
+}
+
+void RuntimeObject::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    RuntimeObject* thisObject = static_cast<RuntimeObject*>(cell);
+    if (!thisObject->m_instance) {
         throwInvalidAccessError(exec);
         return;
     }
     
-    RefPtr<Instance> instance = m_instance;
+    RefPtr<Instance> instance = thisObject->m_instance;
     instance->begin();
 
     // Set the value of the property.
@@ -221,12 +231,17 @@ void RuntimeObject::put(ExecState* exec, const Identifier& propertyName, JSValue
     if (aField)
         aField->setValueToInstance(exec, instance.get(), value);
     else if (!instance->setValueOfUndefinedField(exec, propertyName, value))
-        instance->put(this, exec, propertyName, value, slot);
+        instance->put(thisObject, exec, propertyName, value, slot);
 
     instance->end();
 }
 
-bool RuntimeObject::deleteProperty(ExecState*, const Identifier&)
+bool RuntimeObject::deleteProperty(ExecState* exec, const Identifier& propertyName)
+{
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool RuntimeObject::deleteProperty(JSCell*, ExecState*, const Identifier&)
 {
     // Can never remove a property of a RuntimeObject.
     return false;
@@ -255,12 +270,18 @@ static EncodedJSValue JSC_HOST_CALL callRuntimeObject(ExecState* exec)
     return JSValue::encode(result);
 }
 
-CallType RuntimeObject::getCallData(CallData& callData)
+CallType RuntimeObject::getCallDataVirtual(CallData& callData)
 {
-    if (!m_instance)
+    return getCallData(this, callData);
+}
+
+CallType RuntimeObject::getCallData(JSCell* cell, CallData& callData)
+{
+    RuntimeObject* thisObject = static_cast<RuntimeObject*>(cell);
+    if (!thisObject->m_instance)
         return CallTypeNone;
     
-    RefPtr<Instance> instance = m_instance;
+    RefPtr<Instance> instance = thisObject->m_instance;
     if (!instance->supportsInvokeDefaultMethod())
         return CallTypeNone;
     

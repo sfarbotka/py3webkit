@@ -26,6 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ */
 WebInspector.DOMStorage = function(id, domain, isLocalStorage)
 {
     this._id = id;
@@ -53,19 +56,22 @@ WebInspector.DOMStorage.prototype = {
     {
         DOMStorageAgent.getDOMStorageEntries(this._id, callback);
     },
-    
+
     setItem: function(key, value, callback)
     {
         DOMStorageAgent.setDOMStorageItem(this._id, key, value, callback);
     },
-    
+
     removeItem: function(key, callback)
     {
         DOMStorageAgent.removeDOMStorageItem(this._id, key, callback);
     }
 }
 
-
+/**
+ * @constructor
+ * @implements {DOMStorageAgent.Dispatcher}
+ */
 WebInspector.DOMStorageDispatcher = function()
 {
 }
@@ -86,4 +92,4 @@ WebInspector.DOMStorageDispatcher.prototype = {
     }
 }
 
-InspectorBackend.registerDomainDispatcher("DOMStorage", new WebInspector.DOMStorageDispatcher());
+InspectorBackend.registerDOMStorageDispatcher(new WebInspector.DOMStorageDispatcher());

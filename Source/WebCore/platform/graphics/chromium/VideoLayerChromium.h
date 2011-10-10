@@ -35,6 +35,7 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "LayerChromium.h"
+#include "ManagedTexture.h"
 #include "VideoFrameProvider.h"
 
 namespace WebCore {
@@ -42,21 +43,14 @@ namespace WebCore {
 // A Layer that contains a Video element.
 class VideoLayerChromium : public LayerChromium {
 public:
-    struct Texture {
-        unsigned id;
-        IntSize size;
-        IntSize visibleSize;
-        bool ownedByLayerRenderer;
-        bool isEmpty;
-    };
 
-    static PassRefPtr<VideoLayerChromium> create(GraphicsLayerChromium* owner = 0,
+    static PassRefPtr<VideoLayerChromium> create(CCLayerDelegate* = 0,
                                                  VideoFrameProvider* = 0);
     virtual ~VideoLayerChromium();
 
     virtual PassRefPtr<CCLayerImpl> createCCLayerImpl();
 
-    virtual void updateCompositorResources();
+    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*);
     virtual bool drawsContent() const { return true; }
 
     // This function is called by VideoFrameProvider. When this method is called
@@ -65,21 +59,24 @@ public:
 
     virtual void pushPropertiesTo(CCLayerImpl*);
 
+    virtual void setLayerTreeHost(CCLayerTreeHost*);
+
 protected:
     virtual void cleanupResources();
-    virtual const char* layerTypeAsString() const { return "VideoLayer"; }
 
 private:
-    VideoLayerChromium(GraphicsLayerChromium* owner, VideoFrameProvider*);
+    struct Texture {
+        IntSize m_visibleSize;
+        OwnPtr<ManagedTexture> m_texture;
+    };
 
-    static unsigned determineTextureFormat(const VideoFrameChromium*);
+    VideoLayerChromium(CCLayerDelegate*, VideoFrameProvider*);
+
+    static GC3Denum determineTextureFormat(const VideoFrameChromium*);
     static IntSize computeVisibleSize(const VideoFrameChromium*, unsigned plane);
-    void deleteTexturesInUse();
-
-    bool allocateTexturesIfNeeded(GraphicsContext3D*, const VideoFrameChromium*, unsigned textureFormat);
-    void allocateTexture(GraphicsContext3D*, unsigned textureId, const IntSize& dimensions, unsigned textureFormat) const;
-
-    void updateTexture(GraphicsContext3D*, unsigned textureId, const IntSize& dimensions, unsigned textureFormat, const void* data) const;
+    bool texturesValid();
+    bool reserveTextures(const VideoFrameChromium*, GC3Denum textureFormat);
+    void updateTexture(GraphicsContext3D*, TextureAllocator*, Texture&, const void*) const;
 
     void resetFrameParameters();
 
@@ -87,7 +84,9 @@ private:
     VideoFrameChromium::Format m_frameFormat;
     VideoFrameProvider* m_provider;
 
-    Texture m_textures[3];
+    enum { MaxPlanes = 3 };
+    Texture m_textures[MaxPlanes];
+    unsigned m_planes;
 
     // This will be null for the entire duration of video playback if hardware
     // decoding is not being used.

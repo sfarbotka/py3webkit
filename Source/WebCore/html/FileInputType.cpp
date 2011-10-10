@@ -216,6 +216,13 @@ bool FileInputType::storesValueSeparateFromAttribute()
     return true;
 }
 
+void FileInputType::setValue(const String&, bool, bool)
+{
+    m_fileList->clear();
+    m_icon.clear();
+    element()->setNeedsStyleRecalc();
+}
+
 void FileInputType::setFileList(const Vector<String>& paths)
 {
     m_fileList->clear();
@@ -234,9 +241,12 @@ void FileInputType::setFileList(const Vector<String>& paths)
         }
         rootPath = directoryName(rootPath);
         ASSERT(rootPath.length());
+        int rootLength = rootPath.length();
+        if (rootPath[rootLength - 1] != '\\' && rootPath[rootLength - 1] != '/')
+            rootLength += 1;
         for (size_t i = 0; i < size; i++) {
             // Normalize backslashes to slashes before exposing the relative path to script.
-            String relativePath = paths[i].substring(1 + rootPath.length()).replace('\\', '/');
+            String relativePath = paths[i].substring(rootLength).replace('\\', '/');
             m_fileList->append(File::createWithRelativePath(paths[i], relativePath));
         }
         return;
@@ -317,6 +327,7 @@ void FileInputType::receiveDropForDirectoryUpload(const Vector<String>& paths)
         settings.allowsDirectoryUpload = true;
         settings.allowsMultipleFiles = true;
         settings.selectedFiles.append(paths[0]);
+        settings.acceptTypes = element()->accept();
         chrome->enumerateChosenDirectory(newFileChooser(settings));
     }
 }

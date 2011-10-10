@@ -5,6 +5,7 @@
  * Copyright (C) 2008 Alp Toker <alp@atoker.com>
  * Copyright (C) Research In Motion Limited 2009. All rights reserved.
  * Copyright (C) 2011 Kris Jordan <krisjordan@gmail.com>
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -372,7 +373,7 @@ void FrameLoader::stopLoading(UnloadEventPolicy unloadEventPolicy)
                 Node* currentFocusedNode = m_frame->document()->focusedNode();
                 if (currentFocusedNode)
                     currentFocusedNode->aboutToUnload();
-                if (m_frame->domWindow()) {
+                if (m_frame->domWindow() && m_pageDismissalEventBeingDispatched == NoDismissal) {
                     if (unloadEventPolicy == UnloadEventPolicyUnloadAndPageHide) {
                         m_pageDismissalEventBeingDispatched = PageHideDismissal;
                         m_frame->domWindow()->dispatchEvent(PageTransitionEvent::create(eventNames().pagehideEvent, m_frame->document()->inPageCache()), m_frame->document());
@@ -426,7 +427,7 @@ void FrameLoader::stopLoading(UnloadEventPolicy unloadEventPolicy)
         // http://www.w3.org/Bugs/Public/show_bug.cgi?id=10537
         doc->setReadyState(Document::Complete);
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         doc->stopDatabases(0);
 #endif
     }
@@ -848,7 +849,8 @@ void FrameLoader::loadArchive(PassRefPtr<Archive> archive)
 ObjectContentType FrameLoader::defaultObjectContentType(const KURL& url, const String& mimeTypeIn, bool shouldPreferPlugInsForImages)
 {
     String mimeType = mimeTypeIn;
-    String extension = url.path().substring(url.path().reverseFind('.') + 1);
+    String decodedPath = decodeURLEscapeSequences(url.path());
+    String extension = decodedPath.substring(decodedPath.reverseFind('.') + 1);
 
     // We don't use MIMETypeRegistry::getMIMETypeForPath() because it returns "application/octet-stream" upon failure
     if (mimeType.isEmpty())
@@ -1090,6 +1092,25 @@ void FrameLoader::started()
         frame->loader()->m_isComplete = false;
 }
 
+void FrameLoader::prepareForHistoryNavigation()
+{
+    // If there is no currentItem, but we still want to engage in 
+    // history navigation we need to manufacture one, and update
+    // the state machine of this frame to impersonate having
+    // loaded it.
+    RefPtr<HistoryItem> currentItem = history()->currentItem();
+    if (!currentItem) {
+        currentItem = HistoryItem::create();
+        currentItem->setLastVisitWasFailure(true);
+        history()->setCurrentItem(currentItem.get());
+        frame()->page()->backForward()->setCurrentItem(currentItem.get());
+
+        ASSERT(stateMachine()->isDisplayingInitialEmptyDocument());
+        stateMachine()->advanceTo(FrameLoaderStateMachine::DisplayingInitialEmptyDocumentPostCommit);
+        stateMachine()->advanceTo(FrameLoaderStateMachine::CommittedFirstRealLoad);
+    }
+}
+
 void FrameLoader::prepareForLoadStart()
 {
     if (Page* page = m_frame->page())
@@ -1105,21 +1126,6 @@ void FrameLoader::setupForReplace()
     detachChildren();
 }
 
-// This is a hack to allow keep navigation to http/https feeds working. To remove this
-// we need to introduce new API akin to registerURLSchemeAsLocal, that registers a
-// protocols navigation policy.
-static bool isFeedWithNestedProtocolInHTTPFamily(const KURL& url)
-{
-    const String& urlString = url.string();
-    if (!urlString.startsWith("feed", false))
-        return false;
-
-    return urlString.startsWith("feed://", false) 
-        || urlString.startsWith("feed:http:", false) || urlString.startsWith("feed:https:", false)
-        || urlString.startsWith("feeds:http:", false) || urlString.startsWith("feeds:https:", false)
-        || urlString.startsWith("feedsearch:http:", false) || urlString.startsWith("feedsearch:https:", false);
-}
-
 void FrameLoader::loadFrameRequest(const FrameLoadRequest& request, bool lockHistory, bool lockBackForwardList,
     PassRefPtr<Event> event, PassRefPtr<FormState> formState, ReferrerPolicy referrerPolicy)
 {    
@@ -1129,8 +1135,7 @@ void FrameLoader::loadFrameRequest(const FrameLoadRequest& request, bool lockHis
     KURL url = request.resourceRequest().url();
 
     ASSERT(m_frame->document());
-    // FIXME: Should we move the isFeedWithNestedProtocolInHTTPFamily logic inside SecurityOrigin::canDisplay?
-    if (!isFeedWithNestedProtocolInHTTPFamily(url) && !request.requester()->canDisplay(url)) {
+    if (!request.requester()->canDisplay(url)) {
         reportLocalLoadFailed(m_frame, url.string());
         return;
     }
@@ -1648,9 +1653,9 @@ void FrameLoader::transferLoadingResourcesFromPage(Page* oldPage)
     }
 }
 
-void FrameLoader::dispatchTransferLoadingResourceFromPage(unsigned long identifier, DocumentLoader* docLoader, const ResourceRequest& request, Page* oldPage)
+void FrameLoader::dispatchTransferLoadingResourceFromPage(ResourceLoader* loader, const ResourceRequest& request, Page* oldPage)
 {
-    notifier()->dispatchTransferLoadingResourceFromPage(identifier, docLoader, request, oldPage);
+    notifier()->dispatchTransferLoadingResourceFromPage(loader, request, oldPage);
 }
 
 void FrameLoader::setDocumentLoader(DocumentLoader* loader)
@@ -1667,6 +1672,20 @@ void FrameLoader::setDocumentLoader(DocumentLoader* loader)
         m_documentLoader->detachFromFrame();
 
     m_documentLoader = loader;
+
+    // The following abomination is brought to you by the unload event.
+    // The detachChildren() call above may trigger a child frame's unload event,
+    // which could do something obnoxious like call document.write("") on
+    // the main frame, which results in detaching children while detaching children.
+    // This can cause the new m_documentLoader to be detached from its Frame*, but still
+    // be alive. To make matters worse, DocumentLoaders with a null Frame* aren't supposed
+    // to happen when they're still alive (and many places below us on the stack think the
+    // DocumentLoader is still usable). Ergo, we reattach loader to its Frame, and pretend
+    // like nothing ever happened.
+    if (m_documentLoader && !m_documentLoader->frame()) {
+        ASSERT(!m_documentLoader->isLoading());
+        m_documentLoader->setFrame(m_frame);
+    }
 }
 
 void FrameLoader::setPolicyDocumentLoader(DocumentLoader* loader)
@@ -1820,12 +1839,6 @@ void FrameLoader::transitionToCommitted(PassRefPtr<CachedPage> cachedPage)
 
     if (m_frame->view())
         m_frame->view()->scrollAnimator()->cancelAnimations();
-
-#if ENABLE(INPUT_COLOR)
-    ColorChooserClient* colorChooserClient = ColorChooser::chooser()->client();
-    if (colorChooserClient && colorChooserClient->isColorInputType())
-        static_cast<ColorInputType*>(colorChooserClient)->closeColorChooserIfCurrentClient();
-#endif
 
     m_client->setCopiesOnScroll();
     history()->updateForCommit();
@@ -2033,11 +2046,8 @@ void FrameLoader::open(CachedFrameBase& cachedFrame)
     view->setWasScrolledByUser(false);
 
     // Use the current ScrollView's frame rect.
-    if (m_frame->view()) {
-        IntRect rect = m_frame->view()->frameRect();
-        view->setFrameRect(rect);
-        view->setBoundsSize(rect.size());
-    }
+    if (m_frame->view())
+        view->setFrameRect(m_frame->view()->frameRect());
     m_frame->setView(view);
     
     m_frame->setDocument(document);
@@ -2259,14 +2269,15 @@ void FrameLoader::checkLoadCompleteForThisFrame()
             if (m_stateMachine.creatingInitialEmptyDocument() || !m_stateMachine.committedFirstRealDocumentLoad())
                 return;
 
+            if (Page* page = m_frame->page())
+                page->progress()->progressCompleted(m_frame);
+
             const ResourceError& error = dl->mainDocumentError();
             if (!error.isNull())
                 m_client->dispatchDidFailLoad(error);
             else
                 m_client->dispatchDidFinishLoad();
 
-            if (Page* page = m_frame->page())
-                page->progress()->progressCompleted(m_frame);
             return;
         }
         
@@ -2343,12 +2354,14 @@ void FrameLoader::frameLoadCompleted()
 
 void FrameLoader::detachChildren()
 {
-    // FIXME: Is it really necessary to do this in reverse order?
-    Frame* previous;
-    for (Frame* child = m_frame->tree()->lastChild(); child; child = previous) {
-        previous = child->tree()->previousSibling();
-        child->loader()->detachFromParent();
-    }
+    typedef Vector<RefPtr<Frame> > FrameVector;
+    FrameVector childrenToDetach;
+    childrenToDetach.reserveCapacity(m_frame->tree()->childCount());
+    for (Frame* child = m_frame->tree()->lastChild(); child; child = child->tree()->previousSibling())
+        childrenToDetach.append(child);
+    FrameVector::iterator end = childrenToDetach.end();
+    for (FrameVector::iterator it = childrenToDetach.begin(); it != end; it++)
+        (*it)->loader()->detachFromParent();
 }
 
 void FrameLoader::closeAndRemoveChild(Frame* child)
@@ -2510,10 +2523,13 @@ void FrameLoader::addExtraFieldsToRequest(ResourceRequest& request, FrameLoadTyp
     // Make sure we send the Origin header.
     addHTTPOriginIfNeeded(request, String());
 
-    // Always try UTF-8. If that fails, try frame encoding (if any) and then the default.
-    // For a newly opened frame with an empty URL, encoding() should not be used, because this methods asks decoder, which uses ISO-8859-1.
+#if PLATFORM(MAC) || PLATFORM(WIN)
+    // The Apple Mac and Windows ports have decided not to behave like other
+    // browsers and instead use a quirky fallback array.
+    // FIXME: We should remove this code once CFNetwork implements RFC 6266.
     Settings* settings = m_frame->settings();
     request.setResponseContentDispositionEncodingFallbackArray("UTF-8", activeDocumentLoader()->writer()->deprecatedFrameEncoding(), settings ? settings->defaultTextEncodingName() : String());
+#endif
 }
 
 void FrameLoader::addHTTPOriginIfNeeded(ResourceRequest& request, const String& origin)
@@ -2603,14 +2619,10 @@ unsigned long FrameLoader::loadResourceSynchronously(const ResourceRequest& requ
     if (error.isNull()) {
         ASSERT(!newRequest.isNull());
         
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
         if (!documentLoader()->applicationCacheHost()->maybeLoadSynchronously(newRequest, error, response, data)) {
-#endif
             ResourceHandle::loadResourceSynchronously(networkingContext(), newRequest, storedCredentials, error, response, data);
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
             documentLoader()->applicationCacheHost()->maybeLoadFallbackSynchronously(newRequest, error, response, data);
         }
-#endif
     }
     int encodedDataLength = response.resourceLoadInfo() ? static_cast<int>(response.resourceLoadInfo()->encodedDataLength) : -1;
     notifier()->sendRemainingDelegateMessages(m_documentLoader.get(), identifier, response, data.data(), data.size(), encodedDataLength, error);
@@ -2671,6 +2683,12 @@ void FrameLoader::continueFragmentScrollAfterNavigationPolicy(const ResourceRequ
 
     if (!shouldContinue)
         return;
+
+    // If we have a provisional request for a different document, a fragment scroll should cancel it.
+    if (m_provisionalDocumentLoader && !equalIgnoringFragmentIdentifier(m_provisionalDocumentLoader->request().url(), request.url())) {
+        m_provisionalDocumentLoader->stopLoading();
+        setProvisionalDocumentLoader(0);
+    }
 
     bool isRedirect = m_quickRedirectComing || policyChecker()->loadType() == FrameLoadTypeRedirectWithLockedBackForwardList;    
     loadInSameDocument(request.url(), 0, !isRedirect);
@@ -3189,10 +3207,9 @@ void FrameLoader::didChangeTitle(DocumentLoader* loader)
     }
 }
 
-void FrameLoader::didChangeIcons(DocumentLoader* loader, IconType type)
+void FrameLoader::didChangeIcons(IconType type)
 {
-    if (loader == m_documentLoader)
-        m_client->dispatchDidChangeIcons(type);
+    m_client->dispatchDidChangeIcons(type);
 }
 
 void FrameLoader::dispatchDidCommitLoad()

@@ -221,8 +221,15 @@ InjectedScript.prototype = {
                 try {
                     nameProcessed[name] = true;
                     var descriptor = Object.getOwnPropertyDescriptor(object, name);
-                    if (!descriptor)
+                    if (!descriptor) {
+                        // Not all bindings provide proper descriptors. Fall back to the writable, configurable property.
+                        try {
+                            descriptors.push({ name: name, value: object[name], writable: false, configurable: false, enumerable: false});
+                        } catch (e) {
+                            // Silent catch.
+                        }
                         continue;
+                    }
                 } catch (e) {
                     var descriptor = {};
                     descriptor.value = e;
@@ -268,7 +275,7 @@ InjectedScript.prototype = {
                         return "Could not find object with given id";
 
                     resolvedArgs.push(resolvedArg);
-                } else if (args[i].value)
+                } else if ("value" in args[i])
                     resolvedArgs.push(args[i].value);
                 else
                     resolvedArgs.push(undefined);
@@ -481,7 +488,7 @@ InjectedScript.RemoteObject = function(object, objectGroupName, forceValueType)
 
 InjectedScript.CallFrameProxy = function(ordinal, callFrame)
 {
-    this.id = "{\"ordinal\":" + ordinal + ",\"injectedScriptId\":" + injectedScriptId + "}";
+    this.callFrameId = "{\"ordinal\":" + ordinal + ",\"injectedScriptId\":" + injectedScriptId + "}";
     this.functionName = (callFrame.type === "function" ? callFrame.functionName : "");
     this.location = { scriptId: String(callFrame.sourceID), lineNumber: callFrame.line, columnNumber: callFrame.column };
     this.scopeChain = this._wrapScopeChain(callFrame);

@@ -26,8 +26,6 @@
 #ifndef Test_h
 #define Test_h
 
-#include <gtest/gtest.h>
-
 namespace TestWebKitAPI {
 
 #define EXPECT_NOT_NULL(expression) \
@@ -41,14 +39,6 @@ namespace TestWebKitAPI {
 
 #define ASSERT_NULL(expression) \
     ASSERT_TRUE(!(expression))
-
-#define TEST_ASSERT_RETURN(expression, returnValue) \
-    do { \
-        if (!(expression)) { \
-            EXPECT_FALSE(true) << #expression; \
-            return (returnValue); \
-        } \
-    } while (0)
 
 } // namespace TestWebKitAPI
 

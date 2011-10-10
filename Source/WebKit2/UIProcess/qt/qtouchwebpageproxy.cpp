@@ -27,10 +27,10 @@
 
 using namespace WebCore;
 
-QTouchWebPageProxy::QTouchWebPageProxy(TouchViewInterface* viewInterface, QWKContext* context, WKPageGroupRef pageGroupRef)
-    : QtWebPageProxy(viewInterface, context, pageGroupRef)
-    , m_panGestureRecognizer(viewInterface)
-    , m_pinchGestureRecognizer(viewInterface)
+QTouchWebPageProxy::QTouchWebPageProxy(TouchViewInterface* viewInterface, ViewportInteractionEngine* viewportInteractionEngine)
+    : QtWebPageProxy(viewInterface, 0)
+    , m_panGestureRecognizer(viewportInteractionEngine)
+    , m_pinchGestureRecognizer(viewportInteractionEngine)
 {
     init();
 }
@@ -49,7 +49,6 @@ void QTouchWebPageProxy::processDidCrash()
 
 void QTouchWebPageProxy::paintContent(QPainter* painter, const QRect& area)
 {
-    m_webPageProxy->drawingArea()->paint(IntRect(area), painter);
 }
 
 #if ENABLE(TOUCH_EVENTS)
@@ -77,14 +76,18 @@ bool QTouchWebPageProxy::handleEvent(QEvent* ev)
     return QtWebPageProxy::handleEvent(ev);
 }
 
-void QTouchWebPageProxy::setVisibleContentRect(const QRectF& visibleContentRect)
+void QTouchWebPageProxy::setVisibleContentRectAndScale(const QRectF& visibleContentRect, float scale)
 {
-    TiledDrawingAreaProxy* tiledDrawingArea = static_cast<TiledDrawingAreaProxy*>(m_webPageProxy->drawingArea());
     QRect alignedVisibleContentRect = visibleContentRect.toAlignedRect();
-    tiledDrawingArea->setVisibleContentRect(alignedVisibleContentRect);
+    drawingArea()->setVisibleContentRectAndScale(alignedVisibleContentRect, scale);
 
     // FIXME: Once we support suspend and resume, this should be delayed until the page is active if the page is suspended.
     m_webPageProxy->setFixedVisibleContentRect(alignedVisibleContentRect);
+}
+
+void QTouchWebPageProxy::setVisibleContentRectTrajectoryVector(const QPointF& trajectoryVector)
+{
+    drawingArea()->setVisibleContentRectTrajectoryVector(trajectoryVector);
 }
 
 void QTouchWebPageProxy::setResizesToContentsUsingLayoutSize(const QSize& targetLayoutSize)
@@ -108,7 +111,7 @@ void QTouchWebPageProxy::findZoomableAreaForPoint(const QPoint& point)
     m_webPageProxy->findZoomableAreaForPoint(point);
 }
 
-void QTouchWebPageProxy::setContentsScale(qreal scale)
+void QTouchWebPageProxy::renderNextFrame()
 {
-    drawingArea()->setContentsScale(scale);
+    drawingArea()->renderNextFrame();
 }

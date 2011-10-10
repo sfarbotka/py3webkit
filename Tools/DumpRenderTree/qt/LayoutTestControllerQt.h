@@ -112,6 +112,7 @@ public slots:
     void handleErrorPages() { m_handleErrorPages = true; }
     void dumpEditingCallbacks();
     void dumpFrameLoadCallbacks();
+    void dumpProgressFinishedCallback();
     void dumpUserGestureInFrameLoadCallbacks();
     void dumpResourceLoadCallbacks();
     void dumpResourceResponseMIMETypes();
@@ -232,6 +233,7 @@ public slots:
     bool geolocationPermission() const { return m_geolocationPermission; }
 
     void addMockSpeechInputResult(const QString& result, double confidence, const QString& language);
+    void startSpeechInput(const QString& inputElement);
 
     // Empty stub method to keep parity with object model exposed by global LayoutTestController.
     void abortModal() {}

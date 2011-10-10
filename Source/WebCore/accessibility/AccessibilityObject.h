@@ -30,7 +30,7 @@
 #ifndef AccessibilityObject_h
 #define AccessibilityObject_h
 
-#include "IntRect.h"
+#include "LayoutTypes.h"
 #include "VisiblePosition.h"
 #include "VisibleSelection.h"
 #include <wtf/Forward.h>
@@ -49,7 +49,6 @@
 typedef struct _NSRange NSRange;
 
 #ifdef __OBJC__
-@class AccessibilityObjectWrapper;
 @class NSArray;
 @class NSAttributedString;
 @class NSData;
@@ -57,6 +56,7 @@ typedef struct _NSRange NSRange;
 @class NSString;
 @class NSValue;
 @class NSView;
+@class WebAccessibilityObjectWrapper;
 #else
 class NSArray;
 class NSAttributedString;
@@ -68,9 +68,15 @@ class NSView;
 #if PLATFORM(GTK)
 typedef struct _AtkObject AtkObject;
 typedef struct _AtkObject AccessibilityObjectWrapper;
+#elif PLATFORM(MAC)
+class WebAccessibilityObjectWrapper;
 #else
 class AccessibilityObjectWrapper;
 #endif
+#endif
+
+#if PLATFORM(MAC)
+typedef WebAccessibilityObjectWrapper AccessibilityObjectWrapper;
 #endif
 
 namespace WebCore {
@@ -85,6 +91,7 @@ class HTMLAreaElement;
 class IntPoint;
 class IntSize;
 class Node;
+class Page;
 class RenderObject;
 class RenderListItem;
 class VisibleSelection;
@@ -363,6 +370,7 @@ public:
     virtual bool isMenuListPopup() const { return false; }
     virtual bool isMenuListOption() const { return false; }
     bool isTextControl() const { return roleValue() == TextAreaRole || roleValue() == TextFieldRole; }
+    bool isARIATextControl() const;
     bool isTabList() const { return roleValue() == TabListRole; }
     bool isTabItem() const { return roleValue() == TabRole; }
     bool isRadioGroup() const { return roleValue() == RadioGroupRole; }
@@ -455,9 +463,9 @@ public:
     virtual void determineARIADropEffects(Vector<String>&) { }
     
     // Called on the root AX object to return the deepest available element.
-    virtual AccessibilityObject* accessibilityHitTest(const IntPoint&) const { return 0; }
+    virtual AccessibilityObject* accessibilityHitTest(const LayoutPoint&) const { return 0; }
     // Called on the AX object after the render tree determines which is the right AccessibilityRenderObject.
-    virtual AccessibilityObject* elementAccessibilityHitTest(const IntPoint&) const;
+    virtual AccessibilityObject* elementAccessibilityHitTest(const LayoutPoint&) const;
 
     virtual AccessibilityObject* focusedUIElement() const;
 
@@ -496,10 +504,10 @@ public:
     static AccessibilityObject* anchorElementForNode(Node*);
     virtual Element* anchorElement() const { return 0; }
     virtual Element* actionElement() const { return 0; }
-    virtual IntRect boundingBoxRect() const { return IntRect(); }
-    virtual IntRect elementRect() const = 0;
-    virtual IntSize size() const { return elementRect().size(); }
-    virtual IntPoint clickPoint() const;
+    virtual LayoutRect boundingBoxRect() const { return LayoutRect(); }
+    virtual LayoutRect elementRect() const = 0;
+    virtual LayoutSize size() const { return elementRect().size(); }
+    virtual LayoutPoint clickPoint();
 
     virtual PlainTextRange selectedTextRange() const { return PlainTextRange(); }
     unsigned selectionStart() const { return selectedTextRange().start; }
@@ -518,6 +526,7 @@ public:
     const String& actionVerb() const;
     virtual Widget* widget() const { return 0; }
     virtual Widget* widgetForAttachmentView() const { return 0; }
+    Page* page() const;
     virtual Document* document() const;
     virtual FrameView* topDocumentFrameView() const { return 0; }
     virtual FrameView* documentFrameView() const;
@@ -548,6 +557,9 @@ public:
     virtual bool canHaveChildren() const { return true; }
     virtual bool hasChildren() const { return m_haveChildren; }
     virtual void updateChildrenIfNecessary();
+    virtual void clearChildren();
+    virtual void detachFromParent() { }
+
     virtual void selectedChildren(AccessibilityChildrenVector&) { }
     virtual void visibleChildren(AccessibilityChildrenVector&) { }
     virtual void tabChildren(AccessibilityChildrenVector&) { }
@@ -573,7 +585,7 @@ public:
     VisiblePositionRange visiblePositionRangeForRange(const PlainTextRange&) const;
 
     String stringForVisiblePositionRange(const VisiblePositionRange&) const;
-    virtual IntRect boundsForVisiblePositionRange(const VisiblePositionRange&) const { return IntRect(); }
+    virtual LayoutRect boundsForVisiblePositionRange(const VisiblePositionRange&) const { return LayoutRect(); }
     int lengthForVisiblePositionRange(const VisiblePositionRange&) const;
     virtual void setSelectedVisiblePositionRange(const VisiblePositionRange&) const { }
 
@@ -604,7 +616,7 @@ public:
     PlainTextRange doAXStyleRangeForIndex(unsigned) const;
 
     virtual String doAXStringForRange(const PlainTextRange&) const { return String(); }
-    virtual IntRect doAXBoundsForRange(const PlainTextRange&) const { return IntRect(); }
+    virtual LayoutRect doAXBoundsForRange(const PlainTextRange&) const { return LayoutRect(); }
     String listMarkerTextForNodeAndPosition(Node*, const VisiblePosition&) const;
 
     unsigned doAXLineForIndex(unsigned);
@@ -668,7 +680,6 @@ protected:
     mutable bool m_haveChildren;
     AccessibilityRole m_role;
     
-    virtual void clearChildren();
     virtual bool isDetached() const { return true; }
     
 #if PLATFORM(GTK)
@@ -680,7 +691,7 @@ protected:
 #endif
 
 #if PLATFORM(MAC)
-    RetainPtr<AccessibilityObjectWrapper> m_wrapper;
+    RetainPtr<WebAccessibilityObjectWrapper> m_wrapper;
 #elif PLATFORM(WIN) && !OS(WINCE)
     COMPtr<AccessibilityObjectWrapper> m_wrapper;
 #elif PLATFORM(GTK)

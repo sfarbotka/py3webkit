@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -31,7 +31,7 @@
 #include "config.h"
 #include "DatabaseTracker.h"
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 
 #include "AbstractDatabase.h"
 #include "DatabaseObserver.h"
@@ -47,7 +47,7 @@ namespace WebCore {
 
 DatabaseTracker& DatabaseTracker::tracker()
 {
-    DEFINE_STATIC_LOCAL(DatabaseTracker, tracker, (""));
+    AtomicallyInitializedStatic(DatabaseTracker&, tracker = *new DatabaseTracker(""));
     return tracker;
 }
 
@@ -129,12 +129,19 @@ void DatabaseTracker::removeOpenDatabase(AbstractDatabase* database)
     MutexLocker openDatabaseMapLock(m_openDatabaseMapGuard);
     ASSERT(m_openDatabaseMap);
     DatabaseNameMap* nameMap = m_openDatabaseMap->get(originIdentifier);
-    ASSERT(nameMap);
+    if (!nameMap)
+        return;
+
     String name(database->stringIdentifier());
     DatabaseSet* databaseSet = nameMap->get(name);
-    ASSERT(databaseSet);
-    databaseSet->remove(database);
+    if (!databaseSet)
+        return;
 
+    DatabaseSet::iterator found = databaseSet->find(database);
+    if (found == databaseSet->end())
+        return;
+
+    databaseSet->remove(found);
     if (databaseSet->isEmpty()) {
         nameMap->remove(name);
         delete databaseSet;
@@ -211,4 +218,4 @@ void DatabaseTracker::interruptAllDatabasesForContext(const ScriptExecutionConte
 
 }
 
-#endif // ENABLE(DATABASE)
+#endif // ENABLE(SQL_DATABASE)

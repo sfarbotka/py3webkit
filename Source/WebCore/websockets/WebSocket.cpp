@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Google Inc.  All rights reserved.
+ * Copyright (C) 2011 Google Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,7 +34,10 @@
 
 #include "WebSocket.h"
 
+#include "Blob.h"
+#include "BlobData.h"
 #include "CloseEvent.h"
+#include "ContentSecurityPolicy.h"
 #include "DOMWindow.h"
 #include "Event.h"
 #include "EventException.h"
@@ -49,12 +52,16 @@
 #include "ThreadableWebSocketChannel.h"
 #include "WebSocketChannel.h"
 #include <wtf/HashSet.h>
+#include <wtf/OwnPtr.h>
+#include <wtf/PassOwnPtr.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
+
+const size_t maxReasonSizeInBytes = 123;
 
 static inline bool isValidProtocolCharacter(UChar character)
 {
@@ -191,6 +198,14 @@ void WebSocket::connect(const String& url, const Vector<String>& protocols, Exce
         return;
     }
 
+    if (!scriptExecutionContext()->contentSecurityPolicy()->allowConnectFromSource(m_url)) {
+        m_state = CLOSED;
+
+        // FIXME: Should this be throwing an exception?
+        ec = SECURITY_ERR;
+        return;
+    }
+
     m_channel = ThreadableWebSocketChannel::create(scriptExecutionContext(), this);
     m_useHixie76Protocol = m_channel->useHixie76Protocol();
 
@@ -250,7 +265,8 @@ bool WebSocket::send(const String& message, ExceptionCode& ec)
     }
     // No exception is raised if the connection was once established but has subsequently been closed.
     if (m_state == CLOSING || m_state == CLOSED) {
-        m_bufferedAmountAfterClose += message.utf8().length() + 2; // 2 for frameing
+        size_t payloadSize = message.utf8().length();
+        m_bufferedAmountAfterClose += payloadSize + getFramingOverhead(payloadSize);
         return false;
     }
     // FIXME: check message is valid utf8.
@@ -258,9 +274,60 @@ bool WebSocket::send(const String& message, ExceptionCode& ec)
     return m_channel->send(message);
 }
 
-void WebSocket::close()
+bool WebSocket::send(ArrayBuffer* binaryData, ExceptionCode& ec)
 {
-    LOG(Network, "WebSocket %p close", this);
+    LOG(Network, "WebSocket %p send arraybuffer %p", this, binaryData);
+    ASSERT(binaryData);
+    if (m_useHixie76Protocol)
+        return send("[object ArrayBuffer]", ec);
+    if (m_state == CONNECTING) {
+        ec = INVALID_STATE_ERR;
+        return false;
+    }
+    if (m_state == CLOSING || m_state == CLOSED) {
+        m_bufferedAmountAfterClose += binaryData->byteLength() + getFramingOverhead(binaryData->byteLength());
+        return false;
+    }
+    ASSERT(m_channel);
+    return m_channel->send(*binaryData);
+}
+
+bool WebSocket::send(Blob* binaryData, ExceptionCode& ec)
+{
+    LOG(Network, "WebSocket %p send blob %s", this, binaryData->url().string().utf8().data());
+    ASSERT(binaryData);
+    if (m_useHixie76Protocol)
+        return send("[object Blob]", ec);
+    if (m_state == CONNECTING) {
+        ec = INVALID_STATE_ERR;
+        return false;
+    }
+    if (m_state == CLOSING || m_state == CLOSED) {
+        unsigned long payloadSize = static_cast<unsigned long>(binaryData->size());
+        m_bufferedAmountAfterClose += payloadSize + getFramingOverhead(payloadSize);
+        return false;
+    }
+    ASSERT(m_channel);
+    return m_channel->send(*binaryData);
+}
+
+void WebSocket::close(int code, const String& reason, ExceptionCode& ec)
+{
+    if (code == WebSocketChannel::CloseEventCodeNotSpecified)
+        LOG(Network, "WebSocket %p close without code and reason", this);
+    else {
+        LOG(Network, "WebSocket %p close with code = %d, reason = %s", this, code, reason.utf8().data());
+        if (!(code == WebSocketChannel::CloseEventCodeNormalClosure || (WebSocketChannel::CloseEventCodeMinimumUserDefined <= code && code <= WebSocketChannel::CloseEventCodeMaximumUserDefined))) {
+            ec = INVALID_ACCESS_ERR;
+            return;
+        }
+        // FIXME: if reason contains any unpaired surrogates, raise SYNTAX_ERR.
+        if (reason.utf8().length() > maxReasonSizeInBytes) {
+            ec = SYNTAX_ERR;
+            return;
+        }
+    }
+
     if (m_state == CLOSING || m_state == CLOSED)
         return;
     if (m_state == CONNECTING) {
@@ -273,7 +340,7 @@ void WebSocket::close()
     // didClose notification may be already queued, which we will inadvertently process while waiting for bufferedAmount() to return.
     // In this case m_channel will be set to null during didClose() call, thus we need to test validness of m_channel here.
     if (m_channel)
-        m_channel->close();
+        m_channel->close(code, reason);
 }
 
 const KURL& WebSocket::url() const
@@ -300,6 +367,14 @@ String WebSocket::protocol() const
     if (m_useHixie76Protocol)
         return String();
     return m_subprotocol;
+}
+
+String WebSocket::extensions() const
+{
+    if (m_useHixie76Protocol)
+        return String();
+    // WebSocket protocol extension is not supported yet.
+    return "";
 }
 
 String WebSocket::binaryType() const
@@ -378,7 +453,7 @@ void WebSocket::didConnect()
 {
     LOG(Network, "WebSocket %p didConnect", this);
     if (m_state != CONNECTING) {
-        didClose(0, ClosingHandshakeIncomplete);
+        didClose(0, ClosingHandshakeIncomplete, WebSocketChannel::CloseEventCodeAbnormalClosure, "");
         return;
     }
     ASSERT(scriptExecutionContext());
@@ -393,9 +468,27 @@ void WebSocket::didReceiveMessage(const String& msg)
     if (m_state != OPEN && m_state != CLOSING)
         return;
     ASSERT(scriptExecutionContext());
-    RefPtr<MessageEvent> evt = MessageEvent::create();
-    evt->initMessageEvent(eventNames().messageEvent, false, false, SerializedScriptValue::create(msg), "", "", 0, 0);
-    dispatchEvent(evt);
+    dispatchEvent(MessageEvent::create(msg));
+}
+
+void WebSocket::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
+{
+    switch (m_binaryType) {
+    case BinaryTypeBlob: {
+        size_t size = binaryData->size();
+        RefPtr<RawData> rawData = RawData::create();
+        binaryData->swap(*rawData->mutableData());
+        OwnPtr<BlobData> blobData = BlobData::create();
+        blobData->appendData(rawData.release(), 0, BlobDataItem::toEndOfFile);
+        RefPtr<Blob> blob = Blob::create(blobData.release(), size);
+        dispatchEvent(MessageEvent::create(blob.release()));
+        break;
+    }
+
+    case BinaryTypeArrayBuffer:
+        dispatchEvent(MessageEvent::create(ArrayBuffer::create(binaryData->data(), binaryData->size())));
+        break;
+    }
 }
 
 void WebSocket::didReceiveMessageError()
@@ -413,7 +506,7 @@ void WebSocket::didStartClosingHandshake()
     m_state = CLOSING;
 }
 
-void WebSocket::didClose(unsigned long unhandledBufferedAmount, ClosingHandshakeCompletionStatus closingHandshakeCompletion)
+void WebSocket::didClose(unsigned long unhandledBufferedAmount, ClosingHandshakeCompletionStatus closingHandshakeCompletion, unsigned short code, const String& reason)
 {
     LOG(Network, "WebSocket %p didClose", this);
     if (!m_channel)
@@ -422,8 +515,8 @@ void WebSocket::didClose(unsigned long unhandledBufferedAmount, ClosingHandshake
     m_state = CLOSED;
     m_bufferedAmountAfterClose += unhandledBufferedAmount;
     ASSERT(scriptExecutionContext());
-    RefPtr<CloseEvent> event = CloseEvent::create(false);
-    event->initCloseEvent(eventNames().closeEvent, false, false, wasClean);
+    RefPtr<CloseEvent> event = CloseEvent::create();
+    event->initCloseEvent(eventNames().closeEvent, false, false, wasClean, code, reason);
     dispatchEvent(event);
     if (m_channel) {
         m_channel->disconnect();
@@ -441,6 +534,24 @@ EventTargetData* WebSocket::eventTargetData()
 EventTargetData* WebSocket::ensureEventTargetData()
 {
     return &m_eventTargetData;
+}
+
+size_t WebSocket::getFramingOverhead(size_t payloadSize)
+{
+    static const size_t hixie76FramingOverhead = 2; // Payload is surrounded by 0x00 and 0xFF.
+    if (m_useHixie76Protocol)
+        return hixie76FramingOverhead;
+
+    static const size_t hybiBaseFramingOverhead = 2; // Every frame has at least two-byte header.
+    static const size_t hybiMaskingKeyLength = 4; // Every frame from client must have masking key.
+    static const size_t minimumPayloadSizeWithTwoByteExtendedPayloadLength = 126;
+    static const size_t minimumPayloadSizeWithEightByteExtendedPayloadLength = 0x10000;
+    size_t overhead = hybiBaseFramingOverhead + hybiMaskingKeyLength;
+    if (payloadSize >= minimumPayloadSizeWithEightByteExtendedPayloadLength)
+        overhead += 8;
+    else if (payloadSize >= minimumPayloadSizeWithTwoByteExtendedPayloadLength)
+        overhead += 2;
+    return overhead;
 }
 
 }  // namespace WebCore

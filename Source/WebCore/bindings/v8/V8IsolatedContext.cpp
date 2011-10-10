@@ -48,8 +48,9 @@ void V8IsolatedContext::contextWeakReferenceCallback(v8::Persistent<v8::Value> o
     delete context;
 }
 
-V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup)
-    : m_world(IsolatedWorld::create())
+V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup, int worldId)
+    : m_world(IsolatedWorld::create(worldId)),
+      m_frame(proxy->frame())
 {
     v8::HandleScope scope;
     // FIXME: We should be creating a new V8DOMWindowShell here instead of riping out the context.
@@ -64,7 +65,7 @@ V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup)
 
     V8DOMWindowShell::installHiddenObjectPrototype(m_context->get());
     // FIXME: This will go away once we have a windowShell for the isolated world.
-    proxy->windowShell()->installDOMWindow(m_context->get(), proxy->frame()->domWindow());
+    proxy->windowShell()->installDOMWindow(m_context->get(), m_frame->domWindow());
 
     // Using the default security token means that the canAccess is always
     // called, which is slow.
@@ -74,12 +75,14 @@ V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup)
     //        changes.
     m_context->get()->UseDefaultSecurityToken();
 
-    proxy->frame()->loader()->client()->didCreateIsolatedScriptContext();
+    m_frame->loader()->client()->didCreateScriptContext(context(), m_world->id());
 }
 
 void V8IsolatedContext::destroy()
 {
+    m_frame->loader()->client()->willReleaseScriptContext(context(), m_world->id());
     m_context->get().MakeWeak(this, &contextWeakReferenceCallback);
+    m_frame = 0;
 }
 
 V8IsolatedContext::~V8IsolatedContext()

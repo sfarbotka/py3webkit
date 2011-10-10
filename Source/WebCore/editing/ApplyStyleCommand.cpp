@@ -190,7 +190,7 @@ void ApplyStyleCommand::updateStartEnd(const Position& newStart, const Position&
     if (!m_useEndingSelection && (newStart != m_start || newEnd != m_end))
         m_useEndingSelection = true;
 
-    setEndingSelection(VisibleSelection(newStart, newEnd, VP_DEFAULT_AFFINITY));
+    setEndingSelection(VisibleSelection(newStart, newEnd, VP_DEFAULT_AFFINITY, endingSelection().isDirectional()));
     m_start = newStart;
     m_end = newEnd;
 }
@@ -281,8 +281,8 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style)
                 if (newBlock)
                     block = newBlock;
             }
-            ASSERT(block->isHTMLElement());
-            if (block->isHTMLElement()) {
+            ASSERT(!block || block->isHTMLElement());
+            if (block && block->isHTMLElement()) {
                 removeCSSStyle(style, toHTMLElement(block.get()));
                 if (!m_removeOnly)
                     addBlockStyle(styleChange, toHTMLElement(block.get()));
@@ -819,7 +819,7 @@ bool ApplyStyleCommand::removeInlineStyleFromElement(EditingStyle* style, PassRe
         if (mode == RemoveNone)
             return true;
         ASSERT(extractedStyle);
-        extractedStyle->mergeInlineStyleOfElement(element.get());
+        extractedStyle->mergeInlineStyleOfElement(element.get(), EditingStyle::OverrideValues);
         removeNodePreservingChildren(element);
         return true;
     }
@@ -937,7 +937,7 @@ void ApplyStyleCommand::applyInlineStyleToPushDown(Node* node, EditingStyle* sty
     RefPtr<EditingStyle> newInlineStyle = style;
     if (node->isHTMLElement() && static_cast<HTMLElement*>(node)->inlineStyleDecl()) {
         newInlineStyle = style->copy();
-        newInlineStyle->mergeInlineStyleOfElement(static_cast<HTMLElement*>(node));
+        newInlineStyle->mergeInlineStyleOfElement(static_cast<HTMLElement*>(node), EditingStyle::OverrideValues);
     }
 
     // Since addInlineStyleIfNeeded can't add styles to block-flow render objects, add style attribute instead.

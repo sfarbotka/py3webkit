@@ -6,6 +6,7 @@
  * Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010 Apple Inc. All rights reserved.
  * Copyright (C) 2008, 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
  * Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies)
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -64,7 +65,6 @@ class CachedScript;
 class CanvasRenderingContext;
 class CharacterData;
 class Comment;
-class ContentSecurityPolicy;
 class DOMImplementation;
 class DOMSelection;
 class DOMWindow;
@@ -81,6 +81,7 @@ class EntityReference;
 class Event;
 class EventListener;
 class EventQueue;
+class FontData;
 class FormAssociatedElement;
 class Frame;
 class FrameView;
@@ -364,10 +365,12 @@ public:
     String readyState() const;
 
     String defaultCharset() const;
-    
+
     String inputEncoding() const { return Document::encoding(); }
     String charset() const { return Document::encoding(); }
     String characterSet() const { return Document::encoding(); }
+
+    String encoding() const;
 
     void setCharset(const String&);
 
@@ -539,13 +542,15 @@ public:
     PassRefPtr<CSSStyleDeclaration> createCSSStyleDeclaration();
     PassRefPtr<EditingText> createEditingTextNode(const String&);
 
-    virtual void recalcStyle(StyleChange = NoChange);
+    void recalcStyle(StyleChange = NoChange);
     bool childNeedsAndNotInStyleRecalc();
     virtual void updateStyleIfNeeded();
     void updateLayout();
     void updateLayoutIgnorePendingStylesheets();
     PassRefPtr<RenderStyle> styleForElementIgnoringPendingStylesheets(Element*);
     PassRefPtr<RenderStyle> styleForPage(int pageIndex);
+
+    void retireCustomFont(FontData*);
 
     // Returns true if page box (margin boxes and page borders) is visible.
     bool isPageBoxVisible(int pageIndex);
@@ -607,6 +612,8 @@ public:
 
     virtual String userAgent(const KURL&) const;
 
+    virtual void disableEval();
+
     CSSStyleSheet* pageUserSheet();
     void clearPageUserSheet();
     void updatePageUserSheet();
@@ -655,9 +662,6 @@ public:
     bool parsing() const { return m_bParsing; }
     int minimumLayoutDelay();
 
-    // This method is used by Android.
-    void setExtraLayoutDelay(int delay) { m_extraLayoutDelay = delay; }
-
     bool shouldScheduleLayout();
     bool isLayoutTimerActive();
     int elapsedTime() const;
@@ -675,7 +679,7 @@ public:
     void resetVisitedLinkColor();
     void resetActiveLinkColor();
     
-    MouseEventWithHitTestResults prepareMouseEvent(const HitTestRequest&, const IntPoint&, const PlatformMouseEvent&);
+    MouseEventWithHitTestResults prepareMouseEvent(const HitTestRequest&, const LayoutPoint&, const PlatformMouseEvent&);
 
     StyleSheetList* styleSheets();
 
@@ -764,8 +768,7 @@ public:
         TRANSITIONEND_LISTENER               = 0x800,
         BEFORELOAD_LISTENER                  = 0x1000,
         TOUCH_LISTENER                       = 0x2000,
-        BEFOREPROCESS_LISTENER               = 0x4000,
-        SCROLL_LISTENER                      = 0x8000
+        SCROLL_LISTENER                      = 0x4000
     };
 
     bool hasListenerType(ListenerType listenerType) const { return (m_listenerTypes & listenerType); }
@@ -821,6 +824,7 @@ public:
     //    inherits its cookieURL but not its URL.
     //
     const KURL& cookieURL() const { return m_cookieURL; }
+    void setCookieURL(const KURL& url) { m_cookieURL = url; }
 
     // The firstPartyForCookies is used to compute whether this document
     // appears in a "third-party" context for the purpose of third-party
@@ -916,9 +920,8 @@ public:
     
     void setHasNodesWithPlaceholderStyle() { m_hasNodesWithPlaceholderStyle = true; }
 
-    IconURL iconURL(IconType) const;
-    void setIconURL(const String&, const String&, IconType);
-    void setIconURL(const IconURL&);
+    const Vector<IconURL>& iconURLs() const;
+    void addIconURL(const String& url, const String& mimeType, const String& size, IconType);
 
     void setUseSecureKeyboardEntryWhenActive(bool);
     bool useSecureKeyboardEntryWhenActive() const;
@@ -1007,7 +1010,7 @@ public:
     bool processingLoadEvent() const { return m_processingLoadEvent; }
     bool loadEventFinished() const { return m_loadEventFinished; }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     virtual bool allowDatabaseAccess() const;
     virtual void databaseExceededQuota(const String& name);
 #endif
@@ -1090,11 +1093,11 @@ public:
 
     void initDNSPrefetch();
 
-    ContentSecurityPolicy* contentSecurityPolicy() { return m_contentSecurityPolicy.get(); }
-
     unsigned wheelEventHandlerCount() const { return m_wheelEventHandlerCount; }
     void didAddWheelEventHandler();
     void didRemoveWheelEventHandler();
+    
+    bool visualUpdatesAllowed() const;
     
 protected:
     Document(Frame*, const KURL&, bool isXHTML, bool isHTML);
@@ -1127,8 +1130,6 @@ private:
 
     virtual double minimumTimerInterval() const;
 
-    String encoding() const;
-
     void updateTitle(const StringWithDirection&);
     void updateFocusAppearanceTimerFired(Timer<Document>*);
     void updateBaseURL();
@@ -1138,6 +1139,8 @@ private:
     void buildAccessKeyMap(TreeScope* root);
 
     void createStyleSelector();
+
+    void deleteRetiredCustomFonts();
 
     PassRefPtr<NodeList> handleZeroPadding(const HitTestRequest&, HitTestResult&) const;
 
@@ -1152,7 +1155,8 @@ private:
     OwnPtr<CSSStyleSelector> m_styleSelector;
     bool m_didCalculateStyleSelector;
     bool m_hasDirtyStyleSelector;
-    
+    Vector<OwnPtr<FontData> > m_retiredCustomFonts;
+
     mutable RefPtr<CSSPrimitiveValueCache> m_cssPrimitiveValueCache;
 
     Frame* m_frame;
@@ -1297,10 +1301,6 @@ private:
     RefPtr<SerializedScriptValue> m_pendingStateObject;
     double m_startTime;
     bool m_overMinimumLayoutThreshold;
-    // This is used to increase the minimum delay between re-layouts. It is set
-    // using setExtraLayoutDelay to modify the minimum delay used at different
-    // points during the lifetime of the Document.
-    int m_extraLayoutDelay;
     
     OwnPtr<ScriptRunner> m_scriptRunner;
 
@@ -1351,7 +1351,7 @@ private:
 
     bool m_createRenderers;
     bool m_inPageCache;
-    IconURL m_iconURLs[ICON_COUNT];
+    Vector<IconURL> m_iconURLs;
 
     HashSet<Element*> m_documentActivationCallbackElements;
     HashSet<Element*> m_mediaVolumeCallbackElements;
@@ -1407,8 +1407,6 @@ private:
 #if ENABLE(REQUEST_ANIMATION_FRAME)
     OwnPtr<ScriptedAnimationController> m_scriptedAnimationController;
 #endif
-
-    RefPtr<ContentSecurityPolicy> m_contentSecurityPolicy;
 };
 
 // Put these methods here, because they require the Document definition, but we really want to inline them.

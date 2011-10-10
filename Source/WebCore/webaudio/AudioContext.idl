@@ -28,8 +28,7 @@ module webaudio {
         Conditional=WEB_AUDIO,
         ActiveDOMObject,
         CanBeConstructed,
-        CustomConstructFunction,
-        V8CustomConstructor,
+        CustomConstructor,
         CustomMarkFunction,
 #if defined(V8_BINDING) && V8_BINDING
         EventTarget
@@ -57,9 +56,12 @@ module webaudio {
         void decodeAudioData(in ArrayBuffer audioData, in [Callback] AudioBufferCallback successCallback, in [Optional, Callback] AudioBufferCallback errorCallback)
             raises(DOMException);
 
-        // Source
+        // Sources
         AudioBufferSourceNode createBufferSource();
-
+#if defined(ENABLE_VIDEO) && ENABLE_VIDEO
+        MediaElementAudioSourceNode createMediaElementSource(in HTMLMediaElement mediaElement)
+            raises(DOMException);
+#endif
         // Processing nodes
         AudioGainNode createGainNode();
         DelayNode createDelayNode();

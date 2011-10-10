@@ -45,7 +45,6 @@
 namespace WebCore {
 
 enum CompositeOperator;
-class DrawingBuffer;
 class GraphicsContext3D;
 class Texture;
 
@@ -136,6 +135,7 @@ public:
     TextDrawingModeFlags getTextDrawingMode() const;
     float getAlpha() const;
     int getNormalizedAlpha() const;
+    SkXfermode::Mode getXfermodeMode() const;
 
     void canvasClipPath(const SkPath&);
 
@@ -167,20 +167,13 @@ public:
     bool printing() const { return m_printing; }
     void setPrinting(bool p) { m_printing = p; }
 
-    // Returns if the context allows rendering of fonts using native platform
-    // APIs. If false is returned font rendering is performed using the skia
-    // text drawing APIs.
-    bool isNativeFontRenderingAllowed();
-
     void getImageResamplingHint(IntSize* srcSize, FloatSize* dstSize) const;
     void setImageResamplingHint(const IntSize& srcSize, const FloatSize& dstSize);
     void clearImageResamplingHint();
     bool hasImageResamplingHint() const;
 
     bool isAccelerated() const { return m_gpuContext; }
-    void setGraphicsContext3D(GraphicsContext3D*, DrawingBuffer*, const IntSize&);
-    bool paintsIntoImageBuffer() const;
-    void makeGrContextCurrent();
+    void setGraphicsContext3D(GraphicsContext3D*);
 
 private:
     // Used when restoring and the state has an image clip. Only shows the pixels in

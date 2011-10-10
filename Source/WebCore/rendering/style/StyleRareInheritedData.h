@@ -92,11 +92,15 @@ public:
     AtomicString hyphenationString;
     short hyphenationLimitBefore;
     short hyphenationLimitAfter;
+    short hyphenationLimitLines;
 
     AtomicString locale;
 
     AtomicString textEmphasisCustomMark;
     RefPtr<QuotesData> quotes;
+#if ENABLE(TOUCH_EVENTS)
+    Color tapHighlightColor;
+#endif
 
 private:
     StyleRareInheritedData();

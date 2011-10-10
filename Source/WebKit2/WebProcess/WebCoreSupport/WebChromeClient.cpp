@@ -49,6 +49,7 @@
 #include <WebCore/FileChooser.h>
 #include <WebCore/FileIconLoader.h>
 #include <WebCore/Frame.h>
+#include <WebCore/FrameLoadRequest.h>
 #include <WebCore/FrameLoader.h>
 #include <WebCore/FrameView.h>
 #include <WebCore/HTMLNames.h>
@@ -74,7 +75,7 @@ static WebFrame* findLargestFrameInFrameSet(WebPage* page)
 {
     // Approximate what a user could consider a default target frame for application menu operations.
 
-    WebFrame* mainFrame = page->mainFrame();
+    WebFrame* mainFrame = page->mainWebFrame();
     if (!mainFrame->isFrameSet())
         return 0;
 
@@ -114,11 +115,6 @@ FloatRect WebChromeClient::windowRect()
 FloatRect WebChromeClient::pageRect()
 {
     return FloatRect(FloatPoint(), m_page->size());
-}
-
-float WebChromeClient::scaleFactor()
-{
-    return m_page->userSpaceScaleFactor();
 }
 
 void WebChromeClient::focus()
@@ -161,14 +157,14 @@ void WebChromeClient::focusedFrameChanged(Frame* frame)
     WebProcess::shared().connection()->send(Messages::WebPageProxy::FocusedFrameChanged(webFrame ? webFrame->frameID() : 0), m_page->pageID());
 }
 
-Page* WebChromeClient::createWindow(Frame*, const FrameLoadRequest&, const WindowFeatures& windowFeatures, const NavigationAction& navigationAction)
+Page* WebChromeClient::createWindow(Frame*, const FrameLoadRequest& request, const WindowFeatures& windowFeatures, const NavigationAction& navigationAction)
 {
     uint32_t modifiers = static_cast<uint32_t>(InjectedBundleNavigationAction::modifiersForNavigationAction(navigationAction));
     int32_t mouseButton = static_cast<int32_t>(InjectedBundleNavigationAction::mouseButtonForNavigationAction(navigationAction));
 
     uint64_t newPageID = 0;
     WebPageCreationParameters parameters;
-    if (!WebProcess::shared().connection()->sendSync(Messages::WebPageProxy::CreateNewPage(windowFeatures, modifiers, mouseButton), Messages::WebPageProxy::CreateNewPage::Reply(newPageID, parameters), m_page->pageID()))
+    if (!WebProcess::shared().connection()->sendSync(Messages::WebPageProxy::CreateNewPage(request.resourceRequest(), windowFeatures, modifiers, mouseButton), Messages::WebPageProxy::CreateNewPage::Reply(newPageID, parameters), m_page->pageID()))
         return 0;
 
     if (!newPageID)
@@ -298,7 +294,7 @@ void WebChromeClient::closeWindowSoon()
 
     m_page->corePage()->setGroupName(String());
 
-    if (WebFrame* frame = m_page->mainFrame()) {
+    if (WebFrame* frame = m_page->mainWebFrame()) {
         if (Frame* coreFrame = frame->coreFrame())
             coreFrame->loader()->stopForUserCancel();
     }
@@ -438,7 +434,7 @@ void WebChromeClient::contentsSizeChanged(Frame* frame, const IntSize& size) con
 
     WebFrame* webFrame = static_cast<WebFrameLoaderClient*>(frame->loader()->client())->webFrame();
 
-    if (!m_page->mainFrame() || m_page->mainFrame() != webFrame)
+    if (!m_page->mainWebFrame() || m_page->mainWebFrame() != webFrame)
         return;
 
     m_page->send(Messages::WebPageProxy::DidChangeContentsSize(size));
@@ -467,7 +463,7 @@ void WebChromeClient::contentsSizeChanged(Frame* frame, const IntSize& size) con
     }
 }
 
-void WebChromeClient::scrollRectIntoView(const IntRect&, const ScrollView*) const
+void WebChromeClient::scrollRectIntoView(const IntRect&) const
 {
     notImplemented();
 }
@@ -500,8 +496,15 @@ void WebChromeClient::mouseDidMoveOverElement(const HitTestResult& hitTestResult
     // Notify the bundle client.
     m_page->injectedBundleUIClient().mouseDidMoveOverElement(m_page, hitTestResult, static_cast<WebEvent::Modifiers>(modifierFlags), userData);
 
+    WebHitTestResult::Data webHitTestResultData;
+    webHitTestResultData.absoluteImageURL = hitTestResult.absoluteImageURL().string();
+    webHitTestResultData.absoluteLinkURL = hitTestResult.absoluteLinkURL().string();
+    webHitTestResultData.absoluteMediaURL = hitTestResult.absoluteMediaURL().string();
+    webHitTestResultData.linkLabel = hitTestResult.textContent();
+    webHitTestResultData.linkTitle = hitTestResult.titleDisplayString();
+
     // Notify the UIProcess.
-    m_page->send(Messages::WebPageProxy::MouseDidMoveOverElement(modifierFlags, InjectedBundleUserMessageEncoder(userData.get())));
+    m_page->send(Messages::WebPageProxy::MouseDidMoveOverElement(webHitTestResultData, modifierFlags, InjectedBundleUserMessageEncoder(userData.get())));
 }
 
 void WebChromeClient::setToolTip(const String& toolTip, TextDirection)
@@ -521,7 +524,7 @@ void WebChromeClient::print(Frame* frame)
     m_page->sendSync(Messages::WebPageProxy::PrintFrame(webFrame->frameID()), Messages::WebPageProxy::PrintFrame::Reply());
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& databaseName)
 {
     WebFrame* webFrame = static_cast<WebFrameLoaderClient*>(frame->loader()->client())->webFrame();
@@ -540,7 +543,6 @@ void WebChromeClient::exceededDatabaseQuota(Frame* frame, const String& database
 #endif
 
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void WebChromeClient::reachedMaxAppCacheSize(int64_t)
 {
     notImplemented();
@@ -550,7 +552,6 @@ void WebChromeClient::reachedApplicationCacheOriginQuota(SecurityOrigin*, int64_
 {
     notImplemented();
 }
-#endif
 
 #if ENABLE(DASHBOARD_SUPPORT)
 void WebChromeClient::dashboardRegionsChanged()
@@ -584,20 +585,6 @@ bool WebChromeClient::shouldReplaceWithGeneratedFileForUpload(const String& path
 String WebChromeClient::generateReplacementFile(const String& path)
 {
     return m_page->injectedBundleUIClient().generateFileForUpload(m_page, path);
-}
-
-bool WebChromeClient::paintCustomScrollbar(GraphicsContext*, const FloatRect&, ScrollbarControlSize, 
-                                           ScrollbarControlState, ScrollbarPart pressedPart, bool vertical,
-                                           float value, float proportion, ScrollbarControlPartMask)
-{
-    notImplemented();
-    return false;
-}
-
-bool WebChromeClient::paintCustomScrollCorner(GraphicsContext*, const FloatRect&)
-{
-    notImplemented();
-    return false;
 }
 
 bool WebChromeClient::paintCustomOverhangArea(GraphicsContext* context, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect)
@@ -659,16 +646,6 @@ void WebChromeClient::setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves)
 }
 
 void WebChromeClient::formStateDidChange(const Node*)
-{
-    notImplemented();
-}
-
-void WebChromeClient::formDidFocus(const Node*)
-{ 
-    notImplemented();
-}
-
-void WebChromeClient::formDidBlur(const Node*)
 {
     notImplemented();
 }
@@ -786,10 +763,6 @@ void WebChromeClient::didStartRubberBandForFrame(Frame*, const IntSize&) const
 void WebChromeClient::didCompleteRubberBandForFrame(Frame* frame, const IntSize& initialOverhang) const
 {
     m_page->drawingArea()->enableDisplayThrottling();
-
-    if (frame != frame->page()->mainFrame())
-        return;
-    m_page->send(Messages::WebPageProxy::DidCompleteRubberBandForMainFrame(initialOverhang));
 }
 
 void WebChromeClient::didStartAnimatedScroll() const

@@ -21,7 +21,7 @@
 
 #include "config.h"
 
-#if ENABLE(SVG) && ENABLE(SVG_ANIMATION)
+#if ENABLE(SVG)
 #include "SVGAnimateMotionElement.h"
 
 #include "Attribute.h"
@@ -81,9 +81,7 @@ bool SVGAnimateMotionElement::hasValidAttributeType()
         || targetElement->hasTagName(clipPathTag)
         || targetElement->hasTagName(maskTag)
         || targetElement->hasTagName(aTag)
-#if ENABLE(SVG_FOREIGN_OBJECT)
         || targetElement->hasTagName(foreignObjectTag)
-#endif
         )
         return true;
     return false;
@@ -94,7 +92,7 @@ bool SVGAnimateMotionElement::isSupportedAttribute(const QualifiedName& attrName
     DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, supportedAttributes, ());
     if (supportedAttributes.isEmpty())
         supportedAttributes.add(SVGNames::pathAttr);
-    return supportedAttributes.contains(attrName);
+    return supportedAttributes.contains<QualifiedName, SVGAttributeHashTranslator>(attrName);
 }
 
 void SVGAnimateMotionElement::parseMappedAttribute(Attribute* attr)
@@ -150,7 +148,7 @@ static bool parsePoint(const String& s, FloatPoint& point)
     const UChar* cur = s.characters();
     const UChar* end = cur + s.length();
     
-    if (!skipOptionalSpaces(cur, end))
+    if (!skipOptionalSVGSpaces(cur, end))
         return false;
     
     float x = 0;
@@ -164,7 +162,7 @@ static bool parsePoint(const String& s, FloatPoint& point)
     point = FloatPoint(x, y);
     
     // disallow anything except spaces at the end
-    return !skipOptionalSpaces(cur, end);
+    return !skipOptionalSVGSpaces(cur, end);
 }
     
 void SVGAnimateMotionElement::resetToBaseValue(const String&)

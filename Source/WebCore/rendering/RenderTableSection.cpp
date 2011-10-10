@@ -44,6 +44,10 @@ namespace WebCore {
 
 using namespace HTMLNames;
 
+// Those 2 variables are used to balance the memory consumption vs the repaint time on big tables.
+static unsigned gMinTableSizeToUseFastPaintPathWithOverflowingCell = 75 * 75;
+static float gMaxAllowedOverflowingCellRatioForFastPaintPath = 0.1f;
+
 static inline void setRowLogicalHeightToRowStyleLogicalHeightIfNotRelative(RenderTableSection::RowStruct* row)
 {
     ASSERT(row && row->rowRenderer);
@@ -62,7 +66,6 @@ RenderTableSection::RenderTableSection(Node* node)
     , m_outerBorderBefore(0)
     , m_outerBorderAfter(0)
     , m_needsCellRecalc(false)
-    , m_hasOverflowingCell(false)
     , m_hasMultipleCellLevels(false)
 {
     // init RenderObject attributes
@@ -72,6 +75,17 @@ RenderTableSection::RenderTableSection(Node* node)
 RenderTableSection::~RenderTableSection()
 {
     clearGrid();
+}
+
+void RenderTableSection::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
+{
+    RenderBox::styleDidChange(diff, oldStyle);
+    propagateStyleToAnonymousChildren();
+
+    // If border was changed, notify table.
+    RenderTable* table = this->table();
+    if (table && !table->selfNeedsLayout() && !table->normalChildNeedsLayout() && oldStyle && oldStyle->border() != style()->border())
+        table->invalidateCollapsedBorders();
 }
 
 void RenderTableSection::willBeDestroyed()
@@ -89,14 +103,14 @@ void RenderTableSection::willBeDestroyed()
 void RenderTableSection::addChild(RenderObject* child, RenderObject* beforeChild)
 {
     // Make sure we don't append things after :after-generated content if we have it.
-    if (!beforeChild && isAfterContent(lastChild()))
-        beforeChild = lastChild();
+    if (!beforeChild)
+        beforeChild = findAfterContentRenderer();
 
     if (!child->isTableRow()) {
         RenderObject* last = beforeChild;
         if (!last)
             last = lastChild();
-        if (last && last->isAnonymous()) {
+        if (last && last->isAnonymous() && !last->isBeforeOrAfterContent()) {
             if (beforeChild == last)
                 beforeChild = last->firstChild();
             last->addChild(child, beforeChild);
@@ -108,7 +122,7 @@ void RenderTableSection::addChild(RenderObject* child, RenderObject* beforeChild
         RenderObject* lastBox = last;
         while (lastBox && lastBox->parent()->isAnonymous() && !lastBox->isTableRow())
             lastBox = lastBox->parent();
-        if (lastBox && lastBox->isAnonymous()) {
+        if (lastBox && lastBox->isAnonymous() && !lastBox->isBeforeOrAfterContent()) {
             lastBox->addChild(child, beforeChild);
             return;
         }
@@ -335,7 +349,7 @@ LayoutUnit RenderTableSection::calcRowLogicalHeight()
 
             int indx = max(r - cell->rowSpan() + 1, 0);
 
-            if (cell->hasOverrideSize()) {
+            if (cell->hasOverrideHeight()) {
                 if (!statePusher.didPush()) {
                     // Technically, we should also push state for the row, but since
                     // rows don't push a coordinate transform, that's not necessary.
@@ -424,7 +438,8 @@ LayoutUnit RenderTableSection::layoutRows(LayoutUnit toAdd)
     // Set the width of our section now.  The rows will also be this width.
     setLogicalWidth(table()->contentLogicalWidth());
     m_overflow.clear();
-    m_hasOverflowingCell = false;
+    m_overflowingCells.clear();
+    m_forceSlowPaintPathWithOverflowingCell = false;
 
     if (toAdd && totalRows && (m_rowPos[totalRows] || !nextSibling())) {
         LayoutUnit totalHeight = m_rowPos[totalRows] + toAdd;
@@ -562,7 +577,7 @@ LayoutUnit RenderTableSection::layoutRows(LayoutUnit toAdd)
                 // Alignment within a cell is based off the calculated
                 // height, which becomes irrelevant once the cell has
                 // been resized based off its percentage.
-                cell->setOverrideSizeFromRowHeight(rHeight);
+                cell->setOverrideHeightFromRowHeight(rHeight);
                 cell->layoutIfNeeded();
 
                 // If the baseline moved, we may have to update the data for our row. Find out the new baseline.
@@ -649,6 +664,12 @@ LayoutUnit RenderTableSection::layoutRows(LayoutUnit toAdd)
 
     setLogicalHeight(m_rowPos[totalRows]);
 
+    unsigned totalCellsCount = nEffCols * totalRows;
+    int maxAllowedOverflowingCellsCount = totalCellsCount < gMinTableSizeToUseFastPaintPathWithOverflowingCell ? 0 : gMaxAllowedOverflowingCellRatioForFastPaintPath * totalCellsCount;
+
+#ifndef NDEBUG
+    bool hasOverflowingCell = false;
+#endif
     // Now that our height has been determined, add in overflow from cells.
     for (int r = 0; r < totalRows; r++) {
         for (int c = 0; c < nEffCols; c++) {
@@ -659,9 +680,22 @@ LayoutUnit RenderTableSection::layoutRows(LayoutUnit toAdd)
             if (r < totalRows - 1 && cell == primaryCellAt(r + 1, c))
                 continue;
             addOverflowFromChild(cell);
-            m_hasOverflowingCell |= cell->hasVisualOverflow();
+#ifndef NDEBUG
+            hasOverflowingCell |= cell->hasVisualOverflow();
+#endif
+            if (cell->hasVisualOverflow() && !m_forceSlowPaintPathWithOverflowingCell) {
+                m_overflowingCells.add(cell);
+                if (m_overflowingCells.size() > maxAllowedOverflowingCellsCount) {
+                    // We need to set m_forcesSlowPaintPath only if there is a least one overflowing cells as the hit testing code rely on this information.
+                    m_forceSlowPaintPathWithOverflowingCell = true;
+                    // The slow path does not make any use of the overflowing cells info, don't hold on to the memory.
+                    m_overflowingCells.clear();
+                }
+            }
         }
     }
+
+    ASSERT(hasOverflowingCell == this->hasOverflowingCell());
 
     statePusher.pop();
     return height();
@@ -914,9 +948,19 @@ static inline bool compareCellPositions(RenderTableCell* elem1, RenderTableCell*
     return elem1->row() < elem2->row();
 }
 
+// This comparison is used only when we have overflowing cells as we have an unsorted array to sort. We thus need
+// to sort both on rows and columns to properly repaint.
+static inline bool compareCellPositionsWithOverflowingCells(RenderTableCell* elem1, RenderTableCell* elem2)
+{
+    if (elem1->row() != elem2->row())
+        return elem1->row() < elem2->row();
+
+    return elem1->col() < elem2->col();
+}
+
 void RenderTableSection::paintCell(RenderTableCell* cell, PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    LayoutPoint cellPoint = flipForWritingMode(cell, paintOffset, ParentToChildFlippingAdjustment);
+    LayoutPoint cellPoint = flipForWritingModeForChild(cell, paintOffset);
     PaintPhase paintPhase = paintInfo.phase;
     RenderTableRow* row = toRenderTableRow(cell->parent());
 
@@ -951,7 +995,6 @@ void RenderTableSection::paintCell(RenderTableCell* cell, PaintInfo& paintInfo, 
 void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     // Check which rows and cols are visible and only paint these.
-    // FIXME: Could use a binary search here.
     unsigned totalRows = m_gridRows;
     unsigned totalCols = table()->columns().size();
 
@@ -970,8 +1013,7 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
             localRepaintRect.setX(width() - localRepaintRect.maxX());
     }
 
-    // If some cell overflows, just paint all of them.
-    if (!m_hasOverflowingCell) {
+    if (!m_forceSlowPaintPathWithOverflowingCell) {
         LayoutUnit before = (style()->isHorizontalWritingMode() ? localRepaintRect.y() : localRepaintRect.x()) - os;
         // binary search to find a row
         startrow = std::lower_bound(m_rowPos.begin(), m_rowPos.end(), before) - m_rowPos.begin();
@@ -994,7 +1036,7 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
     unsigned startcol = 0;
     unsigned endcol = totalCols;
     // FIXME: Implement RTL.
-    if (!m_hasOverflowingCell && style()->isLeftToRightDirection()) {
+    if (!m_forceSlowPaintPathWithOverflowingCell && style()->isLeftToRightDirection()) {
         LayoutUnit start = (style()->isHorizontalWritingMode() ? localRepaintRect.x() : localRepaintRect.y()) - os;
         Vector<LayoutUnit>& columnPos = table()->columnPositions();
         startcol = std::lower_bound(columnPos.begin(), columnPos.end(), start) - columnPos.begin();
@@ -1010,7 +1052,7 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
             ++endcol;
     }
     if (startcol < endcol) {
-        if (!m_hasMultipleCellLevels) {
+        if (!m_hasMultipleCellLevels && !m_overflowingCells.size()) {
             // Draw the dirty cells in the order that they appear.
             for (unsigned r = startrow; r < endrow; r++) {
                 for (unsigned c = startcol; c < endcol; c++) {
@@ -1022,26 +1064,41 @@ void RenderTableSection::paintObject(PaintInfo& paintInfo, const LayoutPoint& pa
                 }
             }
         } else {
-            // Draw the cells in the correct paint order.
+            // The overflowing cells should be scarce to avoid adding a lot of cells to the HashSet.
+            ASSERT(m_overflowingCells.size() < totalRows * totalCols * gMaxAllowedOverflowingCellRatioForFastPaintPath);
+
+            // To make sure we properly repaint the section, we repaint all the overflowing cells that we collected.
             Vector<RenderTableCell*> cells;
+            copyToVector(m_overflowingCells, cells);
+
             HashSet<RenderTableCell*> spanningCells;
+
             for (unsigned r = startrow; r < endrow; r++) {
                 for (unsigned c = startcol; c < endcol; c++) {
                     CellStruct& current = cellAt(r, c);
                     if (!current.hasCells())
                         continue;
                     for (unsigned i = 0; i < current.cells.size(); ++i) {
+                        if (m_overflowingCells.contains(current.cells[i]))
+                            continue;
+
                         if (current.cells[i]->rowSpan() > 1 || current.cells[i]->colSpan() > 1) {
                             if (spanningCells.contains(current.cells[i]))
                                 continue;
                             spanningCells.add(current.cells[i]);
                         }
+
                         cells.append(current.cells[i]);
                     }
                 }
             }
+
             // Sort the dirty cells by paint order.
-            std::stable_sort(cells.begin(), cells.end(), compareCellPositions);
+            if (!m_overflowingCells.size())
+                std::stable_sort(cells.begin(), cells.end(), compareCellPositions);
+            else
+                std::sort(cells.begin(), cells.end(), compareCellPositionsWithOverflowingCells);
+
             int size = cells.size();
             // Paint the cells.
             for (int i = 0; i < size; ++i)
@@ -1152,17 +1209,17 @@ bool RenderTableSection::nodeAtPoint(const HitTestRequest& request, HitTestResul
     // Just forward to our children always.
     LayoutPoint adjustedLocation = accumulatedOffset + location();
 
-    if (hasOverflowClip() && !overflowClipRect(adjustedLocation).intersects(result.rectForPoint(pointInContainer)))
+    if (hasOverflowClip() && !overflowClipRect(adjustedLocation, result.region()).intersects(result.rectForPoint(pointInContainer)))
         return false;
 
-    if (m_hasOverflowingCell) {
+    if (hasOverflowingCell()) {
         for (RenderObject* child = lastChild(); child; child = child->previousSibling()) {
             // FIXME: We have to skip over inline flows, since they can show up inside table rows
             // at the moment (a demoted inline <form> for example). If we ever implement a
             // table-specific hit-test method (which we should do for performance reasons anyway),
             // then we can remove this check.
             if (child->isBox() && !toRenderBox(child)->hasSelfPaintingLayer()) {
-                LayoutPoint childPoint = flipForWritingMode(toRenderBox(child), adjustedLocation, ParentToChildFlippingAdjustment);
+                LayoutPoint childPoint = flipForWritingModeForChild(toRenderBox(child), adjustedLocation);
                 if (child->nodeAtPoint(request, result, pointInContainer, childPoint, action)) {
                     updateHitTestResult(result, toLayoutPoint(pointInContainer - childPoint));
                     return true;
@@ -1206,7 +1263,7 @@ bool RenderTableSection::nodeAtPoint(const HitTestRequest& request, HitTestResul
 
     for (int i = current.cells.size() - 1; i >= 0; --i) {
         RenderTableCell* cell = current.cells[i];
-        LayoutPoint cellPoint = flipForWritingMode(cell, adjustedLocation, ParentToChildFlippingAdjustment);
+        LayoutPoint cellPoint = flipForWritingModeForChild(cell, adjustedLocation);
         if (static_cast<RenderObject*>(cell)->nodeAtPoint(request, result, pointInContainer, cellPoint, action)) {
             updateHitTestResult(result, toLayoutPoint(pointInContainer - cellPoint));
             return true;

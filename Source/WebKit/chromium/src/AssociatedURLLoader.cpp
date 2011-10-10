@@ -33,24 +33,47 @@
 
 #include "DocumentThreadableLoader.h"
 #include "DocumentThreadableLoaderClient.h"
+#include "HTTPValidation.h"
 #include "SubresourceLoader.h"
 #include "Timer.h"
 #include "WebApplicationCacheHost.h"
 #include "WebDataSource.h"
 #include "WebFrameImpl.h"
+#include "WebHTTPHeaderVisitor.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebURLError.h"
 #include "WebURLLoaderClient.h"
 #include "WebURLRequest.h"
 #include "WrappedResourceRequest.h"
 #include "WrappedResourceResponse.h"
+#include "XMLHttpRequest.h"
 
 using namespace WebCore;
-using namespace WebKit;
 using namespace WTF;
 
 namespace WebKit {
+
+namespace {
+
+class SafeHTTPHeaderValidator : public WebHTTPHeaderVisitor {
+    WTF_MAKE_NONCOPYABLE(SafeHTTPHeaderValidator);
+public:
+    SafeHTTPHeaderValidator() : m_isSafe(true) { }
+
+    void visitHeader(const WebString& name, const WebString& value);
+    bool isSafe() const { return m_isSafe; }
+
+private:
+    bool m_isSafe;
+};
+
+void SafeHTTPHeaderValidator::visitHeader(const WebString& name, const WebString& value)
+{
+    m_isSafe = m_isSafe && isValidHTTPToken(name) && XMLHttpRequest::isAllowedHTTPHeader(name) && isValidHTTPHeaderValue(value);
+}
+
+}
 
 // This class bridges the interface differences between WebCore and WebKit loader clients.
 // It forwards its ThreadableLoaderClient notifications to a WebURLLoaderClient.
@@ -63,12 +86,16 @@ public:
     virtual void willSendRequest(ResourceRequest& /*newRequest*/, const ResourceResponse& /*redirectResponse*/);
 
     virtual void didReceiveResponse(unsigned long, const ResourceResponse&);
+    virtual void didDownloadData(int /*dataLength*/);
     virtual void didReceiveData(const char*, int /*dataLength*/);
     virtual void didReceiveCachedMetadata(const char*, int /*dataLength*/);
     virtual void didFinishLoading(unsigned long /*identifier*/, double /*finishTime*/);
     virtual void didFail(const ResourceError&);
 
     virtual bool isDocumentThreadableLoaderClient() { return true; }
+
+    // Sets an error to be reported back to the client, asychronously.
+    void setDelayedError(const ResourceError&);
 
     // Enables forwarding of error notifications to the WebURLLoaderClient. These must be
     // deferred until after the call to AssociatedURLLoader::loadAsynchronously() completes.
@@ -87,7 +114,6 @@ private:
     WebURLError m_error;
 
     Timer<ClientAdapter> m_errorTimer;
-    unsigned long m_downloadLength;
     bool m_downloadToFile;
     bool m_enableErrorNotifications;
     bool m_didFail;
@@ -102,7 +128,6 @@ AssociatedURLLoader::ClientAdapter::ClientAdapter(AssociatedURLLoader* loader, W
     : m_loader(loader)
     , m_client(client)
     , m_errorTimer(this, &ClientAdapter::notifyError)
-    , m_downloadLength(0)
     , m_downloadToFile(downloadToFile)
     , m_enableErrorNotifications(false)
     , m_didFail(false)
@@ -135,13 +160,20 @@ void AssociatedURLLoader::ClientAdapter::didReceiveResponse(unsigned long, const
     m_client->didReceiveResponse(m_loader, wrappedResponse);
 }
 
+void AssociatedURLLoader::ClientAdapter::didDownloadData(int dataLength)
+{
+    if (!m_client)
+        return;
+
+    m_client->didDownloadData(m_loader, dataLength);
+}
+
 void AssociatedURLLoader::ClientAdapter::didReceiveData(const char* data, int dataLength)
 {
     if (!m_client)
         return;
 
     m_client->didReceiveData(m_loader, data, dataLength, -1);
-    m_downloadLength += dataLength;
 }
 
 void AssociatedURLLoader::ClientAdapter::didReceiveCachedMetadata(const char* data, int dataLength)
@@ -157,12 +189,6 @@ void AssociatedURLLoader::ClientAdapter::didFinishLoading(unsigned long identifi
     if (!m_client)
         return;
 
-    if (m_downloadToFile) {
-        int downloadLength = m_downloadLength <= INT_MAX ? m_downloadLength : INT_MAX;
-        m_client->didDownloadData(m_loader, downloadLength);
-        // While the client could have canceled, continue, since the load finished.
-    }
-
     m_client->didFinishLoading(m_loader, finishTime);
 }
 
@@ -175,6 +201,11 @@ void AssociatedURLLoader::ClientAdapter::didFail(const ResourceError& error)
     m_error = WebURLError(error);
     if (m_enableErrorNotifications)
         notifyError(&m_errorTimer);
+}
+
+void AssociatedURLLoader::ClientAdapter::setDelayedError(const ResourceError& error)
+{
+    didFail(error);
 }
 
 void AssociatedURLLoader::ClientAdapter::enableErrorNotifications()
@@ -225,18 +256,37 @@ void AssociatedURLLoader::loadAsynchronously(const WebURLRequest& request, WebUR
     m_client = client;
     ASSERT(m_client);
 
-    ThreadableLoaderOptions options;
-    options.sendLoadCallbacks = true; // Always send callbacks.
-    options.sniffContent = m_options.sniffContent;
-    options.allowCredentials = m_options.allowCredentials;
-    options.forcePreflight = m_options.forcePreflight;
-    options.crossOriginRequestPolicy = static_cast<WebCore::CrossOriginRequestPolicy>(m_options.crossOriginRequestPolicy);
-    options.shouldBufferData = false;
+    bool allowLoad = true;
+    WebURLRequest newRequest(request);
+    if (m_options.untrustedHTTP) {
+        WebString method = newRequest.httpMethod();
+        allowLoad = isValidHTTPToken(method) && XMLHttpRequest::isAllowedHTTPMethod(method);
+        if (allowLoad) {
+            newRequest.setHTTPMethod(XMLHttpRequest::uppercaseKnownHTTPMethod(method));
+            SafeHTTPHeaderValidator validator;
+            newRequest.visitHTTPHeaderFields(&validator);
+            allowLoad = validator.isSafe();
+        }
+    }
 
-    const ResourceRequest& webcoreRequest = request.toResourceRequest();
-    Document* webcoreDocument = m_frameImpl->frame()->document();
     m_clientAdapter = ClientAdapter::create(this, m_client, request.downloadToFile());
-    m_loader = DocumentThreadableLoader::create(webcoreDocument, m_clientAdapter.get(), webcoreRequest, options);
+
+    if (allowLoad) {
+        ThreadableLoaderOptions options;
+        options.sendLoadCallbacks = SendCallbacks; // Always send callbacks.
+        options.sniffContent = m_options.sniffContent ? SniffContent : DoNotSniffContent;
+        options.allowCredentials = m_options.allowCredentials ? AllowStoredCredentials : DoNotAllowStoredCredentials;
+        options.preflightPolicy = m_options.forcePreflight ? ForcePreflight : ConsiderPreflight;
+        options.crossOriginRequestPolicy = static_cast<WebCore::CrossOriginRequestPolicy>(m_options.crossOriginRequestPolicy);
+        options.shouldBufferData = DoNotBufferData;
+
+        const ResourceRequest& webcoreRequest = newRequest.toResourceRequest();
+        Document* webcoreDocument = m_frameImpl->frame()->document();
+        m_loader = DocumentThreadableLoader::create(webcoreDocument, m_clientAdapter.get(), webcoreRequest, options);
+    } else {
+        // FIXME: return meaningful error codes.
+        m_clientAdapter->setDelayedError(ResourceError());
+    }
     m_clientAdapter->enableErrorNotifications();
 }
 

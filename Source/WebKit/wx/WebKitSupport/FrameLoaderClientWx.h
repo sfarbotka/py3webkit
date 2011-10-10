@@ -165,9 +165,6 @@ namespace WebCore {
         virtual void updateGlobalHistoryRedirectLinks();
         virtual bool shouldGoToHistoryItem(HistoryItem*) const;
         virtual bool shouldStopLoadingForHistoryItem(HistoryItem*) const;
-        virtual void dispatchDidAddBackForwardItem(HistoryItem*) const;
-        virtual void dispatchDidRemoveBackForwardItem(HistoryItem*) const;
-        virtual void dispatchDidChangeBackForwardIndex() const;
         virtual void saveScrollPositionAndViewStateToItem(HistoryItem*);
         virtual bool canCachePage() const;
         
@@ -214,7 +211,7 @@ namespace WebCore {
         virtual PassRefPtr<Frame> createFrame(const KURL& url, const String& name, HTMLFrameOwnerElement* ownerElement,
                                    const String& referrer, bool allowsScrolling, int marginWidth, int marginHeight);
         virtual void didTransferChildFrameToNewDocument(Page*);
-        virtual void transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*);
+        virtual void transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*);
         virtual PassRefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement*, const KURL&, const Vector<String>&, const Vector<String>&, const String&, bool loadManually) ;
         virtual void redirectDataToPlugin(Widget* pluginWidget);
         virtual ResourceError pluginWillHandleLoadError(const ResourceResponse&);

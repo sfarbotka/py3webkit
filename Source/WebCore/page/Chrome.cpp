@@ -47,6 +47,7 @@
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefPtr.h>
 #include <wtf/Vector.h>
+#include <wtf/text/StringBuilder.h>
 
 #if ENABLE(DOM_STORAGE)
 #include "StorageNamespace.h"
@@ -127,8 +128,7 @@ void Chrome::layoutUpdated(Frame* frame) const
 
 void Chrome::scrollRectIntoView(const IntRect& rect) const
 {
-    // FIXME: The unused ScrollView* argument can and should be removed from ChromeClient::scrollRectIntoView.
-    m_client->scrollRectIntoView(rect, 0);
+    m_client->scrollRectIntoView(rect);
 }
 
 void Chrome::scrollbarsModeDidChange() const
@@ -149,11 +149,6 @@ FloatRect Chrome::windowRect() const
 FloatRect Chrome::pageRect() const
 {
     return m_client->pageRect();
-}
-
-float Chrome::scaleFactor()
-{
-    return m_client->scaleFactor();
 }
 
 void Chrome::focus() const
@@ -433,13 +428,13 @@ void Chrome::setToolTip(const HitTestResult& result)
                     FileList* files = input->files();
                     unsigned listSize = files->length();
                     if (listSize > 1) {
-                        Vector<UChar> names;
+                        StringBuilder names;
                         for (size_t i = 0; i < listSize; ++i) {
-                            append(names, files->item(i)->fileName());
+                            names.append(files->item(i)->fileName());
                             if (i != listSize - 1)
                                 names.append('\n');
                         }
-                        toolTip = String::adopt(names);
+                        toolTip = names.toString();
                         // filename always display as LTR.
                         toolTipDirection = LTR;
                     }
@@ -480,9 +475,9 @@ void Chrome::openColorChooser(ColorChooser* colorChooser, const Color& initialCo
     m_client->openColorChooser(colorChooser, initialColor);
 }
 
-void Chrome::closeColorChooser()
+void Chrome::cleanupColorChooser()
 {
-    m_client->closeColorChooser();
+    m_client->cleanupColorChooser();
 }
 
 void Chrome::setSelectedColorInColorChooser(const Color& color)
@@ -519,7 +514,9 @@ void Chrome::setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves)
 #if ENABLE(REQUEST_ANIMATION_FRAME)
 void Chrome::scheduleAnimation()
 {
+#if !USE(REQUEST_ANIMATION_FRAME_TIMER)
     m_client->scheduleAnimation();
+#endif
 }
 #endif
 
@@ -560,18 +557,6 @@ String ChromeClient::generateReplacementFile(const String&)
 {
     ASSERT_NOT_REACHED();
     return String();
-}
-
-bool ChromeClient::paintCustomScrollbar(GraphicsContext*, const FloatRect&, ScrollbarControlSize,
-                                        ScrollbarControlState, ScrollbarPart, bool,
-                                        float, float, ScrollbarControlPartMask)
-{
-    return false;
-}
-
-bool ChromeClient::paintCustomScrollCorner(GraphicsContext*, const FloatRect&)
-{
-    return false;
 }
 
 bool ChromeClient::paintCustomOverhangArea(GraphicsContext*, const IntRect&, const IntRect&, const IntRect&)

@@ -62,9 +62,11 @@ namespace JSC {
 
     protected:
         explicit JSArray(JSGlobalData&, Structure*);
-        JSArray(JSGlobalData&, Structure*, unsigned initialLength, ArrayCreationMode);
-        JSArray(JSGlobalData&, Structure*, const ArgList& initialValues);
-        
+
+        void finishCreation(JSGlobalData&);
+        void finishCreation(JSGlobalData&, unsigned initialLength, ArrayCreationMode);
+        void finishCreation(JSGlobalData&, const ArgList&);
+    
     public:
         typedef JSNonFinalObject Base;
 
@@ -73,23 +75,30 @@ namespace JSC {
 
         static JSArray* create(JSGlobalData& globalData, Structure* structure)
         {
-            return new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure);
+            JSArray* array = new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure);
+            array->finishCreation(globalData);
+            return array;
         }
-        
+
         static JSArray* create(JSGlobalData& globalData, Structure* structure, unsigned initialLength, ArrayCreationMode createMode)
         {
-            return new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure, initialLength, createMode);
+            JSArray* array = new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure);
+            array->finishCreation(globalData, initialLength, createMode);
+            return array;
         }
-        
+
         static JSArray* create(JSGlobalData& globalData, Structure* structure, const ArgList& initialValues)
         {
-            return new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure, initialValues);
+            JSArray* array = new (allocateCell<JSArray>(globalData.heap)) JSArray(globalData, structure);
+            array->finishCreation(globalData, initialValues);
+            return array;
         }
-        
+
         virtual bool getOwnPropertySlot(ExecState*, const Identifier& propertyName, PropertySlot&);
         virtual bool getOwnPropertySlot(ExecState*, unsigned propertyName, PropertySlot&);
         virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
         virtual void put(ExecState*, unsigned propertyName, JSValue); // FIXME: Make protected and add setItem.
+        static void put(JSCell*, ExecState*, unsigned propertyName, JSValue);
 
         static JS_EXPORTDATA const ClassInfo s_info;
         
@@ -141,9 +150,9 @@ namespace JSC {
         void fillArgList(ExecState*, MarkedArgumentBuffer&);
         void copyToRegisters(ExecState*, Register*, uint32_t);
 
-        static Structure* createStructure(JSGlobalData& globalData, JSValue prototype)
+        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
         {
-            return Structure::create(globalData, prototype, TypeInfo(ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+            return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info);
         }
         
         inline void visitChildrenDirect(SlotVisitor&);
@@ -161,10 +170,14 @@ namespace JSC {
     protected:
         static const unsigned StructureFlags = OverridesGetOwnPropertySlot | OverridesVisitChildren | OverridesGetPropertyNames | JSObject::StructureFlags;
         virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+        static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+
         virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
+        static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
         virtual bool deleteProperty(ExecState*, unsigned propertyName);
+        static bool deleteProperty(JSCell*, ExecState*, unsigned propertyName);
         virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
-        virtual void visitChildren(SlotVisitor&);
+        static void visitChildren(JSCell*, SlotVisitor&);
 
         void* subclassData() const;
         void setSubclassData(void*);

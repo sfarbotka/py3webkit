@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @extends {WebInspector.View}
+ * @constructor
+ */
 WebInspector.ResourceCookiesView = function(resource)
 {
     WebInspector.View.call(this);
@@ -57,7 +61,7 @@ WebInspector.ResourceCookiesView.prototype = {
         this._cookiesTable.updateWidths();
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this._cookiesTable)
             this._cookiesTable.updateWidths();

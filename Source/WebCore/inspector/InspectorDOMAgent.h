@@ -62,6 +62,7 @@ class IntRect;
 class HitTestResult;
 class MatchJob;
 class HTMLElement;
+struct HighlightData;
 class InspectorState;
 class InstrumentingAgents;
 class NameNodeMap;
@@ -115,9 +116,9 @@ public:
     void querySelector(ErrorString*, int nodeId, const String& selectors, int* elementId);
     void querySelectorAll(ErrorString*, int nodeId, const String& selectors, RefPtr<InspectorArray>* result);
     void getDocument(ErrorString*, RefPtr<InspectorObject>* root);
-    void getChildNodes(ErrorString*, int nodeId);
+    void requestChildNodes(ErrorString*, int nodeId);
     void setAttributeValue(ErrorString*, int elementId, const String& name, const String& value);
-    void setAttributesText(ErrorString*, int elementId, const String* const name, const String& text);
+    void setAttributesAsText(ErrorString*, int elementId, const String& text, const String* const name);
     void removeAttribute(ErrorString*, int elementId, const String& name);
     void removeNode(ErrorString*, int nodeId);
     void setNodeName(ErrorString*, int nodeId, const String& name, int* newId);
@@ -128,17 +129,17 @@ public:
     void performSearch(ErrorString*, const String& whitespaceTrimmedQuery, const bool* const runSynchronously);
     void cancelSearch(ErrorString*);
     void resolveNode(ErrorString*, int nodeId, const String* const objectGroup, RefPtr<InspectorObject>* result);
-    void getAttributes(ErrorString*, const RefPtr<InspectorArray>& nodeIds, RefPtr<InspectorArray>* result);
-    void setInspectModeEnabled(ErrorString*, bool enabled);
-    void pushNodeToFrontend(ErrorString*, const String& objectId, int* nodeId);
+    void getAttributes(ErrorString*, int nodeId, RefPtr<InspectorArray>* result);
+    void setInspectModeEnabled(ErrorString*, bool enabled, const RefPtr<InspectorObject>* highlightConfig);
+    void requestNode(ErrorString*, const String& objectId, int* nodeId);
     void pushNodeByPathToFrontend(ErrorString*, const String& path, int* nodeId);
     void hideHighlight(ErrorString*);
-    void highlightRect(ErrorString*, int x, int y, int width, int height);
-    void highlightNode(ErrorString*, int nodeId, String* mode);
-    void highlightFrame(ErrorString*, const String& frameId);
+    void highlightRect(ErrorString*, int x, int y, int width, int height, const RefPtr<InspectorObject>* color, const RefPtr<InspectorObject>* outlineColor);
+    void highlightNode(ErrorString*, int nodeId, const RefPtr<InspectorObject> highlightConfig);
+    void highlightFrame(ErrorString*, const String& frameId, const RefPtr<InspectorObject>* color, const RefPtr<InspectorObject>* outlineColor);
     void moveTo(ErrorString*, int nodeId, int targetNodeId, const int* const anchorNodeId, int* newNodeId);
 
-    Node* highlightedNode() const { return m_highlightedNode.get(); }
+    Node* highlightedNode() const;
 
     // Methods called from the InspectorInstrumentation.
     void setDocument(Document*);
@@ -149,7 +150,8 @@ public:
 
     void didInsertDOMNode(Node*);
     void didRemoveDOMNode(Node*);
-    void didModifyDOMAttr(Element*);
+    void didModifyDOMAttr(Element*, const AtomicString& name, const AtomicString& value);
+    void didRemoveDOMAttr(Element*, const AtomicString& name);
     void styleAttributeInvalidated(const Vector<Element*>& elements);
     void characterDataModified(CharacterData*);
     void didInvalidateStyleAttr(Node*);
@@ -179,17 +181,19 @@ public:
     static Node* innerParentNode(Node*);
     static bool isWhitespace(Node*);
 
+    Node* assertNode(ErrorString*, int nodeId);
+
 private:
     InspectorDOMAgent(InstrumentingAgents*, InspectorPageAgent*, InspectorClient*, InspectorState*, InjectedScriptManager*);
 
-    void setSearchingForNode(bool enabled);
-    void highlight(ErrorString*, Node*, const String& mode);
+    void setSearchingForNode(bool enabled, InspectorObject* highlightConfig);
+    bool setHighlightDataFromConfig(InspectorObject* highlightConfig);
+    void highlight();
 
     // Node-related methods.
     typedef HashMap<RefPtr<Node>, int> NodeToIdMap;
     int bind(Node*, NodeToIdMap*);
     void unbind(Node*, NodeToIdMap*);
-    Node* assertNode(ErrorString*, int nodeId);
     Element* assertElement(ErrorString*, int nodeId);
     HTMLElement* assertHTMLElement(ErrorString*, int nodeId);
 
@@ -231,9 +235,7 @@ private:
     Timer<InspectorDOMAgent> m_matchJobsTimer;
     HashSet<RefPtr<Node> > m_searchResults;
     OwnPtr<RevalidateStyleAttributeTask> m_revalidateStyleAttrTask;
-    RefPtr<Node> m_highlightedNode;
-    OwnPtr<IntRect> m_highlightedRect;
-    String m_highlightMode;
+    OwnPtr<HighlightData> m_highlightData;
     RefPtr<Node> m_nodeToFocus;
     bool m_searchingForNode;
 };

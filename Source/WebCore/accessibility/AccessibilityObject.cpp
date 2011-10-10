@@ -51,6 +51,7 @@
 #include "RenderWidget.h"
 #include "RenderedPosition.h"
 #include "TextCheckerClient.h"
+#include "TextCheckingHelper.h"
 #include "TextIterator.h"
 #include "htmlediting.h"
 #include "visible_units.h"
@@ -245,6 +246,12 @@ bool AccessibilityObject::isBlockquote() const
     return node() && node()->hasTagName(blockquoteTag);
 }
 
+
+bool AccessibilityObject::isARIATextControl() const
+{
+    return ariaRoleAttribute() == TextAreaRole || ariaRoleAttribute() == TextFieldRole;
+}
+
 bool AccessibilityObject::isLandmark() const
 {
     AccessibilityRole role = roleValue();
@@ -285,7 +292,7 @@ bool AccessibilityObject::hasMisspelling() const
     
 #if USE(UNIFIED_TEXT_CHECKING)
     Vector<TextCheckingResult> results;
-    textChecker->checkTextOfParagraph(chars, charsLength, TextCheckingTypeSpelling, results);
+    checkTextOfParagraph(textChecker, chars, charsLength, TextCheckingTypeSpelling, results);
     if (!results.isEmpty())
         isMisspelled = true;
 #else
@@ -393,10 +400,10 @@ bool AccessibilityObject::isARIAControl(AccessibilityRole ariaRole)
     || ariaRole == ComboBoxRole || ariaRole == SliderRole; 
 }
 
-IntPoint AccessibilityObject::clickPoint() const
+LayoutPoint AccessibilityObject::clickPoint()
 {
-    IntRect rect = elementRect();
-    return IntPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
+    LayoutRect rect = elementRect();
+    return LayoutPoint(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
 }
 
 bool AccessibilityObject::press() const
@@ -984,6 +991,14 @@ Document* AccessibilityObject::document() const
     
     return frameView->frame()->document();
 }
+    
+Page* AccessibilityObject::page() const
+{
+    Document* document = this->document();
+    if (!document)
+        return 0;
+    return document->page();
+}
 
 FrameView* AccessibilityObject::documentFrameView() const 
 { 
@@ -1005,6 +1020,11 @@ void AccessibilityObject::updateChildrenIfNecessary()
 
 void AccessibilityObject::clearChildren()
 {
+    // Some objects have weak pointers to their parents and those associations need to be detached.
+    size_t length = m_children.size();
+    for (size_t i = 0; i < length; i++)
+        m_children[i]->detachFromParent();
+    
     m_children.clear();
     m_haveChildren = false;
 }
@@ -1144,7 +1164,7 @@ const AtomicString& AccessibilityObject::getAttribute(const QualifiedName& attri
 // Lacking concrete evidence of orientation, horizontal means width > height. vertical is height > width;
 AccessibilityOrientation AccessibilityObject::orientation() const
 {
-    IntRect bounds = elementRect();
+    LayoutRect bounds = elementRect();
     if (bounds.size().width() > bounds.size().height())
         return AccessibilityOrientationHorizontal;
     if (bounds.size().height() > bounds.size().width())
@@ -1196,7 +1216,7 @@ static ARIARoleMap* createARIARoleMap()
         { "math", DocumentMathRole },
         { "menu", MenuRole },
         { "menubar", MenuBarRole },
-        // "menuitem" isn't here because it may map to different roles depending on the parent element's role
+        { "menuitem", MenuItemRole },
         { "menuitemcheckbox", MenuItemRole },
         { "menuitemradio", MenuItemRole },
         { "note", DocumentNoteRole },
@@ -1287,14 +1307,14 @@ bool AccessibilityObject::supportsARIALiveRegion() const
     return equalIgnoringCase(liveRegion, "polite") || equalIgnoringCase(liveRegion, "assertive");
 }
 
-AccessibilityObject* AccessibilityObject::elementAccessibilityHitTest(const IntPoint& point) const
+AccessibilityObject* AccessibilityObject::elementAccessibilityHitTest(const LayoutPoint& point) const
 { 
     // Send the hit test back into the sub-frame if necessary.
     if (isAttachment()) {
         Widget* widget = widgetForAttachmentView();
         // Normalize the point for the widget's bounds.
         if (widget && widget->isFrameView())
-            return axObjectCache()->getOrCreate(widget)->accessibilityHitTest(IntPoint(point - widget->frameRect().location()));
+            return axObjectCache()->getOrCreate(widget)->accessibilityHitTest(toPoint(point - widget->frameRect().location()));
     }
 
     return const_cast<AccessibilityObject*>(this); 

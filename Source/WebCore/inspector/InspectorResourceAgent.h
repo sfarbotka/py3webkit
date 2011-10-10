@@ -48,12 +48,10 @@ namespace WebCore {
 class CachedResource;
 class Document;
 class DocumentLoader;
-class EventsCollector;
 class Frame;
 class InspectorArray;
 class InspectorClient;
 class InspectorFrontend;
-class InspectorFrontendProxy;
 class InspectorObject;
 class InspectorPageAgent;
 class InspectorState;
@@ -119,9 +117,6 @@ public:
     void didCloseWebSocket(unsigned long identifier);
 #endif
 
-    void isBackgroundEventsCollectionEnabled(ErrorString*, bool* enabled);
-    void setBackgroundEventsCollectionEnabled(ErrorString*, bool enabled);
-
     // called from Internals for layout test purposes.
     void setResourcesDataSizeLimitsFromInternals(int maximumResourcesContentSize, int maximumSingleResourceContentSize);
 
@@ -129,8 +124,8 @@ public:
     void enable(ErrorString*);
     void disable(ErrorString*);
     void setUserAgentOverride(ErrorString*, const String& userAgent);
-    void setExtraHeaders(ErrorString*, PassRefPtr<InspectorObject>);
-    void getResourceContent(ErrorString*, const String& requestId, String* content, bool* base64Encoded);
+    void setExtraHTTPHeaders(ErrorString*, PassRefPtr<InspectorObject>);
+    void getResponseBody(ErrorString*, const String& requestId, String* content, bool* base64Encoded);
     void clearCache(ErrorString*, const String* const optionalPreservedLoaderId);
 
     void clearBrowserCache(ErrorString*);
@@ -140,18 +135,13 @@ public:
 private:
     InspectorResourceAgent(InstrumentingAgents*, InspectorPageAgent*, InspectorClient*, InspectorState*);
 
-    bool isBackgroundEventsCollectionEnabled();
     void enable();
-    void initializeBackgroundCollection();
 
     InstrumentingAgents* m_instrumentingAgents;
     InspectorPageAgent* m_pageAgent;
     InspectorClient* m_client;
     InspectorState* m_state;
     InspectorFrontend::Network* m_frontend;
-    OwnPtr<EventsCollector> m_eventsCollector;
-    OwnPtr<InspectorFrontendProxy> m_inspectorFrontendProxy;
-    OwnPtr<InspectorFrontend::Network> m_mockFrontend;
     String m_userAgentOverride;
     OwnPtr<NetworkResourcesData> m_resourcesData;
     bool m_loadingXHRSynchronously;

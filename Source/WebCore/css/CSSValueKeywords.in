@@ -471,6 +471,20 @@ block-axis
 single
 multiple
 
+// CSS_PROP_FLEX_ALIGN
+// start
+// end
+// center
+// baseline
+// stretch
+
+// CSS_PROP_FLEX_FLOW
+// FIXME: Add the wrap values.
+row
+row-reverse
+column
+column-reverse
+
 // CSS_PROP_MARQUEE_DIRECTION
 forwards
 backwards
@@ -754,6 +768,9 @@ maximized
 minimized
 windowed
 
+// -webkit-hyphenate-limit-lines
+no-limit
+
 // -webkit-hyphens
 // none
 manual
@@ -825,4 +842,4 @@ evenodd
 
 // -webkit-region-overflow
 // auto
--webkit-break
+break

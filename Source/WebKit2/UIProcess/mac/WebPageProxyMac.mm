@@ -31,6 +31,7 @@
 #import "DictionaryPopupInfo.h"
 #import "EditorState.h"
 #import "NativeWebKeyboardEvent.h"
+#import "PluginComplexTextInputState.h"
 #import "PageClient.h"
 #import "PageClientImpl.h"
 #import "TextChecker.h"
@@ -41,6 +42,8 @@
 @interface NSApplication (Details)
 - (void)speakString:(NSString *)string;
 @end
+
+#define MESSAGE_CHECK(assertion) MESSAGE_CHECK_BASE(assertion, process()->connection())
 
 using namespace WebCore;
 
@@ -160,12 +163,12 @@ void WebPageProxy::confirmComposition()
     process()->sendSync(Messages::WebPage::ConfirmComposition(), Messages::WebPage::ConfirmComposition::Reply(m_editorState), m_pageID);
 }
 
-void WebPageProxy::confirmCompositionWithoutDisturbingSelection()
+void WebPageProxy::cancelComposition()
 {
     if (!isValid())
         return;
 
-    process()->sendSync(Messages::WebPage::ConfirmCompositionWithoutDisturbingSelection(), Messages::WebPage::ConfirmComposition::Reply(m_editorState), m_pageID);
+    process()->sendSync(Messages::WebPage::CancelComposition(), Messages::WebPage::ConfirmComposition::Reply(m_editorState), m_pageID);
 }
 
 bool WebPageProxy::insertText(const String& text, uint64_t replacementRangeStart, uint64_t replacementRangeEnd)
@@ -318,7 +321,7 @@ void WebPageProxy::setSmartInsertDeleteEnabled(bool isSmartInsertDeleteEnabled)
 
 void WebPageProxy::didPerformDictionaryLookup(const String& text, const DictionaryPopupInfo& dictionaryPopupInfo)
 {
-    m_pageClient->didPerformDictionaryLookup(text, m_viewScaleFactor, dictionaryPopupInfo);
+    m_pageClient->didPerformDictionaryLookup(text, m_pageScaleFactor, dictionaryPopupInfo);
 }
     
 void WebPageProxy::registerWebProcessAccessibilityToken(const CoreIPC::DataReference& data)
@@ -339,9 +342,16 @@ void WebPageProxy::registerUIProcessAccessibilityTokens(const CoreIPC::DataRefer
     process()->send(Messages::WebPage::RegisterUIProcessAccessibilityTokens(elementToken, windowToken), m_pageID);
 }
 
-void WebPageProxy::setComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled)
+void WebPageProxy::pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus)
 {
-    m_pageClient->setComplexTextInputEnabled(pluginComplexTextInputIdentifier, complexTextInputEnabled);
+    m_pageClient->pluginFocusOrWindowFocusChanged(pluginComplexTextInputIdentifier, pluginHasFocusAndWindowHasFocus);
+}
+
+void WebPageProxy::setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, uint64_t pluginComplexTextInputState)
+{
+    MESSAGE_CHECK(isValidPluginComplexTextInputState(pluginComplexTextInputState));
+
+    m_pageClient->setPluginComplexTextInputState(pluginComplexTextInputIdentifier, static_cast<PluginComplexTextInputState>(pluginComplexTextInputState));
 }
 
 void WebPageProxy::executeSavedCommandBySelector(const String& selector, bool& handled)

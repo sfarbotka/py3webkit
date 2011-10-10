@@ -24,8 +24,9 @@
 #include "Document.h"
 #include "Element.h"
 #include "HTMLNames.h"
-#include "HTMLParserIdioms.h"
 #include "HTMLOptionElement.h"
+#include "HTMLParserIdioms.h"
+#include "HTMLSelectElement.h"
 #include "OptionGroupElement.h"
 #include "ScriptElement.h"
 #include "SelectElement.h"
@@ -42,7 +43,7 @@ void OptionElement::setSelectedState(OptionElementData& data, Element* element, 
     element->setNeedsStyleRecalc();
 }
 
-int OptionElement::optionIndex(SelectElement* selectElement, const Element* element)
+int OptionElement::optionIndex(HTMLSelectElement* selectElement, const Element* element)
 {
     if (!selectElement)
         return 0;
@@ -100,7 +101,7 @@ String OptionElement::normalizeText(const Document* document, const String& src)
     // In WinIE, leading and trailing whitespace is ignored in options and optgroups. We match this behavior.
     text = text.stripWhiteSpace(isHTMLSpace);
 
-    // We want to collapse our whitespace too.  This will match other browsers.
+    // We want to collapse our whitespace too. This will match other browsers.
     text = text.simplifyWhiteSpace(isHTMLSpace);
 
     return text;

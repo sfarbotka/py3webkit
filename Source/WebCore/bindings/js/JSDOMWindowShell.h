@@ -30,14 +30,15 @@
 #define JSDOMWindowShell_h
 
 #include "JSDOMWindow.h"
+#include <runtime/JSGlobalThis.h>
 
 namespace WebCore {
 
     class DOMWindow;
     class Frame;
 
-    class JSDOMWindowShell : public JSC::JSNonFinalObject {
-        typedef JSC::JSNonFinalObject Base;
+    class JSDOMWindowShell : public JSC::JSGlobalThis {
+        typedef JSC::JSGlobalThis Base;
     public:
         JSDOMWindowShell(PassRefPtr<DOMWindow>, JSC::Structure*, DOMWrapperWorld*);
         virtual ~JSDOMWindowShell();
@@ -55,19 +56,29 @@ namespace WebCore {
 
         DOMWindow* impl() const;
 
-        void* operator new(size_t);
+        static JSDOMWindowShell* create(PassRefPtr<DOMWindow> window, JSC::Structure* structure, DOMWrapperWorld* world) 
+        {
+            JSDOMWindowShell* shell = new JSDOMWindowShell(structure, world);
+            shell->finishCreation(*world->globalData(), window);
+            return shell; 
+        }
 
         static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSValue prototype) 
         {
-            return JSC::Structure::create(globalData, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), AnonymousSlotCount, &s_info); 
+            return JSC::Structure::create(globalData, 0, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info); 
         }
 
         DOMWrapperWorld* world() { return m_world.get(); }
 
+    protected:
+        JSDOMWindowShell(JSC::Structure*, DOMWrapperWorld*);
+        void finishCreation(JSC::JSGlobalData&, PassRefPtr<DOMWindow>);
+
     private:
+        void* operator new(size_t);
         static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::OverridesVisitChildren | JSC::OverridesGetPropertyNames | Base::StructureFlags;
 
-        virtual void visitChildren(JSC::SlotVisitor&);
+        static void visitChildren(JSC::JSCell*, JSC::SlotVisitor&);
         virtual JSC::UString className() const;
         virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
         virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);

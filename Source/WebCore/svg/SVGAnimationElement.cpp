@@ -24,7 +24,7 @@
 
 #include "config.h"
 
-#if ENABLE(SVG_ANIMATION)
+#if ENABLE(SVG)
 #include "SVGAnimationElement.h"
 
 #include "Attribute.h"
@@ -100,7 +100,7 @@ static void parseKeySplines(const String& parse, Vector<UnitBezier>& result)
     const UChar* cur = parse.characters();
     const UChar* end = cur + parse.length();
 
-    skipOptionalSpaces(cur, end);
+    skipOptionalSVGSpaces(cur, end);
 
     bool delimParsed = false;
     while (cur < end) {
@@ -129,13 +129,13 @@ static void parseKeySplines(const String& parse, Vector<UnitBezier>& result)
             return;
         }
 
-        skipOptionalSpaces(cur, end);
+        skipOptionalSVGSpaces(cur, end);
 
         if (cur < end && *cur == ';') {
             delimParsed = true;
             cur++;
         }
-        skipOptionalSpaces(cur, end);
+        skipOptionalSVGSpaces(cur, end);
 
         result.append(UnitBezier(posA, posB, posC, posD));
     }
@@ -154,7 +154,7 @@ bool SVGAnimationElement::isSupportedAttribute(const QualifiedName& attrName)
         supportedAttributes.add(SVGNames::keyPointsAttr);
         supportedAttributes.add(SVGNames::keySplinesAttr);
     }
-    return supportedAttributes.contains(attrName);
+    return supportedAttributes.contains<QualifiedName, SVGAttributeHashTranslator>(attrName);
 }
      
 void SVGAnimationElement::parseMappedAttribute(Attribute* attr)
@@ -413,7 +413,10 @@ unsigned SVGAnimationElement::calculateKeyTimesIndex(float percent) const
 {
     unsigned index;
     unsigned keyTimesCount = m_keyTimes.size();
-    for (index = 1; index < keyTimesCount; ++index) {
+    // Compare index + 1 to keyTimesCount because the last keyTimes entry is
+    // required to be 1, and percent can never exceed 1; i.e., the second last
+    // keyTimes entry defines the beginning of the final interval
+    for (index = 1; index + 1 < keyTimesCount; ++index) {
         if (m_keyTimes[index] > percent)
             break;
     }
@@ -457,6 +460,14 @@ float SVGAnimationElement::calculatePercentFromKeyPoints(float percent) const
         keyPointPercent = calculatePercentForSpline(keyPointPercent, index);
     }
     return (toKeyPoint - fromKeyPoint) * keyPointPercent + fromKeyPoint;
+}
+
+float SVGAnimationElement::calculatePercentForFromTo(float percent) const
+{
+    if (calcMode() == CalcModeDiscrete && m_keyTimes.size() == 2)
+        return percent > m_keyTimes[1] ? 1 : 0;
+
+    return percent;
 }
     
 void SVGAnimationElement::currentValuesFromKeyPoints(float percent, float& effectivePercent, String& from, String& to) const
@@ -551,7 +562,8 @@ void SVGAnimationElement::startedActiveInterval()
     if (calcMode == CalcModeSpline) {
         unsigned splinesCount = m_keySplines.size() + 1;
         if ((fastHasAttribute(SVGNames::keyPointsAttr) && m_keyPoints.size() != splinesCount)
-            || (animationMode == ValuesAnimation && m_values.size() != splinesCount))
+            || (animationMode == ValuesAnimation && m_values.size() != splinesCount)
+            || (fastHasAttribute(SVGNames::keyTimesAttr) && m_keyTimes.size() != splinesCount))
             return;
     }
 
@@ -604,6 +616,8 @@ void SVGAnimationElement::updateAnimation(float percent, unsigned repeat, SVGSMI
         effectivePercent = calculatePercentFromKeyPoints(percent);
     else if (m_keyPoints.isEmpty() && mode == CalcModeSpline && m_keyTimes.size() > 1)
         effectivePercent = calculatePercentForSpline(percent, calculateKeyTimesIndex(percent));
+    else if (animationMode() == FromToAnimation || animationMode() == ToAnimation)
+        effectivePercent = calculatePercentForFromTo(percent);
     else
         effectivePercent = percent;
 
@@ -615,5 +629,5 @@ void SVGAnimationElement::endedActiveInterval()
 }
 
 }
-#endif // ENABLE(SVG_ANIMATION)
+#endif // ENABLE(SVG)
 

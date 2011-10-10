@@ -23,6 +23,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ */
 WebInspector.Script = function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, errorLine, errorMessage, isContentScript)
 {
     this.scriptId = scriptId;
@@ -46,12 +49,24 @@ WebInspector.Script.prototype = {
 
         function didGetScriptSource(error, source)
         {
-            this._source = source;
+            this._source = error ? "" : source;
             callback(this._source);
         }
         DebuggerAgent.getScriptSource(this.scriptId, didGetScriptSource.bind(this));
     },
 
+    searchInContent: function(query, callback)
+    {
+        function innerCallback(error, searchMatches)
+        {
+            if (error)
+                console.error(error);
+            callback(searchMatches || []);
+        }
+        
+        DebuggerAgent.searchInContent(this.scriptId, query, innerCallback.bind(this));
+    },
+    
     editSource: function(newSource, callback)
     {
         function didEditScriptSource(error, callFrames)
@@ -60,6 +75,6 @@ WebInspector.Script.prototype = {
                 this._source = newSource;
             callback(error, callFrames);
         }
-        DebuggerAgent.setScriptSource(this.scriptId, newSource, didEditScriptSource.bind(this));
+        DebuggerAgent.setScriptSource(this.scriptId, newSource, undefined, didEditScriptSource.bind(this));
     }
 }

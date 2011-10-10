@@ -28,8 +28,26 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+WebInspector.PlatformFlavor = {
+    WindowsVista: "windows-vista",
+    MacTiger: "mac-tiger",
+    MacLeopard: "mac-leopard",
+    MacSnowLeopard: "mac-snowleopard"
+}
+
+WebInspector.isMac = function()
+{
+    if (typeof WebInspector._isMac === "undefined")
+        WebInspector._isMac = WebInspector.platform === "mac";
+
+    return WebInspector._isMac;
+}
+
 if (!window.InspectorFrontendHost) {
 
+/**
+ * @constructor
+ */
 WebInspector.InspectorFrontendHostStub = function()
 {
     this._attachedWindowHeight = 0;
@@ -120,7 +138,7 @@ WebInspector.InspectorFrontendHostStub.prototype = {
         var builder = new WebKitBlobBuilder();
         builder.append(content);
         var blob = builder.getBlob("application/octet-stream");
-    
+
         var fr = new FileReader();
         fr.onload = function(e) {
             // Force download
@@ -151,6 +169,6 @@ WebInspector.InspectorFrontendHostStub.prototype = {
     }
 }
 
-InspectorFrontendHost = new WebInspector.InspectorFrontendHostStub();
+var InspectorFrontendHost = new WebInspector.InspectorFrontendHostStub();
 
 }

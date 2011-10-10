@@ -33,9 +33,28 @@
 
 #include "MiniBrowserApplication.h"
 #include <QStringList>
-#include <QtGui>
+#include <QTimer>
 
 class UrlLoader;
+
+class WindowWrapper : public QWidget
+{
+    Q_OBJECT
+
+public:
+    WindowWrapper(QWindow* window, QWidget* widget = 0);
+
+protected:
+    void showEvent(QShowEvent* event);
+    void resizeEvent(QResizeEvent* event);
+
+private slots:
+    void doResize();
+
+private:
+    QWindow* m_window;
+    QTimer m_resizeTimer;
+};
 
 class BrowserWindow : public QMainWindow {
     Q_OBJECT
@@ -69,6 +88,7 @@ protected slots:
     void loadURLListFromFile();
 
     void printURL(const QUrl&);
+    void onLinkHovered(const QUrl&, const QString&);
 
 private:
     void updateUserAgentList();

@@ -48,8 +48,6 @@ public:
     virtual WebCore::FloatRect windowRect();
     
     virtual WebCore::FloatRect pageRect();
-    
-    virtual float scaleFactor();
 
     virtual void focus();
     virtual void unfocus();
@@ -115,25 +113,18 @@ public:
 
     virtual void print(WebCore::Frame*);
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     virtual void exceededDatabaseQuota(WebCore::Frame*, const WTF::String&);
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     virtual void reachedMaxAppCacheSize(int64_t spaceNeeded);
     virtual void reachedApplicationCacheOriginQuota(WebCore::SecurityOrigin*, int64_t totalSpaceNeeded);
-#endif
 
 #if ENABLE(CONTEXT_MENUS)
     virtual void showContextMenu() { }
 #endif
 
     virtual void populateVisitedLinks();
-
-    virtual bool paintCustomScrollbar(WebCore::GraphicsContext*, const WebCore::FloatRect&, WebCore::ScrollbarControlSize, 
-                                        WebCore::ScrollbarControlState, WebCore::ScrollbarPart pressedPart, bool vertical,
-                                        float value, float proportion, WebCore::ScrollbarControlPartMask);
-    virtual bool paintCustomScrollCorner(WebCore::GraphicsContext*, const WebCore::FloatRect&);
 
     virtual void runOpenPanel(WebCore::Frame*, PassRefPtr<WebCore::FileChooser>);
     virtual void loadIconForFiles(const Vector<WTF::String>&, WebCore::FileIconLoader*);
@@ -155,7 +146,7 @@ public:
         virtual void scheduleCompositingLayerSync();
 #endif
 
-    virtual void scrollRectIntoView(const WebCore::IntRect&, const WebCore::ScrollView*) const {}
+    virtual void scrollRectIntoView(const WebCore::IntRect&) const { }
 
     // FIXME: Remove once all ports are using client-based geolocation. https://bugs.webkit.org/show_bug.cgi?id=40373
     // For client-based geolocation, these two methods have been moved to WebGeolocationClient. https://bugs.webkit.org/show_bug.cgi?id=50061

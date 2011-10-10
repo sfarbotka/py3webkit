@@ -27,8 +27,16 @@
 #include "WebProcess.h"
 
 #include "WebProcessCreationParameters.h"
-#include <WebCore/RuntimeEnabledFeatures.h>
+
+#include <QCoreApplication>
 #include <QNetworkAccessManager>
+#include <QNetworkCookieJar>
+#include <WebCore/CookieJarQt.h>
+#include <WebCore/RuntimeEnabledFeatures.h>
+
+#if defined(Q_OS_MACX)
+#include <dispatch/dispatch.h>
+#endif
 
 namespace WebKit {
 
@@ -41,9 +49,31 @@ void WebProcess::platformClearResourceCaches(ResourceCachesToClear)
 {
 }
 
+#if defined(Q_OS_MACX)
+static void parentProcessDiedCallback(void*)
+{
+    QCoreApplication::quit();
+}
+#endif
+
 void WebProcess::platformInitializeWebProcess(const WebProcessCreationParameters& parameters, CoreIPC::ArgumentDecoder* arguments)
 {
     m_networkAccessManager = new QNetworkAccessManager;
+    ASSERT(!parameters.cookieStorageDirectory.isEmpty() && !parameters.cookieStorageDirectory.isNull());
+    WebCore::SharedCookieJarQt* jar = WebCore::SharedCookieJarQt::create(parameters.cookieStorageDirectory);
+    m_networkAccessManager->setCookieJar(jar);
+    // Do not let QNetworkAccessManager delete the jar.
+    jar->setParent(0);
+
+#if defined(Q_OS_MACX)
+    pid_t ppid = getppid();
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_source_t source = dispatch_source_create(DISPATCH_SOURCE_TYPE_PROC, ppid, DISPATCH_PROC_EXIT, queue);
+    if (source) {
+        dispatch_source_set_event_handler_f(source, parentProcessDiedCallback);
+        dispatch_resume(source);
+    }
+#endif
 
     // Disable runtime enabled features that have no WebKit2 implementation yet.
 #if ENABLE(DEVICE_ORIENTATION)
@@ -59,6 +89,7 @@ void WebProcess::platformTerminate()
 {
     delete m_networkAccessManager;
     m_networkAccessManager = 0;
+    WebCore::SharedCookieJarQt::shared()->destroy();
 }
 
 } // namespace WebKit

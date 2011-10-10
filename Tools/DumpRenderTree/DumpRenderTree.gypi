@@ -32,6 +32,7 @@
             'chromium/TestNavigationController.h',
             'chromium/TestShell.cpp',
             'chromium/TestShell.h',
+            'chromium/TestShellAndroid.cpp',
             'chromium/TestShellGtk.cpp',
             'chromium/TestShellMac.mm',
             'chromium/TestShellWin.cpp',
@@ -64,6 +65,7 @@
             'TestNetscapePlugIn/Tests/NullNPPGetValuePointer.cpp',
             'TestNetscapePlugIn/Tests/PassDifferentNPPStruct.cpp',
             'TestNetscapePlugIn/Tests/PluginScriptableNPObjectInvokeDefault.cpp',
+            'TestNetscapePlugIn/Tests/PrivateBrowsing.cpp',
             'TestNetscapePlugIn/main.cpp',
         ],
         'conditions': [

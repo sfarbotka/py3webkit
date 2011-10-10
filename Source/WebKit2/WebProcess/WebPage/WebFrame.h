@@ -36,6 +36,7 @@
 #include <wtf/Forward.h>
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefPtr.h>
+#include <wtf/RetainPtr.h>
 
 namespace WebCore {
     class Frame;
@@ -133,6 +134,10 @@ public:
     };
     void setLoadListener(LoadListener* loadListener) { m_loadListener = loadListener; }
     LoadListener* loadListener() const { return m_loadListener; }
+    
+#if PLATFORM(MAC) || PLATFORM(WIN)
+    RetainPtr<CFDataRef> webArchiveData() const;
+#endif
 
 private:
     static PassRefPtr<WebFrame> create();

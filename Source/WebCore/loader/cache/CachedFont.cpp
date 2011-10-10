@@ -28,7 +28,7 @@
 #include "CachedFont.h"
 
 // FIXME: This should really be a blacklist instead of a whitelist
-#if USE(CG) || PLATFORM(QT) || PLATFORM(GTK) || (PLATFORM(CHROMIUM) && (!OS(DARWIN) || USE(SKIA_ON_MAC_CHROMIUM))) || PLATFORM(HAIKU) || OS(WINCE) || PLATFORM(ANDROID) || PLATFORM(BREWMP)
+#if USE(CG) || PLATFORM(QT) || PLATFORM(GTK) || (PLATFORM(CHROMIUM) && (!OS(DARWIN) || USE(SKIA_ON_MAC_CHROMIUM))) || OS(WINCE)
 #define STORE_FONT_CUSTOM_PLATFORM_DATA
 #endif
 
@@ -70,10 +70,11 @@ CachedFont::~CachedFont()
 #endif
 }
 
-void CachedFont::load(CachedResourceLoader*)
+void CachedFont::load(CachedResourceLoader*, const ResourceLoaderOptions& options)
 {
     // Don't load the file yet.  Wait for an access before triggering the load.
     setLoading(true);
+    m_options = options;
 }
 
 void CachedFont::didAddClient(CachedResourceClient* c)
@@ -97,7 +98,7 @@ void CachedFont::beginLoadIfNeeded(CachedResourceLoader* dl)
 {
     if (!m_loadInitiated) {
         m_loadInitiated = true;
-        CachedResource::load(dl);
+        CachedResource::load(dl, m_options);
     }
 }
 

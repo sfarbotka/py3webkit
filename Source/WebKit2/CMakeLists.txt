@@ -75,6 +75,7 @@ SET(WebKit2_INCLUDE_DIRECTORIES
     "${JAVASCRIPTCORE_DIR}/assembler"
     "${JAVASCRIPTCORE_DIR}/bytecode"
     "${JAVASCRIPTCORE_DIR}/bytecompiler"
+    "${JAVASCRIPTCORE_DIR}/dfg"
     "${JAVASCRIPTCORE_DIR}/collector/handles"
     "${JAVASCRIPTCORE_DIR}/heap"
     "${JAVASCRIPTCORE_DIR}/interpreter"
@@ -150,6 +151,7 @@ SET(WebKit2_SOURCES
 
     Shared/SecurityOriginData.cpp
     Shared/SessionState.cpp
+    Shared/StatisticsData.cpp
     Shared/UpdateInfo.cpp
     Shared/VisitedLinkTable.cpp
     Shared/WebBackForwardListItem.cpp
@@ -160,6 +162,7 @@ SET(WebKit2_SOURCES
     Shared/WebEvent.cpp
     Shared/WebGeolocationPosition.cpp
     Shared/WebGraphicsContext.cpp
+    Shared/WebHitTestResult.cpp
     Shared/WebImage.cpp
     Shared/WebKeyboardEvent.cpp
     Shared/WebMouseEvent.cpp
@@ -188,6 +191,7 @@ SET(WebKit2_SOURCES
     UIProcess/API/C/WKFormSubmissionListener.cpp
     UIProcess/API/C/WKFrame.cpp
     UIProcess/API/C/WKFramePolicyListener.cpp
+    UIProcess/API/C/WKHitTestResult.cpp
     UIProcess/API/C/WKIconDatabase.cpp
     UIProcess/API/C/WKInspector.cpp
     UIProcess/API/C/WKKeyValueStorageManager.cpp
@@ -440,6 +444,7 @@ SET(ForwardingNetworkHeaders_NAME )
 INCLUDE_IF_EXISTS(${WEBKIT2_DIR}/CMakeLists${PORT}.txt)
 
 ADD_DEFINITIONS(-DBUILDING_WEBKIT)
+ADD_DEFINITIONS(-DWTF_USE_JSC=1)
 INCLUDE_DIRECTORIES(${WebKit2_INCLUDE_DIRECTORIES})
 ADD_LIBRARY(${WebKit2_LIBRARY_NAME} ${WebKit2_LIBRARY_TYPE} ${WebKit2_SOURCES})
 

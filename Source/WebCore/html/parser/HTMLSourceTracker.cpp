@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "HTMLSourceTracker.h"
+#include <wtf/text/StringBuilder.h>
 
 namespace WebCore {
 
@@ -42,6 +43,7 @@ void HTMLSourceTracker::start(const HTMLInputStream& input, HTMLToken& token)
 void HTMLSourceTracker::end(const HTMLInputStream& input, HTMLToken& token)
 {
     m_cachedSourceForToken = String();
+
     // FIXME: This work should really be done by the HTMLTokenizer.
     token.end(input.current().numberOfCharactersConsumed());
 }
@@ -55,14 +57,16 @@ String HTMLSourceTracker::sourceForToken(const HTMLToken& token)
         return m_cachedSourceForToken;
 
     ASSERT(!token.startIndex());
-    UChar* data = 0;
-    int length = token.endIndex() - token.startIndex() - m_sourceFromPreviousSegments.length();
-    String source = String::createUninitialized(length, data);
+    int length = token.endIndex() - token.startIndex();
+    StringBuilder source;
+    source.reserveCapacity(length);
+    source.append(m_sourceFromPreviousSegments);
+    length -= m_sourceFromPreviousSegments.length();
     for (int i = 0; i < length; ++i) {
-        data[i] = *m_source;
+        source.append(*m_source);
         m_source.advance();
     }
-    m_cachedSourceForToken = m_sourceFromPreviousSegments + source;
+    m_cachedSourceForToken = source.toString();
     return m_cachedSourceForToken;
 }
 

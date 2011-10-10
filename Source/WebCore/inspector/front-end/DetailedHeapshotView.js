@@ -272,7 +272,7 @@ WebInspector.HeapSnapshotDiffDataGrid.prototype = {
             this.dispatchEventToListeners("sorting complete");
             return;
         }
-        this.populateChildren();        
+        this.populateChildren();
     },
 
     populateChildren: function()
@@ -414,7 +414,7 @@ WebInspector.HeapSnapshotRetainingPathsList.prototype = {
     {
         if (this._state)
             this._state.cancel();
-    }, 
+    },
 
     _sortFields: function(sortColumn, sortAscending)
     {
@@ -531,28 +531,31 @@ WebInspector.DetailedHeapshotView = function(parent, profile)
     this.containmentView = new WebInspector.View();
     this.containmentView.element.addStyleClass("view");
     this.containmentDataGrid = new WebInspector.HeapSnapshotContainmentDataGrid();
-    this.containmentDataGrid.element.addEventListener("click", this._mouseClickInContainmentGrid.bind(this), true);
+    this.containmentDataGrid.element.addEventListener("click", this._mouseClickInContentsGrid.bind(this), true);
+    this.containmentDataGrid.element.addEventListener("mousedown", this._mouseDownInContentsGrid.bind(this), true);
     this.containmentView.element.appendChild(this.containmentDataGrid.element);
     this.viewsContainer.appendChild(this.containmentView.element);
 
     this.constructorsView = new WebInspector.View();
     this.constructorsView.element.addStyleClass("view");
     this.constructorsDataGrid = new WebInspector.HeapSnapshotConstructorsDataGrid();
-    this.constructorsDataGrid.element.addEventListener("click", this._mouseClickInContainmentGrid.bind(this), true);
+    this.constructorsDataGrid.element.addEventListener("click", this._mouseClickInContentsGrid.bind(this), true);
+    this.constructorsDataGrid.element.addEventListener("mousedown", this._mouseDownInContentsGrid.bind(this), true);
     this.constructorsView.element.appendChild(this.constructorsDataGrid.element);
     this.viewsContainer.appendChild(this.constructorsView.element);
 
     this.diffView = new WebInspector.View();
     this.diffView.element.addStyleClass("view");
     this.diffDataGrid = new WebInspector.HeapSnapshotDiffDataGrid();
-    this.diffDataGrid.element.addEventListener("click", this._mouseClickInContainmentGrid.bind(this), true);
+    this.diffDataGrid.element.addEventListener("click", this._mouseClickInContentsGrid.bind(this), true);
     this.diffView.element.appendChild(this.diffDataGrid.element);
     this.viewsContainer.appendChild(this.diffView.element);
 
     this.dominatorView = new WebInspector.View();
     this.dominatorView.element.addStyleClass("view");
     this.dominatorDataGrid = new WebInspector.HeapSnapshotDominatorsDataGrid();
-    this.dominatorDataGrid.element.addEventListener("click", this._mouseClickInContainmentGrid.bind(this), true);
+    this.dominatorDataGrid.element.addEventListener("click", this._mouseClickInContentsGrid.bind(this), true);
+    this.dominatorDataGrid.element.addEventListener("mousedown", this._mouseDownInContentsGrid.bind(this), true);
     this.dominatorView.element.appendChild(this.dominatorDataGrid.element);
     this.viewsContainer.appendChild(this.dominatorView.element);
 
@@ -618,7 +621,7 @@ WebInspector.DetailedHeapshotView = function(parent, profile)
     this.helpButton = new WebInspector.StatusBarButton("", "heapshot-help-status-bar-item status-bar-item");
     this.helpButton.addEventListener("click", this._helpClicked.bind(this), false);
 
-    var popoverHelper = new WebInspector.PopoverHelper(this.element, this._getHoverAnchor.bind(this), this._showStringContentPopup.bind(this));
+    var popoverHelper = new WebInspector.PopoverHelper(this.element, this._getHoverAnchor.bind(this), this._showStringContentPopover.bind(this));
 
     this._loadProfile(this._profileUid, profileCallback.bind(this));
 
@@ -705,7 +708,7 @@ WebInspector.DetailedHeapshotView.prototype = {
         this._currentSearchResultIndex = -1;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this.dataGrid)
             this.dataGrid.updateWidths();
@@ -908,10 +911,10 @@ WebInspector.DetailedHeapshotView.prototype = {
         profile.sidebarElement.subtitle = Number.bytesToString(s.totalSize);
     },
 
-    _mouseClickInContainmentGrid: function(event)
+    _mouseClickInContentsGrid: function(event)
     {
         var cell = event.target.enclosingNodeOrSelfWithNodeName("td");
-        if (!cell || (!cell.hasStyleClass("object-column") && !cell.hasStyleClass("shallowSize-column") && !cell.hasStyleClass("retainedSize-column")))
+        if (!cell || (!cell.hasStyleClass("object-column")))
             return;
         var row = event.target.enclosingNodeOrSelfWithNodeName("tr");
         if (!row)
@@ -923,6 +926,27 @@ WebInspector.DetailedHeapshotView.prototype = {
             this.retainmentDataGrid.setDataSource(this, nodeItem.isDeletedNode ? nodeItem.dataGrid.baseSnapshot : nodeItem.dataGrid.snapshot, nodeItem.snapshotNodeIndex, nodeItem.isDeletedNode ? this.baseSelectElement.childNodes[this.baseSelectElement.selectedIndex].label + " | " : "");
         else
             this.retainmentDataGrid.reset();
+    },
+
+    _mouseDownInContentsGrid: function(event)
+    {
+        if (event.detail < 2)
+            return;
+
+        var cell = event.target.enclosingNodeOrSelfWithNodeName("td");
+        if (!cell || (!cell.hasStyleClass("count-column") && !cell.hasStyleClass("shallowSize-column") && !cell.hasStyleClass("retainedSize-column")))
+            return;
+
+        if (cell.hasStyleClass("count-column"))
+            this.showCountAsPercent = !this.showCountAsPercent;
+        else if (cell.hasStyleClass("shallowSize-column"))
+            this.showShallowSizeAsPercent = !this.showShallowSizeAsPercent;
+        else if (cell.hasStyleClass("retainedSize-column"))
+            this.showRetainedSizeAsPercent = !this.showRetainedSizeAsPercent;
+        this.refreshShowAsPercents();
+
+        event.preventDefault();
+        event.stopPropagation();
     },
 
     _mouseClickInRetainmentGrid: function(event)
@@ -961,7 +985,7 @@ WebInspector.DetailedHeapshotView.prototype = {
         }
         this.views[viewIndex].grid.addEventListener("sorting complete", sortingComplete, this);
         this.viewSelectElement.selectedIndex = viewIndex;
-        this._changeView({target: {selectedIndex: viewIndex}});      
+        this._changeView({target: {selectedIndex: viewIndex}});
     },
 
     _changeView: function(event)
@@ -1042,26 +1066,24 @@ WebInspector.DetailedHeapshotView.prototype = {
         this.refreshShowAsPercents();
     },
 
-    _showStringContentPopup: function(span)
+    _showStringContentPopover: function(anchor, popover)
     {
         var stringContentElement = document.createElement("span");
         stringContentElement.className = "monospace";
         stringContentElement.style.whiteSpace = "pre";
 
-        var popover = new WebInspector.Popover(stringContentElement);
         function displayString(name, className)
         {
             stringContentElement.textContent = name;
             stringContentElement.className += " " + className;
-            popover.show(span);
+            popover.show(stringContentElement, anchor);
         }
-        span.node.hoverMessage(displayString);
-        return popover;
+        anchor.node.hoverMessage(displayString);
     },
 
     _helpClicked: function(event)
     {
-        if (!this.helpPopover) {
+        if (!this._helpPopoverContentElement) {
             var refTypes = ["a:", "console-formatted-name", WebInspector.UIString("property"),
                             "0:", "console-formatted-name", WebInspector.UIString("element"),
                             "a:", "console-formatted-number", WebInspector.UIString("context var"),
@@ -1097,7 +1119,8 @@ WebInspector.DetailedHeapshotView.prototype = {
                 row.appendChild(objCell);
                 contentElement.appendChild(row);
             }
-            this.helpPopover = new WebInspector.Popover(contentElement);
+            this._helpPopoverContentElement = contentElement;
+            this.helpPopover = new WebInspector.Popover();
 
             function appendHelp(help, index, cell)
             {
@@ -1116,7 +1139,7 @@ WebInspector.DetailedHeapshotView.prototype = {
         if (this.helpPopover.visible)
             this.helpPopover.hide();
         else
-            this.helpPopover.show(this.helpButton.element);
+            this.helpPopover.show(this._helpPopoverContentElement, this.helpButton.element);
     },
 
     _startRetainersHeaderDragging: function(event)
@@ -1151,7 +1174,7 @@ WebInspector.DetailedHeapshotView.prototype = {
         height = Number.constrain(height, Preferences.minConsoleHeight, this.element.clientHeight - Preferences.minConsoleHeight);
         this.viewsContainer.style.bottom = (height + this.retainmentViewHeader.clientHeight) + "px";
         this.retainmentView.element.style.height = height + "px";
-        this.retainmentViewHeader.style.bottom = height + "px";        
+        this.retainmentViewHeader.style.bottom = height + "px";
     },
 
     _updateBaseOptions: function()

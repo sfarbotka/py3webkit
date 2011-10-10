@@ -26,7 +26,9 @@
 #ifndef JSNPObject_h
 #define JSNPObject_h
 
-#include <JavaScriptCore/JSObjectWithGlobalObject.h>
+#include <JavaScriptCore/JSGlobalObject.h>
+#include <JavaScriptCore/JSObject.h>
+#include <JavaScriptCore/ObjectPrototype.h>
 
 typedef void* NPIdentifier;
 struct NPObject;
@@ -37,18 +39,24 @@ class NPRuntimeObjectMap;
     
 // JSNPObject is a JSObject that wraps an NPObject.
 
-class JSNPObject : public JSC::JSObjectWithGlobalObject {
+class JSNPObject : public JSC::JSNonFinalObject {
 public:
-    typedef JSC::JSObjectWithGlobalObject Base;
+    typedef JSC::JSNonFinalObject Base;
 
     static JSNPObject* create(JSC::JSGlobalObject* globalObject, NPRuntimeObjectMap* objectMap, NPObject* npObject)
     {
-        return new (JSC::allocateCell<JSNPObject>(globalObject->globalData().heap)) JSNPObject(globalObject, objectMap, npObject);
+        JSC::Structure* structure = createStructure(globalObject->globalData(), globalObject, globalObject->objectPrototype());
+        JSNPObject* object = new (JSC::allocateCell<JSNPObject>(globalObject->globalData().heap)) JSNPObject(globalObject, structure, objectMap, npObject);
+        object->finishCreation(globalObject);
+        return object;
     }
 
     ~JSNPObject();
 
     void invalidate();
+
+    // Used to invalidate an NPObject asynchronously.
+    NPObject* leakNPObject();
 
     JSC::JSValue callMethod(JSC::ExecState*, NPIdentifier methodName);
     JSC::JSValue callObject(JSC::ExecState*);
@@ -58,17 +66,21 @@ public:
 
     NPObject* npObject() const { return m_npObject; }
 
+protected:
+    void finishCreation(JSC::JSGlobalObject*);
+
 private:
-    JSNPObject(JSC::JSGlobalObject*, NPRuntimeObjectMap*, NPObject*);
+    JSNPObject(JSC::JSGlobalObject*, JSC::Structure*, NPRuntimeObjectMap*, NPObject*);
 
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::OverridesGetPropertyNames | JSObject::StructureFlags;
     
-    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSValue prototype)
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
     {
-        return JSC::Structure::create(globalData, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
     }
 
-    virtual JSC::CallType getCallData(JSC::CallData&);
+    virtual JSC::CallType getCallDataVirtual(JSC::CallData&);
+    static JSC::CallType getCallData(JSC::JSCell*, JSC::CallData&);
     virtual JSC::ConstructType getConstructData(JSC::ConstructData&);
 
     virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);

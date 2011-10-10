@@ -34,6 +34,8 @@
 // arguments.
 
 // FIXME: move this over to using qunit
+// In the meanwhile, you can run these tests by loading
+// flakiness_dashboard.html#useTestData=true in a browser.
 
 // Clears out the global objects modified or used by processExpectations and
 // populateExpectationsData. A bit gross since it's digging into implementation
@@ -139,8 +141,8 @@ function testOverrideJustBuildType()
     runExpectationsTest('Webkit Win (dbg)(3)', test, 'FAIL PASS TIMEOUT', 'WONTFIX');
     runExpectationsTest('Webkit Linux', test, 'FAIL PASS TIMEOUT', 'WONTFIX');
     runExpectationsTest('Webkit Linux (dbg)(3)', test, 'CRASH', 'LINUX DEBUG');
-    runExpectationsTest('Webkit Mac10.5', test, 'FAIL', 'WONTFIX MAC');
-    runExpectationsTest('Webkit Mac10.5 (dbg)(3)', test, 'FAIL', 'WONTFIX MAC');
+    runExpectationsTest('Webkit Mac10.5 (CG)', test, 'FAIL', 'WONTFIX MAC');
+    runExpectationsTest('Webkit Mac10.5 (CG)(dbg)(3)', test, 'FAIL', 'WONTFIX MAC');
 }
 
 function testPlatformAndBuildType()
@@ -158,9 +160,9 @@ function testPlatformAndBuildType()
     runPlatformAndBuildTypeTest('Webkit Linux (deps)', 'LUCID', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Linux (deps)(dbg)(1)', 'LUCID', 'DEBUG');
     runPlatformAndBuildTypeTest('Webkit Linux (deps)(dbg)(2)', 'LUCID', 'DEBUG');
-    runPlatformAndBuildTypeTest('Webkit Mac10.6 (deps)', 'SNOWLEOPARD', 'RELEASE');
-    runPlatformAndBuildTypeTest('Webkit Mac10.6 (deps)(dbg)(1)', 'SNOWLEOPARD', 'DEBUG');
-    runPlatformAndBuildTypeTest('Webkit Mac10.6 (deps)(dbg)(2)', 'SNOWLEOPARD', 'DEBUG');
+    runPlatformAndBuildTypeTest('Webkit Mac10.6 (CG)(deps)', 'SNOWLEOPARD', 'RELEASE');
+    runPlatformAndBuildTypeTest('Webkit Mac10.6 (CG)(deps)(dbg)(1)', 'SNOWLEOPARD', 'DEBUG');
+    runPlatformAndBuildTypeTest('Webkit Mac10.6 (CG)(deps)(dbg)(2)', 'SNOWLEOPARD', 'DEBUG');
     runPlatformAndBuildTypeTest('Webkit Win', 'XP', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Vista', 'VISTA', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Win7', 'WIN7', 'RELEASE');
@@ -170,11 +172,11 @@ function testPlatformAndBuildType()
     runPlatformAndBuildTypeTest('Webkit Linux 32', 'LUCID', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Linux (dbg)(1)', 'LUCID', 'DEBUG');
     runPlatformAndBuildTypeTest('Webkit Linux (dbg)(2)', 'LUCID', 'DEBUG');
-    runPlatformAndBuildTypeTest('Webkit Mac10.5', 'LEOPARD', 'RELEASE');
-    runPlatformAndBuildTypeTest('Webkit Mac10.5 (dbg)(1)', 'LEOPARD', 'DEBUG');
-    runPlatformAndBuildTypeTest('Webkit Mac10.5 (dbg)(2)', 'LEOPARD', 'DEBUG');
-    runPlatformAndBuildTypeTest('Webkit Mac10.6', 'SNOWLEOPARD', 'RELEASE');
-    runPlatformAndBuildTypeTest('Webkit Mac10.6 (dbg)', 'SNOWLEOPARD', 'DEBUG');
+    runPlatformAndBuildTypeTest('Webkit Mac10.5 (CG)', 'LEOPARD', 'RELEASE');
+    runPlatformAndBuildTypeTest('Webkit Mac10.5 (CG)(dbg)(1)', 'LEOPARD', 'DEBUG');
+    runPlatformAndBuildTypeTest('Webkit Mac10.5 (CG)(dbg)(2)', 'LEOPARD', 'DEBUG');
+    runPlatformAndBuildTypeTest('Webkit Mac10.6 (CG)', 'SNOWLEOPARD', 'RELEASE');
+    runPlatformAndBuildTypeTest('Webkit Mac10.6 (CG)(dbg)', 'SNOWLEOPARD', 'DEBUG');
     runPlatformAndBuildTypeTest('Webkit Win - GPU', 'XP', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Vista - GPU', 'VISTA', 'RELEASE');
     runPlatformAndBuildTypeTest('Webkit Win7 - GPU', 'WIN7', 'RELEASE');
@@ -206,6 +208,7 @@ function testPlatformAndBuildType()
     runPlatformAndBuildTypeTest('GPU Win7 Tests (dbg)(2) - GPU', 'WIN7', 'DEBUG');
     runPlatformAndBuildTypeTest('GPU Linux Tests x64 - GPU', 'LUCID', 'RELEASE');
     runPlatformAndBuildTypeTest('XP Tests', 'XP', 'RELEASE');
+    runPlatformAndBuildTypeTest('Interactive Tests (dbg)', 'XP', 'DEBUG');
     
     g_currentState.group = '@ToT - webkit.org';
     runPlatformAndBuildTypeTest('Chromium Win Release (Tests)', 'XP', 'RELEASE');

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2008, 2009 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2011 Google Inc. All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -44,12 +45,17 @@ JSC::JSValue JSWorker::postMessage(JSC::ExecState* exec)
     return handlePostMessage(exec, impl());
 }
 
+JSC::JSValue JSWorker::webkitPostMessage(JSC::ExecState* exec)
+{
+    return handlePostMessage(exec, impl());
+}
+
 EncodedJSValue JSC_HOST_CALL JSWorkerConstructor::constructJSWorker(ExecState* exec)
 {
     JSWorkerConstructor* jsConstructor = static_cast<JSWorkerConstructor*>(exec->callee());
 
     if (!exec->argumentCount())
-        return throwVMError(exec, createSyntaxError(exec, "Not enough arguments"));
+        return throwVMError(exec, createTypeError(exec, "Not enough arguments"));
 
     UString scriptURL = exec->argument(0).toString(exec);
     if (exec->hadException())

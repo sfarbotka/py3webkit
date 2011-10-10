@@ -32,6 +32,7 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSConsoleCustom.cpp
     bindings/js/JSCoordinatesCustom.cpp
     bindings/js/JSCustomVoidCallback.cpp
+    bindings/js/JSDictionary.cpp
     bindings/js/JSDOMBinding.cpp
     bindings/js/JSDOMFormDataCustom.cpp
     bindings/js/JSDOMGlobalObject.cpp
@@ -45,12 +46,12 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSDOMWindowCustom.cpp
     bindings/js/JSDOMWindowShell.cpp
     bindings/js/JSDOMWrapper.cpp
-    bindings/js/JSDedicatedWorkerContextCustom.cpp
     bindings/js/JSDeviceMotionEventCustom.cpp
     bindings/js/JSDeviceOrientationEventCustom.cpp
     bindings/js/JSDocumentCustom.cpp
     bindings/js/JSElementCustom.cpp
     bindings/js/JSErrorHandler.cpp
+    bindings/js/JSEventConstructors.cpp
     bindings/js/JSEventCustom.cpp
     bindings/js/JSEventListener.cpp
     bindings/js/JSEventSourceCustom.cpp
@@ -104,9 +105,9 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSOptionConstructor.cpp
     bindings/js/JSPeerConnectionCustom.cpp
     bindings/js/JSPluginElementFunctions.cpp
+    bindings/js/JSPopStateEventCustom.cpp
     bindings/js/JSProcessingInstructionCustom.cpp
     bindings/js/JSScriptProfileNodeCustom.cpp
-    bindings/js/JSSharedWorkerCustom.cpp
     bindings/js/JSStyleSheetCustom.cpp
     bindings/js/JSStyleSheetListCustom.cpp
     bindings/js/JSTextCustom.cpp
@@ -122,9 +123,6 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSWebKitCSSKeyframesRuleCustom.cpp
     bindings/js/JSWebKitCSSMatrixCustom.cpp
     bindings/js/JSWebKitPointCustom.cpp
-    bindings/js/JSWorkerContextBase.cpp
-    bindings/js/JSWorkerContextCustom.cpp
-    bindings/js/JSWorkerCustom.cpp
     bindings/js/JSXMLHttpRequestCustom.cpp
     bindings/js/JSXMLHttpRequestUploadCustom.cpp
     bindings/js/JSXSLTProcessorCustom.cpp
@@ -144,8 +142,6 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/ScriptState.cpp
     bindings/js/ScriptValue.cpp
     bindings/js/SerializedScriptValue.cpp
-    bindings/js/WorkerScriptController.cpp
-    bindings/js/WorkerScriptDebugServer.cpp
 
     bridge/IdentifierRep.cpp
     bridge/NP_jsobject.cpp
@@ -170,7 +166,7 @@ IF (ENABLE_BLOB)
     )
 ENDIF ()
 
-IF (ENABLE_DATABASE)
+IF (ENABLE_SQL_DATABASE)
     LIST(APPEND WebCore_SOURCES
         bindings/js/JSCustomSQLStatementErrorCallback.cpp
         bindings/js/JSSQLResultSetRowListCustom.cpp
@@ -199,9 +195,20 @@ IF (ENABLE_WEB_SOCKETS)
     )
 ENDIF ()
 
-IF (ENABLE_OFFLINE_WEB_APPLICATIONS)
+IF (ENABLE_WORKERS)
     LIST(APPEND WebCore_SOURCES
-        bindings/js/JSDOMApplicationCacheCustom.cpp
+        bindings/js/JSDedicatedWorkerContextCustom.cpp
+        bindings/js/JSWorkerContextBase.cpp
+        bindings/js/JSWorkerContextCustom.cpp
+        bindings/js/JSWorkerCustom.cpp
+        bindings/js/WorkerScriptController.cpp
+        bindings/js/WorkerScriptDebugServer.cpp
+    )
+ENDIF ()
+
+IF (ENABLE_SHARED_WORKERS)
+    LIST(APPEND WebCore_SOURCES
+        bindings/js/JSSharedWorkerCustom.cpp
     )
 ENDIF ()
 

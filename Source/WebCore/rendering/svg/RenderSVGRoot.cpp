@@ -29,6 +29,7 @@
 #include "Frame.h"
 #include "GraphicsContext.h"
 #include "HitTestResult.h"
+#include "LayoutRepainter.h"
 #include "RenderPart.h"
 #include "RenderSVGContainer.h"
 #include "RenderSVGResource.h"
@@ -101,7 +102,7 @@ void RenderSVGRoot::computePreferredLogicalWidths()
     LayoutUnit borderAndPadding = borderAndPaddingWidth();
     LayoutUnit width = computeReplacedLogicalWidth(false) + borderAndPadding;
 
-    if (style()->maxWidth().isFixed() && style()->maxWidth().value() != undefinedLength)
+    if (style()->maxWidth().isFixed())
         width = min(width, style()->maxWidth().value() + (style()->boxSizing() == CONTENT_BOX ? borderAndPadding : 0));
 
     if (style()->width().isPercent() || (style()->width().isAuto() && style()->height().isPercent())) {
@@ -275,7 +276,7 @@ void RenderSVGRoot::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
     childPaintInfo.context->save();
 
     // Apply initial viewport clip - not affected by overflow handling
-    childPaintInfo.context->clip(overflowClipRect(borderBoxOriginInContainer));
+    childPaintInfo.context->clip(overflowClipRect(borderBoxOriginInContainer, paintInfo.renderRegion));
 
     // Convert from container offsets (html renderers) to a relative transform (svg renderers).
     // Transform from our paint container's coordinate system to our local coords.
@@ -346,7 +347,7 @@ void RenderSVGRoot::calcViewport()
 // relative to our borderBox origin.  This method gives us exactly that.
 AffineTransform RenderSVGRoot::localToBorderBoxTransform() const
 {
-    IntSize borderAndPadding = borderOriginToContentBox();
+    LayoutSize borderAndPadding = borderOriginToContentBox();
     SVGSVGElement* svg = static_cast<SVGSVGElement*>(node());
     float scale = style()->effectiveZoom();
     FloatPoint translate = svg->currentTranslate();
@@ -354,43 +355,43 @@ AffineTransform RenderSVGRoot::localToBorderBoxTransform() const
     return ctm * svg->viewBoxToViewTransform(width() / scale, height() / scale);
 }
 
-IntSize RenderSVGRoot::parentOriginToBorderBox() const
+LayoutSize RenderSVGRoot::parentOriginToBorderBox() const
 {
-    return IntSize(x(), y());
+    return locationOffset();
 }
 
-IntSize RenderSVGRoot::borderOriginToContentBox() const
+LayoutSize RenderSVGRoot::borderOriginToContentBox() const
 {
-    return IntSize(borderLeft() + paddingLeft(), borderTop() + paddingTop());
+    return LayoutSize(borderLeft() + paddingLeft(), borderTop() + paddingTop());
 }
 
-AffineTransform RenderSVGRoot::localToRepaintContainerTransform(const IntPoint& parentOriginInContainer) const
+AffineTransform RenderSVGRoot::localToRepaintContainerTransform(const LayoutPoint& parentOriginInContainer) const
 {
     return AffineTransform::translation(parentOriginInContainer.x(), parentOriginInContainer.y()) * localToParentTransform();
 }
 
 const AffineTransform& RenderSVGRoot::localToParentTransform() const
 {
-    IntSize parentToBorderBoxOffset = parentOriginToBorderBox();
+    LayoutSize parentToBorderBoxOffset = parentOriginToBorderBox();
 
     m_localToParentTransform = AffineTransform::translation(parentToBorderBoxOffset.width(), parentToBorderBoxOffset.height()) * localToBorderBoxTransform();
 
     return m_localToParentTransform;
 }
 
-IntRect RenderSVGRoot::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderSVGRoot::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     return SVGRenderSupport::clippedOverflowRectForRepaint(this, repaintContainer);
 }
 
-void RenderSVGRoot::computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect& repaintRect, bool fixed) const
+void RenderSVGRoot::computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect& repaintRect, bool fixed) const
 {
     // Apply our local transforms (except for x/y translation), then our shadow, 
     // and then call RenderBox's method to handle all the normal CSS Box model bits
     repaintRect = localToBorderBoxTransform().mapRect(repaintRect);
 
     // Apply initial viewport clip - not affected by overflow settings    
-    repaintRect.intersect(enclosingIntRect(FloatRect(FloatPoint(), m_viewportSize)));
+    repaintRect.intersect(enclosingLayoutRect(FloatRect(FloatPoint(), m_viewportSize)));
 
     const SVGRenderStyle* svgStyle = style()->svgStyle();
     if (const ShadowData* shadow = svgStyle->shadow())

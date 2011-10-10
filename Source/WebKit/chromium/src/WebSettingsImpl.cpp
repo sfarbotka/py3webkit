@@ -50,38 +50,39 @@ WebSettingsImpl::WebSettingsImpl(Settings* settings)
     , m_compositeToTextureEnabled(false)
     , m_showFPSCounter(false)
     , m_showPlatformLayerTree(false)
+    , m_useThreadedCompositor(false)
 {
     ASSERT(settings);
 }
 
-void WebSettingsImpl::setStandardFontFamily(const WebString& font)
+void WebSettingsImpl::setStandardFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setStandardFontFamily(font);
+    m_settings->setStandardFontFamily(font, script);
 }
 
-void WebSettingsImpl::setFixedFontFamily(const WebString& font)
+void WebSettingsImpl::setFixedFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setFixedFontFamily((String)font);
+    m_settings->setFixedFontFamily(font, script);
 }
 
-void WebSettingsImpl::setSerifFontFamily(const WebString& font)
+void WebSettingsImpl::setSerifFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setSerifFontFamily((String)font);
+    m_settings->setSerifFontFamily(font, script);
 }
 
-void WebSettingsImpl::setSansSerifFontFamily(const WebString& font)
+void WebSettingsImpl::setSansSerifFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setSansSerifFontFamily((String)font);
+    m_settings->setSansSerifFontFamily(font, script);
 }
 
-void WebSettingsImpl::setCursiveFontFamily(const WebString& font)
+void WebSettingsImpl::setCursiveFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setCursiveFontFamily((String)font);
+    m_settings->setCursiveFontFamily(font, script);
 }
 
-void WebSettingsImpl::setFantasyFontFamily(const WebString& font)
+void WebSettingsImpl::setFantasyFontFamily(const WebString& font, UScriptCode script)
 {
-    m_settings->setFantasyFontFamily((String)font);
+    m_settings->setFantasyFontFamily(font, script);
 }
 
 void WebSettingsImpl::setDefaultFontSize(int size)
@@ -245,11 +246,6 @@ void WebSettingsImpl::setFontRenderingModeNormal()
     m_settings->setFontRenderingMode(WebCore::NormalRenderingMode);
 }
 
-void WebSettingsImpl::setShouldPaintCustomScrollbars(bool enabled)
-{
-    m_settings->setShouldPaintCustomScrollbars(enabled);
-}
-
 void WebSettingsImpl::setAllowUniversalAccessFromFileURLs(bool allow)
 {
     m_settings->setAllowUniversalAccessFromFileURLs(allow);
@@ -366,6 +362,11 @@ void WebSettingsImpl::setLegacyAccelerated2dCanvasEnabled(bool enabled)
 void WebSettingsImpl::setMinimumAccelerated2dCanvasSize(int numPixels)
 {
     m_settings->setMinimumAccelerated2dCanvasSize(numPixels);
+}
+
+void WebSettingsImpl::setUseThreadedCompositor(bool useThreadedCompositor)
+{
+    m_useThreadedCompositor = useThreadedCompositor;
 }
 
 void WebSettingsImpl::setMemoryInfoEnabled(bool enabled)

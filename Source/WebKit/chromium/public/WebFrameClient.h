@@ -40,6 +40,10 @@
 #include "WebTextDirection.h"
 #include "WebURLError.h"
 
+#if WEBKIT_USING_V8
+#include <v8.h>
+#endif
+
 namespace WebKit {
 
 class WebApplicationCacheHost;
@@ -57,6 +61,7 @@ class WebSharedWorker;
 class WebStorageQuotaCallbacks;
 class WebString;
 class WebURL;
+class WebURLLoader;
 class WebURLRequest;
 class WebURLResponse;
 class WebWorker;
@@ -89,7 +94,7 @@ public:
     // Services ------------------------------------------------------------
 
     // A frame specific cookie jar.  May return null, in which case
-    // WebKitClient::cookieJar() will be called to access cookies.
+    // WebKitPlatformSupport::cookieJar() will be called to access cookies.
     virtual WebCookieJar* cookieJar(WebFrame*) { return 0; }
 
 
@@ -204,12 +209,7 @@ public:
     virtual void didCreateDocumentElement(WebFrame*) { }
 
     // The page title is available.
-    // FIXME: remove override once Chrome is updated to new API.
-    virtual void didReceiveTitle(WebFrame*, const WebString& title) { }
-    virtual void didReceiveTitle(WebFrame* frame, const WebString& title, WebTextDirection direction)
-    {
-        didReceiveTitle(frame, title);
-    }
+    virtual void didReceiveTitle(WebFrame* frame, const WebString& title, WebTextDirection direction) { }
 
     // The icon for the page have changed.
     virtual void didChangeIcon(WebFrame*, WebIconURL::Type) { }
@@ -286,24 +286,24 @@ public:
     // spread to other frames in the same origin.
     virtual void didRunInsecureContent(WebFrame*, const WebSecurityOrigin&, const WebURL& insecureURL) { }
 
+    // This frame adopted the resource that is being loaded. This happens when
+    // an iframe, that is loading a subresource, is transferred between windows.
+    virtual void didAdoptURLLoader(WebURLLoader*) { }
 
     // Script notifications ------------------------------------------------
 
     // Script in the page tried to allocate too much memory.
     virtual void didExhaustMemoryAvailableForScript(WebFrame*) { }
 
+#if WEBKIT_USING_V8
     // Notifies that a new script context has been created for this frame.
     // This is similar to didClearWindowObject but only called once per
     // frame context.
-    virtual void didCreateScriptContext(WebFrame*) { }
+    virtual void didCreateScriptContext(WebFrame*, v8::Handle<v8::Context>, int worldId) { }
 
-    // Notifies that this frame's script context has been destroyed.
-    virtual void didDestroyScriptContext(WebFrame*) { }
-
-    // Notifies that a garbage-collected context was created - content
-    // scripts.
-    virtual void didCreateIsolatedScriptContext(WebFrame*) { }
-
+    // WebKit is about to release its reference to a v8 context for a frame.
+    virtual void willReleaseScriptContext(WebFrame*, v8::Handle<v8::Context>, int worldId) { }
+#endif
 
     // Geometry notifications ----------------------------------------------
 

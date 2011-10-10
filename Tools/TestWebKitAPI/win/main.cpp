@@ -23,6 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
 #include "TestsController.h"
 
 int main(int argc, char** argv)
@@ -31,6 +32,10 @@ int main(int argc, char** argv)
     // testing/debugging, as it causes the post-mortem debugger not to be invoked. We reset the
     // error mode here to work around Cygwin's behavior. See <http://webkit.org/b/55222>.
     ::SetErrorMode(0);
+
+    // Initialize COM, needed for WebKit1 tests.
+    // FIXME: Remove this line once <http://webkit.org/b/32867> is fixed.
+    ::OleInitialize(0);
 
     bool passed = TestWebKitAPI::TestsController::shared().run(argc, argv);
 

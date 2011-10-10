@@ -559,6 +559,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Shared\StatisticsData.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\Shared\StatisticsData.h"
+				>
+			</File>
+			<File
 				RelativePath="..\Shared\StringPairVector.h"
 				>
 			</File>
@@ -663,6 +671,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Shared\WebGeometry.h"
+				>
+			</File>
+			<File
 				RelativePath="..\Shared\WebGraphicsContext.cpp"
 				>
 			</File>
@@ -676,6 +688,14 @@
 			</File>
 			<File
 				RelativePath="..\Shared\WebImage.h"
+				>
+			</File>
+			<File
+				RelativePath="..\Shared\WebHitTestResult.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\Shared\WebHitTestResult.h"
 				>
 			</File>
 			<File
@@ -871,6 +891,10 @@
 				</File>
 				<File
 					RelativePath="..\Shared\API\c\WKGeometry.h"
+					>
+				</File>
+				<File
+					RelativePath="..\Shared\API\c\WKGeometry.cpp"
 					>
 				</File>
 				<File
@@ -2907,6 +2931,14 @@
 				>
 			</File>
 			<File
+				RelativePath="..\UIProcess\WebGrammarDetail.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\UIProcess\WebGrammarDetail.h"
+				>
+			</File>
+			<File
 				RelativePath="..\UIProcess\WebHistoryClient.cpp"
 				>
 			</File>
@@ -3064,6 +3096,22 @@
 			</File>
 			<File
 				RelativePath="..\UIProcess\WebResourceLoadClient.h"
+				>
+			</File>
+			<File
+				RelativePath="..\UIProcess\WebTextChecker.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\UIProcess\WebTextChecker.h"
+				>
+			</File>
+			<File
+				RelativePath="..\UIProcess\WebTextCheckerClient.cpp"
+				>
+			</File>
+			<File
+				RelativePath="..\UIProcess\WebTextCheckerClient.h"
 				>
 			</File>
 			<File
@@ -3233,6 +3281,22 @@
 						>
 					</File>
 					<File
+						RelativePath="..\UIProcess\API\C\WKHitTestResult.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\UIProcess\API\C\WKHitTestResult.h"
+						>
+					</File>
+					<File
+						RelativePath="..\UIProcess\API\C\WKGrammarDetail.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\UIProcess\API\C\WKGrammarDetail.h"
+						>
+					</File>
+					<File
 						RelativePath="..\UIProcess\API\C\WKIconDatabase.cpp"
 						>
 					</File>
@@ -3352,6 +3416,14 @@
 						RelativePath="..\UIProcess\API\C\WKResourceCacheManager.h"
 						>
 					</File>
+					<File
+						RelativePath="..\UIProcess\API\C\WKTextChecker.cpp"
+						>
+					</File>
+					<File
+						RelativePath="..\UIProcess\API\C\WKTextChecker.h"
+						>
+					</File>
 					<Filter
 						Name="cg"
 						>
@@ -3401,22 +3473,6 @@
 						>
 						<File
 							RelativePath="..\UIProcess\API\C\win\WKAPICastWin.h"
-							>
-						</File>
-						<File
-							RelativePath="..\UIProcess\API\C\win\WKGrammarDetail.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\UIProcess\API\C\win\WKGrammarDetail.h"
-							>
-						</File>
-						<File
-							RelativePath="..\UIProcess\API\C\win\WKTextChecker.cpp"
-							>
-						</File>
-						<File
-							RelativePath="..\UIProcess\API\C\win\WKTextChecker.h"
 							>
 						</File>
 						<File
@@ -3574,14 +3630,6 @@
 					>
 				</File>
 				<File
-					RelativePath="..\UIProcess\win\WebGrammarDetail.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\UIProcess\win\WebGrammarDetail.h"
-					>
-				</File>
-				<File
 					RelativePath="..\UIProcess\win\WebInspectorProxyWin.cpp"
 					>
 				</File>
@@ -3599,22 +3647,6 @@
 				</File>
 				<File
 					RelativePath="..\UIProcess\win\WebProcessProxyWin.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\UIProcess\win\WebTextChecker.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\UIProcess\win\WebTextChecker.h"
-					>
-				</File>
-				<File
-					RelativePath="..\UIProcess\win\WebTextCheckerClient.cpp"
-					>
-				</File>
-				<File
-					RelativePath="..\UIProcess\win\WebTextCheckerClient.h"
 					>
 				</File>
 				<File
@@ -4227,6 +4259,14 @@
 				</File>
 				<File
 					RelativePath="..\Scripts\webkit2\messages_unittest.py"
+					>
+				</File>
+				<File
+					RelativePath="..\Scripts\webkit2\model.py"
+					>
+				</File>
+				<File
+					RelativePath="..\Scripts\webkit2\parser.py"
 					>
 				</File>
 			</Filter>

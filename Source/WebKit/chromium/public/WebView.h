@@ -174,6 +174,10 @@ public:
     // Scrolls the node currently in focus into view.
     virtual void scrollFocusedNodeIntoView() = 0;
 
+    // Scrolls the node currently in focus into |rect|, where |rect| is in
+    // window space.
+    virtual void scrollFocusedNodeIntoRect(const WebRect&) { }
+
 
     // Zoom ----------------------------------------------------------------
 
@@ -211,6 +215,18 @@ public:
     // scalePage() magnifies and shrinks a page without affecting layout.
     // On the other hand, zooming affects layout of the page.
     virtual void scalePage(float scaleFactor, WebPoint origin) = 0;
+
+
+    // Fixed Layout --------------------------------------------------------
+
+    // In fixed layout mode, the layout of the page is independent of the
+    // view port size, given by WebWidget::size().
+
+    virtual bool isFixedLayoutModeEnabled() const = 0;
+    virtual void enableFixedLayoutMode(bool enable) = 0;
+
+    virtual WebSize fixedLayoutSize() const = 0;
+    virtual void setFixedLayoutSize(const WebSize&) = 0;
 
 
     // Media ---------------------------------------------------------------
@@ -372,6 +388,17 @@ public:
     // Sets the visibility of the WebView.
     virtual void setVisibilityState(WebPageVisibilityState visibilityState,
                                     bool isInitialState) { }
+
+
+    // Fullscreen -----------------------------------------------------------
+
+    virtual void exitFullscreen() = 0;
+
+    // Testing functionality for LayoutTestController -----------------------
+
+    // Simulates a compositor lost context.
+    virtual void loseCompositorContext(int numTimes) = 0;
+
 
 protected:
     ~WebView() {}

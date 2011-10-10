@@ -119,7 +119,7 @@ void LayoutTestController::addDisallowedURL(JSStringRef url)
         disallowedURLs = CFSetCreateMutable(kCFAllocatorDefault, 0, NULL);
 
     // Canonicalize the URL
-    NSURLRequest* request = [NSURLRequest requestWithURL:[NSURL URLWithString:(NSString *)urlCF.get()]];
+    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:(NSString *)urlCF.get()]];
     request = [NSURLProtocol canonicalRequestForRequest:request];
 
     CFSetAddValue(disallowedURLs, [request URL]);
@@ -168,7 +168,7 @@ void LayoutTestController::clearApplicationCacheForOrigin(JSStringRef url)
     [origin release];
 }
 
-JSValueRef originsArrayToJS(JSContextRef context, NSArray* origins)
+JSValueRef originsArrayToJS(JSContextRef context, NSArray *origins)
 {
     NSUInteger count = [origins count];
 
@@ -355,9 +355,68 @@ void LayoutTestController::notifyDone()
     m_waitToDump = false;
 }
 
-JSStringRef LayoutTestController::pathToLocalResource(JSContextRef context, JSStringRef url)
+static inline std::string stringFromJSString(JSStringRef jsString)
 {
-    return JSStringRetain(url); // Do nothing on mac.
+    size_t maxBufferSize = JSStringGetMaximumUTF8CStringSize(jsString);
+    char* utf8Buffer = new char[maxBufferSize];
+    size_t bytesWrittenToUTF8Buffer = JSStringGetUTF8CString(jsString, utf8Buffer, maxBufferSize);
+    std::string stdString(utf8Buffer, bytesWrittenToUTF8Buffer - 1); // bytesWrittenToUTF8Buffer includes a trailing \0 which std::string doesn't need.
+    delete[] utf8Buffer;
+    return stdString;
+}
+
+static inline size_t indexOfSeparatorAfterDirectoryName(const std::string& directoryName, const std::string& fullPath)
+{
+    std::string searchKey = "/" + directoryName + "/";
+    size_t indexOfSearchKeyStart = fullPath.rfind(searchKey);
+    if (indexOfSearchKeyStart == std::string::npos) {
+        ASSERT_NOT_REACHED();
+        return 0;
+    }
+    // Callers expect the return value not to end in "/", so searchKey.length() - 1.
+    return indexOfSearchKeyStart + searchKey.length() - 1;
+}
+
+static inline std::string resourceRootAbsolutePath(const std::string& testPathOrURL, const std::string& expectedRootName)
+{
+    char* localResourceRootEnv = getenv("LOCAL_RESOURCE_ROOT");
+    if (localResourceRootEnv)
+        return std::string(localResourceRootEnv);
+
+    // This fallback approach works for non-http tests and is useful
+    // in the case when we're running DRT directly from the command line.
+    return testPathOrURL.substr(0, indexOfSeparatorAfterDirectoryName(expectedRootName, testPathOrURL));
+}
+
+JSStringRef LayoutTestController::pathToLocalResource(JSContextRef context, JSStringRef localResourceJSString)
+{
+    // The passed in path will be an absolute path to the resource starting
+    // with "/tmp" or "/tmp/LayoutTests", optionally starting with the explicit file:// protocol.
+    // /tmp maps to DUMPRENDERTREE_TEMP, and /tmp/LayoutTests maps to LOCAL_RESOURCE_ROOT.
+    // FIXME: This code should work on all *nix platforms and can be moved into LayoutTestController.cpp.
+    std::string expectedRootName;
+    std::string absolutePathToResourceRoot;
+    std::string localResourceString = stringFromJSString(localResourceJSString);
+
+    if (localResourceString.find("LayoutTests") != std::string::npos) {
+        expectedRootName = "LayoutTests";
+        absolutePathToResourceRoot = resourceRootAbsolutePath(m_testPathOrURL, expectedRootName);
+    } else if (localResourceString.find("tmp") != std::string::npos) {
+        expectedRootName = "tmp";
+        absolutePathToResourceRoot = getenv("DUMPRENDERTREE_TEMP");
+    } else {
+        ASSERT_NOT_REACHED(); // pathToLocalResource was passed a path it doesn't know how to map.
+    }
+    ASSERT(!absolutePathToResourceRoot.empty());
+    size_t indexOfSeparatorAfterRootName = indexOfSeparatorAfterDirectoryName(expectedRootName, localResourceString);
+    std::string absolutePathToLocalResource = absolutePathToResourceRoot + localResourceString.substr(indexOfSeparatorAfterRootName);
+
+    // Note: It's important that we keep the file:// or http tests will get confused.
+    if (localResourceString.find("file://") != std::string::npos) {
+        ASSERT(absolutePathToLocalResource[0] == '/');
+        absolutePathToLocalResource = std::string("file://") + absolutePathToLocalResource;
+    }
+    return JSStringCreateWithUTF8CString(absolutePathToLocalResource.c_str());
 }
 
 void LayoutTestController::queueLoad(JSStringRef url, JSStringRef target)
@@ -366,7 +425,7 @@ void LayoutTestController::queueLoad(JSStringRef url, JSStringRef target)
     NSString *urlNS = (NSString *)urlCF.get();
 
     NSURL *nsurl = [NSURL URLWithString:urlNS relativeToURL:[[[mainFrame dataSource] response] URL]];
-    NSString* nsurlString = [nsurl absoluteString];
+    NSString *nsurlString = [nsurl absoluteString];
 
     JSRetainPtr<JSStringRef> absoluteURL(Adopt, JSStringCreateWithUTF8CString([nsurlString UTF8String]));
     WorkQueue::shared()->queue(new LoadItem(absoluteURL.get(), target));
@@ -384,7 +443,7 @@ void LayoutTestController::setAlwaysAcceptCookies(bool alwaysAcceptCookies)
 
     m_alwaysAcceptCookies = alwaysAcceptCookies;
     NSHTTPCookieAcceptPolicy cookieAcceptPolicy = alwaysAcceptCookies ? NSHTTPCookieAcceptPolicyAlways : NSHTTPCookieAcceptPolicyOnlyFromMainDocumentDomain;
-    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookieAcceptPolicy:cookieAcceptPolicy];
+    [WebPreferences _setCurrentNetworkLoaderSessionCookieAcceptPolicy:cookieAcceptPolicy];
 }
 
 void LayoutTestController::setAppCacheMaximumSize(unsigned long long size)
@@ -449,8 +508,8 @@ void LayoutTestController::setMockDeviceOrientation(bool canProvideAlpha, double
 {
     // DumpRenderTree configured the WebView to use WebDeviceOrientationProviderMock.
     id<WebDeviceOrientationProvider> provider = [[mainFrame webView] _deviceOrientationProvider];
-    WebDeviceOrientationProviderMock* mockProvider = static_cast<WebDeviceOrientationProviderMock*>(provider);
-    WebDeviceOrientation* orientation = [[WebDeviceOrientation alloc] initWithCanProvideAlpha:canProvideAlpha alpha:alpha canProvideBeta:canProvideBeta beta:beta canProvideGamma:canProvideGamma gamma:gamma];
+    WebDeviceOrientationProviderMock *mockProvider = static_cast<WebDeviceOrientationProviderMock*>(provider);
+    WebDeviceOrientation *orientation = [[WebDeviceOrientation alloc] initWithCanProvideAlpha:canProvideAlpha alpha:alpha canProvideBeta:canProvideBeta beta:beta canProvideGamma:canProvideGamma gamma:gamma];
     [mockProvider setOrientation:orientation];
     [orientation release];
 }
@@ -482,10 +541,16 @@ void LayoutTestController::addMockSpeechInputResult(JSStringRef result, double c
     // See https://bugs.webkit.org/show_bug.cgi?id=39485.
 }
 
+void LayoutTestController::startSpeechInput(JSContextRef inputElement)
+{
+    // FIXME: Implement for speech input layout tests.
+    // See https://bugs.webkit.org/show_bug.cgi?id=39485.
+}
+
 void LayoutTestController::setIconDatabaseEnabled(bool iconDatabaseEnabled)
 {
     // FIXME: Workaround <rdar://problem/6480108>
-    static WebIconDatabase* sharedWebIconDatabase = NULL;
+    static WebIconDatabase *sharedWebIconDatabase = NULL;
     if (!sharedWebIconDatabase) {
         if (!iconDatabaseEnabled)
             return;
@@ -1086,7 +1151,7 @@ void LayoutTestController::authenticateSession(JSStringRef url, JSStringRef user
 
 void LayoutTestController::setEditingBehavior(const char* editingBehavior)
 {
-    NSString* editingBehaviorNS = [[NSString alloc] initWithUTF8String:editingBehavior];
+    NSString *editingBehaviorNS = [[NSString alloc] initWithUTF8String:editingBehavior];
     if ([editingBehaviorNS isEqualToString:@"mac"])
         [[WebPreferences standardPreferences] setEditingBehavior:WebKitEditingMacBehavior];
     else if ([editingBehaviorNS isEqualToString:@"win"])
@@ -1136,4 +1201,29 @@ void LayoutTestController::setTextDirection(JSStringRef directionName)
     else
         ASSERT_NOT_REACHED();
 #endif
+}
+
+void LayoutTestController::addChromeInputField()
+{
+    NSTextField *textField = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 20)];
+    textField.tag = 1;
+    [[[[mainFrame webView] window] contentView] addSubview:textField];
+    [textField release];
+    
+    [textField setNextKeyView:[mainFrame webView]];
+    [[mainFrame webView] setNextKeyView:textField];
+}
+
+void LayoutTestController::removeChromeInputField()
+{
+    NSView* textField = [[[[mainFrame webView] window] contentView] viewWithTag:1];
+    if (textField) {
+        [textField removeFromSuperview];
+        focusWebView();
+    }
+}
+
+void LayoutTestController::focusWebView()
+{
+    [[[mainFrame webView] window] makeFirstResponder:[mainFrame webView]];
 }

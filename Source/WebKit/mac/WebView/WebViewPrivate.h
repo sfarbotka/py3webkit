@@ -34,14 +34,6 @@
 #define ENABLE_DASHBOARD_SUPPORT 1
 #endif
 
-#if MAC_OS_X_VERSION_MAX_ALLOWED <= MAC_OS_X_VERSION_10_4
-#define WebNSInteger int
-#define WebNSUInteger unsigned int
-#else
-#define WebNSInteger NSInteger
-#define WebNSUInteger NSUInteger
-#endif
-
 @class NSError;
 @class WebFrame;
 @class WebDeviceOrientation;
@@ -125,6 +117,7 @@ typedef NSUInteger WebFindOptions;
 - (void)unscheduleFromRunLoop:(NSRunLoop *)runLoop forMode:(NSString *)mode;
 
 - (BOOL)findString:(NSString *)string options:(WebFindOptions)options;
+- (DOMRange *)DOMRangeOfString:(NSString *)string relativeTo:(DOMRange *)previousRange options:(WebFindOptions)options;
 
 - (void)setMainFrameDocumentReady:(BOOL)mainFrameDocumentReady;
 
@@ -181,8 +174,8 @@ typedef NSUInteger WebFindOptions;
 // whether or not they implement the protocol. For now we'll just deal with HTML.
 // These methods are still in flux; don't rely on them yet.
 - (BOOL)canMarkAllTextMatches;
-- (WebNSUInteger)countMatchesForText:(NSString *)string options:(WebFindOptions)options highlight:(BOOL)highlight limit:(WebNSUInteger)limit markMatches:(BOOL)markMatches;
-- (WebNSUInteger)countMatchesForText:(NSString *)string inDOMRange:(DOMRange *)range options:(WebFindOptions)options highlight:(BOOL)highlight limit:(WebNSUInteger)limit markMatches:(BOOL)markMatches;
+- (NSUInteger)countMatchesForText:(NSString *)string options:(WebFindOptions)options highlight:(BOOL)highlight limit:(NSUInteger)limit markMatches:(BOOL)markMatches;
+- (NSUInteger)countMatchesForText:(NSString *)string inDOMRange:(DOMRange *)range options:(WebFindOptions)options highlight:(BOOL)highlight limit:(NSUInteger)limit markMatches:(BOOL)markMatches;
 - (void)unmarkAllTextMatches;
 - (NSArray *)rectsForTextMatches;
 
@@ -472,9 +465,6 @@ Could be worth adding to the API.
 - (void)_setCustomHTMLTokenizerTimeDelay:(double)timeDelay;
 - (void)_setCustomHTMLTokenizerChunkSize:(int)chunkSize;
 
-- (id)_initWithFrame:(NSRect)f frameName:(NSString *)frameName groupName:(NSString *)groupName usesDocumentViews:(BOOL)usesDocumentViews;
-- (BOOL)_usesDocumentViews;
-
 - (void)setSelectTrailingWhitespaceEnabled:(BOOL)flag;
 - (BOOL)isSelectTrailingWhitespaceEnabled;
 
@@ -502,6 +492,11 @@ Could be worth adding to the API.
 // Clients who are able to capture their own copy of the compositing layers need to be able to disable this.
 - (void)_setIncludesFlattenedCompositingLayersWhenDrawingToBitmap:(BOOL)flag;
 - (BOOL)_includesFlattenedCompositingLayersWhenDrawingToBitmap;
+
+- (void)setTracksRepaints:(BOOL)flag;
+- (BOOL)isTrackingRepaints;
+- (void)resetTrackedRepaints;
+- (NSArray*)trackedRepaintRects; // Returned array contains rectValue NSValues.
 
 // Which pasteboard text is coming from in editing delegate methods such as shouldInsertNode.
 - (NSPasteboard *)_insertionPasteboard;
@@ -557,9 +552,11 @@ Could be worth adding to the API.
 - (BOOL)_useFixedLayout;
 - (NSSize)_fixedLayoutSize;
 
+- (void)_setCustomBackingScaleFactor:(CGFloat)overrideScaleFactor;
+
 // Deprecated. Use the methods in pending public above instead.
-- (WebNSUInteger)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(WebNSUInteger)limit;
-- (WebNSUInteger)countMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(WebNSUInteger)limit markMatches:(BOOL)markMatches;
+- (NSUInteger)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(NSUInteger)limit;
+- (NSUInteger)countMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(NSUInteger)limit markMatches:(BOOL)markMatches;
 
 /*!
  @method searchFor:direction:caseSensitive:wrap:startInSelection:
@@ -734,6 +731,3 @@ void WebInstallMemoryPressureHandler(void);
 #ifdef __cplusplus
 }
 #endif
-
-#undef WebNSInteger
-#undef WebNSUInteger

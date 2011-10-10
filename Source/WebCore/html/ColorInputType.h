@@ -43,8 +43,6 @@ public:
     static PassOwnPtr<InputType> create(HTMLInputElement*);
     virtual ~ColorInputType();
 
-    void closeColorChooserIfCurrentClient() const;
-
 private:
     ColorInputType(HTMLInputElement* element) : InputType(element) { }
     virtual bool isColorControl() const;
@@ -53,17 +51,17 @@ private:
     virtual String fallbackValue();
     virtual String sanitizeValue(const String&);
     virtual Color valueAsColor() const;
-    virtual void setValueAsColor(const Color&) const;
     virtual void createShadowSubtree();
-    virtual void valueChanged();
+    virtual void setValue(const String&, bool valueChanged, bool sendChangeEvent);
     virtual void handleClickEvent(MouseEvent*);
     virtual void handleDOMActivateEvent(Event*);
     virtual void detach();
 
     // ColorChooserClient implementation.
-    virtual void colorSelected(const Color&);
+    virtual void didChooseColor(const Color&);
     virtual bool isColorInputType() const;
 
+    void cleanupColorChooserIfCurrentClient() const;
     void updateColorSwatch();
     HTMLElement* shadowColorSwatch() const;
 };

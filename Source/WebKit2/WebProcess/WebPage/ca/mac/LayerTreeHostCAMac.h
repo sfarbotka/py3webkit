@@ -29,6 +29,8 @@
 #include "LayerTreeHostCA.h"
 #include <wtf/RetainPtr.h>
 
+#define CoreAnimationRunLoopOrder 2000000
+
 typedef struct __WKCARemoteLayerClientRef* WKCARemoteLayerClientRef;
 
 namespace WebKit {

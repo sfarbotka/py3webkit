@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -62,7 +62,7 @@
 #include "GeolocationClientProxy.h"
 #include "GraphicsContext.h"
 #include "GraphicsContext3D.h"
-#include "GraphicsContext3DInternal.h"
+#include "GraphicsContext3DPrivate.h"
 #include "HTMLInputElement.h"
 #include "HTMLMediaElement.h"
 #include "HTMLNames.h"
@@ -73,9 +73,11 @@
 #include "InspectorController.h"
 #include "KeyboardCodes.h"
 #include "KeyboardEvent.h"
+#include "LayerChromium.h"
 #include "LayerPainterChromium.h"
 #include "MIMETypeRegistry.h"
 #include "NodeRenderStyle.h"
+#include "NonCompositedContentHost.h"
 #include "Page.h"
 #include "PageGroup.h"
 #include "PageGroupLoadDeferrer.h"
@@ -83,7 +85,7 @@
 #include "PlatformContextSkia.h"
 #include "PlatformKeyboardEvent.h"
 #include "PlatformMouseEvent.h"
-#include "PlatformThemeChromiumGtk.h"
+#include "PlatformThemeChromiumLinux.h"
 #include "PlatformWheelEvent.h"
 #include "PopupContainer.h"
 #include "PopupMenuClient.h"
@@ -101,6 +103,7 @@
 #include "Vector.h"
 #include "WebAccessibilityObject.h"
 #include "WebAutofillClient.h"
+#include "WebCompositorImpl.h"
 #include "WebDevToolsAgentImpl.h"
 #include "WebDevToolsAgentPrivate.h"
 #include "WebDragData.h"
@@ -111,7 +114,7 @@
 #include "WebInputEvent.h"
 #include "WebInputEventConversion.h"
 #include "WebKit.h"
-#include "WebKitClient.h"
+#include "WebKitPlatformSupport.h"
 #include "WebMediaPlayerAction.h"
 #include "WebNode.h"
 #include "WebPlugin.h"
@@ -176,6 +179,7 @@ GraphicsContext3D::Attributes getCompositorContextAttributes()
     // disparities we explicitly disable antialiasing.
     GraphicsContext3D::Attributes attributes;
     attributes.antialias = false;
+    attributes.shareResources = true;
     return attributes;
 }
 
@@ -460,7 +464,6 @@ void WebViewImpl::mouseDown(const WebMouseEvent& event)
 
     m_lastMouseDownPoint = WebPoint(event.x, event.y);
 
-    RefPtr<Node> clickedNode;
     if (event.button == WebMouseEvent::ButtonLeft) {
         IntPoint point(event.x, event.y);
         point = m_page->mainFrame()->view()->windowToContents(point);
@@ -470,30 +473,11 @@ void WebViewImpl::mouseDown(const WebMouseEvent& event)
         // Take capture on a mouse down on a plugin so we can send it mouse events.
         if (hitNode && hitNode->renderer() && hitNode->renderer()->isEmbeddedObject())
             m_mouseCaptureNode = hitNode;
-
-        // If a text field that has focus is clicked again, we should display the
-        // Autofill popup.
-        RefPtr<Node> focusedNode = focusedWebCoreNode();
-        if (focusedNode.get() && toHTMLInputElement(focusedNode.get())) {
-            if (hitNode == focusedNode) {
-                // Already focused text field was clicked, let's remember this.  If
-                // focus has not changed after the mouse event is processed, we'll
-                // trigger the autocomplete.
-                clickedNode = focusedNode;
-            }
-        }
     }
-
-    mainFrameImpl()->frame()->loader()->resetMultipleFormSubmissionProtection();
 
     mainFrameImpl()->frame()->eventHandler()->handleMousePressEvent(
         PlatformMouseEventBuilder(mainFrameImpl()->frameView(), event));
 
-    if (clickedNode.get() && clickedNode == focusedWebCoreNode()) {
-        // Focus has not changed, show the Autofill popup.
-        static_cast<EditorClientImpl*>(m_page->editorClient())->
-            showFormAutofillForNode(clickedNode.get());
-    }
     if (m_selectPopup && m_selectPopup == selectPopup) {
         // That click triggered a select popup which is the same as the one that
         // was showing before the click.  It means the user clicked the select
@@ -606,7 +590,14 @@ bool WebViewImpl::mouseWheel(const WebMouseWheelEvent& event)
 bool WebViewImpl::gestureEvent(const WebGestureEvent& event)
 {
     PlatformGestureEventBuilder platformEvent(mainFrameImpl()->frameView(), event);
-    return mainFrameImpl()->frame()->eventHandler()->handleGestureEvent(platformEvent);
+    bool handled = mainFrameImpl()->frame()->eventHandler()->handleGestureEvent(platformEvent);
+
+    Frame* frame = mainFrameImpl()->frame();
+    WebPluginContainerImpl* pluginContainer = WebFrameImpl::pluginContainerFromFrame(frame);
+    if (pluginContainer)
+        handled |= pluginContainer->handleGestureEvent(platformEvent);
+
+    return handled;
 }
 #endif
 
@@ -633,7 +624,7 @@ bool WebViewImpl::keyEvent(const WebKeyboardEvent& event)
     if (autocompleteHandleKeyEvent(event))
         return true;
 
-    Frame* frame = focusedWebCoreFrame();
+    RefPtr<Frame> frame = focusedWebCoreFrame();
     if (!frame)
         return false;
 
@@ -663,7 +654,7 @@ bool WebViewImpl::keyEvent(const WebKeyboardEvent& event)
         if (WebInputEvent::RawKeyDown == event.type) {
             // Suppress the next keypress event unless the focused node is a plug-in node.
             // (Flash needs these keypress events to handle non-US keyboards.)
-            Node* node = frame->document()->focusedNode();
+            Node* node = focusedWebCoreNode();
             if (!node || !node->renderer() || !node->renderer()->isEmbeddedObject())
                 m_suppressNextKeypressEvent = true;
         }
@@ -1060,15 +1051,13 @@ void WebViewImpl::animate(double frameBeginTime)
     if (webframe) {
         FrameView* view = webframe->frameView();
         if (view) {
-#if !USE(THREADED_COMPOSITING)
-            if (m_layerTreeHost)
+            if (!settings()->useThreadedCompositor() && m_layerTreeHost)
                 m_layerTreeHost->setAnimating(true);
-#endif
+
             view->serviceScriptedAnimations(convertSecondsToDOMTimeStamp(frameBeginTime));
-#if !USE(THREADED_COMPOSITING)
-            if (m_layerTreeHost)
+
+            if (!settings()->useThreadedCompositor() && m_layerTreeHost)
                 m_layerTreeHost->setAnimating(false);
-#endif
         }
     }
 #endif
@@ -1140,7 +1129,7 @@ void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
         if (canvas) {
             // Clip rect to the confines of the rootLayerTexture.
             IntRect resizeRect(rect);
-            resizeRect.intersect(IntRect(IntPoint(0, 0), m_layerTreeHost->viewportVisibleRect().size()));
+            resizeRect.intersect(IntRect(IntPoint(0, 0), m_layerTreeHost->viewportSize()));
             doPixelReadbackToCanvas(canvas, resizeRect);
         }
 #endif
@@ -1151,8 +1140,8 @@ void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
             webframe->paint(canvas, rect);
         double paintEnd = currentTime();
         double pixelsPerSec = (rect.width * rect.height) / (paintEnd - paintStart);
-        PlatformBridge::histogramCustomCounts("Renderer4.SoftwarePaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
-        PlatformBridge::histogramCustomCounts("Renderer4.SoftwarePaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.SoftwarePaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.SoftwarePaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
     }
 }
 
@@ -1166,21 +1155,29 @@ void WebViewImpl::themeChanged()
     view->invalidateRect(damagedRect);
 }
 
-void WebViewImpl::composite(bool finish)
+void WebViewImpl::composite(bool)
 {
 #if USE(ACCELERATED_COMPOSITING)
-#if USE(THREADED_COMPOSITING)
-    m_layerTreeHost->setNeedsRedraw();
-#else
-    ASSERT(isAcceleratedCompositingActive());
-    if (!page())
-        return;
+    if (settings()->useThreadedCompositor())
+        m_layerTreeHost->setNeedsRedraw();
+    else {
+        ASSERT(isAcceleratedCompositingActive());
+        if (!page())
+            return;
 
-    if (m_pageOverlay)
-        m_pageOverlay->update();
+        if (m_pageOverlay)
+            m_pageOverlay->update();
 
-    m_layerTreeHost->composite(finish);
+        m_layerTreeHost->composite();
+    }
 #endif
+}
+
+void WebViewImpl::loseCompositorContext(int numTimes)
+{
+#if USE(ACCELERATED_COMPOSITING)
+    if (m_layerTreeHost)
+        m_layerTreeHost->loseCompositorContext(numTimes);
 #endif
 }
 
@@ -1303,10 +1300,8 @@ void WebViewImpl::mouseCaptureLost()
 void WebViewImpl::setFocus(bool enable)
 {
     m_page->focusController()->setFocused(enable);
+    m_page->focusController()->setActive(enable);
     if (enable) {
-        // Note that we don't call setActive() when disabled as this cause extra
-        // focus/blur events to be dispatched.
-        m_page->focusController()->setActive(true);
         RefPtr<Frame> focusedFrame = m_page->focusController()->focusedFrame();
         if (focusedFrame) {
             Node* focusedNode = focusedFrame->document()->focusedNode();
@@ -1509,6 +1504,36 @@ WebTextInputType WebViewImpl::textInputType()
     return WebTextInputTypeNone;
 }
 
+bool WebViewImpl::getSelectionOffsetsAndTextInEditableContent(WebString& text, size_t& focus, size_t& anchor) const
+{
+    const Frame* frame = focusedWebCoreFrame();
+    if (!frame)
+        return false;
+
+    const FrameSelection* selection = frame->selection();
+    Element* element = selection->rootEditableElement();
+    if (!element)
+        return false;
+
+    size_t location;
+    size_t length;
+    RefPtr<Range> range = selection->selection().firstRange();
+    if (!range || !TextIterator::locationAndLengthFromRange(range.get(), location, length))
+        return false;
+
+    if (selection->selection().isBaseFirst()) {
+        anchor = location;
+        focus = location + length;
+    } else {
+        anchor = location;
+        focus = location + length;
+    }
+
+    text = element->innerText();
+
+    return true;
+}
+
 WebRect WebViewImpl::caretOrSelectionBounds()
 {
     WebRect rect;
@@ -1570,6 +1595,8 @@ bool WebViewImpl::selectionRange(WebPoint& start, WebPoint& end) const
 
     start = frame->view()->contentsToWindow(start);
     end = frame->view()->contentsToWindow(end);
+    if (!frame->selection()->selection().isBaseFirst())
+        std::swap(start, end);
     return true;
 }
 
@@ -1649,7 +1676,11 @@ WebString WebViewImpl::pageEncoding() const
     if (!m_page.get())
         return WebString();
 
-    return m_page->mainFrame()->document()->loader()->writer()->encoding();
+    // FIXME: Is this check needed?
+    if (!m_page->mainFrame()->document()->loader())
+        return WebString();
+
+    return m_page->mainFrame()->document()->encoding();
 }
 
 void WebViewImpl::setPageEncoding(const WebString& encodingName)
@@ -1743,10 +1774,7 @@ void WebViewImpl::setInitialFocus(bool reverse)
 
 void WebViewImpl::clearFocusedNode()
 {
-    if (!m_page.get())
-        return;
-
-    RefPtr<Frame> frame = m_page->mainFrame();
+    RefPtr<Frame> frame = focusedWebCoreFrame();
     if (!frame.get())
         return;
 
@@ -1766,9 +1794,9 @@ void WebViewImpl::clearFocusedNode()
     // knows to remove selection from it. Otherwise, the text field is still
     // processing keyboard events even though focus has been moved to the page and
     // keystrokes get eaten as a result.
-    if (oldFocusedNode->hasTagName(HTMLNames::textareaTag)
-        || (oldFocusedNode->hasTagName(HTMLNames::inputTag)
-            && static_cast<HTMLInputElement*>(oldFocusedNode.get())->isTextField())) {
+    if (oldFocusedNode->isContentEditable()
+        || (oldFocusedNode->isElementNode()
+            && static_cast<Element*>(oldFocusedNode.get())->isTextFormControl())) {
         frame->selection()->clear();
     }
 }
@@ -1782,6 +1810,16 @@ void WebViewImpl::scrollFocusedNodeIntoView()
     }
 }
 
+void WebViewImpl::scrollFocusedNodeIntoRect(const WebRect& rect)
+{
+    Frame* frame = page()->mainFrame();
+    Node* focusedNode = focusedWebCoreNode();
+    if (!frame || !frame->view() || !focusedNode || !focusedNode->isElementNode())
+        return;
+    Element* elementNode = static_cast<Element*>(focusedNode);
+    frame->view()->scrollElementToRect(elementNode, IntRect(rect.x, rect.y, rect.width, rect.height));
+}
+
 double WebViewImpl::zoomLevel()
 {
     return m_zoomLevel;
@@ -1789,6 +1827,9 @@ double WebViewImpl::zoomLevel()
 
 double WebViewImpl::setZoomLevel(bool textOnly, double zoomLevel)
 {
+    if (m_layerTreeHost)
+        m_layerTreeHost->setZoomAnimatorTransform(TransformationMatrix());
+
     if (zoomLevel < m_minimumZoomLevel)
         m_zoomLevel = m_minimumZoomLevel;
     else if (zoomLevel > m_maximumZoomLevel)
@@ -1843,14 +1884,30 @@ float WebViewImpl::pageScaleFactor() const
     if (!page())
         return 1.0;
 
-    Frame* frame = page()->mainFrame();
-    if (!frame)
-        return 1.0;
-
-    return frame->pageScaleFactor();
+    return page()->pageScaleFactor();
 }
 
 void WebViewImpl::scalePage(float scaleFactor, WebPoint origin)
+{
+    if (!page())
+        return;
+
+    page()->setPageScaleFactor(scaleFactor, origin);
+}
+
+bool WebViewImpl::isFixedLayoutModeEnabled() const
+{
+    if (!page())
+        return false;
+
+    Frame* frame = page()->mainFrame();
+    if (!frame)
+        return false;
+
+    return frame->view()->useFixedLayout();
+}
+
+void WebViewImpl::enableFixedLayoutMode(bool enable)
 {
     if (!page())
         return;
@@ -1859,7 +1916,31 @@ void WebViewImpl::scalePage(float scaleFactor, WebPoint origin)
     if (!frame)
         return;
 
-    frame->scalePage(scaleFactor, origin);
+    frame->view()->setUseFixedLayout(enable);
+}
+
+WebSize WebViewImpl::fixedLayoutSize() const
+{
+    if (!page())
+        return WebSize();
+
+    Frame* frame = page()->mainFrame();
+    if (!frame)
+        return WebSize();
+
+    return frame->view()->fixedLayoutSize();
+}
+
+void WebViewImpl::setFixedLayoutSize(const WebSize& layoutSize)
+{
+    if (!page())
+        return;
+
+    Frame* frame = page()->mainFrame();
+    if (!frame)
+        return;
+
+    frame->view()->setFixedLayoutSize(layoutSize);
 }
 
 void WebViewImpl::performMediaPlayerAction(const WebMediaPlayerAction& action,
@@ -2223,9 +2304,7 @@ void WebViewImpl::setScrollbarColors(unsigned inactiveColor,
                                      unsigned activeColor,
                                      unsigned trackColor) {
 #if OS(UNIX) && !OS(DARWIN)
-    PlatformThemeChromiumGtk::setScrollbarColors(inactiveColor,
-                                                 activeColor,
-                                                 trackColor);
+    PlatformThemeChromiumLinux::setScrollbarColors(inactiveColor, activeColor, trackColor);
 #endif
 }
 
@@ -2466,33 +2545,29 @@ bool WebViewImpl::pageHasRTLStyle() const
     return (style->direction() == RTL);
 }
 
-void WebViewImpl::setRootGraphicsLayer(WebCore::GraphicsLayer* layer)
+void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
 {
     m_rootGraphicsLayer = layer;
-    setRootPlatformLayer(layer ? layer->platformLayer() : 0);
-}
 
-void WebViewImpl::setRootPlatformLayer(WebCore::PlatformLayer* layer)
-{
     setIsAcceleratedCompositingActive(layer);
-    if (m_layerTreeHost)
-        m_layerTreeHost->setRootLayer(layer);
+    if (m_nonCompositedContentHost)
+        m_nonCompositedContentHost->setRootLayer(layer);
 
     IntRect damagedRect(0, 0, m_size.width, m_size.height);
-    if (m_isAcceleratedCompositingActive)
-        invalidateRootLayerRect(damagedRect);
-    else
+    if (!m_isAcceleratedCompositingActive)
         m_client->didInvalidateRect(damagedRect);
 }
 
 void WebViewImpl::setRootLayerNeedsDisplay()
 {
-#if USE(THREADED_COMPOSITING)
+    if (m_layerTreeHost) {
+        TransformationMatrix zoomMatrix;
+        zoomMatrix.translate(m_page->settings()->zoomAnimatorPosX(), m_page->settings()->zoomAnimatorPosY());
+        zoomMatrix.scale(m_page->settings()->zoomAnimatorScale());
+        m_layerTreeHost->setZoomAnimatorTransform(zoomMatrix);
+    }
     if (m_layerTreeHost)
-        m_layerTreeHost->setNeedsCommitAndRedraw();
-#else
-    m_client->scheduleComposite();
-#endif
+        m_layerTreeHost->setNeedsCommitThenRedraw();
 }
 
 void WebViewImpl::scrollRootLayerRect(const IntSize& scrollDelta, const IntRect& clipRect)
@@ -2511,7 +2586,7 @@ void WebViewImpl::invalidateRootLayerRect(const IntRect& rect)
     FrameView* view = page()->mainFrame()->view();
     IntRect dirtyRect = view->windowToContents(rect);
     updateLayerTreeViewport();
-    m_layerTreeHost->invalidateRootLayerRect(dirtyRect);
+    m_nonCompositedContentHost->invalidateRect(dirtyRect);
     setRootLayerNeedsDisplay();
 }
 
@@ -2533,8 +2608,8 @@ public:
         view->paintContents(&context, contentRect);
         double paintEnd = currentTime();
         double pixelsPerSec = (contentRect.width() * contentRect.height()) / (paintEnd - paintStart);
-        PlatformBridge::histogramCustomCounts("Renderer4.AccelRootPaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
-        PlatformBridge::histogramCustomCounts("Renderer4.AccelRootPaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.AccelRootPaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.AccelRootPaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
     }
 
 private:
@@ -2548,43 +2623,45 @@ private:
 
 void WebViewImpl::setIsAcceleratedCompositingActive(bool active)
 {
-    PlatformBridge::histogramEnumeration("GPU.setIsAcceleratedCompositingActive", active * 2 + m_isAcceleratedCompositingActive, 4);
+    PlatformSupport::histogramEnumeration("GPU.setIsAcceleratedCompositingActive", active * 2 + m_isAcceleratedCompositingActive, 4);
 
     if (m_isAcceleratedCompositingActive == active)
         return;
 
     if (!active) {
         m_isAcceleratedCompositingActive = false;
-        // We need to finish all GL rendering before sending
-        // didActivateAcceleratedCompositing(false) to prevent
+        // We need to finish all GL rendering before sending didDeactivateCompositor() to prevent
         // flickering when compositing turns off.
         if (m_layerTreeHost)
             m_layerTreeHost->finishAllRendering();
-        m_client->didActivateAcceleratedCompositing(false);
+        m_client->didDeactivateCompositor();
     } else if (m_layerTreeHost) {
         m_isAcceleratedCompositingActive = true;
         updateLayerTreeViewport();
 
-        m_client->didActivateAcceleratedCompositing(true);
+        m_client->didActivateCompositor(m_layerTreeHost->compositorIdentifier());
     } else {
         TRACE_EVENT("WebViewImpl::setIsAcceleratedCompositingActive(true)", this, 0);
 
         WebCore::CCSettings ccSettings;
         ccSettings.acceleratePainting = page()->settings()->acceleratedDrawingEnabled();
         ccSettings.compositeOffscreen = settings()->compositeToTextureEnabled();
+        ccSettings.enableCompositorThread = settings()->useThreadedCompositor();
         ccSettings.showFPSCounter = settings()->showFPSCounter();
         ccSettings.showPlatformLayerTree = settings()->showPlatformLayerTree();
 
-        m_layerTreeHost = CCLayerTreeHost::create(this, ccSettings);
+        m_nonCompositedContentHost = NonCompositedContentHost::create(WebViewImplContentPainter::create(this));
+        m_layerTreeHost = CCLayerTreeHost::create(this, m_nonCompositedContentHost->topLevelRootLayer()->platformLayer(), ccSettings);
         if (m_layerTreeHost) {
-            m_client->didActivateAcceleratedCompositing(true);
+            updateLayerTreeViewport();
+            m_client->didActivateCompositor(m_layerTreeHost->compositorIdentifier());
             m_isAcceleratedCompositingActive = true;
             m_compositorCreationFailed = false;
             if (m_pageOverlay)
                 m_pageOverlay->update();
         } else {
             m_isAcceleratedCompositingActive = false;
-            m_client->didActivateAcceleratedCompositing(false);
+            m_client->didDeactivateCompositor();
             m_compositorCreationFailed = true;
         }
     }
@@ -2598,16 +2675,12 @@ PassRefPtr<GraphicsContext3D> WebViewImpl::createLayerTreeHostContext3D()
 {
     RefPtr<GraphicsContext3D> context = m_temporaryOnscreenGraphicsContext3D.release();
     if (!context) {
-        context = GraphicsContext3D::create(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
-        if (context)
-            context->reshape(max(1, m_size.width), max(1, m_size.height));
+        if (settings()->useThreadedCompositor())
+            context = GraphicsContext3DPrivate::createGraphicsContextForAnotherThread(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
+        else
+            context = GraphicsContext3D::create(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
     }
     return context;
-}
-
-PassOwnPtr<LayerPainterChromium> WebViewImpl::createRootLayerPainter()
-{
-    return WebViewImplContentPainter::create(this);
 }
 
 void WebViewImpl::animateAndLayout(double frameBeginTime)
@@ -2616,25 +2689,38 @@ void WebViewImpl::animateAndLayout(double frameBeginTime)
     layout();
 }
 
+void WebViewImpl::applyScrollDelta(const IntSize& scrollDelta)
+{
+    if (!mainFrameImpl() || !mainFrameImpl()->frameView())
+        return;
+
+    mainFrameImpl()->frameView()->scrollBy(scrollDelta);
+}
+
 void WebViewImpl::didRecreateGraphicsContext(bool success)
 {
-    setRootPlatformLayer(success ? m_layerTreeHost->rootLayer() : 0);
 
-    if (success) {
-      // Forces ViewHostMsg_DidActivateAcceleratedCompositing to be sent so
-      // that the browser process can reacquire surfaces.
-      m_client->didActivateAcceleratedCompositing(true);
-      if (m_pageOverlay)
-          m_pageOverlay->update();
+    // Switch back to software rendering mode, if necessary
+    if (!success) {
+        ASSERT(m_isAcceleratedCompositingActive);
+        setIsAcceleratedCompositingActive(false);
+        m_compositorCreationFailed = true;
+        m_client->didInvalidateRect(IntRect(0, 0, m_size.width, m_size.height));
+
+        // Force a style recalc to remove all the composited layers.
+        m_page->mainFrame()->document()->scheduleForcedStyleRecalc();
+        return;
     }
+
+    if (m_pageOverlay)
+        m_pageOverlay->update();
 }
 
-#if !USE(THREADED_COMPOSITING)
 void WebViewImpl::scheduleComposite()
 {
+    ASSERT(!settings()->useThreadedCompositor());
     m_client->scheduleComposite();
 }
-#endif
 
 void WebViewImpl::updateLayerTreeViewport()
 {
@@ -2642,11 +2728,11 @@ void WebViewImpl::updateLayerTreeViewport()
         return;
 
     FrameView* view = page()->mainFrame()->view();
-    IntRect contentRect = view->visibleContentRect(false);
-    IntRect visibleRect = view->visibleContentRect(true);
+    IntRect visibleRect = view->visibleContentRect(true /* include scrollbars */);
     IntPoint scroll(view->scrollX(), view->scrollY());
 
-    m_layerTreeHost->setViewport(visibleRect, contentRect, scroll);
+    m_nonCompositedContentHost->setViewport(visibleRect.size(), view->contentsSize(), scroll);
+    m_layerTreeHost->setViewport(visibleRect.size());
 }
 
 WebGraphicsContext3D* WebViewImpl::graphicsContext3D()
@@ -2654,19 +2740,21 @@ WebGraphicsContext3D* WebViewImpl::graphicsContext3D()
 #if USE(ACCELERATED_COMPOSITING)
     if (m_page->settings()->acceleratedCompositingEnabled() && allowsAcceleratedCompositing()) {
         if (m_layerTreeHost) {
-            WebGraphicsContext3D* webContext = GraphicsContext3DInternal::extractWebGraphicsContext3D(m_layerTreeHost->context());
+            WebGraphicsContext3D* webContext = GraphicsContext3DPrivate::extractWebGraphicsContext3D(m_layerTreeHost->context());
             if (webContext && !webContext->isContextLost())
                 return webContext;
         }
         if (m_temporaryOnscreenGraphicsContext3D) {
-            WebGraphicsContext3D* webContext = GraphicsContext3DInternal::extractWebGraphicsContext3D(m_temporaryOnscreenGraphicsContext3D.get());
+            WebGraphicsContext3D* webContext = GraphicsContext3DPrivate::extractWebGraphicsContext3D(m_temporaryOnscreenGraphicsContext3D.get());
             if (webContext && !webContext->isContextLost())
                 return webContext;
         }
-        m_temporaryOnscreenGraphicsContext3D = GraphicsContext3D::create(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
-        if (m_temporaryOnscreenGraphicsContext3D)
-            m_temporaryOnscreenGraphicsContext3D->reshape(max(1, m_size.width), max(1, m_size.height));
-        return GraphicsContext3DInternal::extractWebGraphicsContext3D(m_temporaryOnscreenGraphicsContext3D.get());
+        if (settings()->useThreadedCompositor())
+            m_temporaryOnscreenGraphicsContext3D = GraphicsContext3DPrivate::createGraphicsContextForAnotherThread(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
+        else
+            m_temporaryOnscreenGraphicsContext3D = GraphicsContext3D::create(getCompositorContextAttributes(), m_page->chrome(), GraphicsContext3D::RenderDirectlyToHostWindow);
+
+        return GraphicsContext3DPrivate::extractWebGraphicsContext3D(m_temporaryOnscreenGraphicsContext3D.get());
     }
 #endif
     return 0;
@@ -2686,8 +2774,12 @@ void WebViewImpl::setVisibilityState(WebPageVisibilityState visibilityState,
 #endif
 
 #if USE(ACCELERATED_COMPOSITING)
-    if (isAcceleratedCompositingActive())
-        m_layerTreeHost->setVisible(visibilityState == WebPageVisibilityStateVisible);
+    if (isAcceleratedCompositingActive()) {
+        bool visible = visibilityState == WebPageVisibilityStateVisible;
+        if (!visible)
+            m_nonCompositedContentHost->protectVisibleTileTextures();
+        m_layerTreeHost->setVisible(visible);
+    }
 #endif
 }
 
@@ -2698,5 +2790,16 @@ void WebViewImpl::resetGestureRecognizer()
 }
 #endif
 
+void WebViewImpl::exitFullscreen()
+{
+#if ENABLE(FULLSCREEN_API)
+    Document* document = page()->mainFrame()->document();
+    Element* fullscreenElement = document->webkitCurrentFullScreenElement();
+    if (!fullscreenElement)
+        return;
+    document->webkitWillExitFullScreenForElement(fullscreenElement);
+    document->webkitDidExitFullScreenForElement(fullscreenElement);
+#endif
+}
 
 } // namespace WebKit

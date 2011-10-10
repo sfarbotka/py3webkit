@@ -43,6 +43,7 @@
 #include "FrameView.h"
 #include "GraphicsContext.h"
 #include "HTMLNames.h"
+#include "HTMLSelectElement.h"
 #include "HitTestResult.h"
 #include "NodeRenderStyle.h"
 #include "OptionGroupElement.h"
@@ -51,11 +52,11 @@
 #include "PaintInfo.h"
 #include "RenderLayer.h"
 #include "RenderScrollbar.h"
+#include "RenderText.h"
 #include "RenderTheme.h"
 #include "RenderView.h"
 #include "Scrollbar.h"
 #include "ScrollbarTheme.h"
-#include "SelectElement.h"
 #include "SpatialNavigation.h"
 #include <math.h>
 
@@ -84,6 +85,9 @@ RenderListBox::RenderListBox(Element* element)
     , m_optionsWidth(0)
     , m_indexOffset(0)
 {
+    ASSERT(element);
+    ASSERT(element->isHTMLElement());
+    ASSERT(element->hasTagName(HTMLNames::selectTag));
     if (Page* page = frame()->page()) {
         m_page = page;
         m_page->addScrollableArea(this);
@@ -121,6 +125,7 @@ void RenderListBox::updateFromElement()
             }
 
             if (!text.isEmpty()) {
+                applyTextTransform(style(), text, ' ');
                 // FIXME: Why is this always LTR? Can't text direction affect the width?
                 TextRun textRun = constructTextRun(this, itemFont, text, style(), TextRun::AllowTrailingExpansion);
                 textRun.disableRoundingHacks();
@@ -162,7 +167,7 @@ void RenderListBox::layout()
 
 void RenderListBox::scrollToRevealSelection()
 {    
-    SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+    HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
 
     m_scrollToRevealSelectionAfterLayout = false;
 
@@ -194,7 +199,7 @@ void RenderListBox::computePreferredLogicalWidths()
     else
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth;
 
-    if (style()->maxWidth().isFixed() && style()->maxWidth().value() != undefinedLength) {
+    if (style()->maxWidth().isFixed()) {
         m_maxPreferredLogicalWidth = min(m_maxPreferredLogicalWidth, computeContentBoxLogicalWidth(style()->maxWidth().value()));
         m_minPreferredLogicalWidth = min(m_minPreferredLogicalWidth, computeContentBoxLogicalWidth(style()->maxWidth().value()));
     }
@@ -309,7 +314,7 @@ void RenderListBox::addFocusRingRects(Vector<LayoutRect>& rects, const LayoutPoi
     if (!isSpatialNavigationEnabled(frame()))
         return RenderBlock::addFocusRingRects(rects, additionalOffset);
 
-    SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+    HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
 
     // Focus the last selected item.
     int selectedItem = select->activeSelectionEndListIndex();
@@ -365,7 +370,7 @@ void RenderListBox::paintItemForeground(PaintInfo& paintInfo, const LayoutPoint&
 {
     FontCachePurgePreventer fontCachePurgePreventer;
 
-    SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+    HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
     const Vector<Element*>& listItems = select->listItems();
     Element* element = listItems[listIndex];
     OptionElement* optionElement = toOptionElement(element);
@@ -382,7 +387,8 @@ void RenderListBox::paintItemForeground(PaintInfo& paintInfo, const LayoutPoint&
         itemText = optionElement->textIndentedToRespectGroupLabel();
     else if (OptionGroupElement* optionGroupElement = toOptionGroupElement(element))
         itemText = optionGroupElement->groupLabelText();
-    
+    applyTextTransform(style(), itemText, ' ');
+
     Color textColor = element->renderStyle() ? element->renderStyle()->visitedDependentColor(CSSPropertyColor) : style()->visitedDependentColor(CSSPropertyColor);
     if (optionElement && optionElement->selected()) {
         if (frame()->selection()->isFocusedAndActive() && document()->focusedNode() == node())
@@ -416,7 +422,7 @@ void RenderListBox::paintItemForeground(PaintInfo& paintInfo, const LayoutPoint&
 
 void RenderListBox::paintItemBackground(PaintInfo& paintInfo, const LayoutPoint& paintOffset, int listIndex)
 {
-    SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+    HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
     const Vector<Element*>& listItems = select->listItems();
     Element* element = listItems[listIndex];
     OptionElement* optionElement = toOptionElement(element);
@@ -513,7 +519,7 @@ void RenderListBox::panScroll(const IntPoint& panStartMousePosition)
         return;
 
     m_inAutoscroll = true;
-    SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+    HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
     select->updateListBoxSelection(!select->multiple());
     m_inAutoscroll = false;
 }
@@ -542,7 +548,7 @@ void RenderListBox::autoscroll()
 
     int endIndex = scrollToward(pos);
     if (endIndex >= 0) {
-        SelectElement* select = toSelectElement(static_cast<Element*>(node()));
+        HTMLSelectElement* select = toSelectElement(static_cast<Element*>(node()));
         m_inAutoscroll = true;
 
         if (!select->multiple())
@@ -593,7 +599,7 @@ bool RenderListBox::logicalScroll(ScrollLogicalDirection direction, ScrollGranul
 void RenderListBox::valueChanged(unsigned listIndex)
 {
     Element* element = static_cast<Element*>(node());
-    SelectElement* select = toSelectElement(element);
+    HTMLSelectElement* select = toSelectElement(element);
     select->setSelectedIndex(select->listToOptionIndex(listIndex));
     element->dispatchFormControlChangeEvent();
 }

@@ -56,7 +56,6 @@
 #define ENABLE(WTF_FEATURE) (defined ENABLE_##WTF_FEATURE  && ENABLE_##WTF_FEATURE)
 
 
-
 /* ==== CPU() - the target CPU architecture ==== */
 
 /* This also defines CPU(BIG_ENDIAN) or CPU(MIDDLE_ENDIAN) or neither, as appropriate. */
@@ -323,11 +322,15 @@
 #define BUILDING_ON_LEOPARD 1
 #elif !defined(MAC_OS_X_VERSION_10_7) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_7
 #define BUILDING_ON_SNOW_LEOPARD 1
+#elif !defined(MAC_OS_X_VERSION_10_8) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_8
+#define BUILDING_ON_LION 1
 #endif
 #if !defined(MAC_OS_X_VERSION_10_6) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_6
 #define TARGETING_LEOPARD 1
 #elif !defined(MAC_OS_X_VERSION_10_7) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7
 #define TARGETING_SNOW_LEOPARD 1
+#elif !defined(MAC_OS_X_VERSION_10_8) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_8
+#define TARGETING_LION 1
 #endif
 #include <TargetConditionals.h>
 
@@ -346,11 +349,6 @@
 /* OS(FREEBSD) - FreeBSD */
 #if defined(__FreeBSD__) || defined(__DragonFly__)
 #define WTF_OS_FREEBSD 1
-#endif
-
-/* OS(HAIKU) - Haiku */
-#ifdef __HAIKU__
-#define WTF_OS_HAIKU 1
 #endif
 
 /* OS(LINUX) - Linux */
@@ -398,7 +396,6 @@
     || OS(ANDROID)          \
     || OS(DARWIN)           \
     || OS(FREEBSD)          \
-    || OS(HAIKU)            \
     || OS(LINUX)            \
     || OS(NETBSD)           \
     || OS(OPENBSD)          \
@@ -418,7 +415,6 @@
 /* PLATFORM(QT) */
 /* PLATFORM(WX) */
 /* PLATFORM(GTK) */
-/* PLATFORM(HAIKU) */
 /* PLATFORM(MAC) */
 /* PLATFORM(WIN) */
 #if defined(BUILDING_CHROMIUM__)
@@ -429,17 +425,6 @@
 #define WTF_PLATFORM_WX 1
 #elif defined(BUILDING_GTK__)
 #define WTF_PLATFORM_GTK 1
-#elif defined(BUILDING_HAIKU__)
-#define WTF_PLATFORM_HAIKU 1
-#elif defined(BUILDING_BREWMP__)
-#define WTF_PLATFORM_BREWMP 1
-#if defined(AEE_SIMULATOR)
-#define WTF_PLATFORM_BREWMP_SIMULATOR 1
-#else
-#define WTF_PLATFORM_BREWMP_SIMULATOR 0
-#endif
-#undef WTF_OS_WINDOWS
-#undef WTF_PLATFORM_WIN
 #elif OS(DARWIN)
 #define WTF_PLATFORM_MAC 1
 #elif OS(WINDOWS)
@@ -491,10 +476,6 @@
 #endif
 #endif
 
-#if PLATFORM(BREWMP)
-#define WTF_USE_SKIA 1
-#endif
-
 #if PLATFORM(GTK)
 #define WTF_USE_CAIRO 1
 #endif
@@ -507,14 +488,6 @@
 
 #if PLATFORM(QT) && OS(UNIX) && !OS(SYMBIAN) && !OS(DARWIN)
 #define WTF_USE_PTHREAD_BASED_QT 1
-#endif
-
-#if (PLATFORM(GTK) || PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || (PLATFORM(QT) && (OS(DARWIN) || USE(PTHREAD_BASED_QT)) && !ENABLE(SINGLE_THREADED))) && !OS(QNX) && !defined(ENABLE_JSC_MULTIPLE_THREADS)
-#define ENABLE_JSC_MULTIPLE_THREADS 1
-#endif
-
-#if ENABLE(JSC_MULTIPLE_THREADS) || PLATFORM(CHROMIUM)
-#define ENABLE_WTF_MULTIPLE_THREADS 1
 #endif
 
 /* On Windows, use QueryPerformanceCounter by default */
@@ -540,8 +513,6 @@
 #endif
 #elif OS(WINCE)
 #define WTF_USE_WINCE_UNICODE 1
-#elif PLATFORM(BREWMP)
-#define WTF_USE_BREWMP_UNICODE 1
 #elif PLATFORM(GTK)
 /* The GTK+ Unicode backend is configurable */
 #else
@@ -555,7 +526,7 @@
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
 #define ENABLE_GESTURE_EVENTS 1
 #define ENABLE_RUBBER_BANDING 1
-#define WTF_USE_WK_SCROLLBAR_PAINTER 1
+#define WTF_USE_SCROLLBAR_PAINTER 1
 #endif
 #if !defined(ENABLE_JAVA_BRIDGE)
 #define ENABLE_JAVA_BRIDGE 1
@@ -571,6 +542,7 @@
 #define ENABLE_FULLSCREEN_API 1
 #define ENABLE_SMOOTH_SCROLLING 1
 #define ENABLE_WEB_ARCHIVE 1
+#define ENABLE_WEB_AUDIO 1
 #endif /* PLATFORM(MAC) && !PLATFORM(IOS) */
 
 #if PLATFORM(CHROMIUM) && OS(DARWIN)
@@ -579,10 +551,6 @@
 #define HAVE_PTHREAD_RWLOCK 1
 
 #define WTF_USE_WK_SCROLLBAR_PAINTER 1
-#endif
-
-#if PLATFORM(BREWMP)
-#define ENABLE_SINGLE_THREADED 1
 #endif
 
 #if PLATFORM(QT) && OS(DARWIN)
@@ -610,20 +578,6 @@
 #define WTF_USE_PTHREADS 1
 #define HAVE_PTHREAD_RWLOCK 1
 #define ENABLE_WEB_ARCHIVE 1
-#endif
-
-#if PLATFORM(ANDROID)
-#define WTF_USE_PTHREADS 1
-#define USE_SYSTEM_MALLOC 1
-#define ENABLE_JAVA_BRIDGE 1
-#define LOG_DISABLED 1
-/* Prevents Webkit from drawing the caret in textfields and textareas
-   This prevents unnecessary invals. */
-#define ENABLE_TEXT_CARET 1
-#define ENABLE_JAVASCRIPT_DEBUGGER 0
-#if !defined(ENABLE_JIT) && !ENABLE(ANDROID_JSC_JIT)
-#define ENABLE_JIT 0
-#endif
 #endif
 
 #if PLATFORM(WIN) && !OS(WINCE)
@@ -668,23 +622,6 @@
 #endif
 #endif
 
-#if PLATFORM(HAIKU)
-#define HAVE_POSIX_MEMALIGN 1
-#define WTF_USE_CURL 1
-#define WTF_USE_PTHREADS 1
-#define HAVE_PTHREAD_RWLOCK 1
-#define USE_SYSTEM_MALLOC 1
-#define ENABLE_NETSCAPE_PLUGIN_API 0
-#endif
-
-#if PLATFORM(BREWMP)
-#define USE_SYSTEM_MALLOC 1
-#endif
-
-#if PLATFORM(BREWMP_SIMULATOR)
-#define ENABLE_JIT 0
-#endif
-
 #if !defined(HAVE_ACCESSIBILITY)
 #if PLATFORM(IOS) || PLATFORM(MAC) || PLATFORM(WIN) || PLATFORM(GTK) || PLATFORM(CHROMIUM)
 #define HAVE_ACCESSIBILITY 1
@@ -695,6 +632,12 @@
 #define HAVE_SIGNAL_H 1
 #endif
 
+#if !defined(HAVE_VASPRINTF)
+#if !COMPILER(MSVC) && !COMPILER(RVCT) && !COMPILER(MINGW) && !(COMPILER(GCC) && OS(QNX))
+#define HAVE_VASPRINTF 1
+#endif
+#endif
+
 #if !defined(HAVE_STRNSTR)
 #if OS(DARWIN) || OS(FREEBSD)
 #define HAVE_STRNSTR 1
@@ -702,8 +645,8 @@
 #endif
 
 #if !OS(WINDOWS) && !OS(SOLARIS) && !OS(QNX) \
-    && !OS(SYMBIAN) && !OS(HAIKU) && !OS(RVCT) \
-    && !OS(ANDROID) && !PLATFORM(BREWMP)
+    && !OS(SYMBIAN) && !OS(RVCT) \
+    && !OS(ANDROID)
 #define HAVE_TM_GMTOFF 1
 #define HAVE_TM_ZONE 1
 #define HAVE_TIMEGM 1
@@ -763,10 +706,6 @@
 #define HAVE_SYS_PARAM_H 1
 #endif
 
-#elif PLATFORM(BREWMP)
-
-#define HAVE_ERRNO_H 1
-
 #elif OS(QNX)
 
 #define HAVE_ERRNO_H 1
@@ -775,12 +714,13 @@
 #define HAVE_STRINGS_H 1
 #define HAVE_SYS_PARAM_H 1
 #define HAVE_SYS_TIME_H 1
+#define WTF_USE_PTHREADS 1
 
 #elif OS(ANDROID)
 
 #define HAVE_ERRNO_H 1
 #define HAVE_LANGINFO_H 0
-#define HAVE_MMAP 1
+#define HAVE_NMAP 1
 #define HAVE_SBRK 1
 #define HAVE_STRINGS_H 1
 #define HAVE_SYS_PARAM_H 1
@@ -791,10 +731,7 @@
 /* FIXME: is this actually used or do other platforms generate their own config.h? */
 
 #define HAVE_ERRNO_H 1
-/* As long as Haiku doesn't have a complete support of locale this will be disabled. */
-#if !OS(HAIKU)
 #define HAVE_LANGINFO_H 1
-#endif
 #define HAVE_MMAP 1
 #define HAVE_SBRK 1
 #define HAVE_STRINGS_H 1
@@ -823,8 +760,8 @@
 #define ENABLE_ICONDATABASE 1
 #endif
 
-#if !defined(ENABLE_DATABASE)
-#define ENABLE_DATABASE 1
+#if !defined(ENABLE_SQL_DATABASE)
+#define ENABLE_SQL_DATABASE 1
 #endif
 
 #if !defined(ENABLE_JAVASCRIPT_DEBUGGER)
@@ -949,8 +886,8 @@
 #define ENABLE_JIT 0
 #endif
 
-/* JIT is not implemented for 64 bit on MSVC */
-#if !defined(ENABLE_JIT) && COMPILER(MSVC) && CPU(X86_64)
+/* JIT is not implemented for Windows 64-bit */
+#if !defined(ENABLE_JIT) && OS(WINDOWS) && CPU(X86_64)
 #define ENABLE_JIT 0
 #endif
 
@@ -966,6 +903,25 @@
 /* Currently only implemented for JSVALUE64, only tested on PLATFORM(MAC) */
 #if !defined(ENABLE_DFG_JIT) && ENABLE(JIT) && USE(JSVALUE64) && PLATFORM(MAC)
 #define ENABLE_DFG_JIT 1
+#endif
+
+/* Currently only implemented for JSVALUE64, only tested on PLATFORM(MAC). */
+#if !defined(ENABLE_VALUE_PROFILER) && ENABLE(DFG_JIT)
+#define ENABLE_VALUE_PROFILER 1
+#endif
+
+#if !defined(ENABLE_VERBOSE_VALUE_PROFILE) && ENABLE(VALUE_PROFILER)
+#define ENABLE_VERBOSE_VALUE_PROFILE 0
+#endif
+
+#if !defined(ENABLE_SIMPLE_HEAP_PROFILING)
+#define ENABLE_SIMPLE_HEAP_PROFILING 0
+#endif
+
+/* Counts uses of write barriers using sampling counters. Be sure to also
+   set ENABLE_SAMPLING_COUNTERS to 1. */
+#if !defined(ENABLE_WRITE_BARRIER_PROFILING)
+#define ENABLE_WRITE_BARRIER_PROFILING 0
 #endif
 
 /* Ensure that either the JIT or the interpreter has been enabled. */
@@ -1034,13 +990,6 @@
 #else
 #define ENABLE_EXECUTABLE_ALLOCATOR_DEMAND 1
 #endif
-#endif
-
-#if ENABLE(SINGLE_THREADED)
-#undef ENABLE_LAZY_BLOCK_FREEING
-#define ENABLE_LAZY_BLOCK_FREEING 0
-#else
-#define ENABLE_LAZY_BLOCK_FREEING 1
 #endif
 
 #ifndef ENABLE_LARGE_HEAP
@@ -1123,7 +1072,7 @@
 #define ENABLE_THREADING_OPENMP 1
 #endif
 
-#if !defined(ENABLE_PARALLEL_JOBS) && !ENABLE(SINGLE_THREADED) && (ENABLE(THREADING_GENERIC) || ENABLE(THREADING_LIBDISPATCH) || ENABLE(THREADING_OPENMP))
+#if !defined(ENABLE_PARALLEL_JOBS) && (ENABLE(THREADING_GENERIC) || ENABLE(THREADING_LIBDISPATCH) || ENABLE(THREADING_OPENMP))
 #define ENABLE_PARALLEL_JOBS 1
 #endif
 
@@ -1145,6 +1094,19 @@
 #ifndef ENABLE_GC_VALIDATION
 #define ENABLE_GC_VALIDATION 1
 #endif
+#endif
+
+#if PLATFORM(MAC) && !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+#define WTF_USE_AVFOUNDATION 1
+#endif
+
+#if PLATFORM(MAC) || PLATFORM(GTK) || (PLATFORM(WIN) && !OS(WINCE) && !PLATFORM(WIN_CAIRO))
+#define WTF_USE_REQUEST_ANIMATION_FRAME_TIMER 1
+#define WTF_USE_REQUEST_ANIMATION_FRAME_TIMER 1
+#endif
+
+#if PLATFORM(MAC) && !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+#define HAVE_INVERTED_WHEEL_EVENTS 1
 #endif
 
 #endif /* WTF_Platform_h */

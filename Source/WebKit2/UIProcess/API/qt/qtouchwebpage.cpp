@@ -34,6 +34,11 @@ QTouchWebPage::QTouchWebPage(QSGItem* parent)
     , d(new QTouchWebPagePrivate(this))
 {
     setFlag(ItemHasContents);
+
+    // We do the transform from the top left so the viewport can assume the position 0, 0
+    // is always where rendering starts.
+    setTransformOrigin(TopLeft);
+    connect(this, SIGNAL(visibleChanged()), SLOT(onVisibleChanged()));
 }
 
 QTouchWebPage::~QTouchWebPage()
@@ -67,7 +72,17 @@ QSGNode* QTouchWebPage::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 {
     if (!oldNode)
         oldNode = new QSGNode;
-    d->sgAgent.updatePaintNode(oldNode);
+
+    // A swap is on the queue, and SGUpdateQueue::applyUpdates will empty the queue, so we know that
+    // the old frame's buffers won't be used anymore (for buffers used all the way from the web process
+    // to the graphic card). Notify the web process that it can render the next frame.
+    if (d->sgUpdateQueue.isSwapPending())
+        // The UI thread is currently locked and calling this from the rendering thread didn't crash
+        // yet, so I'm assuming that this is OK. Else we have to wait until the SG update is over
+        // and the UI thread returns to the event loop picking our event before it can be sent to
+        // the web process. This would increase our chances of missing a frame.
+        d->page->renderNextFrame();
+    d->sgUpdateQueue.applyUpdates(oldNode);
 
     // QSGItem takes ownership of this return value and it's children between and after updatePaintNode calls.
     return oldNode;
@@ -77,17 +92,6 @@ QSGNode* QTouchWebPage::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 */
 bool QTouchWebPage::event(QEvent* ev)
 {
-    switch (ev->type()) {
-    case QEvent::Show:
-        d->page->setPageIsVisible(true);
-        break;
-    case QEvent::Hide:
-        d->page->setPageIsVisible(false);
-        break;
-    default:
-        break;
-    }
-
     if (d->page->handleEvent(ev))
         return true;
     return QSGItem::event(ev);
@@ -141,13 +145,8 @@ QTouchWebPagePrivate::QTouchWebPagePrivate(QTouchWebPage* view)
     : q(view)
     , page(0)
     , navigationController(0)
-    , sgAgent(view)
+    , sgUpdateQueue(view)
 {
-}
-
-void QTouchWebPagePrivate::commitScaleChange()
-{
-    page->setContentsScale(q->scale());
 }
 
 void QTouchWebPagePrivate::setPage(QTouchWebPageProxy* page)
@@ -157,10 +156,9 @@ void QTouchWebPagePrivate::setPage(QTouchWebPageProxy* page)
     this->page = page;
 }
 
-void QTouchWebPagePrivate::setViewportRect(const QRectF& viewportRect)
+void QTouchWebPage::onVisibleChanged()
 {
-    const QRectF visibleContentRect = q->boundingRect().intersected(viewportRect);
-    page->setVisibleContentRect(visibleContentRect);
+    d->page->setPageIsVisible(isVisible());
 }
 
 #include "moc_qtouchwebpage.cpp"

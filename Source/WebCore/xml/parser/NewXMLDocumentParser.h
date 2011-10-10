@@ -27,6 +27,8 @@
 #define NewXMLDocumentParser_h
 
 #include "CachedResourceClient.h"
+#include "CachedResourceHandle.h"
+#include "CachedScript.h"
 #include "ScriptableDocumentParser.h"
 #include "XMLToken.h"
 #include "XMLTokenizer.h"
@@ -35,11 +37,12 @@
 
 namespace WebCore {
 
-class Document;
 class ContainerNode;
+class Document;
+class ScriptElement;
 class XMLTreeBuilder;
 
-class NewXMLDocumentParser : public ScriptableDocumentParser {
+class NewXMLDocumentParser : public ScriptableDocumentParser, public CachedResourceClient {
     WTF_MAKE_FAST_ALLOCATED;
 public:
     static PassRefPtr<NewXMLDocumentParser> create(Document* document)
@@ -47,8 +50,19 @@ public:
         return adoptRef(new NewXMLDocumentParser(document));
     }
 
-    virtual TextPosition0 textPosition() const;
-    virtual int lineNumber() const;
+    static PassRefPtr<NewXMLDocumentParser> create(DocumentFragment* fragment, Element* parent, FragmentScriptingPermission scriptingPermission)
+    {
+        return adoptRef(new NewXMLDocumentParser(fragment, parent, scriptingPermission));
+    }
+
+    static bool parseDocumentFragment(const String&, DocumentFragment*, Element* parent = 0, FragmentScriptingPermission = FragmentScriptingAllowed);
+
+    void pauseParsing() { m_parserPaused = true; }
+    void resumeParsing();
+    void processScript(ScriptElement*);
+
+    virtual TextPosition textPosition() const;
+    virtual OrdinalNumber lineNumber() const;
 
     // DocumentParser
     virtual bool hasInsertionPoint();
@@ -57,6 +71,9 @@ public:
     virtual bool isExecutingScript() const;
     virtual void executeScriptsWaitingForStylesheets();
 
+    // CachedResourceClient
+    virtual void notifyFinished(CachedResource*);
+
 protected:
     virtual void insert(const SegmentedString&);
     virtual void append(const SegmentedString&);
@@ -64,12 +81,18 @@ protected:
 
 private:
     NewXMLDocumentParser(Document*);
+    NewXMLDocumentParser(DocumentFragment*, Element* parent, FragmentScriptingPermission);
     virtual ~NewXMLDocumentParser();
 
+    SegmentedString m_input;
     OwnPtr<XMLTokenizer> m_tokenizer;
     XMLToken m_token;
 
+    bool m_parserPaused;
     bool m_finishWasCalled;
+
+    CachedResourceHandle<CachedScript> m_pendingScript;
+    RefPtr<Element> m_scriptElement;
 
     OwnPtr<XMLTreeBuilder> m_treeBuilder;
 };

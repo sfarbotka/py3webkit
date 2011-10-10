@@ -31,12 +31,14 @@
 #include "ContentData.h"
 #include "RenderBlock.h"
 #include "RenderCounter.h"
+#include "RenderFlowThread.h"
 #include "RenderImage.h"
 #include "RenderImageResourceStyleImage.h"
 #include "RenderInline.h"
 #include "RenderLayer.h"
 #include "RenderListItem.h"
 #include "RenderQuote.h"
+#include "RenderRegion.h"
 #include "RenderStyle.h"
 #include "RenderTextFragment.h"
 #include "RenderView.h"
@@ -59,6 +61,14 @@ void RenderObjectChildList::destroyLeftoverChildren()
             firstChild()->destroy();
         }
     }
+}
+
+static RenderFlowThread* renderFlowThreadContainer(RenderObject* object)
+{
+    while (object && object->isAnonymousBlock() && !object->isRenderFlowThread())
+        object = object->parent();
+
+    return object && object->isRenderFlowThread() ? toRenderFlowThread(object) : 0;
 }
 
 RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, RenderObject* oldChild, bool fullRemove)
@@ -84,8 +94,8 @@ RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, Render
         // if we remove visible child from an invisible parent, we don't know the layer visibility any more
         RenderLayer* layer = 0;
         if (owner->style()->visibility() != VISIBLE && oldChild->style()->visibility() == VISIBLE && !oldChild->hasLayer()) {
-            layer = owner->enclosingLayer();
-            layer->dirtyVisibleContentStatus();
+            if ((layer = owner->enclosingLayer()))
+                layer->dirtyVisibleContentStatus();
         }
 
          // Keep our layer hierarchy updated.
@@ -100,6 +110,15 @@ RenderObject* RenderObjectChildList::removeChildNode(RenderObject* owner, Render
 
         if (oldChild->isPositioned() && owner->childrenInline())
             owner->dirtyLinesFromChangedChild(oldChild);
+
+        if (oldChild->isRenderRegion())
+            toRenderRegion(oldChild)->detachRegion();
+
+        if (oldChild->inRenderFlowThread() && oldChild->isBox())
+            oldChild->enclosingRenderFlowThread()->removeRenderBoxRegionInfo(toRenderBox(oldChild));
+
+        if (RenderFlowThread* containerFlowThread = renderFlowThreadContainer(owner))
+            containerFlowThread->removeFlowChild(oldChild);
 
 #if ENABLE(SVG)
         // Update cached boundaries in SVG renderers, if a child is removed.
@@ -175,8 +194,14 @@ void RenderObjectChildList::appendChildNode(RenderObject* owner, RenderObject* n
         if (newChild->isListItem())
             toRenderListItem(newChild)->updateListMarkerNumbers();
 
-        if (!newChild->isFloatingOrPositioned() && owner->childrenInline())
+        if (!newChild->isFloating() && owner->childrenInline())
             owner->dirtyLinesFromChangedChild(newChild);
+
+        if (newChild->isRenderRegion())
+            toRenderRegion(newChild)->attachRegion();
+
+        if (RenderFlowThread* containerFlowThread = renderFlowThreadContainer(owner))
+            containerFlowThread->addFlowChild(newChild);
     }
     RenderCounter::rendererSubtreeAttached(newChild);
     RenderQuote::rendererSubtreeAttached(newChild);
@@ -237,6 +262,12 @@ void RenderObjectChildList::insertChildNode(RenderObject* owner, RenderObject* c
 
         if (!child->isFloating() && owner->childrenInline())
             owner->dirtyLinesFromChangedChild(child);
+
+        if (child->isRenderRegion())
+            toRenderRegion(child)->attachRegion();
+
+        if (RenderFlowThread* containerFlowThread = renderFlowThreadContainer(owner))
+            containerFlowThread->addFlowChild(child, beforeChild);
     }
 
     RenderCounter::rendererSubtreeAttached(child);
@@ -271,7 +302,12 @@ RenderObject* RenderObjectChildList::beforePseudoElementRenderer(const RenderObj
     do {
         // Skip list markers and generated run-ins
         first = first->firstChild();
-        while (first && (first->isListMarker() || (first->isRenderInline() && first->isRunIn() && first->isAnonymous())))
+        while (first && first->isListMarker()) {
+            if (first->parent() != owner && first->parent()->isAnonymousBlock())
+                first = first->parent();
+            first = first->nextSibling();
+        }
+        while (first && first->isRenderInline() && first->isRunIn())
             first = first->nextSibling();
     } while (first && first->isAnonymous() && first->style()->styleType() == NOPSEUDO);
 
@@ -293,7 +329,7 @@ RenderObject* RenderObjectChildList::beforePseudoElementRenderer(const RenderObj
         // We still need to skip any list markers that could exist before the run-in.
         while (first && first->isListMarker())
             first = first->nextSibling();
-        if (first && first->style()->styleType() == BEFORE && first->isRenderInline() && first->isRunIn() && first->isAnonymous())
+        if (first && first->style()->styleType() == BEFORE && first->isRenderInline() && first->isRunIn())
             return first;
     }
     return 0;
@@ -387,6 +423,22 @@ void RenderObjectChildList::updateBeforeAfterContent(RenderObject* owner, Pseudo
             RenderObject* beforeAfterParent = findBeforeAfterParent(child);
             if (!beforeAfterParent)
                 return;
+
+            // When beforeAfterParent is not equal to child (e.g. in tables),
+            // we need to create new styles inheriting from pseudoElementStyle 
+            // on all the intermediate parents (leaving their display same).
+            if (beforeAfterParent != child) {
+                RenderObject* curr = beforeAfterParent;
+                while (curr && curr != child) {
+                    ASSERT(curr->isAnonymous());
+                    RefPtr<RenderStyle> newStyle = RenderStyle::create();
+                    newStyle->inheritFrom(pseudoElementStyle);
+                    newStyle->setDisplay(curr->style()->display());
+                    newStyle->setStyleType(curr->style()->styleType());
+                    curr->setStyle(newStyle);
+                    curr = curr->parent();
+                }
+            }
 
             // Note that if we ever support additional types of generated content (which should be way off
             // in the future), this code will need to be patched.

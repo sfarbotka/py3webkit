@@ -26,6 +26,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ */
 WebInspector.Database = function(id, domain, name, version)
 {
     this._id = id;
@@ -84,7 +87,7 @@ WebInspector.Database.prototype = {
         }
         DatabaseAgent.getDatabaseTableNames(this._id, sortingCallback);
     },
-    
+
     executeSql: function(query, onSuccess, onError)
     {
         function callback(error, success, transactionId)
@@ -103,6 +106,10 @@ WebInspector.Database.prototype = {
     }
 }
 
+/**
+ * @constructor
+ * @implements {DatabaseAgent.Dispatcher}
+ */
 WebInspector.DatabaseDispatcher = function()
 {
 }
@@ -124,7 +131,7 @@ WebInspector.DatabaseDispatcher.prototype = {
     {
         if (!WebInspector.DatabaseDispatcher._callbacks[transactionId])
             return;
-    
+
         var callback = WebInspector.DatabaseDispatcher._callbacks[transactionId].onSuccess;
         delete WebInspector.DatabaseDispatcher._callbacks[transactionId];
         if (callback)
@@ -143,4 +150,4 @@ WebInspector.DatabaseDispatcher.prototype = {
     }
 }
 
-InspectorBackend.registerDomainDispatcher("Database", new WebInspector.DatabaseDispatcher());
+InspectorBackend.registerDatabaseDispatcher(new WebInspector.DatabaseDispatcher());

@@ -164,7 +164,7 @@ PassRefPtr<InspectorObject> TimelineRecordFactory::createReceiveResourceData(con
     return data.release();
 }
     
-PassRefPtr<InspectorObject> TimelineRecordFactory::createPaintData(const IntRect& rect)
+PassRefPtr<InspectorObject> TimelineRecordFactory::createPaintData(const LayoutRect& rect)
 {
     RefPtr<InspectorObject> data = InspectorObject::create();
     data->setNumber("x", rect.x());
@@ -179,6 +179,13 @@ PassRefPtr<InspectorObject> TimelineRecordFactory::createParseHTMLData(unsigned 
     RefPtr<InspectorObject> data = InspectorObject::create();
     data->setNumber("length", length);
     data->setNumber("startLine", startLine);
+    return data.release();
+}
+
+PassRefPtr<InspectorObject> TimelineRecordFactory::createAnimationFrameCallbackData(int callbackId)
+{
+    RefPtr<InspectorObject> data = InspectorObject::create();
+    data->setNumber("id", callbackId);
     return data.release();
 }
 

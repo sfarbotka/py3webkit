@@ -23,6 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.View}
+ */
 WebInspector.DOMStorageItemsView = function(domStorage)
 {
     WebInspector.View.call(this);
@@ -75,7 +79,7 @@ WebInspector.DOMStorageItemsView.prototype = {
         this.deleteButton.visible = true;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this._dataGrid)
             this._dataGrid.updateWidths();
@@ -107,7 +111,7 @@ WebInspector.DOMStorageItemsView.prototype = {
         }
 
         var dataGrid = new WebInspector.DataGrid(columns, this._editingCallback.bind(this), this._deleteCallback.bind(this));
-        var length = nodes.length;
+        length = nodes.length;
         for (var i = 0; i < length; ++i)
             dataGrid.appendChild(nodes[i]);
         dataGrid.addCreationNode(false);
@@ -128,7 +132,7 @@ WebInspector.DOMStorageItemsView.prototype = {
     {
         this.update();
     },
-    
+
     _editingCallback: function(editingNode, columnIdentifier, oldText, newText)
     {
         var domStorage = this.domStorage;
@@ -140,10 +144,10 @@ WebInspector.DOMStorageItemsView.prototype = {
         } else {
             domStorage.setItem(editingNode.data[0], newText);
         }
-        
+
         this.update();
     },
-    
+
     _deleteCallback: function(node)
     {
         if (!node || node.isCreationNode)
@@ -151,7 +155,7 @@ WebInspector.DOMStorageItemsView.prototype = {
 
         if (this.domStorage)
             this.domStorage.removeItem(node.data[0]);
-            
+
         this.update();
     }
 }

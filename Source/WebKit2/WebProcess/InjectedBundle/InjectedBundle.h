@@ -100,6 +100,7 @@ public:
     void setFrameFlatteningEnabled(WebPageGroupProxy*, bool);
     void setJavaScriptCanAccessClipboard(WebPageGroupProxy*, bool);
     void setPrivateBrowsingEnabled(WebPageGroupProxy*, bool);
+    void switchNetworkLoaderToNewTestingSession();
     void setAuthorAndUserStylesEnabled(WebPageGroupProxy*, bool);
     void addOriginAccessWhitelistEntry(const String&, const String&, const String&, bool);
     void removeOriginAccessWhitelistEntry(const String&, const String&, const String&, bool);
@@ -121,6 +122,10 @@ public:
     // Local storage API
     void clearAllDatabases();
     void setDatabaseQuota(uint64_t);
+
+    // Application Cache API
+    void clearApplicationCache();
+    void setAppCacheMaximumSize(uint64_t);
 
     // Garbage collection API
     void garbageCollectJavaScriptObjects();

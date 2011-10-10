@@ -30,6 +30,7 @@
 #include "ActiveDOMObject.h"
 #include "Blob.h"
 #include "BlobURL.h"
+#include "ContentSecurityPolicy.h"
 #include "DOMTimer.h"
 #include "DOMURL.h"
 #include "Database.h"
@@ -39,6 +40,8 @@
 #include "EventListener.h"
 #include "EventTarget.h"
 #include "FileThread.h"
+#include "MediaStream.h"
+#include "MediaStreamRegistry.h"
 #include "MessagePort.h"
 #include "ScriptCallStack.h"
 #include "SecurityOrigin.h"
@@ -89,7 +92,7 @@ ScriptExecutionContext::ScriptExecutionContext()
     : m_iteratingActiveDOMObjects(false)
     , m_inDestructor(false)
     , m_inDispatchErrorEvent(false)
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     , m_hasOpenDatabases(false)
 #endif
 {
@@ -110,7 +113,7 @@ ScriptExecutionContext::~ScriptExecutionContext()
         ASSERT((*iter)->scriptExecutionContext() == this);
         (*iter)->contextDestroyed();
     }
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     if (m_databaseThread) {
         ASSERT(m_databaseThread->terminationRequested());
         m_databaseThread = 0;
@@ -134,9 +137,15 @@ ScriptExecutionContext::~ScriptExecutionContext()
         (*iter)->contextDestroyed();
     }
 #endif
+
+#if ENABLE(MEDIA_STREAM)
+    HashSet<String>::iterator publicStreamURLsEnd = m_publicStreamURLs.end();
+    for (HashSet<String>::iterator iter = m_publicStreamURLs.begin(); iter != publicStreamURLsEnd; ++iter)
+        MediaStreamRegistry::registry().unregisterMediaStreamURL(KURL(ParsedURLString, *iter));
+#endif
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 
 DatabaseThread* ScriptExecutionContext::databaseThread()
 {
@@ -307,6 +316,11 @@ void ScriptExecutionContext::setSecurityOrigin(PassRefPtr<SecurityOrigin> securi
     m_securityOrigin = securityOrigin;
 }
 
+void ScriptExecutionContext::setContentSecurityPolicy(PassRefPtr<ContentSecurityPolicy> contentSecurityPolicy)
+{
+    m_contentSecurityPolicy = contentSecurityPolicy;
+}
+
 bool ScriptExecutionContext::sanitizeScriptError(String& errorMessage, int& lineNumber, String& sourceURL)
 {
     KURL targetURL = completeURL(sourceURL);
@@ -377,6 +391,23 @@ DOMTimer* ScriptExecutionContext::findTimeout(int timeoutId)
 }
 
 #if ENABLE(BLOB)
+
+#if ENABLE(MEDIA_STREAM)
+KURL ScriptExecutionContext::createPublicBlobURL(MediaStream* stream)
+{
+    if (!stream)
+        return KURL();
+
+    KURL publicURL = BlobURL::createPublicURL(securityOrigin());
+
+    // Since WebWorkers cannot obtain Stream objects, we should be on the main thread.
+    ASSERT(isMainThread());
+    MediaStreamRegistry::registry().registerMediaStreamURL(publicURL, stream);
+    m_publicStreamURLs.add(publicURL.string());
+    return publicURL;
+}
+#endif // ENABLE(MEDIA_STREAM)
+
 KURL ScriptExecutionContext::createPublicBlobURL(Blob* blob)
 {
     if (!blob)
@@ -395,8 +426,17 @@ void ScriptExecutionContext::revokePublicBlobURL(const KURL& url)
         ThreadableBlobRegistry::unregisterBlobURL(url);
         m_publicBlobURLs.remove(url.string());
     }
+#if ENABLE(MEDIA_STREAM)
+    if (m_publicStreamURLs.contains(url.string())) {
+        // FIXME: make sure of this assertion below. Raise a spec question if required.
+        // Since WebWorkers cannot obtain Stream objects, we should be on the main thread.
+        ASSERT(isMainThread());
+        MediaStreamRegistry::registry().unregisterMediaStreamURL(url);
+        m_publicStreamURLs.remove(url.string());
+    }
+#endif // ENABLE(MEDIA_STREAM)
 }
-#endif
+#endif // ENABLE(BLOB)
 
 #if ENABLE(BLOB) || ENABLE(FILE_SYSTEM)
 FileThread* ScriptExecutionContext::fileThread()

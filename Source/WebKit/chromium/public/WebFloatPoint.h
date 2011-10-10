@@ -34,7 +34,7 @@
 #include "WebCommon.h"
 
 #if WEBKIT_IMPLEMENTATION
-#include "IntPoint.h"
+#include "FloatPoint.h"
 #endif
 
 namespace WebKit {

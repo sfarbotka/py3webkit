@@ -59,11 +59,14 @@ HTMLFormControlElement::HTMLFormControlElement(const QualifiedName& tagName, Doc
     , m_willValidate(true)
     , m_isValid(true)
     , m_wasChangedSinceLastFormControlChangeEvent(false)
+    , m_hasAutofocused(false)
 {
     if (!this->form())
         setForm(findFormAncestor());
     if (this->form())
         this->form()->registerFormElement(this);
+
+    setHasCustomWillOrDidRecalcStyle();
 }
 
 HTMLFormControlElement::~HTMLFormControlElement()
@@ -78,6 +81,26 @@ void HTMLFormControlElement::detach()
     HTMLElement::detach();
 }
 
+String HTMLFormControlElement::formEnctype() const
+{
+    return FormSubmission::Attributes::parseEncodingType(fastGetAttribute(formenctypeAttr));
+}
+
+void HTMLFormControlElement::setFormEnctype(const String& value)
+{
+    setAttribute(formenctypeAttr, value);
+}
+
+String HTMLFormControlElement::formMethod() const
+{
+    return FormSubmission::Attributes::methodString(FormSubmission::Attributes::parseMethodType(fastGetAttribute(formmethodAttr)));
+}
+
+void HTMLFormControlElement::setFormMethod(const String& value)
+{
+    setAttribute(formmethodAttr, value);
+}
+
 bool HTMLFormControlElement::formNoValidate() const
 {
     return fastHasAttribute(formnovalidateAttr);
@@ -85,7 +108,11 @@ bool HTMLFormControlElement::formNoValidate() const
 
 void HTMLFormControlElement::parseMappedAttribute(Attribute* attr)
 {
-    if (attr->name() == disabledAttr) {
+    if (attr->name() == formAttr) {
+        formAttributeChanged();
+        if (!form())
+            document()->checkedRadioButtons().addButton(this);
+    } else if (attr->name() == disabledAttr) {
         bool oldDisabled = m_disabled;
         m_disabled = !attr->isNull();
         if (oldDisabled != m_disabled) {
@@ -121,7 +148,7 @@ static bool shouldAutofocus(HTMLFormControlElement* element)
         return false;
     if (element->document()->ignoreAutofocus())
         return false;
-    if (element->isReadOnlyFormControl())
+    if (element->hasAutofocused())
         return false;
 
     // FIXME: Should this set of hasTagName checks be replaced by a
@@ -161,6 +188,7 @@ void HTMLFormControlElement::attach()
         renderer()->updateFromElement();
 
     if (shouldAutofocus(this)) {
+        setAutofocused();
         ref();
         queuePostAttachCallback(focusPostAttach, this);
     }
@@ -258,10 +286,8 @@ static void updateFromElementCallback(Node* node, unsigned)
         renderer->updateFromElement();
 }
 
-void HTMLFormControlElement::recalcStyle(StyleChange change)
+void HTMLFormControlElement::didRecalcStyle(StyleChange)
 {
-    HTMLElement::recalcStyle(change);
-
     // updateFromElement() can cause the selection to change, and in turn
     // trigger synchronous layout, so it must not be called during style recalc.
     if (renderer())
@@ -430,9 +456,9 @@ void HTMLFormControlElement::setCustomValidity(const String& error)
     validity()->setCustomErrorMessage(error);
 }
 
-void HTMLFormControlElement::dispatchBlurEvent()
+void HTMLFormControlElement::dispatchBlurEvent(PassRefPtr<Node> newFocusedNode)
 {
-    HTMLElement::dispatchBlurEvent();
+    HTMLElement::dispatchBlurEvent(newFocusedNode);
     hideVisibleValidationMessage();
 }
 
@@ -444,16 +470,6 @@ HTMLFormElement* HTMLFormControlElement::virtualForm() const
 bool HTMLFormControlElement::isDefaultButtonForForm() const
 {
     return isSuccessfulSubmitButton() && form() && form()->defaultButton() == this;
-}
-
-void HTMLFormControlElement::attributeChanged(Attribute* attr, bool preserveDecls)
-{
-    if (attr->name() == formAttr) {
-        formAttributeChanged();
-        if (!form())
-            document()->checkedRadioButtons().addButton(this);
-    } else
-        HTMLElement::attributeChanged(attr, preserveDecls);
 }
 
 bool HTMLFormControlElement::isLabelable() const

@@ -57,8 +57,7 @@ def _baseline_name(fs, test_name, suffix):
 class RebaselineTest(AbstractDeclarativeCommand):
     name = "rebaseline-test"
     help_text = "Rebaseline a single test from a buildbot.  (Currently works only with build.chromium.org buildbots.)"
-    # FIXME: Remove SUFFIX argument.
-    argument_names = "BUILDER_NAME TEST_NAME [SUFFIX]"
+    argument_names = "BUILDER_NAME TEST_NAME"
 
     def _results_url(self, builder_name):
         # FIXME: Generalize this command to work with non-build.chromium.org builders.
@@ -104,8 +103,8 @@ class RebaselineTest(AbstractDeclarativeCommand):
 
 class OptimizeBaselines(AbstractDeclarativeCommand):
     name = "optimize-baselines"
-    help_text = "Reshuffles the baselines for the given test to use as litte space on disk as possible."
-    argument_names = "TEST_NAME"
+    help_text = "Reshuffles the baselines for the given tests to use as litte space on disk as possible."
+    argument_names = "TEST_NAMES"
 
     def _optimize_baseline(self, test_name):
         for suffix in _baseline_suffix_list:
@@ -113,17 +112,7 @@ class OptimizeBaselines(AbstractDeclarativeCommand):
             if not self._baseline_optimizer.optimize(baseline_name):
                 print "Hueristics failed to optimize %s" % baseline_name
 
-    def execute(self, options, args, tool):
-        self._baseline_optimizer = BaselineOptimizer(tool.scm(), tool.filesystem)
-        self._optimize_baseline(args[0])
-
-
-class BulkOptimizeBaselines(OptimizeBaselines):
-    name = "bulk-optimize-baselines"
-    help_text = """Reshuffles the baselines for tests to use as litte space on disk as possible."""
-    argument_names = "TEST_NAMES"
-
-    def _to_test_name(self, file_name):
+    def _to_test_name(self, file_name): 
         return self._tool.filesystem.relpath(file_name, self._port.layout_tests_dir())
 
     def execute(self, options, args, tool):
@@ -133,6 +122,35 @@ class BulkOptimizeBaselines(OptimizeBaselines):
         for test_name in map(self._to_test_name, test_files.find(self._port, args)):
             print "Optimizing %s." % test_name
             self._optimize_baseline(test_name)
+
+
+class AnalyzeBaselines(AbstractDeclarativeCommand):
+    name = "analyze-baselines"
+    help_text = "Analyzes the baselines for the given tests and prints results that are identical."
+    argument_names = "TEST_NAMES"
+
+    def _print(self, baseline_name, directories_by_result):
+        for result, directories in directories_by_result.items():
+            if len(directories) <= 1:
+                continue
+            results_names = [self._tool.filesystem.join(directory, baseline_name) for directory in directories]
+            print ' '.join(results_names)
+
+    def _analyze_baseline(self, test_name):
+        for suffix in _baseline_suffix_list:
+            baseline_name = _baseline_name(self._tool.filesystem, test_name, suffix)
+            directories_by_result = self._baseline_optimizer.directories_by_result(baseline_name)
+            self._print(baseline_name, directories_by_result)
+
+    def _to_test_name(self, file_name): 
+        return self._tool.filesystem.relpath(file_name, self._port.layout_tests_dir())
+
+    def execute(self, options, args, tool):
+        self._baseline_optimizer = BaselineOptimizer(tool.scm(), tool.filesystem)
+        self._port = factory.get("chromium-win-win7")  # FIXME: This should be selectable.
+
+        for test_name in map(self._to_test_name, test_files.find(self._port, args)):
+            self._analyze_baseline(test_name)
 
 
 class RebaselineExpectations(AbstractDeclarativeCommand):
@@ -218,7 +236,7 @@ class Rebaseline(AbstractDeclarativeCommand):
     def execute(self, options, args, tool):
         builder, build_number = self._builder_to_pull_from()
         build = builder.build(build_number)
-        port = builder_name_for_port_name.port_for_builder(builder.name())
+        port = factory.get_from_builder_name(builder.name())
 
         for test in self._tests_to_update(build):
             results_url = self._results_url_for_test(build, test)

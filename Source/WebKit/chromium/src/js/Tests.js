@@ -177,7 +177,7 @@ TestSuite.prototype.showPanel = function(panelName)
     var toolbar = document.getElementById("toolbar");
     var button = toolbar.getElementsByClassName(panelName)[0];
     button.click();
-    this.assertEquals(WebInspector.panels[panelName], WebInspector.currentPanel);
+    this.assertEquals(WebInspector.panels[panelName], WebInspector.currentPanel());
 };
 
 
@@ -252,7 +252,7 @@ TestSuite.prototype.testShowScriptsTab = function()
 TestSuite.prototype.testScriptsTabIsPopulatedOnInspectedPageRefresh = function()
 {
     var test = this;
-    this.assertEquals(WebInspector.panels.elements, WebInspector.currentPanel, "Elements panel should be current one.");
+    this.assertEquals(WebInspector.panels.elements, WebInspector.currentPanel(), "Elements panel should be current one.");
 
     this.addSniffer(WebInspector.panels.scripts, "reset", waitUntilScriptIsParsed);
 
@@ -364,8 +364,8 @@ TestSuite.prototype.testPauseWhenLoadingDevTools = function()
 
 
     // Script execution can already be paused.
-    if (WebInspector.currentPanel.paused) {
-        var callFrame = WebInspector.currentPanel._presentationModel.selectedCallFrame;
+    if (WebInspector.currentPanel().paused) {
+        var callFrame = WebInspector.currentPanel()._presentationModel.selectedCallFrame;
         this.assertEquals(expectations.functionsOnStack[0], callFrame.functionName);
         var callbackInvoked = false;
         this._checkSourceFrameWhenLoaded(expectations, function() {
@@ -536,6 +536,40 @@ TestSuite.prototype.testNetworkTiming = function()
 };
 
 
+TestSuite.prototype.testConsoleOnNavigateBack = function()
+{
+    if (WebInspector.console.messages.length === 1)
+        firstConsoleMessageReceived.call(this);
+    else
+        WebInspector.console.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, firstConsoleMessageReceived, this);
+
+    function firstConsoleMessageReceived() {
+        this.evaluateInConsole_("clickLink();", didClickLink.bind(this));
+    }
+
+    function didClickLink() {
+        // Check that there are no new messages(command is not a message).
+        this.assertEquals(1, WebInspector.console.messages.length);
+        this.assertEquals(1, WebInspector.console.messages[0].totalRepeatCount);
+        this.evaluateInConsole_("history.back();", didNavigateBack.bind(this));
+    }
+
+    function didNavigateBack()
+    {
+        // Make sure navigation completed and possible console messages were pushed.
+        this.evaluateInConsole_("void 0;", didCompleteNavigation.bind(this));
+    }
+
+    function didCompleteNavigation() {
+        this.assertEquals(1, WebInspector.console.messages.length);
+        this.assertEquals(1, WebInspector.console.messages[0].totalRepeatCount);
+        this.releaseControl();
+    }
+
+    this.takeControl();
+};
+
+
 TestSuite.prototype.testSharedWorker = function()
 {
     function didEvaluateInConsole(resultText) {
@@ -592,7 +626,7 @@ TestSuite.prototype.showMainPageScriptSource_ = function(scriptName, callback)
         scriptResource = options[pageScriptIndex].representedObject;
 
         // Current panel is "Scripts".
-        WebInspector.currentPanel._showScriptOrResource(scriptResource);
+        WebInspector.currentPanel()._showScriptOrResource(scriptResource);
         test.assertEquals(pageScriptIndex, scriptSelect.selectedIndex, "Unexpected selected option index.");
     }
 
@@ -624,10 +658,10 @@ TestSuite.prototype.showMainPageScriptSource_ = function(scriptName, callback)
 TestSuite.prototype.evaluateInConsole_ = function(code, callback)
 {
     WebInspector.showConsole();
-    WebInspector.console.prompt.text = code;
-    WebInspector.console.promptElement.dispatchEvent(TestSuite.createKeyEvent("Enter"));
+    WebInspector.consoleView.prompt.text = code;
+    WebInspector.consoleView.promptElement.dispatchEvent(TestSuite.createKeyEvent("Enter"));
 
-    this.addSniffer(WebInspector.ConsoleView.prototype, "addMessage",
+    this.addSniffer(WebInspector.ConsoleView.prototype, "_appendConsoleMessage",
         function(commandResult) {
             callback(commandResult.toMessageElement().textContent);
         });
@@ -711,7 +745,7 @@ TestSuite.prototype._checkSourceFrameWhenLoaded = function(expectations, callbac
 {
     var test = this;
 
-    var frame = WebInspector.currentPanel.visibleView;
+    var frame = WebInspector.currentPanel().visibleView;
 
     if (frame._textViewer)
         checkExecLine();

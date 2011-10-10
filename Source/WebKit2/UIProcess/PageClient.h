@@ -34,11 +34,9 @@
 #include <wtf/Forward.h>
 
 #if PLATFORM(MAC)
-#ifdef __OBJC__
-@class WKView;
-#else
-class WKView;
-#endif
+#include "PluginComplexTextInputState.h"
+
+OBJC_CLASS WKView;
 #endif
 
 namespace WebCore {
@@ -162,7 +160,8 @@ public:
 #endif
 
 #if PLATFORM(MAC)
-    virtual void setComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled) = 0;
+    virtual void pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus) = 0;
+    virtual void setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, PluginComplexTextInputState) = 0;
     virtual CGContextRef containingWindowGraphicsContext() = 0;
     virtual void didPerformDictionaryLookup(const String&, double scaleFactor, const DictionaryPopupInfo&) = 0;
     virtual void dismissDictionaryLookupPanel() = 0;
@@ -185,8 +184,6 @@ public:
     virtual void flashBackingStoreUpdates(const Vector<WebCore::IntRect>& updateRects) = 0;
     virtual void findStringInCustomRepresentation(const String&, FindOptions, unsigned maxMatchCount) = 0;
     virtual void countStringMatchesInCustomRepresentation(const String&, FindOptions, unsigned maxMatchCount) = 0;
-
-    virtual float userSpaceScaleFactor() const = 0;
 };
 
 } // namespace WebKit

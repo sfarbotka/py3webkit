@@ -166,9 +166,9 @@ void Notification::startLoading()
     setPendingActivity(this);
     m_state = Loading;
     ThreadableLoaderOptions options;
-    options.sendLoadCallbacks = false;
-    options.sniffContent = false;
-    options.forcePreflight = false;
+    options.sendLoadCallbacks = DoNotSendCallbacks;
+    options.sniffContent = DoNotSniffContent;
+    options.preflightPolicy = ConsiderPreflight;
     options.allowCredentials = AllowStoredCredentials;
     options.crossOriginRequestPolicy = AllowCrossOriginRequests;
     m_loader = ThreadableLoader::create(scriptExecutionContext(), this, ResourceRequest(iconURL()), options);

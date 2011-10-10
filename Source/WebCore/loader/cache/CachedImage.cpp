@@ -44,7 +44,7 @@
 #include "PDFDocumentImage.h"
 #endif
 
-#if ENABLE(SVG_AS_IMAGE)
+#if ENABLE(SVG)
 #include "SVGImage.h"
 #endif
 
@@ -81,10 +81,10 @@ void CachedImage::decodedDataDeletionTimerFired(Timer<CachedImage>*)
     destroyDecodedData();
 }
 
-void CachedImage::load(CachedResourceLoader* cachedResourceLoader)
+void CachedImage::load(CachedResourceLoader* cachedResourceLoader, const ResourceLoaderOptions& options)
 {
     if (!cachedResourceLoader || cachedResourceLoader->autoLoadImages())
-        CachedResource::load(cachedResourceLoader, true, DoSecurityCheck, true);
+        CachedResource::load(cachedResourceLoader, options);
     else
         setLoading(false);
 }
@@ -113,18 +113,32 @@ void CachedImage::allClientsRemoved()
         m_decodedDataDeletionTimer.startOneShot(interval);
 }
 
-static Image* brokenImage()
+pair<Image*, float> CachedImage::brokenImage(float deviceScaleFactor) const
 {
-    DEFINE_STATIC_LOCAL(RefPtr<Image>, brokenImage, (Image::loadPlatformResource("missingImage")));
-    return brokenImage.get();
+    if (deviceScaleFactor >= 2) {
+        DEFINE_STATIC_LOCAL(Image*, brokenImageHiRes, (Image::loadPlatformResource("missingImage@2x").leakRef()));
+        return make_pair(brokenImageHiRes, 2);
+    }
+
+    DEFINE_STATIC_LOCAL(Image*, brokenImageLoRes, (Image::loadPlatformResource("missingImage").leakRef()));
+    return make_pair(brokenImageLoRes, 1);
+}
+
+bool CachedImage::willPaintBrokenImage() const
+{
+    return errorOccurred() && m_shouldPaintBrokenImage;
 }
 
 Image* CachedImage::image() const
 {
     ASSERT(!isPurgeable());
 
-    if (errorOccurred() && m_shouldPaintBrokenImage)
-        return brokenImage();
+    if (errorOccurred() && m_shouldPaintBrokenImage) {
+        // Returning the 1x broken image is non-ideal, but we cannot reliably access the appropriate
+        // deviceScaleFactor from here. It is critical that callers use CachedImage::brokenImage() 
+        // when they need the real, deviceScaleFactor-appropriate broken image icon. 
+        return brokenImage(1).first;
+    }
 
     if (m_image)
         return m_image.get();
@@ -246,7 +260,7 @@ inline void CachedImage::createImage()
         return;
     }
 #endif
-#if ENABLE(SVG_AS_IMAGE)
+#if ENABLE(SVG)
     if (m_response.mimeType() == "image/svg+xml") {
         m_image = SVGImage::create(this);
         return;

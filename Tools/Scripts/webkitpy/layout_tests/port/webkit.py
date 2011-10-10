@@ -151,11 +151,11 @@ class WebKitPort(Port):
         # Handle the case where the test didn't actually generate an image.
         # FIXME: need unit tests for this.
         if not actual_contents and not expected_contents:
-            return None
+            return (None, 0)
         if not actual_contents or not expected_contents:
             # FIXME: It's not clear what we should return in this case.
             # Maybe we should throw an exception?
-            return True
+            return (True, 0)
 
         process = self._start_image_diff_process(expected_contents, actual_contents)
         return self._read_image_diff(process)
@@ -180,12 +180,15 @@ class WebKitPort(Port):
         timeout = 2.0
         deadline = time.time() + timeout
         output = sp.read_line(timeout)
+        output_image = ""
+        diff_percent = 0
         while not sp.timed_out and not sp.crashed and output:
             if output.startswith('Content-Length'):
                 m = re.match('Content-Length: (\d+)', output)
                 content_length = int(m.group(1))
                 timeout = deadline - time.time()
-                output = sp.read(timeout, content_length)
+                output_image = sp.read(timeout, content_length)
+                output = sp.read_line(timeout)
                 break
             elif output.startswith('diff'):
                 break
@@ -201,8 +204,9 @@ class WebKitPort(Port):
         if output.startswith('diff'):
             m = re.match('diff: (.+)% (passed|failed)', output)
             if m.group(2) == 'passed':
-                return None
-        return output
+                return [None, 0]
+            diff_percent = float(m.group(1))
+        return (output_image, diff_percent)
 
     def default_results_directory(self):
         # Results are store relative to the built products to make it easy
@@ -266,7 +270,6 @@ class WebKitPort(Port):
             "GraphicsLayer": ["compositing"],
             "WebCoreHas3DRendering": ["animations/3d", "transforms/3d"],
             "WebGLShader": ["fast/canvas/webgl", "compositing/webgl", "http/tests/canvas/webgl"],
-            "parseWCSSInputProperty": ["fast/wcss"],
             "isXHTMLMPDocument": ["fast/xhtmlmp"],
             "MHTMLArchive": ["mhtml"],
         }
@@ -384,7 +387,7 @@ class WebKitPort(Port):
         for path in ["/usr/sbin/httpd", "/usr/sbin/apache2"]:
             if self._filesystem.exists(path):
                 return path
-            _log.error("Could not find apache. Not installed or unknown path.")
+        _log.error("Could not find apache. Not installed or unknown path.")
         return None
 
     # FIXME: This belongs on some platform abstraction instead of Port.
@@ -446,6 +449,7 @@ class WebKitDriver(Driver):
         environment['DYLD_FRAMEWORK_PATH'] = self._port._build_path()
         # FIXME: We're assuming that WebKitTestRunner checks this DumpRenderTree-named environment variable.
         environment['DUMPRENDERTREE_TEMP'] = str(self._driver_tempdir)
+        environment['LOCAL_RESOURCE_ROOT'] = self._port.layout_tests_dir()
         self._server_process = server_process.ServerProcess(self._port, server_name, self.cmd_line(), environment)
 
     def poll(self):
@@ -509,44 +513,46 @@ class WebKitDriver(Driver):
             crash=self.detected_crash(), test_time=time.time() - start_time,
             timeout=self._server_process.timed_out, error=error)
 
+    LENGTH_HEADER = 'Content-Length: '
+    HASH_HEADER = 'ActualHash: '
+    TYPE_HEADER = 'Content-Type: '
+    ENCODING_HEADER = 'Content-Transfer-Encoding: '
+
+    def _read_line_until(self, deadline):
+        return self._server_process.read_line(deadline - time.time())
+
     def _read_block(self, deadline):
-        LENGTH_HEADER = 'Content-Length: '
-        HASH_HEADER = 'ActualHash: '
-        TYPE_HEADER = 'Content-Type: '
-        ENCODING_HEADER = 'Content-Transfer-Encoding: '
         content_type = None
         encoding = None
         content_hash = None
         content_length = None
 
         # Content is treated as binary data even though the text output is usually UTF-8.
-        content = ''
-        timeout = deadline - time.time()
-        line = self._server_process.read_line(timeout)
+        content = str()  # FIXME: Should be bytearray() once we require Python 2.6.
+        line = self._read_line_until(deadline)
         eof = False
         while (not self._server_process.timed_out and not self.detected_crash() and not eof):
-            chomped_line = line.rstrip()
+            chomped_line = line.rstrip()  # FIXME: This will remove trailing lines from test output.  Is that right?
             if chomped_line.endswith("#EOF"):
                 eof = True
                 line = chomped_line[:-4]
 
-            if line.startswith(TYPE_HEADER) and content_type is None:
+            if line.startswith(self.TYPE_HEADER) and content_type is None:
                 content_type = line.split()[1]
-            elif line.startswith(ENCODING_HEADER) and encoding is None:
+            elif line.startswith(self.ENCODING_HEADER) and encoding is None:
                 encoding = line.split()[1]
-            elif line.startswith(LENGTH_HEADER) and content_length is None:
-                timeout = deadline - time.time()
-                content_length = int(line[len(LENGTH_HEADER):])
-                # FIXME: Technically there should probably be another blank
-                # line here, but DRT doesn't write one.
-                content = self._server_process.read(timeout, content_length)
-            elif line.startswith(HASH_HEADER):
+            elif line.startswith(self.LENGTH_HEADER) and content_length is None:
+                content_length = int(line[len(self.LENGTH_HEADER):])
+                # FIXME: In real HTTP there should probably be a blank line
+                # after headers before content, but DRT doesn't write one.
+                content = self._server_process.read(deadline - time.time(), content_length)
+            elif line.startswith(self.HASH_HEADER):
                 content_hash = line.split()[1]
             elif line:
                 content += line
-            if not eof:
-                line = self._server_process.read_line(timeout)
-                timeout = deadline - time.time()
+            if eof:
+                break
+            line = self._read_line_until(deadline)
         return ContentBlock(content_type, encoding, content_hash, content)
 
     def stop(self):

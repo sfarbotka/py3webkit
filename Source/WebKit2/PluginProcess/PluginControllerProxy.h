@@ -96,7 +96,8 @@ private:
     virtual void willSendEventToPlugin();
 
 #if PLATFORM(MAC)
-    virtual void setComplexTextInputEnabled(bool);
+    virtual void pluginFocusOrWindowFocusChanged(bool);
+    virtual void setComplexTextInputState(PluginComplexTextInputState);
     virtual mach_port_t compositingRenderServerPort();
 #endif
 

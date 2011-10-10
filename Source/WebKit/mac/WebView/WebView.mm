@@ -374,7 +374,18 @@ static const char webViewIsOpen[] = "At least one WebView is still open.";
 - (id)initWithTarget:(id)target defaultTarget:(id)defaultTarget catchExceptions:(BOOL)catchExceptions;
 @end
 
+FindOptions coreOptions(WebFindOptions options)
+{
+    return (options & WebFindOptionsCaseInsensitive ? CaseInsensitive : 0)
+        | (options & WebFindOptionsAtWordStarts ? AtWordStarts : 0)
+        | (options & WebFindOptionsTreatMedialCapitalAsWordStart ? TreatMedialCapitalAsWordStart : 0)
+        | (options & WebFindOptionsBackwards ? Backwards : 0)
+        | (options & WebFindOptionsWrapAround ? WrapAround : 0)
+        | (options & WebFindOptionsStartInSelection ? StartInSelection : 0);
+}
+
 @interface WebView (WebFileInternal)
+- (float)_deviceScaleFactor;
 - (BOOL)_isLoading;
 - (WebFrameView *)_frameViewAtWindowPoint:(NSPoint)point;
 - (WebFrame *)_focusedFrame;
@@ -565,7 +576,6 @@ static NSString *createUserVisibleWebKitVersionString()
 
 static void WebKitInitializeApplicationCachePathIfNecessary()
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     static BOOL initialized = NO;
     if (initialized)
         return;
@@ -573,14 +583,13 @@ static void WebKitInitializeApplicationCachePathIfNecessary()
     NSString *appName = [[NSBundle mainBundle] bundleIdentifier];
     if (!appName)
         appName = [[NSProcessInfo processInfo] processName];
-    
+
     ASSERT(appName);
 
     NSString* cacheDir = [NSString _webkit_localCacheDirectoryWithBundleIdentifier:appName];
 
     cacheStorage().setCacheDirectory(cacheDir);
     initialized = YES;
-#endif
 }
 
 static bool runningLeopardMail()
@@ -589,11 +598,6 @@ static bool runningLeopardMail()
     return applicationIsAppleMail();
 #endif
     return NO;
-}
-
-static bool runningTigerMail()
-{
-    return NO;    
 }
 
 static bool coreVideoHas7228836Fix()
@@ -626,10 +630,13 @@ static bool shouldEnableLoadDeferring()
     [types release];
 }
 
+#if defined(BUILDING_ON_LEOPARD) || defined(BUILDING_ON_SNOW_LEOPARD)
+// This method should be removed once we no longer want to keep Safari 5.0.x working with nightly builds.
 - (BOOL)_usesDocumentViews
 {
-    return _private->usesDocumentViews;
+    return true;
 }
+#endif
 
 static NSString *leakMailQuirksUserScriptContents()
 {
@@ -666,28 +673,7 @@ static NSString *leakOutlookQuirksUserScriptContents()
         outlookQuirksScriptContents, KURL(), nullptr, nullptr, InjectAtDocumentEnd, InjectInAllFrames);
 }
 
-static bool needsSolarWalkQuirksScript()
-{
-    static bool isSolarWalkNeedingQuirksScript = !WebKitLinkedOnOrAfter(WEBKIT_FIRST_VERSION_WITH_HTML5_PARSER)
-    && applicationIsSolarWalkMac();
-    return isSolarWalkNeedingQuirksScript;
-}
-
-static NSString *leakSolarWalkQuirksUserScriptContents()
-{
-    NSString *scriptPath = [[NSBundle bundleForClass:[WebView class]] pathForResource:@"SolarWalkQuirksUserScript" ofType:@"js"];
-    NSStringEncoding encoding;
-    return [[NSString alloc] initWithContentsOfFile:scriptPath usedEncoding:&encoding error:0];
-}
-
--(void)_injectSolarWalkQuirksScript
-{
-    static NSString *solarWalkQuirksScriptContents = leakSolarWalkQuirksUserScriptContents();
-    core(self)->group().addUserScriptToWorld(core([WebScriptWorld world]),
-        solarWalkQuirksScriptContents, KURL(), nullptr, nullptr, InjectAtDocumentEnd, InjectInAllFrames);
-}
-
-- (void)_commonInitializationWithFrameName:(NSString *)frameName groupName:(NSString *)groupName usesDocumentViews:(BOOL)usesDocumentViews
+- (void)_commonInitializationWithFrameName:(NSString *)frameName groupName:(NSString *)groupName
 {
     WebCoreThreadViolationCheckRoundTwo();
 
@@ -703,24 +689,20 @@ static NSString *leakSolarWalkQuirksUserScriptContents()
     _private->mainFrameDocumentReady = NO;
     _private->drawsBackground = YES;
     _private->backgroundColor = [[NSColor colorWithDeviceWhite:1 alpha:1] retain];
-    _private->usesDocumentViews = usesDocumentViews;
     _private->includesFlattenedCompositingLayersWhenDrawingToBitmap = YES;
 
-    WebFrameView *frameView = nil;
-    if (_private->usesDocumentViews) {
-        NSRect f = [self frame];
-        frameView = [[WebFrameView alloc] initWithFrame: NSMakeRect(0,0,f.size.width,f.size.height)];
-        [frameView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
-        [self addSubview:frameView];
-        [frameView release];
-    }
+    NSRect f = [self frame];
+    WebFrameView *frameView = [[WebFrameView alloc] initWithFrame: NSMakeRect(0,0,f.size.width,f.size.height)];
+    [frameView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [self addSubview:frameView];
+    [frameView release];
 
     static bool didOneTimeInitialization = false;
     if (!didOneTimeInitialization) {
         WebKitInitializeLoggingChannelsIfNecessary();
         WebCore::InitializeLoggingChannelsIfNecessary();
         [WebHistoryItem initWindowWatcherIfNecessary];
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         WebKitInitializeDatabasesIfNecessary();
 #endif
 
@@ -757,11 +739,6 @@ static NSString *leakSolarWalkQuirksUserScriptContents()
     if (needsOutlookQuirksScript()) {
         _private->page->settings()->setShouldInjectUserScriptsInInitialEmptyDocument(true);
         [self _injectOutlookQuirksScript];
-    }
-
-    if (needsSolarWalkQuirksScript()) {
-        _private->page->settings()->setShouldInjectUserScriptsInInitialEmptyDocument(true);
-        [self _injectSolarWalkQuirksScript];
     }
 
     [WebFrame _createMainFrameWithPage:_private->page frameName:frameName frameView:frameView];
@@ -815,12 +792,16 @@ static NSString *leakSolarWalkQuirksUserScriptContents()
     [self _scheduleGlibContextIterations];
 #endif
 
-    if (runningTigerMail() || runningLeopardMail())
+    if (runningLeopardMail())
         [self _injectMailQuirksScript];
 }
 
 - (id)_initWithFrame:(NSRect)f frameName:(NSString *)frameName groupName:(NSString *)groupName usesDocumentViews:(BOOL)usesDocumentViews
 {
+    // FIXME: Remove the usesDocumentViews parameter; it's only here for compatibility with WebKit nightly builds
+    // running against Safari 5 on Leopard.
+    ASSERT(usesDocumentViews);
+
     self = [super initWithFrame:f];
     if (!self)
         return nil;
@@ -838,78 +819,9 @@ static NSString *leakSolarWalkQuirksUserScriptContents()
 #endif
 
     _private = [[WebViewPrivate alloc] init];
-    [self _commonInitializationWithFrameName:frameName groupName:groupName usesDocumentViews:usesDocumentViews];
+    [self _commonInitializationWithFrameName:frameName groupName:groupName];
     [self setMaintainsBackForwardList: YES];
     return self;
-}
-
-- (BOOL)_mustDrawUnionedRect:(NSRect)rect singleRects:(const NSRect *)rects count:(NSInteger)count
-{
-    // If count == 0 here, use the rect passed in for drawing. This is a workaround for:
-    // <rdar://problem/3908282> REGRESSION (Mail): No drag image dragging selected text in Blot and Mail
-    // The reason for the workaround is that this method is called explicitly from the code
-    // to generate a drag image, and at that time, getRectsBeingDrawn:count: will return a zero count.
-    const int cRectThreshold = 10;
-    const float cWastedSpaceThreshold = 0.75f;
-    BOOL useUnionedRect = (count <= 1) || (count > cRectThreshold);
-    if (!useUnionedRect) {
-        // Attempt to guess whether or not we should use the unioned rect or the individual rects.
-        // We do this by computing the percentage of "wasted space" in the union.  If that wasted space
-        // is too large, then we will do individual rect painting instead.
-        float unionPixels = (rect.size.width * rect.size.height);
-        float singlePixels = 0;
-        for (int i = 0; i < count; ++i)
-            singlePixels += rects[i].size.width * rects[i].size.height;
-        float wastedSpace = 1 - (singlePixels / unionPixels);
-        if (wastedSpace <= cWastedSpaceThreshold)
-            useUnionedRect = YES;
-    }
-    return useUnionedRect;
-}
-
-- (void)drawSingleRect:(NSRect)rect
-{
-    ASSERT(!_private->usesDocumentViews);
-    
-    [NSGraphicsContext saveGraphicsState];
-    NSRectClip(rect);
-
-    @try {
-        [[self mainFrame] _drawRect:rect contentsOnly:NO];
-
-        [[self _UIDelegateForwarder] webView:self didDrawRect:rect];
-
-        if (WebNodeHighlight *currentHighlight = [self currentNodeHighlight])
-            [currentHighlight setNeedsUpdateInTargetViewRect:rect];
-
-        [NSGraphicsContext restoreGraphicsState];
-    } @catch (NSException *localException) {
-        [NSGraphicsContext restoreGraphicsState];
-        LOG_ERROR("Exception caught while drawing: %@", localException);
-        [localException raise];
-    }
-}
-
-- (BOOL)isFlipped 
-{
-    return _private && !_private->usesDocumentViews;
-}
-
-- (void)setFrameSize:(NSSize)size
-{
-    if (!_private->usesDocumentViews && !NSEqualSizes(_private->lastLayoutSize, size)) {
-        Frame* frame = [self _mainCoreFrame];
-        // FIXME: Viewless WebKit is broken with Safari banners (e.g., the Find banner).  We'll have to figure out a way for
-        // Safari to communicate that this space is being consumed.  For WebKit with document views, there's no
-        // need to do an explicit resize, since WebFrameViews have auto resizing turned on and will handle changing
-        // their bounds automatically. See <rdar://problem/6835573> for details.
-        frame->view()->resize(IntSize(size));
-        frame->view()->setNeedsLayout();
-        [self setNeedsDisplay:YES];
-        _private->lastLayoutSize = size;
-    }
-
-    [super setFrameSize:size];
 }
 
 - (void)_viewWillDrawInternal
@@ -917,34 +829,6 @@ static NSString *leakSolarWalkQuirksUserScriptContents()
     Frame* frame = [self _mainCoreFrame];
     if (frame && frame->view())
         frame->view()->updateLayoutAndStyleIfNeededRecursive();
-}
-
-- (void)viewWillDraw
-{
-    if (!_private->usesDocumentViews)
-        [self _viewWillDrawInternal];
-    [super viewWillDraw];
-}
-
-
-
-- (void)drawRect:(NSRect)rect
-{
-    if (_private->usesDocumentViews)
-        return [super drawRect:rect];
-    
-    ASSERT_MAIN_THREAD();
-
-    const NSRect *rects;
-    NSInteger count;
-    [self getRectsBeingDrawn:&rects count:&count];
-
-    
-    if ([self _mustDrawUnionedRect:rect singleRects:rects count:count])
-        [self drawSingleRect:rect];
-    else
-        for (int i = 0; i < count; ++i)
-            [self drawSingleRect:rects[i]];
 }
 
 + (NSArray *)_supportedMIMETypes
@@ -1165,8 +1049,6 @@ static bool fastDocumentTeardownEnabled()
 
     _private->closed = YES;
     [self _removeFromAllWebViewsSet];
-
-    [self _closingEventHandling];
 
 #ifndef NDEBUG
     WTF::RefCountedLeakCounter::cancelMessageSuppression(webViewIsOpen);
@@ -1509,7 +1391,7 @@ static bool needsSelfRetainWhileLoadingQuirk()
     settings->setMinimumLogicalFontSize([preferences minimumLogicalFontSize]);
     settings->setPictographFontFamily([preferences pictographFontFamily]);
     settings->setPluginsEnabled([preferences arePlugInsEnabled]);
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     AbstractDatabase::setIsAvailable([preferences databasesEnabled]);
 #endif
     settings->setLocalStorageEnabled([preferences localStorageEnabled]);
@@ -1544,7 +1426,6 @@ static bool needsSelfRetainWhileLoadingQuirk()
     settings->setTreatsAnyTextCSSLinkAsStylesheet([self _needsLinkElementTextCSSQuirk]);
     settings->setNeedsKeyboardEventDisambiguationQuirks([self _needsKeyboardEventDisambiguationQuirks]);
     settings->setNeedsLeopardMailQuirks(runningLeopardMail());
-    settings->setNeedsTigerMailQuirks(runningTigerMail());
     settings->setNeedsSiteSpecificQuirks(_private->useSiteSpecificSpoofing);
     settings->setWebArchiveDebugModeEnabled([preferences webArchiveDebugModeEnabled]);
     settings->setLocalFileContentSniffingEnabled([preferences localFileContentSniffingEnabled]);
@@ -1594,6 +1475,7 @@ static bool needsSelfRetainWhileLoadingQuirk()
 #endif
     settings->setMediaPlaybackRequiresUserGesture([preferences mediaPlaybackRequiresUserGesture]);
     settings->setMediaPlaybackAllowsInline([preferences mediaPlaybackAllowsInline]);
+    settings->setSuppressIncrementalRendering([preferences suppressIncrementalRendering]);
 
     // Application Cache Preferences are stored on the global cache storage manager, not in Settings.
     [WebApplicationCache setDefaultOriginQuota:[preferences applicationCacheDefaultOriginQuota]];
@@ -1967,7 +1849,7 @@ static inline IMP getMethod(id o, SEL s)
     [request _web_setHTTPUserAgent:[self userAgentForURL:URL]];
     NSCachedURLResponse *cachedResponse;
 #if USE(CFURLSTORAGESESSIONS)
-    if (CFURLStorageSessionRef storageSession = ResourceHandle::privateBrowsingStorageSession())
+    if (CFURLStorageSessionRef storageSession = ResourceHandle::currentStorageSession())
         cachedResponse = WKCachedResponseForRequest(storageSession, request);
     else
 #endif
@@ -2479,13 +2361,11 @@ static inline IMP getMethod(id o, SEL s)
 - (BOOL)_isUsingAcceleratedCompositing
 {
 #if USE(ACCELERATED_COMPOSITING)
-    if (_private->usesDocumentViews) {
-        Frame* coreFrame = [self _mainCoreFrame];
-        for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame)) {
-            NSView *documentView = [[kit(frame) frameView] documentView];
-            if ([documentView isKindOfClass:[WebHTMLView class]] && [(WebHTMLView *)documentView _isUsingAcceleratedCompositing])
-                return YES;
-        }
+    Frame* coreFrame = [self _mainCoreFrame];
+    for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame)) {
+        NSView *documentView = [[kit(frame) frameView] documentView];
+        if ([documentView isKindOfClass:[WebHTMLView class]] && [(WebHTMLView *)documentView _isUsingAcceleratedCompositing])
+            return YES;
     }
 #endif
     return NO;
@@ -2514,13 +2394,11 @@ static inline IMP getMethod(id o, SEL s)
 - (BOOL)_isSoftwareRenderable
 {
 #if USE(ACCELERATED_COMPOSITING)
-    if (_private->usesDocumentViews) {
-        Frame* coreFrame = [self _mainCoreFrame];
-        for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame)) {
-            if (FrameView* view = frame->view()) {
-                if (!view->isSoftwareRenderable())
-                    return NO;
-            }
+    Frame* coreFrame = [self _mainCoreFrame];
+    for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame)) {
+        if (FrameView* view = frame->view()) {
+            if (!view->isSoftwareRenderable())
+                return NO;
         }
     }
 #endif
@@ -2535,6 +2413,45 @@ static inline IMP getMethod(id o, SEL s)
 - (BOOL)_includesFlattenedCompositingLayersWhenDrawingToBitmap
 {
     return _private->includesFlattenedCompositingLayersWhenDrawingToBitmap;
+}
+
+- (void)setTracksRepaints:(BOOL)flag
+{
+    Frame* coreFrame = [self _mainCoreFrame];
+    if (FrameView* view = coreFrame->view())
+        view->setTracksRepaints(flag);
+}
+
+- (BOOL)isTrackingRepaints
+{
+    Frame* coreFrame = [self _mainCoreFrame];
+    if (FrameView* view = coreFrame->view())
+        return view->isTrackingRepaints();
+    
+    return NO;
+}
+
+- (void)resetTrackedRepaints
+{
+    Frame* coreFrame = [self _mainCoreFrame];
+    if (FrameView* view = coreFrame->view())
+        view->resetTrackedRepaints();
+}
+
+- (NSArray*)trackedRepaintRects
+{
+    Frame* coreFrame = [self _mainCoreFrame];
+    FrameView* view = coreFrame->view();
+    if (!view || !view->isTrackingRepaints())
+        return nil;
+
+    const Vector<IntRect>& repaintRects = view->trackedRepaintRects();
+    NSMutableArray* rectsArray = [[NSMutableArray alloc] initWithCapacity:repaintRects.size()];
+    
+    for (unsigned i = 0; i < repaintRects.size(); ++i)
+        [rectsArray addObject:[NSValue valueWithRect:repaintRects[i]]];
+
+    return [rectsArray autorelease];
 }
 
 - (NSPasteboard *)_insertionPasteboard
@@ -2720,20 +2637,12 @@ static PassOwnPtr<Vector<String> > toStringVector(NSArray* patterns)
 
 - (void)_scaleWebView:(float)scale atOrigin:(NSPoint)origin
 {
-    Frame* coreFrame = [self _mainCoreFrame];
-    if (!coreFrame)
-        return;
-
-    coreFrame->scalePage(scale, IntPoint(origin));
+    _private->page->setPageScaleFactor(scale, IntPoint(origin));
 }
 
 - (float)_viewScaleFactor
 {
-    Frame* coreFrame = [self _mainCoreFrame];
-    if (!coreFrame)
-        return 1;
-
-    return coreFrame->pageScaleFactor();
+    return _private->page->pageScaleFactor();
 }
 
 - (void)_setUseFixedLayout:(BOOL)fixed
@@ -2789,6 +2698,16 @@ static PassOwnPtr<Vector<String> > toStringVector(NSArray* patterns)
         return IntSize();
 
     return view->fixedLayoutSize();
+}
+
+- (void)_setCustomBackingScaleFactor:(CGFloat)customScaleFactor
+{
+    float oldScaleFactor = [self _deviceScaleFactor];
+
+    _private->customDeviceScaleFactor = customScaleFactor;
+
+    if (oldScaleFactor != [self _deviceScaleFactor])
+        _private->page->setDeviceScaleFactor(customScaleFactor);
 }
 
 - (NSUInteger)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(NSUInteger)limit
@@ -3191,7 +3110,7 @@ static bool needsWebViewInitThreadWorkaround()
             preferences = nil;
 
         LOG(Encoding, "FrameName = %@, GroupName = %@, useBackForwardList = %d\n", frameName, groupName, (int)useBackForwardList);
-        [result _commonInitializationWithFrameName:frameName groupName:groupName usesDocumentViews:YES];
+        [result _commonInitializationWithFrameName:frameName groupName:groupName];
         static_cast<BackForwardListImpl*>([result page]->backForwardList())->setEnabled(useBackForwardList);
         result->_private->allowsUndo = allowsUndo;
         if (preferences)
@@ -3283,6 +3202,9 @@ static bool needsWebViewInitThreadWorkaround()
     return _private->shouldCloseWithWindow;
 }
 
+// FIXME: Use an AppKit constant for this once one is available.
+static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidChangeResolutionNotification";
+
 - (void)addWindowObserversForWindow:(NSWindow *)window
 {
     if (window) {
@@ -3292,6 +3214,10 @@ static bool needsWebViewInitThreadWorkaround()
             name:NSWindowDidResignKeyNotification object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowWillOrderOnScreen:)
             name:WKWindowWillOrderOnScreenNotification() object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowWillOrderOffScreen:)
+            name:WKWindowWillOrderOffScreenNotification() object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeResolution:)
+            name:windowDidChangeResolutionNotification object:window];
     }
 }
 
@@ -3305,6 +3231,10 @@ static bool needsWebViewInitThreadWorkaround()
             name:NSWindowDidResignKeyNotification object:nil];
         [[NSNotificationCenter defaultCenter] removeObserver:self
             name:WKWindowWillOrderOnScreenNotification() object:window];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+            name:WKWindowWillOrderOffScreenNotification() object:window];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+            name:windowDidChangeResolutionNotification object:window];
     }
 }
 
@@ -3352,6 +3282,8 @@ static bool needsWebViewInitThreadWorkaround()
         _private->page->didMoveOnscreen();
     }
     
+    _private->page->setDeviceScaleFactor([self _deviceScaleFactor]);
+
     [self _updateActiveState];
 }
 
@@ -3371,14 +3303,32 @@ static bool needsWebViewInitThreadWorkaround()
 
 - (void)_windowWillOrderOnScreen:(NSNotification *)notification
 {
+    // Update the active state here so WebViews in NSPopovers get the active state.
+    // This is needed because the normal NSWindowDidBecomeKeyNotification is not fired
+    // for NSPopover windows since they share key with their parent window.
+    [self _updateActiveState];
+
     if (![self shouldUpdateWhileOffscreen])
         [self setNeedsDisplay:YES];
+}
+
+- (void)_windowWillOrderOffScreen:(NSNotification *)notification
+{
+    // Update the active state here so WebViews in NSPopovers get the inactive state.
+    // This is needed because the normal NSWindowDidResignKeyNotification is not fired
+    // for NSPopover windows since they share key with their parent window.
+    [self _updateActiveState];
 }
 
 - (void)_windowWillClose:(NSNotification *)notification
 {
     if ([self shouldCloseWithWindow] && ([self window] == [self hostWindow] || ([self window] && ![self hostWindow]) || (![self window] && [self hostWindow])))
         [self close];
+}
+
+- (void)_windowDidChangeResolution:(NSNotification *)notification
+{
+    _private->page->setDeviceScaleFactor([self _deviceScaleFactor]);
 }
 
 - (void)setPreferences:(WebPreferences *)prefs
@@ -3510,14 +3460,12 @@ static bool needsWebViewInitThreadWorkaround()
 
 - (WebFrame *)selectedFrame
 {
-    if (_private->usesDocumentViews) {
-        // If the first responder is a view in our tree, we get the frame containing the first responder.
-        // This is faster than searching the frame hierarchy, and will give us a result even in the case
-        // where the focused frame doesn't actually contain a selection.
-        WebFrame *focusedFrame = [self _focusedFrame];
-        if (focusedFrame)
-            return focusedFrame;
-    }
+    // If the first responder is a view in our tree, we get the frame containing the first responder.
+    // This is faster than searching the frame hierarchy, and will give us a result even in the case
+    // where the focused frame doesn't actually contain a selection.
+    WebFrame *focusedFrame = [self _focusedFrame];
+    if (focusedFrame)
+        return focusedFrame;
     
     // If the first responder is outside of our view tree, we search for a frame containing a selection.
     // There should be at most only one of these.
@@ -3803,20 +3751,16 @@ static bool needsWebViewInitThreadWorkaround()
         return;
 
     Frame* coreFrame = [self _mainCoreFrame];
-    if (_private->usesDocumentViews) {
-        for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame))
-            [[[kit(frame) frameView] documentView] viewWillMoveToHostWindow:hostWindow];
-    }
+    for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame))
+        [[[kit(frame) frameView] documentView] viewWillMoveToHostWindow:hostWindow];
     if (_private->hostWindow && [self window] != _private->hostWindow)
         [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:_private->hostWindow];
     if (hostWindow)
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowWillClose:) name:NSWindowWillCloseNotification object:hostWindow];
     [_private->hostWindow release];
     _private->hostWindow = [hostWindow retain];
-    if (_private->usesDocumentViews) {
-        for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame))
-            [[[kit(frame) frameView] documentView] viewDidMoveToHostWindow];
-    }
+    for (Frame* frame = coreFrame; frame; frame = frame->tree()->traverseNext(coreFrame))
+        [[[kit(frame) frameView] documentView] viewDidMoveToHostWindow];
 }
 
 - (NSWindow *)hostWindow
@@ -3937,80 +3881,68 @@ static bool needsWebViewInitThreadWorkaround()
 
 - (BOOL)acceptsFirstResponder
 {
-    if (_private->usesDocumentViews)
-        return [[[self mainFrame] frameView] acceptsFirstResponder];
-
-    // FIXME (Viewless): Need more code from WebHTMLView here.
-    return YES;
+    return [[[self mainFrame] frameView] acceptsFirstResponder];
 }
 
 - (BOOL)becomeFirstResponder
 {
-    if (_private->usesDocumentViews) {
-        if (_private->becomingFirstResponder) {
-            // Fix for unrepro infinite recursion reported in Radar 4448181. If we hit this assert on
-            // a debug build, we should figure out what causes the problem and do a better fix.
-            ASSERT_NOT_REACHED();
-            return NO;
-        }
-        
-        // This works together with setNextKeyView to splice the WebView into
-        // the key loop similar to the way NSScrollView does this. Note that
-        // WebFrameView has very similar code.
-        NSWindow *window = [self window];
-        WebFrameView *mainFrameView = [[self mainFrame] frameView];
+    if (_private->becomingFirstResponder) {
+        // Fix for unrepro infinite recursion reported in Radar 4448181. If we hit this assert on
+        // a debug build, we should figure out what causes the problem and do a better fix.
+        ASSERT_NOT_REACHED();
+        return NO;
+    }
+    
+    // This works together with setNextKeyView to splice the WebView into
+    // the key loop similar to the way NSScrollView does this. Note that
+    // WebFrameView has very similar code.
+    NSWindow *window = [self window];
+    WebFrameView *mainFrameView = [[self mainFrame] frameView];
 
-        NSResponder *previousFirstResponder = [[self window] _oldFirstResponderBeforeBecoming];
-        BOOL fromOutside = ![previousFirstResponder isKindOfClass:[NSView class]] || (![(NSView *)previousFirstResponder isDescendantOf:self] && previousFirstResponder != self);
+    NSResponder *previousFirstResponder = [[self window] _oldFirstResponderBeforeBecoming];
+    BOOL fromOutside = ![previousFirstResponder isKindOfClass:[NSView class]] || (![(NSView *)previousFirstResponder isDescendantOf:self] && previousFirstResponder != self);
 
-        if ([window keyViewSelectionDirection] == NSSelectingPrevious) {
-            NSView *previousValidKeyView = [self previousValidKeyView];
-            if (previousValidKeyView != self && previousValidKeyView != mainFrameView) {
-                _private->becomingFirstResponder = YES;
-                _private->becomingFirstResponderFromOutside = fromOutside;
-                [window makeFirstResponder:previousValidKeyView];
-                _private->becomingFirstResponderFromOutside = NO;
-                _private->becomingFirstResponder = NO;
-                return YES;
-            }
-            return NO;
-        }
-
-        if ([mainFrameView acceptsFirstResponder]) {
+    if ([window keyViewSelectionDirection] == NSSelectingPrevious) {
+        NSView *previousValidKeyView = [self previousValidKeyView];
+        if (previousValidKeyView != self && previousValidKeyView != mainFrameView) {
             _private->becomingFirstResponder = YES;
             _private->becomingFirstResponderFromOutside = fromOutside;
-            [window makeFirstResponder:mainFrameView];
+            [window makeFirstResponder:previousValidKeyView];
             _private->becomingFirstResponderFromOutside = NO;
             _private->becomingFirstResponder = NO;
             return YES;
-        } 
-
+        }
         return NO;
     }
 
-    // FIXME (Viewless): Need more code from WebHTMLView here.
-    return YES;
+    if ([mainFrameView acceptsFirstResponder]) {
+        _private->becomingFirstResponder = YES;
+        _private->becomingFirstResponderFromOutside = fromOutside;
+        [window makeFirstResponder:mainFrameView];
+        _private->becomingFirstResponderFromOutside = NO;
+        _private->becomingFirstResponder = NO;
+        return YES;
+    } 
+
+    return NO;
 }
 
 - (NSView *)_webcore_effectiveFirstResponder
 {
-    if (_private && _private->usesDocumentViews) {
-        if (WebFrameView *frameView = [[self mainFrame] frameView])
-            return [frameView _webcore_effectiveFirstResponder];
-    }
+    if (WebFrameView *frameView = [[self mainFrame] frameView])
+        return [frameView _webcore_effectiveFirstResponder];
+
     return [super _webcore_effectiveFirstResponder];
 }
 
 - (void)setNextKeyView:(NSView *)view
 {
-    if (_private && _private->usesDocumentViews) {
-        // This works together with becomeFirstResponder to splice the WebView into
-        // the key loop similar to the way NSScrollView does this. Note that
-        // WebFrameView has similar code.
-        if (WebFrameView *mainFrameView = [[self mainFrame] frameView]) {
-            [mainFrameView setNextKeyView:view];
-            return;
-        }
+    // This works together with becomeFirstResponder to splice the WebView into
+    // the key loop similar to the way NSScrollView does this. Note that
+    // WebFrameView has similar code.
+    if (WebFrameView *mainFrameView = [[self mainFrame] frameView]) {
+        [mainFrameView setNextKeyView:view];
+        return;
     }
 
     [super setNextKeyView:view];
@@ -4521,6 +4453,14 @@ static BOOL findString(NSView <WebDocumentSearching> *searchView, NSString *stri
     return NO;
 }
 
+- (DOMRange *)DOMRangeOfString:(NSString *)string relativeTo:(DOMRange *)previousRange options:(WebFindOptions)options
+{
+    if (!_private->page)
+        return nil;
+
+    return kit(_private->page->rangeOfString(string, core(previousRange), coreOptions(options)).get());
+}
+
 - (void)setHoverFeedbackSuspended:(BOOL)newValue
 {
     if (_private->hoverFeedbackSuspended == newValue)
@@ -4528,20 +4468,15 @@ static BOOL findString(NSView <WebDocumentSearching> *searchView, NSString *stri
     
     _private->hoverFeedbackSuspended = newValue;
 
-    if (_private->usesDocumentViews) {
-        id <WebDocumentView> documentView = [[[self mainFrame] frameView] documentView];
-        // FIXME: in a perfect world we'd do this in a general way that worked with any document view,
-        // such as by calling a protocol method or using respondsToSelector or sending a notification.
-        // But until there is any need for these more general solutions, we'll just hardwire it to work
-        // with WebHTMLView.
-        // Note that _hoverFeedbackSuspendedChanged needs to be called only on the main WebHTMLView, not
-        // on each subframe separately.
-        if ([documentView isKindOfClass:[WebHTMLView class]])
-            [(WebHTMLView *)documentView _hoverFeedbackSuspendedChanged];
-        return;
-    }
-
-    [self _updateMouseoverWithFakeEvent];
+    id <WebDocumentView> documentView = [[[self mainFrame] frameView] documentView];
+    // FIXME: in a perfect world we'd do this in a general way that worked with any document view,
+    // such as by calling a protocol method or using respondsToSelector or sending a notification.
+    // But until there is any need for these more general solutions, we'll just hardwire it to work
+    // with WebHTMLView.
+    // Note that _hoverFeedbackSuspendedChanged needs to be called only on the main WebHTMLView, not
+    // on each subframe separately.
+    if ([documentView isKindOfClass:[WebHTMLView class]])
+        [(WebHTMLView *)documentView _hoverFeedbackSuspendedChanged];
 }
 
 - (BOOL)isHoverFeedbackSuspended
@@ -4560,13 +4495,6 @@ static BOOL findString(NSView <WebDocumentSearching> *searchView, NSString *stri
     _private->mainFrameDocumentReady = mainFrameDocumentReady;
     [self _didChangeValueForKey:_WebMainFrameDocumentKey];
     // this will cause observers to call mainFrameDocument where this flag will be checked
-}
-
-// This method name is used by Mail on Tiger (but not post-Tiger), so we shouldn't delete it 
-// until the day comes when we're no longer supporting Mail on Tiger.
-- (WebFrame *)_frameForCurrentSelection
-{
-    return [self _selectedOrMainFrame];
 }
 
 - (void)setTabKeyCyclesThroughElements:(BOOL)cyclesElements
@@ -4620,11 +4548,11 @@ static NSAppleEventDescriptor* aeDescFromJSValue(ExecState* exec, JSValue jsValu
 {
     NSAppleEventDescriptor* aeDesc = 0;
     if (jsValue.isBoolean())
-        return [NSAppleEventDescriptor descriptorWithBoolean:jsValue.getBoolean()];
+        return [NSAppleEventDescriptor descriptorWithBoolean:jsValue.asBoolean()];
     if (jsValue.isString())
         return [NSAppleEventDescriptor descriptorWithString:ustringToString(jsValue.getString(exec))];
     if (jsValue.isNumber()) {
-        double value = jsValue.uncheckedGetNumber();
+        double value = jsValue.asNumber();
         int intValue = value;
         if (value == intValue)
             return [NSAppleEventDescriptor descriptorWithDescriptorType:typeSInt32 bytes:&intValue length:sizeof(intValue)];
@@ -5509,6 +5437,23 @@ static WebFrameView *containingFrameView(NSView *view)
 
 @implementation WebView (WebFileInternal)
 
+- (float)_deviceScaleFactor
+{
+    if (_private->customDeviceScaleFactor != 0)
+        return _private->customDeviceScaleFactor;
+
+    NSWindow *window = [self window];
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+    if (window)
+        return [window backingScaleFactor];
+    return [[NSScreen mainScreen] backingScaleFactor];
+#else
+    if (window)
+        return [window userSpaceScaleFactor];
+    return [[NSScreen mainScreen] userSpaceScaleFactor];
+#endif
+}
+
 static inline uint64_t roundUpToPowerOf2(uint64_t num)
 {
     return powf(2.0, ceilf(log2f(num)));
@@ -5753,7 +5698,6 @@ static inline uint64_t roundUpToPowerOf2(uint64_t num)
 {
     if (_private->closed)
         return nil;
-    ASSERT(_private->usesDocumentViews);
     NSView *view = [self hitTest:[[self superview] convertPoint:point fromView:nil]];
     if (![view isDescendantOf:[[self mainFrame] frameView]])
         return nil;
@@ -6012,18 +5956,6 @@ static inline uint64_t roundUpToPowerOf2(uint64_t num)
     _private->insertionPasteboard = pasteboard;
 }
 
-- (void)_selectionChanged
-{
-    if (_private->usesDocumentViews) {
-        id documentView = [[[self _selectedOrMainFrame] frameView] documentView];
-        if ([documentView isKindOfClass:[WebHTMLView class]])
-            [documentView _selectionChanged];
-        return;
-    }
-
-    // FIXME (Viewless): We'll need code here.
-}
-
 - (Frame*)_mainCoreFrame
 {
     return (_private && _private->page) ? _private->page->mainFrame() : 0;
@@ -6139,7 +6071,8 @@ static void layerSyncRunLoopObserverCallBack(CFRunLoopObserverRef, CFRunLoopActi
     // Run after AppKit does its window update. If we do any painting, we'll commit
     // layer changes from FrameView::paintContents(), otherwise we'll commit via
     // _syncCompositingChanges when this observer fires.
-    const CFIndex runLoopOrder = NSDisplayWindowRunLoopOrdering + 1;
+    // Also leave a slot for the requestAnimationFrameRunLoopObserver, if it's enabled
+    const CFIndex runLoopOrder = NSDisplayWindowRunLoopOrdering + 2;
 
     // The WebView always outlives the observer, so no need to retain/release.
     CFRunLoopObserverContext context = { 0, self, 0, 0, 0 };

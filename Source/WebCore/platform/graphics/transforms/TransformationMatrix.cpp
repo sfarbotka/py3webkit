@@ -395,8 +395,12 @@ static bool decompose(const TransformationMatrix::Matrix4& mat, TransformationMa
     // is -1, then negate the matrix and the scaling factors.
     v3Cross(row[1], row[2], pdum3);
     if (v3Dot(row[0], pdum3) < 0) {
+
+        result.scaleX *= -1;
+        result.scaleY *= -1;
+        result.scaleZ *= -1;
+
         for (i = 0; i < 3; i++) {
-            result.scaleX *= -1;
             row[i][0] *= -1;
             row[i][1] *= -1;
             row[i][2] *= -1;
@@ -1141,5 +1145,14 @@ bool TransformationMatrix::isIntegerTranslation() const
 
     return true;
 }
+
+TransformationMatrix TransformationMatrix::to2dTransform() const
+{
+    return TransformationMatrix(m_matrix[0][0], m_matrix[0][1], 0, m_matrix[0][3],
+                                m_matrix[1][0], m_matrix[1][1], 0, m_matrix[1][3],
+                                0, 0, 1, 0,
+                                m_matrix[3][0], m_matrix[3][1], 0, m_matrix[3][3]);
+}
+
 
 }

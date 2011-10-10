@@ -26,7 +26,9 @@
 #ifndef JSNPMethod_h
 #define JSNPMethod_h
 
+#include <JavaScriptCore/FunctionPrototype.h>
 #include <JavaScriptCore/InternalFunction.h>
+#include <JavaScriptCore/JSGlobalObject.h>
 
 typedef void* NPIdentifier;
 
@@ -37,24 +39,31 @@ class JSNPMethod : public JSC::InternalFunction {
 public:
     typedef JSC::InternalFunction Base;
 
-    static JSNPMethod* create(JSC::ExecState* exec, JSC::JSGlobalObject* globalObject, const JSC::Identifier& ident, NPIdentifier npIdent)
+    static JSNPMethod* create(JSC::ExecState* exec, JSC::JSGlobalObject* globalObject, const JSC::Identifier& name, NPIdentifier npIdent)
     {
-        return new (JSC::allocateCell<JSNPMethod>(*exec->heap())) JSNPMethod(exec, globalObject, ident, npIdent);
+        JSC::Structure* structure = createStructure(exec->globalData(), globalObject, globalObject->functionPrototype());
+        JSNPMethod* method = new (JSC::allocateCell<JSNPMethod>(*exec->heap())) JSNPMethod(globalObject, structure, npIdent);
+        method->finishCreation(exec->globalData(), name);
+        return method;
     }
 
     static const JSC::ClassInfo s_info;
 
     NPIdentifier npIdentifier() const { return m_npIdentifier; }
 
-private:    
-    JSNPMethod(JSC::ExecState*, JSC::JSGlobalObject*, const JSC::Identifier&, NPIdentifier);
+protected:
+    void finishCreation(JSC::JSGlobalData&, const JSC::Identifier& name);
 
-    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSValue prototype)
+private:    
+    JSNPMethod(JSC::JSGlobalObject*, JSC::Structure*, NPIdentifier);
+
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
     {
-        return JSC::Structure::create(globalData, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
     }
 
-    virtual JSC::CallType getCallData(JSC::CallData&);
+    virtual JSC::CallType getCallDataVirtual(JSC::CallData&);
+    static JSC::CallType getCallData(JSC::JSCell*, JSC::CallData&);
     
     NPIdentifier m_npIdentifier;
 };

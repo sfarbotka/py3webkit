@@ -29,6 +29,7 @@
 #include "APIClient.h"
 #include "WKPage.h"
 #include "WebEvent.h"
+#include "WebHitTestResult.h"
 #include "WebOpenPanelParameters.h"
 #include <wtf/Forward.h>
 #include <wtf/PassRefPtr.h>
@@ -36,6 +37,7 @@
 namespace WebCore {
     class FloatRect;
     class IntSize;
+    class ResourceRequest;
     struct WindowFeatures;
 }
 
@@ -53,7 +55,7 @@ class WebOpenPanelResultListenerProxy;
 
 class WebUIClient : public APIClient<WKPageUIClient, kWKPageUIClientCurrentVersion> {
 public:
-    PassRefPtr<WebPageProxy> createNewPage(WebPageProxy*, const WebCore::WindowFeatures&, WebEvent::Modifiers, WebMouseEvent::Button);
+    PassRefPtr<WebPageProxy> createNewPage(WebPageProxy*, const WebCore::ResourceRequest&, const WebCore::WindowFeatures&, WebEvent::Modifiers, WebMouseEvent::Button);
     void showPage(WebPageProxy*);
     void close(WebPageProxy*);
 
@@ -66,7 +68,7 @@ public:
     String runJavaScriptPrompt(WebPageProxy*, const String&, const String&, WebFrameProxy*);
 
     void setStatusText(WebPageProxy*, const String&);
-    void mouseDidMoveOverElement(WebPageProxy*, WebEvent::Modifiers, APIObject*);
+    void mouseDidMoveOverElement(WebPageProxy*, const WebHitTestResult::Data&, WebEvent::Modifiers, APIObject*);
     void missingPluginButtonClicked(WebPageProxy*, const String& mimeType, const String& url, const String& pluginsPageURL);
     
     bool implementsDidNotHandleKeyEvent() const;
@@ -107,8 +109,6 @@ public:
 
     bool canRunModal() const;
     void runModal(WebPageProxy*);
-
-    void didCompleteRubberBandForMainFrame(WebPageProxy*, const WebCore::IntSize&);
 
     void saveDataToFileInDownloadsFolder(WebPageProxy*, const String& suggestedFilename, const String& mimeType, const String& originatingURLString, WebData*);
 

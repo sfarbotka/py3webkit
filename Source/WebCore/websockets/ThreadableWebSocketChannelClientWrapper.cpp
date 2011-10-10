@@ -44,8 +44,7 @@ ThreadableWebSocketChannelClientWrapper::ThreadableWebSocketChannelClientWrapper
     : m_client(client)
     , m_syncMethodDone(false)
     , m_useHixie76Protocol(true)
-    , m_subprotocol("")
-    , m_sent(false)
+    , m_sendRequestResult(false)
     , m_bufferedAmount(0)
     , m_suspended(false)
 {
@@ -83,22 +82,27 @@ void ThreadableWebSocketChannelClientWrapper::setUseHixie76Protocol(bool useHixi
 
 String ThreadableWebSocketChannelClientWrapper::subprotocol() const
 {
-    return m_subprotocol;
+    if (m_subprotocol.isEmpty())
+        return String("");
+    return String(m_subprotocol);
 }
 
 void ThreadableWebSocketChannelClientWrapper::setSubprotocol(const String& subprotocol)
 {
-    m_subprotocol = subprotocol;
+    unsigned length = subprotocol.length();
+    m_subprotocol.resize(length);
+    if (length)
+        memcpy(m_subprotocol.data(), subprotocol.characters(), sizeof(UChar) * length);
 }
 
-bool ThreadableWebSocketChannelClientWrapper::sent() const
+bool ThreadableWebSocketChannelClientWrapper::sendRequestResult() const
 {
-    return m_sent;
+    return m_sendRequestResult;
 }
 
-void ThreadableWebSocketChannelClientWrapper::setSent(bool sent)
+void ThreadableWebSocketChannelClientWrapper::setSendRequestResult(bool sendRequestResult)
 {
-    m_sent = sent;
+    m_sendRequestResult = sendRequestResult;
     m_syncMethodDone = true;
 }
 
@@ -132,6 +136,13 @@ void ThreadableWebSocketChannelClientWrapper::didReceiveMessage(const String& me
         processPendingTasks();
 }
 
+void ThreadableWebSocketChannelClientWrapper::didReceiveBinaryData(PassOwnPtr<Vector<char> > binaryData)
+{
+    m_pendingTasks.append(createCallbackTask(&ThreadableWebSocketChannelClientWrapper::didReceiveBinaryDataCallback, AllowCrossThreadAccess(this), binaryData));
+    if (!m_suspended)
+        processPendingTasks();
+}
+
 void ThreadableWebSocketChannelClientWrapper::didStartClosingHandshake()
 {
     m_pendingTasks.append(createCallbackTask(&ThreadableWebSocketChannelClientWrapper::didStartClosingHandshakeCallback, AllowCrossThreadAccess(this)));
@@ -139,9 +150,9 @@ void ThreadableWebSocketChannelClientWrapper::didStartClosingHandshake()
         processPendingTasks();
 }
 
-void ThreadableWebSocketChannelClientWrapper::didClose(unsigned long unhandledBufferedAmount, WebSocketChannelClient::ClosingHandshakeCompletionStatus closingHandshakeCompletion)
+void ThreadableWebSocketChannelClientWrapper::didClose(unsigned long unhandledBufferedAmount, WebSocketChannelClient::ClosingHandshakeCompletionStatus closingHandshakeCompletion, unsigned short code, const String& reason)
 {
-    m_pendingTasks.append(createCallbackTask(&ThreadableWebSocketChannelClientWrapper::didCloseCallback, AllowCrossThreadAccess(this), unhandledBufferedAmount, closingHandshakeCompletion));
+    m_pendingTasks.append(createCallbackTask(&ThreadableWebSocketChannelClientWrapper::didCloseCallback, AllowCrossThreadAccess(this), unhandledBufferedAmount, closingHandshakeCompletion, code, reason));
     if (!m_suspended)
         processPendingTasks();
 }
@@ -180,6 +191,13 @@ void ThreadableWebSocketChannelClientWrapper::didReceiveMessageCallback(ScriptEx
         wrapper->m_client->didReceiveMessage(message);
 }
 
+void ThreadableWebSocketChannelClientWrapper::didReceiveBinaryDataCallback(ScriptExecutionContext* context, ThreadableWebSocketChannelClientWrapper* wrapper, PassOwnPtr<Vector<char> > binaryData)
+{
+    ASSERT_UNUSED(context, !context);
+    if (wrapper->m_client)
+        wrapper->m_client->didReceiveBinaryData(binaryData);
+}
+
 void ThreadableWebSocketChannelClientWrapper::didStartClosingHandshakeCallback(ScriptExecutionContext* context, ThreadableWebSocketChannelClientWrapper* wrapper)
 {
     ASSERT_UNUSED(context, !context);
@@ -187,11 +205,11 @@ void ThreadableWebSocketChannelClientWrapper::didStartClosingHandshakeCallback(S
         wrapper->m_client->didStartClosingHandshake();
 }
 
-void ThreadableWebSocketChannelClientWrapper::didCloseCallback(ScriptExecutionContext* context, ThreadableWebSocketChannelClientWrapper* wrapper, unsigned long unhandledBufferedAmount, WebSocketChannelClient::ClosingHandshakeCompletionStatus closingHandshakeCompletion)
+void ThreadableWebSocketChannelClientWrapper::didCloseCallback(ScriptExecutionContext* context, ThreadableWebSocketChannelClientWrapper* wrapper, unsigned long unhandledBufferedAmount, WebSocketChannelClient::ClosingHandshakeCompletionStatus closingHandshakeCompletion, unsigned short code, const String& reason)
 {
     ASSERT_UNUSED(context, !context);
     if (wrapper->m_client)
-        wrapper->m_client->didClose(unhandledBufferedAmount, closingHandshakeCompletion);
+        wrapper->m_client->didClose(unhandledBufferedAmount, closingHandshakeCompletion, code, reason);
 }
 
 } // namespace WebCore

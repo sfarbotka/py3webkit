@@ -66,26 +66,42 @@ class Restart(IRCCommand):
 
 
 class Rollout(IRCCommand):
+    def _extract_revisions(self, arg):
+
+        revision_list = []
+        possible_revisions = arg.split(",")
+        for revision in possible_revisions:
+            revision = revision.strip()
+            if not revision:
+                continue
+            revision = revision.lstrip("r")
+            # If one part of the arg isn't in the correct format,
+            # then none of the arg should be considered a revision.
+            if not revision.isdigit():
+                return None
+            revision_list.append(int(revision))
+        return revision_list
+
     def _parse_args(self, args):
         if not args:
             return (None, None)
 
-        # the first argument must be a revision number
-        first_revision = args[0].lstrip("r")
-        if not first_revision.isdigit():
+        svn_revision_list = []
+        remaining_args = args[:]
+        # First process all revisions.
+        while remaining_args:
+            new_revisions = self._extract_revisions(remaining_args[0])
+            if not new_revisions:
+                break
+            svn_revision_list += new_revisions
+            remaining_args = remaining_args[1:]
+
+        # Was there a revision number?
+        if not len(svn_revision_list):
             return (None, None)
 
-        parsing_revision = True
-        svn_revision_list = [int(first_revision)]
-        rollout_reason = []
-        for arg in args[1:]:
-            if arg.lstrip("r").isdigit() and parsing_revision:
-                svn_revision_list.append(int(arg.lstrip("r")))
-            else:
-                parsing_revision = False
-                rollout_reason.append(arg)
-
-        rollout_reason = " ".join(rollout_reason)
+        # Everything left is the reason.
+        rollout_reason = " ".join(remaining_args)
         return svn_revision_list, rollout_reason
 
     def _responsible_nicknames_from_revisions(self, tool, sheriff, svn_revision_list):
@@ -109,7 +125,7 @@ class Rollout(IRCCommand):
 
         if (not svn_revision_list or not rollout_reason):
             # return is equivalent to an irc().post(), but makes for easier unit testing.
-            return "%s: Usage: SVN_REVISION [SVN_REVISIONS] REASON" % nick
+            return "%s: Usage: rollout SVN_REVISION [SVN_REVISIONS] REASON" % nick
 
         self._update_working_copy(tool)
 
@@ -161,7 +177,7 @@ class RollChromiumDEPS(IRCCommand):
 
 class Help(IRCCommand):
     def execute(self, nick, args, tool, sheriff):
-        return "%s: Available commands: %s" % (nick, ", ".join(sorted(commands.keys())))
+        return "%s: Available commands: %s" % (nick, ", ".join(sorted(visible_commands.keys())))
 
 
 class Hi(IRCCommand):
@@ -172,17 +188,33 @@ class Hi(IRCCommand):
 
 
 class Whois(IRCCommand):
+    def _nick_or_full_record(self, contributor):
+        if contributor.irc_nicknames:
+            return ', '.join(contributor.irc_nicknames)
+        return unicode(contributor)
+
     def execute(self, nick, args, tool, sheriff):
         if len(args) != 1:
-            return "%s: Usage: BUGZILLA_EMAIL" % nick
-        email = args[0]
+            return "%s: Usage: whois SEARCH_STRING" % nick
+        search_string = args[0]
         # FIXME: We should get the ContributorList off the tool somewhere.
-        committer = CommitterList().contributor_by_email(email)
-        if not committer:
-            return "%s: Sorry, I don't know %s. Maybe you could introduce me?" % (nick, email)
-        if not committer.irc_nickname:
-            return "%s: %s hasn't told me their nick. Boo hoo :-(" % (nick, email)
-        return "%s: %s is %s. Why do you ask?" % (nick, email, committer.irc_nickname)
+        contributors = CommitterList().contributors_by_search_string(search_string)
+        if not contributors:
+            return "%s: Sorry, I don't know any contributors matching '%s'." % (nick, search_string)
+        if len(contributors) > 5:
+            return "%s: More than 5 contributors match '%s', could you be more specific?" % (nick, search_string)
+        if len(contributors) == 1:
+            contributor = contributors[0]
+            if not contributor.irc_nicknames:
+                return "%s: %s hasn't told me their nick. Boo hoo :-(" % (nick, contributor)
+            if contributor.emails and search_string.lower() not in map(lambda email: email.lower(), contributor.emails):
+                formattedEmails = ', '.join(contributor.emails)
+                return "%s: %s is %s (%s). Why do you ask?" % (nick, search_string, self._nick_or_full_record(contributor), formattedEmails)
+            else:
+                return "%s: %s is %s. Why do you ask?" % (nick, search_string, self._nick_or_full_record(contributor))
+        contributor_nicks = map(self._nick_or_full_record, contributors)
+        contributors_string = join_with_separators(contributor_nicks, only_two_separator=" or ", last_separator=', or ')
+        return "%s: I'm not sure who you mean?  %s could be '%s'." % (nick, contributors_string, search_string)
 
 
 class Eliza(IRCCommand):
@@ -200,7 +232,7 @@ class Eliza(IRCCommand):
 class CreateBug(IRCCommand):
     def execute(self, nick, args, tool, sheriff):
         if not args:
-            return "%s: Usage: BUG_TITLE" % nick
+            return "%s: Usage: create-bug BUG_TITLE" % nick
 
         bug_title = " ".join(args)
         bug_description = "%s\nRequested by %s on %s." % (bug_title, nick, config_irc.channel)
@@ -219,7 +251,7 @@ class CreateBug(IRCCommand):
 
 
 # FIXME: Lame.  We should have an auto-registering CommandCenter.
-commands = {
+visible_commands = {
     "help": Help,
     "hi": Hi,
     "last-green-revision": LastGreenRevision,
@@ -229,3 +261,10 @@ commands = {
     "create-bug": CreateBug,
     "roll-chromium-deps": RollChromiumDEPS,
 }
+
+# Add revert as an "easter egg" command. Why?
+# revert is the same as rollout and it would be confusing to list both when
+# they do the same thing. However, this command is a very natural thing for
+# people to use and it seems silly to have them hunt around for "rollout" instead.
+commands = visible_commands.copy()
+commands["revert"] = Rollout

@@ -35,14 +35,15 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "ContentLayerChromium.h"
+#include "FloatQuad.h"
 #include "IntRect.h"
 #include "LayerChromium.h"
-#include "LayerTilerChromium.h"
+#include "TrackingTextureAllocator.h"
 #include "VideoLayerChromium.h"
 #include "cc/CCCanvasLayerImpl.h"
 #include "cc/CCHeadsUpDisplay.h"
 #include "cc/CCLayerSorter.h"
-#include "cc/CCLayerTreeHost.h"
+#include "cc/CCLayerTreeHostImpl.h"
 #include "cc/CCPluginLayerImpl.h"
 #include "cc/CCVideoLayerImpl.h"
 #include <wtf/HashMap.h>
@@ -64,40 +65,38 @@ namespace WebCore {
 
 class CCHeadsUpDisplay;
 class CCLayerImpl;
-class CCLayerTreeHostCommitter;
 class CCLayerTreeHostImpl;
 class GeometryBinding;
 class GraphicsContext3D;
+class NonCompositedContentHost;
+class TrackingTextureAllocator;
 
 // Class that handles drawing of composited render layers using GL.
-class LayerRendererChromium : public RefCounted<LayerRendererChromium> {
+class LayerRendererChromium {
+    WTF_MAKE_NONCOPYABLE(LayerRendererChromium);
 public:
-    static PassRefPtr<LayerRendererChromium> create(CCLayerTreeHost*, PassRefPtr<GraphicsContext3D>);
+    static PassOwnPtr<LayerRendererChromium> create(CCLayerTreeHostImpl*, PassRefPtr<GraphicsContext3D>);
 
-    virtual ~LayerRendererChromium();
+    // Must be called in order to allow the LayerRendererChromium to destruct
+    void close();
+
+    ~LayerRendererChromium();
 
     const CCSettings& settings() const { return m_owner->settings(); }
+    const LayerRendererCapabilities& capabilities() const { return m_capabilities; }
 
-    CCLayerTreeHost* owner() { return m_owner; }
-    const CCLayerTreeHost* owner() const { return m_owner; }
-
-    LayerChromium* rootLayer() { return m_owner->rootLayer(); }
-    const LayerChromium* rootLayer() const { return m_owner->rootLayer(); }
+    CCLayerImpl* rootLayer() { return m_owner->rootLayer(); }
+    const CCLayerImpl* rootLayer() const { return m_owner->rootLayer(); }
 
     GraphicsContext3D* context();
-    bool contextSupportsMapSub() const { return m_contextSupportsMapSub; }
+    bool contextSupportsMapSub() const { return m_capabilities.usingMapSub; }
 
-#if USE(SKIA)
-    GrContext* skiaContext() { return m_skiaContext.get(); }
-#endif
+    const IntSize& viewportSize() { return m_owner->viewportSize(); }
+    int viewportWidth() { return viewportSize().width(); }
+    int viewportHeight() { return viewportSize().height(); }
 
-    void invalidateRootLayerRect(const IntRect& dirtyRect);
-
-    void rootLayerChanged();
     void viewportChanged();
 
-    // updates and draws the current layers onto the backbuffer
-    void updateLayers();
     void drawLayers();
 
     // waits for rendering to finish
@@ -106,26 +105,25 @@ public:
     // puts backbuffer onscreen
     void present();
 
-    unsigned createLayerTexture();
-    void deleteLayerTexture(unsigned);
+    void setZoomAnimatorTransform(const TransformationMatrix& t) { m_zoomAnimatorTransform = t; }
 
     static void debugGLCall(GraphicsContext3D*, const char* command, const char* file, int line);
 
     const TransformationMatrix& projectionMatrix() const { return m_projectionMatrix; }
     const TransformationMatrix& windowMatrix() const { return m_windowMatrix; }
 
-    bool checkTextureSize(const IntSize&);
-    int maxTextureSize() const { return m_maxTextureSize; }
-
     const GeometryBinding* sharedGeometry() const { return m_sharedGeometry.get(); }
+    const FloatQuad& sharedGeometryQuad() const { return m_sharedGeometryQuad; }
     const LayerChromium::BorderProgram* borderProgram();
     const CCHeadsUpDisplay::Program* headsUpDisplayProgram();
     const CCRenderSurface::Program* renderSurfaceProgram();
+    const CCRenderSurface::ProgramAA* renderSurfaceProgramAA();
     const CCRenderSurface::MaskProgram* renderSurfaceMaskProgram();
-    const LayerTilerChromium::Program* tilerProgram();
-    const LayerTilerChromium::ProgramSwizzle* tilerProgramSwizzle();
-    const LayerTilerChromium::ProgramAA* tilerProgramAA();
-    const LayerTilerChromium::ProgramSwizzleAA* tilerProgramSwizzleAA();
+    const CCRenderSurface::MaskProgramAA* renderSurfaceMaskProgramAA();
+    const CCTiledLayerImpl::Program* tilerProgram();
+    const CCTiledLayerImpl::ProgramAA* tilerProgramAA();
+    const CCTiledLayerImpl::ProgramSwizzle* tilerProgramSwizzle();
+    const CCTiledLayerImpl::ProgramSwizzleAA* tilerProgramSwizzleAA();
     const CCCanvasLayerImpl::Program* canvasLayerProgram();
     const CCPluginLayerImpl::Program* pluginLayerProgram();
     const CCVideoLayerImpl::RGBAProgram* videoLayerRGBAProgram();
@@ -133,8 +131,9 @@ public:
 
     void getFramebufferPixels(void *pixels, const IntRect& rect);
 
-    TextureManager* contentsTextureManager() const { return m_contentsTextureManager.get(); }
     TextureManager* renderSurfaceTextureManager() const { return m_renderSurfaceTextureManager.get(); }
+    TextureAllocator* renderSurfaceTextureAllocator() const { return m_renderSurfaceTextureAllocator.get(); }
+    TextureAllocator* contentsTextureAllocator() const { return m_contentsTextureAllocator.get(); }
 
     CCHeadsUpDisplay* headsUpDisplay() { return m_headsUpDisplay.get(); }
 
@@ -142,42 +141,26 @@ public:
 
     String layerTreeAsText() const;
 
-    void addChildContext(GraphicsContext3D*);
-    void removeChildContext(GraphicsContext3D*);
+    bool isContextLost();
 
-    // Return true if the compositor context has an error.
-    bool isCompositorContextLost();
+    void releaseRenderSurfaceTextures();
 
-    void releaseTextures();
+    GC3Denum bestTextureFormat();
 
-    void setLayerRendererRecursive(LayerChromium*);
-
-#ifndef NDEBUG
-    static bool s_inPaintLayerContents;
-#endif
-    typedef Vector<RefPtr<LayerChromium> > LayerList;
     typedef Vector<RefPtr<CCLayerImpl> > CCLayerList;
 
+    static void toGLMatrix(float*, const TransformationMatrix&);
+    void drawTexturedQuad(const TransformationMatrix& layerMatrix,
+                          float width, float height, float opacity, const FloatQuad&,
+                          int matrixLocation, int alphaLocation, int quadLocation);
+
 private:
-    typedef HashMap<GraphicsContext3D*, int> ChildContextMap;
-
-    // FIXME: This needs to be moved to the CCLayerTreeHostImpl when that class exists.
-    RefPtr<CCLayerImpl> m_rootCCLayerImpl;
-
-    LayerRendererChromium(CCLayerTreeHost*, PassRefPtr<GraphicsContext3D>);
+    LayerRendererChromium(CCLayerTreeHostImpl*, PassRefPtr<GraphicsContext3D>);
     bool initialize();
-
-    void updateLayers(LayerChromium*);
-    void updateRootLayerContents();
-
-    void paintLayerContents(const LayerList&);
-    void updateCompositorResources(const LayerList& renderSurfaceLayerList);
-    void updateCompositorResources(LayerChromium*);
 
     void drawLayersInternal();
     void drawLayer(CCLayerImpl*, CCRenderSurface*);
 
-    void drawRootLayer();
     ManagedTexture* getOffscreenLayerTexture();
     void copyOffscreenTextureToDisplay();
 
@@ -191,29 +174,23 @@ private:
 
     static bool compareLayerZ(const RefPtr<CCLayerImpl>&, const RefPtr<CCLayerImpl>&);
 
-    void dumpRenderSurfaces(TextStream&, int indent, const LayerChromium*) const;
+    void dumpRenderSurfaces(TextStream&, int indent, const CCLayerImpl*) const;
 
     bool initializeSharedObjects();
     void cleanupSharedObjects();
 
-    // FIXME: Change this to CCLayerTreeHostImpl
-    CCLayerTreeHost* m_owner;
+    void clearRenderSurfacesOnCCLayerImplRecursive(CCLayerImpl*);
+
+    CCLayerTreeHostImpl* m_owner;
+
+    LayerRendererCapabilities m_capabilities;
 
     TransformationMatrix m_projectionMatrix;
     TransformationMatrix m_windowMatrix;
 
-    // FIXME: split the texture updater and tiler into two parts. Then, keep the
-    // impl here and put the painting-side on the LayerTreeHost.
-    OwnPtr<LayerTextureUpdater> m_rootLayerTextureUpdater;
-    OwnPtr<LayerTilerChromium> m_rootLayerContentTiler;
-
-    OwnPtr<LayerList> m_computedRenderSurfaceLayerList;
-
     CCRenderSurface* m_currentRenderSurface;
     unsigned m_offscreenFramebufferId;
-
-    // Maximum texture dimensions supported.
-    int m_maxTextureSize;
+    TransformationMatrix m_zoomAnimatorTransform;
 
     // Store values that are shared between instances of each layer type
     // associated with this instance of the compositor. Since there can be
@@ -222,34 +199,32 @@ private:
     OwnPtr<GeometryBinding> m_sharedGeometry;
     OwnPtr<LayerChromium::BorderProgram> m_borderProgram;
     OwnPtr<CCHeadsUpDisplay::Program> m_headsUpDisplayProgram;
-    OwnPtr<LayerTilerChromium::Program> m_tilerProgram;
-    OwnPtr<LayerTilerChromium::ProgramSwizzle> m_tilerProgramSwizzle;
-    OwnPtr<LayerTilerChromium::ProgramAA> m_tilerProgramAA;
-    OwnPtr<LayerTilerChromium::ProgramSwizzleAA> m_tilerProgramSwizzleAA;
+    OwnPtr<CCTiledLayerImpl::Program> m_tilerProgram;
+    OwnPtr<CCTiledLayerImpl::ProgramSwizzle> m_tilerProgramSwizzle;
+    OwnPtr<CCTiledLayerImpl::ProgramAA> m_tilerProgramAA;
+    OwnPtr<CCTiledLayerImpl::ProgramSwizzleAA> m_tilerProgramSwizzleAA;
     OwnPtr<CCCanvasLayerImpl::Program> m_canvasLayerProgram;
     OwnPtr<CCPluginLayerImpl::Program> m_pluginLayerProgram;
     OwnPtr<CCRenderSurface::MaskProgram> m_renderSurfaceMaskProgram;
     OwnPtr<CCRenderSurface::Program> m_renderSurfaceProgram;
+    OwnPtr<CCRenderSurface::MaskProgramAA> m_renderSurfaceMaskProgramAA;
+    OwnPtr<CCRenderSurface::ProgramAA> m_renderSurfaceProgramAA;
     OwnPtr<CCVideoLayerImpl::RGBAProgram> m_videoLayerRGBAProgram;
     OwnPtr<CCVideoLayerImpl::YUVProgram> m_videoLayerYUVProgram;
 
-    OwnPtr<TextureManager> m_contentsTextureManager;
     OwnPtr<TextureManager> m_renderSurfaceTextureManager;
+    OwnPtr<TrackingTextureAllocator> m_contentsTextureAllocator;
+    OwnPtr<TrackingTextureAllocator> m_renderSurfaceTextureAllocator;
 
     OwnPtr<CCHeadsUpDisplay> m_headsUpDisplay;
 
     RefPtr<GraphicsContext3D> m_context;
-#if USE(SKIA)
-    OwnPtr<GrContext> m_skiaContext;
-#endif
-
-    ChildContextMap m_childContexts;
-
-    bool m_contextSupportsMapSub;
 
     CCRenderSurface* m_defaultRenderSurface;
 
     CCLayerSorter m_layerSorter;
+
+    FloatQuad m_sharedGeometryQuad;
 };
 
 // Setting DEBUG_GL_CALLS to 1 will call glGetError() after almost every GL

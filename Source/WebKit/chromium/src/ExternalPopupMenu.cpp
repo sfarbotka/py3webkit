@@ -115,6 +115,39 @@ void ExternalPopupMenu::didAcceptIndex(int index)
     m_webExternalPopupMenu = 0;
 }
 
+void ExternalPopupMenu::didAcceptIndices(const WebVector<int>& indices)
+{
+#if ENABLE(NO_LISTBOX_RENDERING)
+    if (!m_popupMenuClient) {
+        m_webExternalPopupMenu = 0;
+        return
+    }
+
+    // Calling methods on the PopupMenuClient might lead to this object being
+    // derefed. This ensures it does not get deleted while we are running this
+    // method.
+    RefPtr<ExternalPopupMenu> protect(this);
+    ListPopupMenuClient* listPopupMenuClient = static_cast<ListPopupMenuClient*>(m_popupMenuClient);
+
+    if (!indices.size())
+        listPopupMenuClient->valueChanged(-1, true);
+    else {
+        for (size_t i = 0; i < indices.size(); ++i)
+            listPopupMenuClient->listBoxSelectItem(indices[i], (i > 0), false, (i == indices.size() - 1));
+    }
+
+    // The call to valueChanged above might have lead to a call to
+    // disconnectClient, so we might not have a PopupMenuClient anymore.
+    if (m_popupMenuClient)
+        m_popupMenuClient->popupDidHide();
+
+    m_webExternalPopupMenu = 0;
+
+#else
+    ASSERT_NOT_REACHED();
+#endif
+}
+
 void ExternalPopupMenu::didCancel()
 {
     // See comment in didAcceptIndex on why we need this.
@@ -128,8 +161,7 @@ void ExternalPopupMenu::didCancel()
 void ExternalPopupMenu::getPopupMenuInfo(WebPopupMenuInfo* info)
 {
     int itemCount = m_popupMenuClient->listSize();
-    WebVector<WebMenuItemInfo> items(
-        static_cast<size_t>(itemCount));
+    WebVector<WebMenuItemInfo> items(static_cast<size_t>(itemCount));
     for (int i = 0; i < itemCount; ++i) {
         WebMenuItemInfo& popupItem = items[i];
         popupItem.label = m_popupMenuClient->itemText(i);
@@ -141,6 +173,7 @@ void ExternalPopupMenu::getPopupMenuInfo(WebPopupMenuInfo* info)
         else
             popupItem.type = WebMenuItemInfo::Option;
         popupItem.enabled = m_popupMenuClient->itemIsEnabled(i);
+        popupItem.checked = m_popupMenuClient->itemIsSelected(i);
         PopupMenuStyle style = m_popupMenuClient->itemStyle(i);
         if (style.textDirection() == WebCore::RTL)
             popupItem.textDirection = WebTextDirectionRightToLeft;
@@ -150,12 +183,15 @@ void ExternalPopupMenu::getPopupMenuInfo(WebPopupMenuInfo* info)
     }
 
     info->itemHeight = m_popupMenuClient->menuStyle().font().fontMetrics().height();
-    info->itemFontSize =
-        static_cast<int>(m_popupMenuClient->menuStyle().font().size());
+    info->itemFontSize = static_cast<int>(m_popupMenuClient->menuStyle().font().size());
     info->selectedIndex = m_popupMenuClient->selectedIndex();
-    info->rightAligned =
-        m_popupMenuClient->menuStyle().textDirection() == WebCore::RTL;
+    info->rightAligned = m_popupMenuClient->menuStyle().textDirection() == WebCore::RTL;
+#if ENABLE(NO_LISTBOX_RENDERING)
+    // FIXME: Why is this cast safe?
+    ListPopupMenuClient* client = static_cast<ListPopupMenuClient*>(m_popupMenuClient);
+    info->allowMultipleSelection = client->multiple();
+#endif
     info->items.swap(items);
 }
 
-} // namespace WebKit
+}

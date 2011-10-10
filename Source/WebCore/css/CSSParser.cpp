@@ -32,6 +32,7 @@
 #include "CSSFlexValue.h"
 #include "CSSFontFaceRule.h"
 #include "CSSFontFaceSrcValue.h"
+#include "CSSFunctionValue.h"
 #include "CSSGradientValue.h"
 #include "CSSImageValue.h"
 #include "CSSImportRule.h"
@@ -72,6 +73,9 @@
 #include "Rect.h"
 #include "RenderTheme.h"
 #include "ShadowValue.h"
+#if ENABLE(CSS_FILTERS)
+#include "WebKitCSSFilterValue.h"
+#endif
 #include "WebKitCSSKeyframeRule.h"
 #include "WebKitCSSKeyframesRule.h"
 #include "WebKitCSSTransformValue.h"
@@ -883,6 +887,8 @@ bool CSSParser::parseValue(int propId, bool important)
     case CSSPropertyPageBreakBefore:
     case CSSPropertyWebkitColumnBreakAfter:
     case CSSPropertyWebkitColumnBreakBefore:
+    case CSSPropertyWebkitRegionBreakAfter:
+    case CSSPropertyWebkitRegionBreakBefore:
         if (id == CSSValueAuto ||
              id == CSSValueAlways ||
              id == CSSValueAvoid ||
@@ -893,6 +899,7 @@ bool CSSParser::parseValue(int propId, bool important)
 
     case CSSPropertyPageBreakInside:    // avoid | auto | inherit
     case CSSPropertyWebkitColumnBreakInside:
+    case CSSPropertyWebkitRegionBreakInside:
         if (id == CSSValueAuto || id == CSSValueAvoid)
             validPrimitive = true;
         break;
@@ -973,11 +980,7 @@ bool CSSParser::parseValue(int propId, bool important)
         // inline | block | list-item | run-in | inline-block | table |
         // inline-table | table-row-group | table-header-group | table-footer-group | table-row |
         // table-column-group | table-column | table-cell | table-caption | -webkit-box | -webkit-inline-box | none | inherit
-#if ENABLE(WCSS)
-        if ((id >= CSSValueInline && id <= CSSValueWapMarquee) || id == CSSValueNone)
-#else
         if ((id >= CSSValueInline && id <= CSSValueWebkitInlineBox) || id == CSSValueNone)
-#endif
             validPrimitive = true;
 #if ENABLE(CSS3_FLEXBOX)
         if (id == CSSValueWebkitFlexbox || id == CSSValueWebkitInlineFlexbox)
@@ -1202,6 +1205,8 @@ bool CSSParser::parseValue(int propId, bool important)
         return result;
     }
     case CSSPropertyListStyleImage:     // <uri> | none | inherit
+    case CSSPropertyBorderImageSource:
+    case CSSPropertyWebkitMaskBoxImageSource:
         if (id == CSSValueNone) {
             parsedValue = CSSImageValue::create();
             m_valueList->next();
@@ -1437,18 +1442,52 @@ bool CSSParser::parseValue(int propId, bool important)
             validPrimitive = true;
         break;
 
+    case CSSPropertyBorderImage:
     case CSSPropertyWebkitBorderImage:
-    case CSSPropertyWebkitMaskBoxImage:
-        if (id == CSSValueNone)
-            validPrimitive = true;
-        else {
-            RefPtr<CSSValue> result;
-            if (parseBorderImage(propId, important, result)) {
-                addProperty(propId, result, important);
-                return true;
-            }
+    case CSSPropertyWebkitMaskBoxImage: {
+        RefPtr<CSSValue> result;
+        if (parseBorderImage(propId, result)) {
+            addProperty(propId, result, important);
+            return true;
         }
         break;
+    }
+    case CSSPropertyBorderImageOutset:
+    case CSSPropertyWebkitMaskBoxImageOutset: {
+        RefPtr<CSSPrimitiveValue> result;
+        if (parseBorderImageOutset(result)) {
+            addProperty(propId, result, important);
+            return true;
+        }
+        break;
+    }
+    case CSSPropertyBorderImageRepeat:
+    case CSSPropertyWebkitMaskBoxImageRepeat: {
+        RefPtr<CSSValue> result;
+        if (parseBorderImageRepeat(result)) {
+            addProperty(propId, result, important);
+            return true;
+        }
+        break;
+    }
+    case CSSPropertyBorderImageSlice:
+    case CSSPropertyWebkitMaskBoxImageSlice: {
+        RefPtr<CSSBorderImageSliceValue> result;
+        if (parseBorderImageSlice(propId, result)) {
+            addProperty(propId, result, important);
+            return true;
+        }
+        break;
+    }
+    case CSSPropertyBorderImageWidth:
+    case CSSPropertyWebkitMaskBoxImageWidth: {
+        RefPtr<CSSPrimitiveValue> result;
+        if (parseBorderImageWidth(result)) {
+            addProperty(propId, result, important);
+            return true;
+        }
+        break;
+    }
     case CSSPropertyBorderTopRightRadius:
     case CSSPropertyBorderTopLeftRadius:
     case CSSPropertyBorderBottomLeftRadius:
@@ -1533,6 +1572,40 @@ bool CSSParser::parseValue(int propId, bool important)
     case CSSPropertyWebkitColorCorrection:
         validPrimitive = id == CSSValueSrgb || id == CSSValueDefault;
         break;
+#if ENABLE(CSS_FILTERS)
+    case CSSPropertyWebkitFilter:
+        if (id == CSSValueNone)
+            validPrimitive = true;
+        else {
+            RefPtr<CSSValue> val = parseFilter();
+            if (val) {
+                addProperty(propId, val, important);
+                return true;
+            }
+            return false;
+        }
+        break;
+#endif
+#if ENABLE(CSS3_FLEXBOX)
+    case CSSPropertyWebkitFlexOrder:
+        if (validUnit(value, FInteger, true)) {
+            // We restrict the smallest value to int min + 2 because we use int min and int min + 1 as special values in a hash set.
+            parsedValue = primitiveValueCache()->createValue(max(static_cast<double>(std::numeric_limits<int>::min() + 2), value->fValue),
+                                                             static_cast<CSSPrimitiveValue::UnitTypes>(value->unit));
+            m_valueList->next();
+        }
+        break;
+    case CSSPropertyWebkitFlexPack:
+        validPrimitive = id == CSSValueStart || id == CSSValueEnd || id == CSSValueCenter || id == CSSValueJustify;
+        break;
+    case CSSPropertyWebkitFlexAlign:
+        validPrimitive = id == CSSValueStart || id == CSSValueEnd || id == CSSValueCenter || id == CSSValueBaseline || id == CSSValueStretch;
+        break;
+    case CSSPropertyWebkitFlexFlow:
+        // FIXME: -webkit-flex-flow takes a second "wrap" value.    
+        validPrimitive = id == CSSValueRow || id == CSSValueRowReverse || id == CSSValueColumn || id == CSSValueColumnReverse;
+        break;
+#endif
     case CSSPropertyWebkitMarquee: {
         const int properties[5] = { CSSPropertyWebkitMarqueeDirection, CSSPropertyWebkitMarqueeIncrement,
                                     CSSPropertyWebkitMarqueeRepetition,
@@ -1567,36 +1640,13 @@ bool CSSParser::parseValue(int propId, bool important)
         else
             validPrimitive = validUnit(value, FTime | FInteger | FNonNeg, m_strict);
         break;
-#if ENABLE(WCSS)
-    case CSSPropertyWapMarqueeDir:
-        if (id == CSSValueLtr || id == CSSValueRtl)
-            validPrimitive = true;
-        break;
-    case CSSPropertyWapMarqueeStyle:
-        if (id == CSSValueNone || id == CSSValueSlide || id == CSSValueScroll || id == CSSValueAlternate)
-            validPrimitive = true;
-        break;
-    case CSSPropertyWapMarqueeLoop:
-        if (id == CSSValueInfinite)
-            validPrimitive = true;
-        else
-            validPrimitive = validUnit(value, FInteger | FNonNeg, m_strict);
-        break;
-    case CSSPropertyWapMarqueeSpeed:
-        if (id == CSSValueNormal || id == CSSValueSlow || id == CSSValueFast)
-            validPrimitive = true;
-        else
-            validPrimitive = validUnit(value, FTime | FInteger | FNonNeg, m_strict);
-        break;
-#endif
-
     case CSSPropertyWebkitFlow:
         return parseFlowThread(propId, important);
     case CSSPropertyWebkitContentOrder:
         validPrimitive = validUnit(value, FInteger, m_strict);
         break;
     case CSSPropertyWebkitRegionOverflow:
-        if (id == CSSValueAuto || id == CSSValueWebkitBreak)
+        if (id == CSSValueAuto || id == CSSValueBreak)
             validPrimitive = true;
         break;
 
@@ -1853,6 +1903,11 @@ bool CSSParser::parseValue(int propId, bool important)
             validPrimitive = true;
         break;
 
+    case CSSPropertyWebkitHyphenateLimitLines:
+        if (id == CSSValueNoLimit || validUnit(value, FInteger | FNonNeg, true))
+            validPrimitive = true;
+        break;
+
     case CSSPropertyWebkitLocale:
         if (id == CSSValueAuto || value->unit == CSSPrimitiveValue::CSS_STRING)
             validPrimitive = true;
@@ -1883,6 +1938,18 @@ bool CSSParser::parseValue(int propId, bool important)
 #endif
     // End Apple-specific properties
 
+#if ENABLE(TOUCH_EVENTS)
+    case CSSPropertyWebkitTapHighlightColor:
+        if ((id >= CSSValueAqua && id <= CSSValueWindowtext) || id == CSSValueMenu
+            || (id >= CSSValueWebkitFocusRingColor && id < CSSValueWebkitText && !m_strict)) {
+             validPrimitive = true;
+        } else {
+            parsedValue = parseColor();
+            if (parsedValue)
+                m_valueList->next();
+        }
+        break;
+#endif
         /* shorthand properties */
     case CSSPropertyBackground: {
         // Position must come before color in this array because a plain old "0" is a legal color
@@ -1904,7 +1971,13 @@ bool CSSParser::parseValue(int propId, bool important)
     {
         const int properties[3] = { CSSPropertyBorderWidth, CSSPropertyBorderStyle,
                                     CSSPropertyBorderColor };
-        return parseShorthand(propId, properties, 3, important);
+        if (parseShorthand(propId, properties, 3, important)) {
+            // The CSS3 Borders and Backgrounds specification says that border also resets border-image. It's as
+            // though a value of none was specified for the image.
+            addProperty(CSSPropertyBorderImage, CSSInitialValue::createImplicit(), important);
+            return true;
+        }
+        return false;
     }
     case CSSPropertyBorderTop:
         // [ 'border-top-width' || 'border-style' || <color> ] | inherit
@@ -2040,15 +2113,6 @@ bool CSSParser::parseValue(int propId, bool important)
     case CSSPropertyTextOverline:
     case CSSPropertyTextUnderline:
         return false;
-#if ENABLE(WCSS)
-    case CSSPropertyWapInputFormat:
-        validPrimitive = true;
-        break;
-    case CSSPropertyWapInputRequired:
-        parsedValue = parseWCSSInputProperty();
-        break;
-#endif
-
     // CSS Text Layout Module Level 3: Vertical writing support
     case CSSPropertyWebkitWritingMode:
         if (id >= CSSValueHorizontalTb && id <= CSSValueHorizontalBt)
@@ -2117,27 +2181,6 @@ bool CSSParser::parseValue(int propId, bool important)
     }
     return false;
 }
-
-#if ENABLE(WCSS)
-PassRefPtr<CSSValue> CSSParser::parseWCSSInputProperty()
-{
-    RefPtr<CSSValue> parsedValue = 0;
-    CSSParserValue* value = m_valueList->current();
-    String inputProperty;
-    if (value->unit == CSSPrimitiveValue::CSS_STRING || value->unit == CSSPrimitiveValue::CSS_IDENT)
-        inputProperty = String(value->string);
-
-    if (!inputProperty.isEmpty())
-       parsedValue = primitiveValueCache()->createValue(inputProperty, CSSPrimitiveValue::CSS_STRING);
-
-    while (m_valueList->next()) {
-    // pass all other values, if any. If we don't do this,
-    // the parser will think that it's not done and won't process this property
-    }
-
-    return parsedValue;
-}
-#endif
 
 void CSSParser::addFillValue(RefPtr<CSSValue>& lval, PassRefPtr<CSSValue> rval)
 {
@@ -2947,7 +2990,7 @@ PassRefPtr<CSSValue> CSSParser::parseFillSize(int propId, bool& allowComma)
     RefPtr<CSSPrimitiveValue> parsedValue1;
 
     if (value->id == CSSValueAuto)
-        parsedValue1 = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_UNKNOWN);
+        parsedValue1 = primitiveValueCache()->createIdentifierValue(CSSValueAuto);
     else {
         if (!validUnit(value, FLength | FPercent, m_strict))
             return 0;
@@ -2957,23 +3000,22 @@ PassRefPtr<CSSValue> CSSParser::parseFillSize(int propId, bool& allowComma)
     CSSPropertyID property = static_cast<CSSPropertyID>(propId);
     RefPtr<CSSPrimitiveValue> parsedValue2;
     if ((value = m_valueList->next())) {
-        if (value->id == CSSValueAuto)
-            parsedValue2 = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_UNKNOWN);
-        else if (value->unit == CSSParserValue::Operator && value->iValue == ',')
+        if (value->unit == CSSParserValue::Operator && value->iValue == ',')
             allowComma = false;
-        else {
+        else if (value->id != CSSValueAuto) {
             if (!validUnit(value, FLength | FPercent, m_strict))
                 return 0;
             parsedValue2 = createPrimitiveNumericValue(value);
         }
-    }
-    if (!parsedValue2) {
-        if (property == CSSPropertyWebkitBackgroundSize || property == CSSPropertyWebkitMaskSize)
-            parsedValue2 = parsedValue1;
-        else
-            parsedValue2 = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_UNKNOWN);
+    } else if (!parsedValue2 && property == CSSPropertyWebkitBackgroundSize) {
+        // For backwards compatibility we set the second value to the first if it is omitted.
+        // We only need to do this for -webkit-background-size. It should be safe to let masks match
+        // the real property.
+        parsedValue2 = parsedValue1;
     }
 
+    if (!parsedValue2)
+        return parsedValue1;
     return primitiveValueCache()->createValue(Pair::create(parsedValue1.release(), parsedValue2.release()));
 }
 
@@ -3243,8 +3285,6 @@ bool CSSParser::parseCubicBezierTimingFunctionValue(CSSParserValueList*& args, d
     if (!validUnit(v, FNumber, m_strict))
         return false;
     result = v->fValue;
-    if (result < 0 || result > 1.0)
-        return false;
     v = args->next();
     if (!v)
         // The last number in the function has no comma after it, so we're done.
@@ -3597,7 +3637,7 @@ PassRefPtr<CSSValue> CSSParser::parseCounterContent(CSSParserValueList* args, bo
     RefPtr<CSSPrimitiveValue> listStyle;
     i = args->next();
     if (!i) // Make the list style default decimal
-        listStyle = primitiveValueCache()->createValue(CSSValueDecimal - CSSValueDisc, CSSPrimitiveValue::CSS_NUMBER);
+        listStyle = primitiveValueCache()->createIdentifierValue(CSSValueDecimal);
     else {
         if (i->unit != CSSParserValue::Operator || i->iValue != ',')
             return 0;
@@ -3606,15 +3646,13 @@ PassRefPtr<CSSValue> CSSParser::parseCounterContent(CSSParserValueList* args, bo
         if (i->unit != CSSPrimitiveValue::CSS_IDENT)
             return 0;
 
-        short ls = 0;
-        if (i->id == CSSValueNone)
-            ls = CSSValueKatakanaIroha - CSSValueDisc + 1;
-        else if (i->id >= CSSValueDisc && i->id <= CSSValueKatakanaIroha)
-            ls = i->id - CSSValueDisc;
+        int listStyleID = 0;
+        if (i->id == CSSValueNone || (i->id >= CSSValueDisc && i->id <= CSSValueKatakanaIroha))
+            listStyleID = i->id;
         else
             return 0;
 
-        listStyle = primitiveValueCache()->createValue(ls, (CSSPrimitiveValue::UnitTypes) i->unit);
+        listStyle = primitiveValueCache()->createIdentifierValue(listStyleID);
     }
 
     return primitiveValueCache()->createValue(Counter::create(identifier.release(), listStyle.release(), separator.release()));
@@ -4960,8 +4998,9 @@ bool CSSParser::parseShadow(int propId, bool important)
         } else {
             // The only other type of value that's ok is a color value.
             RefPtr<CSSPrimitiveValue> parsedColor;
-            bool isColor = ((val->id >= CSSValueAqua && val->id <= CSSValueWindowtext) || val->id == CSSValueMenu ||
-                            (val->id >= CSSValueWebkitFocusRingColor && val->id <= CSSValueWebkitText && !m_strict));
+            bool isColor = ((val->id >= CSSValueAqua && val->id <= CSSValueWindowtext) || val->id == CSSValueMenu
+                            || (val->id >= CSSValueWebkitFocusRingColor && val->id <= CSSValueWebkitText && !m_strict)
+                            || val->id == CSSValueCurrentcolor);
             if (isColor) {
                 if (!context.allowColor)
                     return false;
@@ -5033,7 +5072,7 @@ bool CSSParser::parseReflect(int propId, bool important)
     RefPtr<CSSValue> mask;
     val = m_valueList->next();
     if (val) {
-        if (!parseBorderImage(propId, important, mask))
+        if (!parseBorderImage(propId, mask))
             return false;
     }
 
@@ -5063,7 +5102,7 @@ bool CSSParser::parseFlex(int propId, bool important)
             else if (negativeFlex == unsetValue)
                 negativeFlex = arg->fValue;
             else if (!arg->fValue) {
-                // flex() only allows a size of 0 if the positive and negative flex values have already been set.
+                // flex() only allows a preferred size of 0 (sans units) if the positive and negative flex values have already been set.
                 preferredSize = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_PX);
             } else {
                 // We only allow 3 numbers without units if the last value is 0. E.g., flex(1 1 1) is invalid.
@@ -5083,7 +5122,7 @@ bool CSSParser::parseFlex(int propId, bool important)
     if (negativeFlex == unsetValue)
         negativeFlex = 0;
     if (!preferredSize)
-        preferredSize = primitiveValueCache()->createIdentifierValue(CSSValueAuto);
+        preferredSize = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_PX);
 
     RefPtr<CSSFlexValue> flex = CSSFlexValue::create(clampToFloat(positiveFlex), clampToFloat(negativeFlex), preferredSize);
     addProperty(propId, flex.release(), important);
@@ -5098,29 +5137,229 @@ bool CSSParser::parseFlex(int propId, bool important)
 struct BorderImageParseContext {
     BorderImageParseContext(CSSPrimitiveValueCache* primitiveValueCache)
     : m_primitiveValueCache(primitiveValueCache)
-    , m_allowBreak(false)
-    , m_allowNumber(false)
+    , m_canAdvance(false)
+    , m_allowCommit(true)
+    , m_allowImage(true)
+    , m_allowImageSlice(true)
+    , m_allowRepeat(true)
     , m_allowSlash(false)
-    , m_allowWidth(false)
-    , m_allowRule(false)
-    , m_borderTop(0)
-    , m_borderRight(0)
-    , m_borderBottom(0)
-    , m_borderLeft(0)
-    , m_horizontalRule(0)
-    , m_verticalRule(0)
+    , m_requireWidth(false)
+    , m_requireOutset(false)    
     {}
 
-    bool allowBreak() const { return m_allowBreak; }
-    bool allowNumber() const { return m_allowNumber; }
-    bool allowSlash() const { return m_allowSlash; }
-    bool allowWidth() const { return m_allowWidth; }
-    bool allowRule() const { return m_allowRule; }
+    bool canAdvance() const { return m_canAdvance; }
+    void setCanAdvance(bool canAdvance) { m_canAdvance = canAdvance; }
 
-    void commitImage(PassRefPtr<CSSValue> image) { m_image = image; m_allowNumber = true; }
+    bool allowCommit() const { return m_allowCommit; }
+    bool allowImage() const { return m_allowImage; }
+    bool allowImageSlice() const { return m_allowImageSlice; }
+    bool allowRepeat() const { return m_allowRepeat; }
+    bool allowSlash() const { return m_allowSlash; }
+
+    bool requireWidth() const { return m_requireWidth; }
+    bool requireOutset() const { return m_requireOutset; }
+    
+    void commitImage(PassRefPtr<CSSValue> image)
+    {
+        m_image = image;
+        m_canAdvance = true;
+        m_allowCommit = true;
+        m_allowImage = m_allowSlash = m_requireWidth = m_requireOutset = false;
+        m_allowImageSlice = !m_imageSlice;
+        m_allowRepeat = !m_repeat;
+    }
+    void commitImageSlice(PassRefPtr<CSSBorderImageSliceValue> slice)
+    {
+        m_imageSlice = slice;
+        m_canAdvance = true;
+        m_allowCommit = m_allowSlash = true;
+        m_allowImageSlice = m_requireWidth = m_requireOutset = false;
+        m_allowImage = !m_image;
+        m_allowRepeat = !m_repeat;
+    }
+    void commitSlash()
+    {
+        m_canAdvance = true;
+        m_allowCommit = m_allowImage = m_allowImageSlice = m_allowRepeat = m_allowSlash = false;
+        if (!m_borderSlice) {
+            m_requireWidth = true;
+            m_requireOutset = false;
+        } else {
+            m_requireOutset = true;
+            m_requireWidth = false;
+        }
+    }
+    void commitBorderWidth(PassRefPtr<CSSPrimitiveValue> slice)
+    {
+        m_borderSlice = slice;
+        m_canAdvance = true;
+        m_allowCommit = m_allowSlash = true;
+        m_allowImageSlice = m_requireWidth = m_requireOutset = false;
+        m_allowImage = !m_image;
+        m_allowRepeat = !m_repeat;
+    }
+    void commitBorderOutset(PassRefPtr<CSSPrimitiveValue> outset)
+    {
+        m_outset = outset;
+        m_canAdvance = true;
+        m_allowCommit = true;
+        m_allowImageSlice = m_allowSlash = m_requireWidth = m_requireOutset = false;
+        m_allowImage = !m_image;
+        m_allowRepeat = !m_repeat;
+    }
+    void commitRepeat(PassRefPtr<CSSValue> repeat)
+    {
+        m_repeat = repeat;
+        m_canAdvance = true;
+        m_allowCommit = true;
+        m_allowRepeat = m_allowSlash = m_requireWidth = m_requireOutset = false;
+        m_allowImageSlice = !m_imageSlice;
+        m_allowImage = !m_image;
+    }
+
+    PassRefPtr<CSSValue> commitBorderImage()
+    {
+        // Make our new border image value now.
+        return CSSBorderImageValue::create(m_image, m_imageSlice, m_borderSlice, m_outset, m_repeat);
+    }
+    
+    CSSPrimitiveValueCache* m_primitiveValueCache;
+
+    bool m_canAdvance;
+
+    bool m_allowCommit;
+    bool m_allowImage;
+    bool m_allowImageSlice;
+    bool m_allowRepeat;
+    bool m_allowSlash;
+    
+    bool m_requireWidth;
+    bool m_requireOutset;
+
+    RefPtr<CSSValue> m_image;
+    RefPtr<CSSBorderImageSliceValue> m_imageSlice;
+    RefPtr<CSSPrimitiveValue> m_borderSlice;
+    RefPtr<CSSPrimitiveValue> m_outset;
+
+    RefPtr<CSSValue> m_repeat;
+};
+
+bool CSSParser::parseBorderImage(int propId, RefPtr<CSSValue>& result)
+{
+    ShorthandScope scope(this, propId);
+    BorderImageParseContext context(primitiveValueCache());
+    while (CSSParserValue* val = m_valueList->current()) {
+        context.setCanAdvance(false);
+
+        if (!context.canAdvance() && context.allowSlash() && val->unit == CSSParserValue::Operator && val->iValue == '/')
+            context.commitSlash();
+        
+        if (!context.canAdvance() && context.allowImage()) {
+            if (val->unit == CSSPrimitiveValue::CSS_URI && m_styleSheet) {
+                // FIXME: The completeURL call should be done when using the CSSImageValue,
+                // not when creating it.
+                context.commitImage(CSSImageValue::create(m_styleSheet->completeURL(val->string)));
+            } else if (isGeneratedImageValue(val)) {
+                RefPtr<CSSValue> value;
+                if (parseGeneratedImage(value))
+                    context.commitImage(value);
+                else
+                    return false;
+            } else if (val->id == CSSValueNone)
+                context.commitImage(CSSImageValue::create());
+        }
+        
+        if (!context.canAdvance() && context.allowImageSlice()) {
+            RefPtr<CSSBorderImageSliceValue> imageSlice;
+            if (parseBorderImageSlice(propId, imageSlice))
+                context.commitImageSlice(imageSlice.release());
+        } 
+        
+        if (!context.canAdvance() && context.allowRepeat()) {
+            RefPtr<CSSValue> repeat;
+            if (parseBorderImageRepeat(repeat))
+                context.commitRepeat(repeat);
+        }
+        
+        if (!context.canAdvance() && context.requireWidth()) {
+            RefPtr<CSSPrimitiveValue> borderSlice;
+            if (parseBorderImageWidth(borderSlice))
+                context.commitBorderWidth(borderSlice.release());
+        } 
+        
+        if (!context.canAdvance() && context.requireOutset()) {
+            RefPtr<CSSPrimitiveValue> borderOutset;
+            if (parseBorderImageOutset(borderOutset))
+                context.commitBorderOutset(borderOutset.release());
+        } 
+        
+        if (!context.canAdvance())
+            return false;
+    
+        m_valueList->next();
+    }
+
+    if (context.allowCommit()) {
+        // Need to fully commit as a single value.
+        result = context.commitBorderImage();
+        return true;
+    }
+
+    return false;
+}
+
+static bool isBorderImageRepeatKeyword(int id)
+{
+     return id == CSSValueStretch || id == CSSValueRepeat || id == CSSValueSpace || id == CSSValueRound;
+}
+
+bool CSSParser::parseBorderImageRepeat(RefPtr<CSSValue>& result)
+{
+    RefPtr<CSSPrimitiveValue> firstValue;
+    RefPtr<CSSPrimitiveValue> secondValue;
+    CSSParserValue* val = m_valueList->current();
+    if (isBorderImageRepeatKeyword(val->id))
+        firstValue = primitiveValueCache()->createIdentifierValue(val->id);
+    else
+        return false;
+    
+    val = m_valueList->next();
+    if (val) {
+        if (isBorderImageRepeatKeyword(val->id))
+            secondValue = primitiveValueCache()->createIdentifierValue(val->id);
+        else if (!inShorthand()) {
+            // If we're not parsing a shorthand then we are invalid.
+            return false;
+        } else {
+            // We need to rewind the value list, so that when its advanced we'll
+            // end up back at this value.
+            m_valueList->previous();
+        }
+    } else
+        secondValue = firstValue;
+
+    result = primitiveValueCache()->createValue(Pair::create(firstValue, secondValue));
+    return true;
+}
+
+class BorderImageSliceParseContext {
+public:
+    BorderImageSliceParseContext(CSSPrimitiveValueCache* primitiveValueCache)
+    : m_primitiveValueCache(primitiveValueCache)
+    , m_allowNumber(true)
+    , m_allowFill(false)
+    , m_allowFinalCommit(false)
+    , m_fill(false)
+    { }
+
+    bool allowNumber() const { return m_allowNumber; }
+    bool allowFill() const { return m_allowFill; }
+    bool allowFinalCommit() const { return m_allowFinalCommit; }
+    CSSPrimitiveValue* top() const { return m_top.get(); }
+
     void commitNumber(CSSParserValue* v)
     {
-        PassRefPtr<CSSPrimitiveValue> val = m_primitiveValueCache->createValue(v->fValue, (CSSPrimitiveValue::UnitTypes)v->unit);
+        RefPtr<CSSPrimitiveValue> val = m_primitiveValueCache->createValue(v->fValue, (CSSPrimitiveValue::UnitTypes)v->unit);
         if (!m_top)
             m_top = val;
         else if (!m_right)
@@ -5132,37 +5371,20 @@ struct BorderImageParseContext {
             m_left = val;
         }
 
-        m_allowBreak = m_allowSlash = m_allowRule = true;
         m_allowNumber = !m_left;
+        m_allowFill = true;
+        m_allowFinalCommit = true;
     }
-    void commitSlash() { m_allowBreak = m_allowSlash = m_allowNumber = false; m_allowWidth = true; }
-    void commitWidth(CSSParserValue* val)
-    {
-        if (!m_borderTop)
-            m_borderTop = val;
-        else if (!m_borderRight)
-            m_borderRight = val;
-        else if (!m_borderBottom)
-            m_borderBottom = val;
-        else {
-            ASSERT(!m_borderLeft);
-            m_borderLeft = val;
-        }
 
-        m_allowBreak = m_allowRule = true;
-        m_allowWidth = !m_borderLeft;
-    }
-    void commitRule(int keyword)
-    {
-        if (!m_horizontalRule)
-            m_horizontalRule = keyword;
-        else if (!m_verticalRule)
-            m_verticalRule = keyword;
-        m_allowRule = !m_verticalRule;
-    }
-    PassRefPtr<CSSValue> commitBorderImage(CSSParser* p, bool important)
+    void commitFill() { m_fill = true; m_allowFill = false; m_allowNumber = false; }
+
+    void setAllowFinalCommit() { m_allowFinalCommit = true; }
+    void setTop(PassRefPtr<CSSPrimitiveValue> val) { m_top = val; }
+
+    PassRefPtr<CSSBorderImageSliceValue> commitBorderImageSlice()
     {
         // We need to clone and repeat values for any omissions.
+        ASSERT(m_top);
         if (!m_right) {
             m_right = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
             m_bottom = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
@@ -5176,113 +5398,178 @@ struct BorderImageParseContext {
              m_left = m_primitiveValueCache->createValue(m_right->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_right->primitiveType());
 
         // Now build a rect value to hold all four of our primitive values.
-        RefPtr<Rect> rect = Rect::create();
-        rect->setTop(m_top);
-        rect->setRight(m_right);
-        rect->setBottom(m_bottom);
-        rect->setLeft(m_left);
-
-        // Fill in STRETCH as the default if it wasn't specified.
-        if (!m_horizontalRule)
-            m_horizontalRule = CSSValueStretch;
-
-        // The vertical rule should match the horizontal rule if unspecified.
-        if (!m_verticalRule)
-            m_verticalRule = m_horizontalRule;
-
-        // Now we have to deal with the border widths.  The best way to deal with these is to actually put these values into a value
-        // list and then make our parsing machinery do the parsing.
-        if (m_borderTop) {
-            CSSParserValueList newList;
-            newList.addValue(*m_borderTop);
-            if (m_borderRight)
-                newList.addValue(*m_borderRight);
-            if (m_borderBottom)
-                newList.addValue(*m_borderBottom);
-            if (m_borderLeft)
-                newList.addValue(*m_borderLeft);
-            CSSParserValueList* oldList = p->m_valueList;
-            p->m_valueList = &newList;
-            p->parseValue(CSSPropertyBorderWidth, important);
-            p->m_valueList = oldList;
-        }
+        RefPtr<Quad> quad = Quad::create();
+        quad->setTop(m_top);
+        quad->setRight(m_right);
+        quad->setBottom(m_bottom);
+        quad->setLeft(m_left);
 
         // Make our new border image value now.
-        return CSSBorderImageValue::create(m_image, rect.release(), m_horizontalRule, m_verticalRule);
+        return CSSBorderImageSliceValue::create(m_primitiveValueCache->createValue(quad.release()), m_fill);
     }
     
+private:
     CSSPrimitiveValueCache* m_primitiveValueCache;
 
-    bool m_allowBreak;
     bool m_allowNumber;
-    bool m_allowSlash;
-    bool m_allowWidth;
-    bool m_allowRule;
-
-    RefPtr<CSSValue> m_image;
+    bool m_allowFill;
+    bool m_allowFinalCommit;
 
     RefPtr<CSSPrimitiveValue> m_top;
     RefPtr<CSSPrimitiveValue> m_right;
     RefPtr<CSSPrimitiveValue> m_bottom;
     RefPtr<CSSPrimitiveValue> m_left;
-
-    CSSParserValue* m_borderTop;
-    CSSParserValue* m_borderRight;
-    CSSParserValue* m_borderBottom;
-    CSSParserValue* m_borderLeft;
-
-    int m_horizontalRule;
-    int m_verticalRule;
+    
+    bool m_fill;
 };
 
-bool CSSParser::parseBorderImage(int propId, bool important, RefPtr<CSSValue>& result)
+bool CSSParser::parseBorderImageSlice(int propId, RefPtr<CSSBorderImageSliceValue>& result)
 {
-    // Look for an image initially.  If the first value is not a URI, then we're done.
-    BorderImageParseContext context(primitiveValueCache());
-    CSSParserValue* val = m_valueList->current();
-    if (val->unit == CSSPrimitiveValue::CSS_URI && m_styleSheet) {
-        // FIXME: The completeURL call should be done when using the CSSImageValue,
-        // not when creating it.
-        context.commitImage(CSSImageValue::create(m_styleSheet->completeURL(val->string)));
-    } else if (isGeneratedImageValue(val)) {
-        RefPtr<CSSValue> value;
-        if (parseGeneratedImage(value))
-            context.commitImage(value);
-        else
-            return false;
-    } else
-        return false;
-
-    while ((val = m_valueList->next())) {
+    BorderImageSliceParseContext context(primitiveValueCache());
+    CSSParserValue* val;
+    while ((val = m_valueList->current())) {
         if (context.allowNumber() && validUnit(val, FInteger | FNonNeg | FPercent, true)) {
             context.commitNumber(val);
-        } else if (propId == CSSPropertyWebkitBorderImage && context.allowSlash() && val->unit == CSSParserValue::Operator && val->iValue == '/') {
-            context.commitSlash();
-        } else if (context.allowWidth() &&
-            (val->id == CSSValueThin || val->id == CSSValueMedium || val->id == CSSValueThick || validUnit(val, FLength, m_strict))) {
-            context.commitWidth(val);
-        } else if (context.allowRule() &&
-            (val->id == CSSValueStretch || val->id == CSSValueRound || val->id == CSSValueRepeat)) {
-            context.commitRule(val->id);
-        } else {
-            // Something invalid was encountered.
+        } else if (context.allowFill() && val->id == CSSValueFill)
+            context.commitFill();
+        else if (!inShorthand()) {
+            // If we're not parsing a shorthand then we are invalid.
             return false;
+        } else {
+            if (context.allowFinalCommit()) {
+                // We're going to successfully parse, but we don't want to consume this token.
+                m_valueList->previous();
+            }
+            break;
         }
+        m_valueList->next();
     }
 
-    if (context.allowNumber() && propId != CSSPropertyWebkitBorderImage) {
-        // Allow the slices to be omitted for images that don't fit to a border.  We just set the slices to be 0.
-        context.m_top = primitiveValueCache()->createValue(0, CSSPrimitiveValue::CSS_NUMBER);
-        context.m_allowBreak = true;
-    }
+    if (context.allowFinalCommit()) {
+        // FIXME: For backwards compatibility, -webkit-border-image, -webkit-mask-box-image and -webkit-box-reflect have to do a fill by default.
+        // FIXME: What do we do with -webkit-box-reflect and -webkit-mask-box-image? Probably just have to leave them filling...
+        if (propId == CSSPropertyWebkitBorderImage || propId == CSSPropertyWebkitMaskBoxImage || propId == CSSPropertyWebkitBoxReflect)
+            context.commitFill();
 
-    if (context.allowBreak()) {
         // Need to fully commit as a single value.
-        result = context.commitBorderImage(this, important);
+        result = context.commitBorderImageSlice();
         return true;
     }
 
     return false;
+}
+
+class BorderImageQuadParseContext {
+public:
+    BorderImageQuadParseContext(CSSPrimitiveValueCache* primitiveValueCache)
+    : m_primitiveValueCache(primitiveValueCache)
+    , m_allowNumber(true)
+    , m_allowFinalCommit(false)
+    { }
+
+    bool allowNumber() const { return m_allowNumber; }
+    bool allowFinalCommit() const { return m_allowFinalCommit; }
+    CSSPrimitiveValue* top() const { return m_top.get(); }
+
+    void commitNumber(CSSParserValue* v)
+    {
+        RefPtr<CSSPrimitiveValue> val;
+        if (v->id == CSSValueAuto)
+            val = m_primitiveValueCache->createIdentifierValue(v->id);
+        else
+            val = m_primitiveValueCache->createValue(v->fValue, (CSSPrimitiveValue::UnitTypes)v->unit);
+        
+        if (!m_top)
+            m_top = val;
+        else if (!m_right)
+            m_right = val;
+        else if (!m_bottom)
+            m_bottom = val;
+        else {
+            ASSERT(!m_left);
+            m_left = val;
+        }
+
+        m_allowNumber = !m_left;
+        m_allowFinalCommit = true;
+    }
+
+    void setAllowFinalCommit() { m_allowFinalCommit = true; }
+    void setTop(PassRefPtr<CSSPrimitiveValue> val) { m_top = val; }
+
+    PassRefPtr<CSSPrimitiveValue> commitBorderImageQuad()
+    {
+        // We need to clone and repeat values for any omissions.
+        ASSERT(m_top);
+        if (!m_right) {
+            m_right = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
+            m_bottom = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
+            m_left = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
+        }
+        if (!m_bottom) {
+            m_bottom = m_primitiveValueCache->createValue(m_top->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_top->primitiveType());
+            m_left = m_primitiveValueCache->createValue(m_right->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_right->primitiveType());
+        }
+        if (!m_left)
+             m_left = m_primitiveValueCache->createValue(m_right->getDoubleValue(), (CSSPrimitiveValue::UnitTypes)m_right->primitiveType());
+
+        // Now build a quad value to hold all four of our primitive values.
+        RefPtr<Quad> quad = Quad::create();
+        quad->setTop(m_top);
+        quad->setRight(m_right);
+        quad->setBottom(m_bottom);
+        quad->setLeft(m_left);
+
+        // Make our new value now.
+        return m_primitiveValueCache->createValue(quad.release());
+    }
+    
+private:
+    CSSPrimitiveValueCache* m_primitiveValueCache;
+
+    bool m_allowNumber;
+    bool m_allowFinalCommit;
+
+    RefPtr<CSSPrimitiveValue> m_top;
+    RefPtr<CSSPrimitiveValue> m_right;
+    RefPtr<CSSPrimitiveValue> m_bottom;
+    RefPtr<CSSPrimitiveValue> m_left;
+};
+
+bool CSSParser::parseBorderImageQuad(Units validUnits, RefPtr<CSSPrimitiveValue>& result)
+{
+    BorderImageQuadParseContext context(primitiveValueCache());
+    CSSParserValue* val;
+    while ((val = m_valueList->current())) {
+        if (context.allowNumber() && (validUnit(val, validUnits, true) || val->id == CSSValueAuto)) {
+            context.commitNumber(val);
+        } else if (!inShorthand()) {
+            // If we're not parsing a shorthand then we are invalid.
+            return false;
+        } else {
+            if (context.allowFinalCommit())
+                m_valueList->previous(); // The shorthand loop will advance back to this point.
+            break;
+        }
+        m_valueList->next();
+    }
+
+    if (context.allowFinalCommit()) {
+        // Need to fully commit as a single value.
+        result = context.commitBorderImageQuad();
+        return true;
+    }
+    return false;
+}
+
+bool CSSParser::parseBorderImageWidth(RefPtr<CSSPrimitiveValue>& result)
+{
+    return parseBorderImageQuad(FLength | FInteger | FNonNeg | FPercent, result);
+}
+
+bool CSSParser::parseBorderImageOutset(RefPtr<CSSPrimitiveValue>& result)
+{
+    return parseBorderImageQuad(FLength | FInteger | FNonNeg, result);
 }
 
 static void completeBorderRadii(RefPtr<CSSPrimitiveValue> radii[4])
@@ -5633,7 +5920,7 @@ static PassRefPtr<CSSPrimitiveValue> valueFromSideKeyword(CSSParserValue* a, boo
 static PassRefPtr<CSSPrimitiveValue> parseGradientColorOrKeyword(CSSParser* p, CSSParserValue* value)
 {
     int id = value->id;
-    if (id == CSSValueWebkitText || (id >= CSSValueAqua && id <= CSSValueWindowtext) || id == CSSValueMenu)
+    if (id == CSSValueWebkitText || (id >= CSSValueAqua && id <= CSSValueWindowtext) || id == CSSValueMenu || id == CSSValueCurrentcolor)
         return p->primitiveValueCache()->createIdentifierValue(id);
 
     return p->parseColor(value);
@@ -5730,6 +6017,8 @@ bool CSSParser::parseRadialGradient(RefPtr<CSSValue>& gradient, CSSGradientRepea
     // parseFillPosition advances the args next pointer.
     parseFillPosition(args, centerX, centerY);
     a = args->current();
+    if (!a)
+        return false;
     
     if (centerX || centerY) {
         // Comma
@@ -6087,6 +6376,139 @@ PassRefPtr<CSSValueList> CSSParser::parseTransform()
 
     return list.release();
 }
+
+#if ENABLE(CSS_FILTERS)
+
+static void filterInfoForName(const CSSParserString& name, WebKitCSSFilterValue::FilterOperationType& filterType, unsigned& maximumArgumentCount)
+{
+    if (equalIgnoringCase(name, "grayscale("))
+        filterType = WebKitCSSFilterValue::GrayscaleFilterOperation;
+    else if (equalIgnoringCase(name, "sepia("))
+        filterType = WebKitCSSFilterValue::SepiaFilterOperation;
+    else if (equalIgnoringCase(name, "saturate("))
+       filterType = WebKitCSSFilterValue::SaturateFilterOperation;
+    else if (equalIgnoringCase(name, "hue-rotate("))
+        filterType = WebKitCSSFilterValue::HueRotateFilterOperation;
+    else if (equalIgnoringCase(name, "invert("))
+        filterType = WebKitCSSFilterValue::InvertFilterOperation;
+    else if (equalIgnoringCase(name, "opacity("))
+        filterType = WebKitCSSFilterValue::OpacityFilterOperation;
+    else if (equalIgnoringCase(name, "gamma(")) {
+        filterType = WebKitCSSFilterValue::GammaFilterOperation;
+        maximumArgumentCount = 3;
+    } else if (equalIgnoringCase(name, "blur(")) {
+        filterType = WebKitCSSFilterValue::BlurFilterOperation;
+        maximumArgumentCount = 2;
+    } else if (equalIgnoringCase(name, "sharpen(")) {
+        filterType = WebKitCSSFilterValue::SharpenFilterOperation;
+        maximumArgumentCount = 3;
+    }
+}
+
+bool CSSParser::isValidFilterArgument(CSSParserValue* argument, WebKitCSSFilterValue::FilterOperationType& filterType, unsigned argumentCount)
+{
+    // Check parameter types.
+    if (filterType == WebKitCSSFilterValue::HueRotateFilterOperation && !argumentCount) {
+        // 1st parameter of hue-rotate() is an angle.
+        if (!validUnit(argument, FAngle, true))
+            return false;
+    } else if (filterType == WebKitCSSFilterValue::BlurFilterOperation) {
+        // parameters of blur() are lengths.
+        if (!validUnit(argument, FLength | FPercent, true))
+            return false;
+    } else if (filterType == WebKitCSSFilterValue::SharpenFilterOperation && argumentCount == 1) {
+        // 2nd parameter of sharpen() is a length.
+        if (!validUnit(argument, FLength | FPercent, true))
+            return false;
+    } else if (!validUnit(argument, FNumber, true))
+        return false;
+    
+    // Check parameter values.
+    if (filterType == WebKitCSSFilterValue::GrayscaleFilterOperation
+        || filterType == WebKitCSSFilterValue::SepiaFilterOperation
+        || filterType == WebKitCSSFilterValue::SaturateFilterOperation
+        || filterType == WebKitCSSFilterValue::InvertFilterOperation
+        || filterType == WebKitCSSFilterValue::OpacityFilterOperation) {
+        // Arguments must be within [0,1].
+        double amount = argument->fValue;
+        if (amount < 0 || amount > 1)
+            return false;
+    } else if (filterType == WebKitCSSFilterValue::GammaFilterOperation
+               || filterType == WebKitCSSFilterValue::BlurFilterOperation) {
+        // Arguments must be positive
+        double amount = argument->fValue;
+        if (amount < 0)
+            return false;
+    } else if (filterType == WebKitCSSFilterValue::SharpenFilterOperation) {
+        // Arguments must be positive
+        double amount = argument->fValue;
+        if (!argumentCount) {
+            if (amount < 0 || amount > 1)
+                return false;
+        } else {
+            if (amount < 0)
+                return false;
+        }
+    }
+    return true;
+}
+
+PassRefPtr<CSSValueList> CSSParser::parseFilter()
+{
+    if (!m_valueList)
+        return 0;
+
+    // The filter is a list of functional primitives that specify individual operations.
+    RefPtr<CSSValueList> list = CSSValueList::createSpaceSeparated();
+    for (CSSParserValue* value = m_valueList->current(); value; value = m_valueList->next()) {
+        if (value->unit != CSSPrimitiveValue::CSS_URI && (value->unit != CSSParserValue::Function || !value->function))
+            return 0;
+
+        WebKitCSSFilterValue::FilterOperationType filterType = WebKitCSSFilterValue::UnknownFilterOperation;
+
+        // See if the specified primitive is one we understand.
+        if (value->unit == CSSPrimitiveValue::CSS_URI) {
+            RefPtr<WebKitCSSFilterValue> referenceFilterValue = WebKitCSSFilterValue::create(WebKitCSSFilterValue::ReferenceFilterOperation);
+            list->append(referenceFilterValue);
+            referenceFilterValue->append(primitiveValueCache()->createValue(value->string, CSSPrimitiveValue::CSS_STRING));
+        } else {        
+            const CSSParserString name = value->function->name;
+            unsigned maximumArgumentCount = 1;
+
+            filterInfoForName(name, filterType, maximumArgumentCount);
+            
+            if (filterType == WebKitCSSFilterValue::UnknownFilterOperation)
+                return 0;
+
+            CSSParserValueList* args = value->function->args.get();
+            if (!args || args->size() > maximumArgumentCount)
+                return 0;
+
+            // Create the new WebKitCSSFilterValue for this operation and add it to our list.
+            RefPtr<WebKitCSSFilterValue> filterValue = WebKitCSSFilterValue::create(filterType);
+            list->append(filterValue);
+            
+            CSSParserValue* argument = args->current();
+            unsigned argumentCount = 0;
+
+            while (argument) {
+                if (!isValidFilterArgument(argument, filterType, argumentCount))
+                    return 0;
+
+                filterValue->append(createPrimitiveNumericValue(argument));
+
+                argument = args->next();
+                if (!argument)
+                    break;
+
+                ++argumentCount;
+            }
+        }
+    }
+
+    return list.release();
+}
+#endif
 
 // auto | <flow_name>
 bool CSSParser::parseFlowThread(int propId, bool important)

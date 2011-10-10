@@ -465,6 +465,20 @@ static NPError NPN_GetValue(NPP npp, NPNVariable variable, void *value)
             *(NPBool*)value = true;
             break;
 
+        case NPNVsupportsUpdatedCocoaTextInputBool: {
+            // The plug-in is asking whether we support the updated Cocoa text input model.
+            // If we haven't yet delivered a key down event to the plug-in, we can opt into the updated
+            // model and say that we support it. Otherwise, we'll just fall back and say that we don't support it.
+            RefPtr<NetscapePlugin> plugin = NetscapePlugin::fromNPP(npp);
+
+            bool supportsUpdatedTextInput = !plugin->hasHandledAKeyDownEvent();
+            if (supportsUpdatedTextInput)
+                plugin->setPluginWantsLegacyCocoaTextInput(false);
+
+            *reinterpret_cast<NPBool*>(value) = supportsUpdatedTextInput;
+            break;
+        }
+
         case WKNVCALayerRenderServerPort: {
             RefPtr<NetscapePlugin> plugin = NetscapePlugin::fromNPP(npp);
 
@@ -489,8 +503,7 @@ static NPError NPN_GetValue(NPP npp, NPNVariable variable, void *value)
 #endif
 #ifndef NP_NO_CARBON
        case NPNVsupportsCarbonBool:
-            // FIXME: We should support the Carbon event model.
-            *(NPBool*)value = false;
+            *(NPBool*)value = true;
             break;
 #endif
 #elif PLATFORM(WIN)
@@ -937,15 +950,18 @@ static NPError NPN_GetAuthenticationInfo(NPP npp, const char* protocol, const ch
     return NPERR_NO_ERROR;
 }
 
-static uint32_t NPN_ScheduleTimer(NPP instance, uint32_t interval, NPBool repeat, void (*timerFunc)(NPP npp, uint32_t timerID))
+static uint32_t NPN_ScheduleTimer(NPP npp, uint32_t interval, NPBool repeat, void (*timerFunc)(NPP npp, uint32_t timerID))
 {
-    notImplemented();
-    return NPERR_GENERIC_ERROR;
+    RefPtr<NetscapePlugin> plugin = NetscapePlugin::fromNPP(npp);
+
+    return plugin->scheduleTimer(interval, repeat, timerFunc);
 }
 
-static void NPN_UnscheduleTimer(NPP instance, uint32_t timerID)
+static void NPN_UnscheduleTimer(NPP npp, uint32_t timerID)
 {
-    notImplemented();
+    RefPtr<NetscapePlugin> plugin = NetscapePlugin::fromNPP(npp);
+
+    plugin->unscheduleTimer(timerID);
 }
 
 #if PLATFORM(MAC)

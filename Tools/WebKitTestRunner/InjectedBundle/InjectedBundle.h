@@ -29,6 +29,7 @@
 #include "EventSendingController.h"
 #include "GCController.h"
 #include "LayoutTestController.h"
+#include "TextInputController.h"
 #include <WebKit2/WKBase.h>
 #include <WebKit2/WKRetainPtr.h>
 #include <wtf/OwnPtr.h>
@@ -54,6 +55,7 @@ public:
     LayoutTestController* layoutTestController() { return m_layoutTestController.get(); }
     GCController* gcController() { return m_gcController.get(); }
     EventSendingController* eventSendingController() { return m_eventSendingController.get(); }
+    TextInputController* textInputController() { return m_textInputController.get(); }
 
     InjectedBundlePage* page() const;
     size_t pageCount() const { return m_pages.size(); }
@@ -64,6 +66,7 @@ public:
     void done();
     std::ostringstream& os() { return m_outputStream; }
     void setPixelResult(WKImageRef image) { m_pixelResult = image; }
+    void setRepaintRects(WKArrayRef rects) { m_repaintRects = rects; }
 
     bool isTestRunning() { return m_state == Testing; }
 
@@ -73,6 +76,9 @@ public:
     bool shouldDumpPixels() const { return m_dumpPixels; }
     
     void postNewBeforeUnloadReturnValue(bool);
+    void postAddChromeInputField();
+    void postRemoveChromeInputField();
+    void postFocusWebView();
 
 private:
     InjectedBundle();
@@ -100,6 +106,7 @@ private:
     RefPtr<LayoutTestController> m_layoutTestController;
     RefPtr<GCController> m_gcController;
     RefPtr<EventSendingController> m_eventSendingController;
+    RefPtr<TextInputController> m_textInputController;
 
     WKBundleFrameRef m_topLoadingFrame;
 
@@ -115,6 +122,7 @@ private:
     bool m_dumpPixels;
 
     WKRetainPtr<WKImageRef> m_pixelResult;
+    WKRetainPtr<WKArrayRef> m_repaintRects;
 };
 
 } // namespace WTR

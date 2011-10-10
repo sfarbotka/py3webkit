@@ -98,7 +98,7 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document* document, Threadabl
     OwnPtr<ResourceRequest> crossOriginRequest = adoptPtr(new ResourceRequest(request));
     updateRequestForAccessControl(*crossOriginRequest, securityOrigin(), m_options.allowCredentials);
 
-    if (!m_options.forcePreflight && isSimpleCrossOriginAccessRequest(crossOriginRequest->httpMethod(), crossOriginRequest->httpHeaderFields()))
+    if ((m_options.preflightPolicy == ConsiderPreflight && isSimpleCrossOriginAccessRequest(crossOriginRequest->httpMethod(), crossOriginRequest->httpHeaderFields())) || m_options.preflightPolicy == PreventPreflight)
         makeSimpleCrossOriginAccessRequest(*crossOriginRequest);
     else {
         m_actualRequest = crossOriginRequest.release();
@@ -112,7 +112,8 @@ DocumentThreadableLoader::DocumentThreadableLoader(Document* document, Threadabl
 
 void DocumentThreadableLoader::makeSimpleCrossOriginAccessRequest(const ResourceRequest& request)
 {
-    ASSERT(isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields()));
+    ASSERT(m_options.preflightPolicy != ForcePreflight);
+    ASSERT(m_options.preflightPolicy == PreventPreflight || isSimpleCrossOriginAccessRequest(request.httpMethod(), request.httpHeaderFields()));
 
     // Cross-origin requests are only defined for HTTP. We would catch this when checking response headers later, but there is no reason to send a request that's guaranteed to be denied.
     // FIXME: Consider allowing simple CORS requests to non-HTTP URLs.
@@ -287,35 +288,6 @@ void DocumentThreadableLoader::didFail(SubresourceLoader* loader, const Resource
     m_client->didFail(error);
 }
 
-bool DocumentThreadableLoader::getShouldUseCredentialStorage(SubresourceLoader* loader, bool& shouldUseCredentialStorage)
-{
-    ASSERT_UNUSED(loader, loader == m_loader || !m_loader);
-
-    if (!m_options.allowCredentials) {
-        shouldUseCredentialStorage = false;
-        return true;
-    }
-
-    return false; // Only FrameLoaderClient can ultimately permit credential use.
-}
-
-void DocumentThreadableLoader::didReceiveAuthenticationChallenge(SubresourceLoader* loader, const AuthenticationChallenge& challenge)
-{
-    ASSERT(loader == m_loader);
-    // Users are not prompted for credentials for cross-origin requests.
-    if (!m_sameOriginRequest) {
-#if PLATFORM(MAC) || USE(CFNETWORK) || USE(CURL)
-        loader->handle()->receivedRequestToContinueWithoutCredential(challenge);
-#else
-        // These platforms don't provide a way to continue without credentials, cancel the load altogether.
-        UNUSED_PARAM(challenge);
-        RefPtr<DocumentThreadableLoader> protect(this);
-        m_client->didFail(loader->blockedError());
-        cancel();
-#endif
-    }
-}
-
 void DocumentThreadableLoader::preflightSuccess()
 {
     OwnPtr<ResourceRequest> actualRequest;
@@ -337,15 +309,20 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Secur
 {
     // Any credential should have been removed from the cross-site requests.
     const KURL& requestURL = request.url();
+    m_options.securityCheck = securityCheck;
     ASSERT(m_sameOriginRequest || requestURL.user().isEmpty());
     ASSERT(m_sameOriginRequest || requestURL.pass().isEmpty());
 
     if (m_async) {
-        // Don't sniff content or send load callbacks for the preflight request.
-        bool sendLoadCallbacks = m_options.sendLoadCallbacks && !m_actualRequest;
-        bool sniffContent = m_options.sniffContent && !m_actualRequest;
-        // Keep buffering the data for the preflight request.
-        bool shouldBufferData = m_options.shouldBufferData || m_actualRequest;
+        ThreadableLoaderOptions options = m_options;
+        options.crossOriginCredentialPolicy = DoNotAskClientForCrossOriginCredentials;
+        if (m_actualRequest) {
+            // Don't sniff content or send load callbacks for the preflight request.
+            options.sendLoadCallbacks = DoNotSendCallbacks;
+            options.sniffContent = DoNotSniffContent;
+            // Keep buffering the data for the preflight request.
+            options.shouldBufferData = BufferData;
+        }
 
 #if ENABLE(INSPECTOR)
         if (m_actualRequest) {
@@ -359,20 +336,17 @@ void DocumentThreadableLoader::loadRequest(const ResourceRequest& request, Secur
 
         // Clear the loader so that any callbacks from SubresourceLoader::create will not have the old loader.
         m_loader = 0;
-        m_loader = resourceLoadScheduler()->scheduleSubresourceLoad(m_document->frame(), this, request, ResourceLoadPriorityMedium, securityCheck, sendLoadCallbacks,
-                                                                    sniffContent, shouldBufferData);
+        m_loader = resourceLoadScheduler()->scheduleSubresourceLoad(m_document->frame(), this, request, ResourceLoadPriorityMedium, options);
         return;
     }
     
     // FIXME: ThreadableLoaderOptions.sniffContent is not supported for synchronous requests.
-    StoredCredentials storedCredentials = m_options.allowCredentials ? AllowStoredCredentials : DoNotAllowStoredCredentials;
-
     Vector<char> data;
     ResourceError error;
     ResourceResponse response;
     unsigned long identifier = std::numeric_limits<unsigned long>::max();
     if (m_document->frame())
-        identifier = m_document->frame()->loader()->loadResourceSynchronously(request, storedCredentials, error, response, data);
+        identifier = m_document->frame()->loader()->loadResourceSynchronously(request, m_options.allowCredentials, error, response, data);
 
     // No exception for file:/// resources, see <rdar://problem/4962298>.
     // Also, if we have an HTTP response, then it wasn't a network error in fact.

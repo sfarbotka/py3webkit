@@ -108,7 +108,7 @@
 #include "PageOverlay.h"
 #include "painting/GraphicsContextBuilder.h"
 #include "Performance.h"
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
 #include "PluginDocument.h"
 #include "PrintContext.h"
 #include "RenderFrame.h"
@@ -122,6 +122,7 @@
 #include "ResourceRequest.h"
 #include "SVGDocumentExtensions.h"
 #include "SVGSMILElement.h"
+#include "SchemeRegistry.h"
 #include "ScriptController.h"
 #include "ScriptSourceCode.h"
 #include "ScriptValue.h"
@@ -144,7 +145,6 @@
 #include "WebIconURL.h"
 #include "WebInputElement.h"
 #include "WebNode.h"
-#include "WebPasswordAutocompleteListener.h"
 #include "WebPerformance.h"
 #include "WebPlugin.h"
 #include "WebPluginContainerImpl.h"
@@ -162,10 +162,6 @@
 
 #include <algorithm>
 #include <wtf/CurrentTime.h>
-
-#if OS(UNIX) && !OS(DARWIN)
-#include <gdk/gdk.h>
-#endif
 
 #if USE(V8)
 #include "AsyncFileSystem.h"
@@ -257,7 +253,7 @@ static void frameContentAsPlainText(size_t maxChars, Frame* frame,
     for (Frame* curChild = frameTree->firstChild(); curChild; curChild = curChild->tree()->nextSibling()) {
         // Ignore the text of non-visible frames.
         RenderView* contentRenderer = curChild->contentRenderer();
-        RenderPart* ownerRenderer = curChild->ownerRenderer();        
+        RenderPart* ownerRenderer = curChild->ownerRenderer();
         if (!contentRenderer || !contentRenderer->width() || !contentRenderer->height()
             || (contentRenderer->x() + contentRenderer->width() <= 0) || (contentRenderer->y() + contentRenderer->height() <= 0)
             || (ownerRenderer && ownerRenderer->style() && ownerRenderer->style()->visibility() != VISIBLE)) {
@@ -750,7 +746,7 @@ void WebFrameImpl::bindToWindowObject(const WebString& name, NPObject* object)
 
 void WebFrameImpl::executeScript(const WebScriptSource& source)
 {
-    TextPosition1 position(WTF::OneBasedNumber::fromOneBasedInt(source.startLine), WTF::OneBasedNumber::base());
+    TextPosition position(OrdinalNumber::fromOneBasedInt(source.startLine), OrdinalNumber::first());
     m_frame->script()->executeScript(
         ScriptSourceCode(source.code, source.url, position));
 }
@@ -762,7 +758,7 @@ void WebFrameImpl::executeScriptInIsolatedWorld(
     Vector<ScriptSourceCode> sources;
 
     for (unsigned i = 0; i < numSources; ++i) {
-        TextPosition1 position(WTF::OneBasedNumber::fromOneBasedInt(sourcesIn[i].startLine), WTF::OneBasedNumber::base());
+        TextPosition position(OrdinalNumber::fromOneBasedInt(sourcesIn[i].startLine), OrdinalNumber::first());
         sources.append(ScriptSourceCode(
             sourcesIn[i].code, sourcesIn[i].url, position));
     }
@@ -832,7 +828,7 @@ v8::Handle<v8::Value> WebFrameImpl::executeScriptAndReturnValue(const WebScriptS
     // http://code.google.com/p/chromium/issues/detail?id=86397
     UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
 
-    TextPosition1 position(WTF::OneBasedNumber::fromOneBasedInt(source.startLine), WTF::OneBasedNumber::base());
+    TextPosition position(OrdinalNumber::fromOneBasedInt(source.startLine), OrdinalNumber::first());
     return m_frame->script()->executeScript(ScriptSourceCode(source.code, source.url, position)).v8Value();
 }
 
@@ -889,17 +885,8 @@ void WebFrameImpl::loadHistoryItem(const WebHistoryItem& item)
     RefPtr<HistoryItem> historyItem = PassRefPtr<HistoryItem>(item);
     ASSERT(historyItem.get());
 
-    // If there is no currentItem, which happens when we are navigating in
-    // session history after a crash, we need to manufacture one otherwise WebKit
-    // hoarks. This is probably the wrong thing to do, but it seems to work.
+    m_frame->loader()->prepareForHistoryNavigation();
     RefPtr<HistoryItem> currentItem = m_frame->loader()->history()->currentItem();
-    if (!currentItem) {
-        currentItem = HistoryItem::create();
-        currentItem->setLastVisitWasFailure(true);
-        m_frame->loader()->history()->setCurrentItem(currentItem.get());
-        m_frame->page()->backForward()->setCurrentItem(currentItem.get());
-    }
-
     m_inSameDocumentHistoryLoad = currentItem->shouldDoSameDocumentNavigationTo(historyItem.get());
     m_frame->page()->goToItem(historyItem.get(),
                               FrameLoadTypeIndexedBackForward);
@@ -1097,7 +1084,7 @@ void WebFrameImpl::setMarkedText(
 
 void WebFrameImpl::unmarkText()
 {
-    frame()->editor()->confirmCompositionWithoutDisturbingSelection();
+    frame()->editor()->cancelComposition();
 }
 
 bool WebFrameImpl::hasMarkedText() const
@@ -1663,7 +1650,7 @@ void WebFrameImpl::scopeStringMatches(int identifier,
         // Set the new start for the search range to be the end of the previous
         // result range. There is no need to use a VisiblePosition here,
         // since findPlainText will use a TextIterator to go over the visible
-        // text nodes. 
+        // text nodes.
         searchRange->setStart(resultRange->endContainer(ec), resultRange->endOffset(ec), ec);
 
         Node* shadowTreeRoot = searchRange->shadowTreeRootNode();
@@ -1878,17 +1865,16 @@ WebFrameImpl::WebFrameImpl(WebFrameClient* client)
     , m_identifier(generateFrameIdentifier())
     , m_inSameDocumentHistoryLoad(false)
 {
-    PlatformBridge::incrementStatsCounter(webFrameActiveCount);
+    PlatformSupport::incrementStatsCounter(webFrameActiveCount);
     frameCount++;
 }
 
 WebFrameImpl::~WebFrameImpl()
 {
-    PlatformBridge::decrementStatsCounter(webFrameActiveCount);
+    PlatformSupport::decrementStatsCounter(webFrameActiveCount);
     frameCount--;
 
     cancelPendingScopingEffort();
-    clearPasswordListeners();
 }
 
 void WebFrameImpl::initializeAsMainFrame(WebViewImpl* webViewImpl)
@@ -1988,8 +1974,15 @@ void WebFrameImpl::createFrameView()
     ASSERT(page->mainFrame());
 
     bool isMainFrame = m_frame == page->mainFrame();
-    if (isMainFrame && m_frame->view())
+    bool useFixedLayout = false;
+    IntSize fixedLayoutSize;
+    if (isMainFrame && m_frame->view()) {
         m_frame->view()->setParentVisible(false);
+        // Save the fixed layout information before destroying the
+        // existing FrameView of this frame.
+        useFixedLayout = m_frame->view()->useFixedLayout();
+        fixedLayoutSize = m_frame->view()->fixedLayoutSize();
+    }
 
     m_frame->setView(0);
 
@@ -2020,6 +2013,10 @@ void WebFrameImpl::createFrameView()
 #if ENABLE(GESTURE_RECOGNIZER)
     webView->resetGestureRecognizer();
 #endif
+
+    // Restore the saved fixed layout information.
+    view->setUseFixedLayout(useFixedLayout);
+    view->setFixedLayoutSize(fixedLayoutSize);
 }
 
 WebFrameImpl* WebFrameImpl::fromFrame(Frame* frame)
@@ -2122,35 +2119,6 @@ void WebFrameImpl::setCanHaveScrollbars(bool canHaveScrollbars)
     m_frame->view()->setCanHaveScrollbars(canHaveScrollbars);
 }
 
-bool WebFrameImpl::registerPasswordListener(
-    WebInputElement inputElement,
-    WebPasswordAutocompleteListener* listener)
-{
-    RefPtr<HTMLInputElement> element(inputElement.unwrap<HTMLInputElement>());
-    if (!m_passwordListeners.add(element, listener).second) {
-        delete listener;
-        return false;
-    }
-    return true;
-}
-
-void WebFrameImpl::notifiyPasswordListenerOfAutocomplete(
-    const WebInputElement& inputElement)
-{
-    const HTMLInputElement* element = inputElement.constUnwrap<HTMLInputElement>();
-    WebPasswordAutocompleteListener* listener = getPasswordListener(element);
-    // Password listeners need to autocomplete other fields that depend on the
-    // input element with autofill suggestions.
-    if (listener)
-        listener->performInlineAutocomplete(element->value(), false, false);
-}
-
-WebPasswordAutocompleteListener* WebFrameImpl::getPasswordListener(
-    const HTMLInputElement* inputElement)
-{
-    return m_passwordListeners.get(RefPtr<HTMLInputElement>(const_cast<HTMLInputElement*>(inputElement)));
-}
-
 // WebFrameImpl private --------------------------------------------------------
 
 void WebFrameImpl::closing()
@@ -2176,13 +2144,9 @@ void WebFrameImpl::invalidateArea(AreaToInvalidate area)
 
         if ((area & InvalidateScrollbar) == InvalidateScrollbar) {
             // Invalidate the vertical scroll bar region for the view.
-            IntRect scrollBarVert(
-                view->x() + view->visibleWidth(), view->y(),
-                ScrollbarTheme::nativeTheme()->scrollbarThickness(),
-                view->visibleHeight());
-            IntRect frameRect = view->frameRect();
-            scrollBarVert.move(-frameRect.x(), -frameRect.y());
-            view->invalidateRect(scrollBarVert);
+            Scrollbar* scrollbar = view->verticalScrollbar();
+            if (scrollbar)
+                scrollbar->invalidate();
         }
     }
 }
@@ -2278,12 +2242,6 @@ void WebFrameImpl::invalidateIfNecessary()
     }
 }
 
-void WebFrameImpl::clearPasswordListeners()
-{
-    deleteAllValues(m_passwordListeners);
-    m_passwordListeners.clear();
-}
-
 void WebFrameImpl::loadJavaScriptURL(const KURL& url)
 {
     // This is copied from ScriptController::executeIfJavaScriptURL.
@@ -2295,6 +2253,10 @@ void WebFrameImpl::loadJavaScriptURL(const KURL& url)
     // the page are otherwise disabled.
 
     if (!m_frame->document() || !m_frame->page())
+        return;
+
+    // Protect privileged pages against bookmarklets and other javascript manipulations.
+    if (SchemeRegistry::shouldTreatURLSchemeAsNotAllowingJavascriptURLs(m_frame->document()->url().protocol()))
         return;
 
     String script = decodeURLEscapeSequences(url.string().substring(strlen("javascript:")));

@@ -80,10 +80,6 @@ class PlatformContextSkia;
 typedef PlatformContextSkia GraphicsContextPlatformPrivate;
 }
 typedef WebCore::PlatformContextSkia PlatformGraphicsContext;
-#elif PLATFORM(HAIKU)
-class BView;
-typedef BView PlatformGraphicsContext;
-struct pattern;
 #elif OS(WINCE)
 typedef struct HDC__ PlatformGraphicsContext;
 #else
@@ -275,7 +271,6 @@ namespace WebCore {
         void setIsAcceleratedContext(bool);
 #endif
         bool isAcceleratedContext() const;
-        bool paintsIntoImageBuffer() const;
 
         void save();
         void restore();
@@ -316,7 +311,7 @@ namespace WebCore {
         void drawTiledImage(Image*, ColorSpace styleColorSpace, const IntRect& destRect, const IntPoint& srcPoint, const IntSize& tileSize,
                        CompositeOperator = CompositeSourceOver, bool useLowQualityScale = false);
         void drawTiledImage(Image*, ColorSpace styleColorSpace, const IntRect& destRect, const IntRect& srcRect,
-                            Image::TileRule hRule = Image::StretchTile, Image::TileRule vRule = Image::StretchTile,
+                            const FloatSize& tileScaleFactor, Image::TileRule hRule = Image::StretchTile, Image::TileRule vRule = Image::StretchTile,
                             CompositeOperator = CompositeSourceOver, bool useLowQualityScale = false);
 
         void drawImageBuffer(ImageBuffer*, ColorSpace styleColorSpace, const IntPoint&, CompositeOperator = CompositeSourceOver);
@@ -371,6 +366,7 @@ namespace WebCore {
 
         void beginTransparencyLayer(float opacity);
         void endTransparencyLayer();
+        bool isInTransparencyLayer() const;
 
         bool hasShadow() const;
         void setShadow(const FloatSize&, float blur, const Color&, ColorSpace);
@@ -426,13 +422,11 @@ namespace WebCore {
         void drawBitmap(SharedBitmap*, const IntRect& dstRect, const IntRect& srcRect, ColorSpace styleColorSpace, CompositeOperator compositeOp);
         void drawBitmapPattern(SharedBitmap*, const FloatRect& tileRectIn, const AffineTransform& patternTransform, const FloatPoint& phase, ColorSpace styleColorSpace, CompositeOperator op, const FloatRect& destRect, const IntSize& origSourceSize);
         void drawIcon(HICON icon, const IntRect& dstRect, UINT flags);
-        bool inTransparencyLayer() const { return false; }
         HDC getWindowsContext(const IntRect&, bool supportAlphaBlend = false, bool mayCreateBitmap = true); // The passed in rect is used to create a bitmap for compositing inside transparency layers.
         void releaseWindowsContext(HDC, const IntRect&, bool supportAlphaBlend = false, bool mayCreateBitmap = true);    // The passed in HDC should be the one handed back by getWindowsContext.
         void drawRoundCorner(bool newClip, RECT clipRect, RECT rectWin, HDC dc, int width, int height);
 #elif PLATFORM(WIN)
         GraphicsContext(HDC, bool hasAlpha = false); // FIXME: To be removed.
-        bool inTransparencyLayer() const;
         HDC getWindowsContext(const IntRect&, bool supportAlphaBlend = true, bool mayCreateBitmap = true); // The passed in rect is used to create a bitmap for compositing inside transparency layers.
         void releaseWindowsContext(HDC, const IntRect&, bool supportAlphaBlend = true, bool mayCreateBitmap = true);    // The passed in HDC should be the one handed back by getWindowsContext.
 
@@ -482,11 +476,9 @@ namespace WebCore {
         // This is needed because of a bug whereby getting an HDC from a GDI+ context
         // loses the scale operations applied to the context.
         FloatSize currentScale(); 
-        bool inTransparencyLayer() const { return false; }
 #endif
 
 #if PLATFORM(QT)
-        bool inTransparencyLayer() const;
         void pushTransparencyLayerInternal(const QRect &rect, qreal opacity, QPixmap& alphaMask);
         void takeOwnershipOfPlatformContext();
 #endif
@@ -504,12 +496,6 @@ namespace WebCore {
         GdkWindow* gdkWindow() const;
         GdkEventExpose* gdkExposeEvent() const;
 #endif
-
-#if PLATFORM(HAIKU)
-        pattern getHaikuStrokeStyle();
-#endif
-
-        void setGraphicsContext3D(GraphicsContext3D*, DrawingBuffer*, const IntSize&);
 
         static void adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2, float strokeWidth, StrokeStyle);
 
@@ -541,11 +527,16 @@ namespace WebCore {
 
         void setPlatformCompositeOperation(CompositeOperator);
 
+        void beginPlatformTransparencyLayer(float opacity);
+        void endPlatformTransparencyLayer();
+        static bool supportsTransparencyLayers();
+
         GraphicsContextPlatformPrivate* m_data;
 
         GraphicsContextState m_state;
         Vector<GraphicsContextState> m_stack;
         bool m_updatingControlTints;
+        unsigned m_transparencyCount;
     };
 
     class GraphicsContextStateSaver {

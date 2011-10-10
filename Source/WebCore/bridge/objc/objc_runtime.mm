@@ -35,7 +35,6 @@
 #include <runtime/Error.h>
 #include <runtime/JSGlobalObject.h>
 #include <runtime/JSLock.h>
-#include <runtime/ObjectPrototype.h>
 #include <wtf/RetainPtr.h>
 
 using namespace WebCore;
@@ -77,11 +76,7 @@ NSMethodSignature* ObjcMethod::getMethodSignature() const
 
 ObjcField::ObjcField(Ivar ivar) 
     : _ivar(ivar)
-#if defined(OBJC_API_VERSION) && OBJC_API_VERSION >= 2
     , _name(AdoptCF, CFStringCreateWithCString(0, ivar_getName(_ivar), kCFStringEncodingASCII))
-#else
-    , _name(AdoptCF, CFStringCreateWithCString(0, _ivar->ivar_name, kCFStringEncodingASCII))
-#endif
 {
 }
 
@@ -195,14 +190,18 @@ unsigned int ObjcArray::getLength() const
     return [_array.get() count];
 }
 
-const ClassInfo ObjcFallbackObjectImp::s_info = { "ObjcFallbackObject", &JSObjectWithGlobalObject::s_info, 0, 0 };
+const ClassInfo ObjcFallbackObjectImp::s_info = { "ObjcFallbackObject", &JSNonFinalObject::s_info, 0, 0, CREATE_METHOD_TABLE(ObjcFallbackObjectImp) };
 
-ObjcFallbackObjectImp::ObjcFallbackObjectImp(ExecState* exec, JSGlobalObject* globalObject, ObjcInstance* i, const Identifier& propertyName)
-    // FIXME: deprecatedGetDOMStructure uses the prototype off of the wrong global object
-    : JSObjectWithGlobalObject(globalObject, deprecatedGetDOMStructure<ObjcFallbackObjectImp>(exec))
+ObjcFallbackObjectImp::ObjcFallbackObjectImp(JSGlobalObject* globalObject, Structure* structure, ObjcInstance* i, const Identifier& propertyName)
+    : JSNonFinalObject(globalObject->globalData(), structure)
     , _instance(i)
     , _item(propertyName)
 {
+}
+
+void ObjcFallbackObjectImp::finishCreation(JSGlobalObject* globalObject)
+{
+    Base::finishCreation(globalObject->globalData());
     ASSERT(inherits(&s_info));
 }
 
@@ -221,6 +220,10 @@ bool ObjcFallbackObjectImp::getOwnPropertyDescriptor(ExecState*, const Identifie
 }
 
 void ObjcFallbackObjectImp::put(ExecState*, const Identifier&, JSValue, PutPropertySlot&)
+{
+}
+
+void ObjcFallbackObjectImp::put(JSCell*, ExecState*, const Identifier&, JSValue, PutPropertySlot&)
 {
 }
 
@@ -256,16 +259,27 @@ static EncodedJSValue JSC_HOST_CALL callObjCFallbackObject(ExecState* exec)
     return JSValue::encode(result);
 }
 
-CallType ObjcFallbackObjectImp::getCallData(CallData& callData)
+CallType ObjcFallbackObjectImp::getCallDataVirtual(CallData& callData)
 {
-    id targetObject = _instance->getObject();
+    return getCallData(this, callData);
+}
+
+CallType ObjcFallbackObjectImp::getCallData(JSCell* cell, CallData& callData)
+{
+    ObjcFallbackObjectImp* thisObject = static_cast<ObjcFallbackObjectImp*>(cell);
+    id targetObject = thisObject->_instance->getObject();
     if (![targetObject respondsToSelector:@selector(invokeUndefinedMethodFromWebScript:withArguments:)])
         return CallTypeNone;
     callData.native.function = callObjCFallbackObject;
     return CallTypeHost;
 }
 
-bool ObjcFallbackObjectImp::deleteProperty(ExecState*, const Identifier&)
+bool ObjcFallbackObjectImp::deleteProperty(ExecState* exec, const Identifier& identifier)
+{
+    return deleteProperty(this, exec, identifier);
+}
+
+bool ObjcFallbackObjectImp::deleteProperty(JSCell*, ExecState*, const Identifier&)
 {
     return false;
 }

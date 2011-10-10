@@ -152,7 +152,7 @@ static bool sendMouseEvent(Evas* evas, EvasMouseEvent event, int buttonNumber, E
 
 static Eina_Bool sendClick(void*)
 {
-    return !!sendMouseEvent(evas_object_evas_get(mainFrame), EvasMouseEventClick, EvasMouseButtonLeft, EvasKeyModifierNone);
+    return !!sendMouseEvent(evas_object_evas_get(browser->mainFrame()), EvasMouseEventClick, EvasMouseButtonLeft, EvasKeyModifierNone);
 }
 
 static JSValueRef scheduleAsynchronousClickCallback(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
@@ -223,7 +223,7 @@ static JSValueRef mouseDownCallback(JSContextRef context, JSObjectRef function, 
     updateClickCount(button);
 
     EvasKeyModifier modifiers = argumentCount >= 2 ? modifiersFromJSValue(context, arguments[1]) : EvasKeyModifierNone;
-    if (!sendMouseEvent(evas_object_evas_get(mainFrame), EvasMouseEventDown, button, modifiers))
+    if (!sendMouseEvent(evas_object_evas_get(browser->mainFrame()), EvasMouseEventDown, button, modifiers))
         return JSValueMakeUndefined(context);
 
     gButtonCurrentlyDown = button;
@@ -246,7 +246,7 @@ static JSValueRef mouseUpCallback(JSContextRef context, JSObjectRef function, JS
     gButtonCurrentlyDown = 0;
 
     EvasKeyModifier modifiers = argumentCount >= 2 ? modifiersFromJSValue(context, arguments[1]) : EvasKeyModifierNone;
-    sendMouseEvent(evas_object_evas_get(mainFrame), EvasMouseEventUp, translateMouseButtonNumber(button), modifiers);
+    sendMouseEvent(evas_object_evas_get(browser->mainFrame()), EvasMouseEventUp, translateMouseButtonNumber(button), modifiers);
     return JSValueMakeUndefined(context);
 }
 
@@ -262,7 +262,7 @@ static JSValueRef mouseMoveToCallback(JSContextRef context, JSObjectRef function
     if (exception && *exception)
         return JSValueMakeUndefined(context);
 
-    sendMouseEvent(evas_object_evas_get(mainFrame), EvasMouseEventMove, EvasMouseButtonNone, EvasKeyModifierNone);
+    sendMouseEvent(evas_object_evas_get(browser->mainFrame()), EvasMouseEventMove, EvasMouseButtonNone, EvasKeyModifierNone);
     return JSValueMakeUndefined(context);
 }
 
@@ -295,7 +295,7 @@ static JSValueRef mouseScrollByCallback(JSContextRef context, JSObjectRef functi
     if (exception && *exception)
         return JSValueMakeUndefined(context);
 
-    sendMouseEvent(evas_object_evas_get(mainFrame), evasMouseEventFromHorizontalAndVerticalOffsets(horizontal, vertical), EvasMouseButtonNone, EvasKeyModifierNone);
+    sendMouseEvent(evas_object_evas_get(browser->mainFrame()), evasMouseEventFromHorizontalAndVerticalOffsets(horizontal, vertical), EvasMouseButtonNone, EvasKeyModifierNone);
     return JSValueMakeUndefined(context);
 }
 
@@ -315,9 +315,9 @@ static const char* keyPadNameFromJSValue(JSStringRef character)
     if (equals(character, "downArrow"))
         return "KP_Down";
     if (equals(character, "pageUp"))
-        return "KP_Page_Up";
+        return "KP_Prior";
     if (equals(character, "pageDown"))
-        return "KP_Page_Down";
+        return "KP_Next";
     if (equals(character, "home"))
         return "KP_Home";
     if (equals(character, "end"))
@@ -344,9 +344,9 @@ static const char* keyNameFromJSValue(JSStringRef character)
     if (equals(character, "downArrow"))
         return "Down";
     if (equals(character, "pageUp"))
-        return "Page_Up";
+        return "Prior";
     if (equals(character, "pageDown"))
-        return "Page_Down";
+        return "Next";
     if (equals(character, "home"))
         return "Home";
     if (equals(character, "end"))
@@ -400,7 +400,7 @@ static const char* keyNameFromJSValue(JSStringRef character)
 
 static JSValueRef keyDownCallback(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
 {
-    Evas_Object* view = ewk_frame_view_get(mainFrame);
+    Evas_Object* view = ewk_frame_view_get(browser->mainFrame());
     if (!view)
         return JSValueMakeUndefined(context);
 
@@ -435,7 +435,7 @@ static JSValueRef scalePageByCallback(JSContextRef context, JSObjectRef function
     if (argumentCount < 3)
         return JSValueMakeUndefined(context);
 
-    Evas_Object* view = ewk_frame_view_get(mainFrame);
+    Evas_Object* view = ewk_frame_view_get(browser->mainFrame());
     if (!view)
         return JSValueMakeUndefined(context);
 

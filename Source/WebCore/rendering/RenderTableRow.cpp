@@ -74,23 +74,30 @@ void RenderTableRow::updateBeforeAndAfterContent()
 void RenderTableRow::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
     RenderBox::styleDidChange(diff, oldStyle);
+    propagateStyleToAnonymousChildren();
 
     if (parent())
         updateBeforeAndAfterContent();
 
+    // If border was changed, notify table.
+    if (parent()) {
+        RenderTable* table = this->table();
+        if (table && !table->selfNeedsLayout() && !table->normalChildNeedsLayout() && oldStyle && oldStyle->border() != style()->border())
+            table->invalidateCollapsedBorders();
+    }
 }
 
 void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
 {
     // Make sure we don't append things after :after-generated content if we have it.
-    if (!beforeChild && isAfterContent(lastChild()))
-        beforeChild = lastChild();
+    if (!beforeChild)
+        beforeChild = findAfterContentRenderer();
 
     if (!child->isTableCell()) {
         RenderObject* last = beforeChild;
         if (!last)
             last = lastChild();
-        if (last && last->isAnonymous() && last->isTableCell()) {
+        if (last && last->isAnonymous() && last->isTableCell() && !last->isBeforeOrAfterContent()) {
             if (beforeChild == last)
                 beforeChild = last->firstChild();
             last->addChild(child, beforeChild);
@@ -98,7 +105,7 @@ void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
         }
 
         // If beforeChild is inside an anonymous cell, insert into the cell.
-        if (last && !last->isTableCell() && last->parent() && last->parent()->isAnonymous()) {
+        if (last && !last->isTableCell() && last->parent() && last->parent()->isAnonymous() && !last->parent()->isBeforeOrAfterContent()) {
             last->parent()->addChild(child, beforeChild);
             return;
         }
@@ -197,7 +204,7 @@ bool RenderTableRow::nodeAtPoint(const HitTestRequest& request, HitTestResult& r
         // table-specific hit-test method (which we should do for performance reasons anyway),
         // then we can remove this check.
         if (child->isTableCell() && !toRenderBox(child)->hasSelfPaintingLayer()) {
-            LayoutPoint cellPoint = flipForWritingMode(toRenderTableCell(child), accumulatedOffset, ParentToChildFlippingAdjustment);
+            LayoutPoint cellPoint = flipForWritingModeForChild(toRenderTableCell(child), accumulatedOffset);
             if (child->nodeAtPoint(request, result, pointInContainer, cellPoint, action)) {
                 updateHitTestResult(result, pointInContainer - toLayoutSize(cellPoint));
                 return true;

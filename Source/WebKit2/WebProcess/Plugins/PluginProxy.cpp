@@ -329,6 +329,10 @@ void PluginProxy::setFocus(bool hasFocus)
 
 NPObject* PluginProxy::pluginScriptableNPObject()
 {
+    // Sending the synchronous Messages::PluginControllerProxy::GetPluginScriptableNPObject message can cause us to dispatch an
+    // incoming synchronous message that ends up destroying the PluginProxy object.
+    PluginController::PluginDestructionProtector protector(controller());
+
     uint64_t pluginScriptableNPObjectID = 0;
     
     if (!m_connection->connection()->sendSync(Messages::PluginControllerProxy::GetPluginScriptableNPObject(), Messages::PluginControllerProxy::GetPluginScriptableNPObject::Reply(pluginScriptableNPObjectID), m_pluginInstanceID))
@@ -380,6 +384,21 @@ bool PluginProxy::getFormValue(String& formValue)
         return false;
 
     return returnValue;
+}
+
+bool PluginProxy::handleScroll(ScrollDirection, ScrollGranularity)
+{
+    return false;
+}
+
+Scrollbar* PluginProxy::horizontalScrollbar()
+{
+    return 0;
+}
+
+Scrollbar* PluginProxy::verticalScrollbar()
+{
+    return 0;
 }
 
 void PluginProxy::loadURL(uint64_t requestID, const String& method, const String& urlString, const String& target, const HTTPHeaderMap& headerFields, const Vector<uint8_t>& httpBody, bool allowPopups)
@@ -470,13 +489,6 @@ void PluginProxy::setStatusbarText(const String& statusbarText)
     controller()->setStatusbarText(statusbarText);
 }
 
-#if PLATFORM(MAC)
-void PluginProxy::setComplexTextInputEnabled(bool complexTextInputEnabled)
-{
-    controller()->setComplexTextInputEnabled(complexTextInputEnabled);
-}
-#endif
-    
 void PluginProxy::update(const IntRect& paintedRect)
 {
     if (paintedRect == m_frameRect)

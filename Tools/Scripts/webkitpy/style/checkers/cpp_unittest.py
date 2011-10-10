@@ -615,6 +615,11 @@ class FunctionDetectionTest(CppStyleTestBase):
 
 class CppStyleTest(CppStyleTestBase):
 
+    def test_asm_lines_ignored(self):
+        self.assert_lint(
+            '__asm mov [registration], eax',
+            '')
+
     # Test get line width.
     def test_get_line_width(self):
         self.assertEquals(0, cpp_style.get_line_width(''))
@@ -3275,6 +3280,11 @@ class PassPtrTest(CppStyleTestBase):
             '{\n'
             '}',
             'The parameter type should use PassRefPtr instead of RefPtr.  [readability/pass_ptr] [5]')
+        self.assert_pass_ptr_check(
+            'int myFunction(RefPtr<Type1>&)\n'
+            '{\n'
+            '}',
+            '')
 
     def test_own_ptr_parameter_value(self):
         self.assert_pass_ptr_check(
@@ -3287,6 +3297,11 @@ class PassPtrTest(CppStyleTestBase):
             '{\n'
             '}',
             'The parameter type should use PassOwnPtr instead of OwnPtr.  [readability/pass_ptr] [5]')
+        self.assert_pass_ptr_check(
+            'int myFunction(OwnPtr<Type1>& simple)\n'
+            '{\n'
+            '}',
+            '')
 
     def test_ref_ptr_member_variable(self):
         self.assert_pass_ptr_check(
@@ -4092,6 +4107,27 @@ class WebKitStyleTest(CppStyleTestBase):
             'gst_element_unlink_many(foo, bar, boo, NULL);',
             '')
         self.assert_lint(
+            'gst_structure_get(foo, "value", G_TYPE_INT, &value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_set(foo, "value", G_TYPE_INT, value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_remove_fields(foo, "value", "bar", NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_new("foo", "value", G_TYPE_INT, value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_id_new(FOO, VALUE, G_TYPE_INT, value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_id_set(FOO, VALUE, G_TYPE_INT, value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_structure_id_get(FOO, VALUE, G_TYPE_INT, &value, NULL);',
+            '')
+        self.assert_lint(
             'gchar* result = g_strconcat("part1", "part2", "part3", NULL);',
             '')
         self.assert_lint(
@@ -4362,6 +4398,19 @@ class WebKitStyleTest(CppStyleTestBase):
         # GObject requires certain magical names in class declarations.
         self.assert_lint('void webkit_dom_object_init();', '')
         self.assert_lint('void webkit_dom_object_class_init();', '')
+
+        # There is an exception for GTK+ API.
+        self.assert_lint('void webkit_web_view_load(int var1, int var2)', '', 'Source/Webkit/gtk/webkit/foo.cpp')
+        self.assert_lint('void webkit_web_view_load(int var1, int var2)', '', 'Source/Webkit2/UIProcess/gtk/foo.cpp')
+
+        # Test that this doesn't also apply to files not in a 'gtk' directory.
+        self.assert_lint('void webkit_web_view_load(int var1, int var2)',
+            'webkit_web_view_load is incorrectly named. Don\'t use underscores in your identifier names.'
+            '  [readability/naming] [4]', 'Source/Webkit/webkit/foo.cpp')
+        # Test that this doesn't also apply to names that don't start with 'webkit_'.
+        self.assert_lint_one_of_many_errors_re('void otherkit_web_view_load(int var1, int var2)',
+            'otherkit_web_view_load is incorrectly named. Don\'t use underscores in your identifier names.'
+            '  [readability/naming] [4]', 'Source/Webkit/webkit/foo.cpp')
 
         # There is an exception for some unit tests that begin with "tst_".
         self.assert_lint('void tst_QWebFrame::arrayObjectEnumerable(int var1, int var2)', '')

@@ -39,6 +39,7 @@
 #include <wtf/DecimalNumber.h>
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/StringBuffer.h>
+#include <wtf/text/StringBuilder.h>
 
 #if ENABLE(DASHBOARD_SUPPORT)
 #include "DashboardRegion.h"
@@ -47,6 +48,56 @@
 using namespace WTF;
 
 namespace WebCore {
+
+static inline bool isValidCSSUnitTypeForDoubleConversion(CSSPrimitiveValue::UnitTypes unitType)
+{
+    switch (unitType) {
+    case CSSPrimitiveValue:: CSS_CM:
+    case CSSPrimitiveValue:: CSS_DEG:
+    case CSSPrimitiveValue:: CSS_DIMENSION:
+    case CSSPrimitiveValue:: CSS_EMS:
+    case CSSPrimitiveValue:: CSS_EXS:
+    case CSSPrimitiveValue:: CSS_GRAD:
+    case CSSPrimitiveValue:: CSS_HZ:
+    case CSSPrimitiveValue:: CSS_IN:
+    case CSSPrimitiveValue:: CSS_KHZ:
+    case CSSPrimitiveValue:: CSS_MM:
+    case CSSPrimitiveValue:: CSS_MS:
+    case CSSPrimitiveValue:: CSS_NUMBER:
+    case CSSPrimitiveValue:: CSS_PERCENTAGE:
+    case CSSPrimitiveValue:: CSS_PC:
+    case CSSPrimitiveValue:: CSS_PT:
+    case CSSPrimitiveValue:: CSS_PX:
+    case CSSPrimitiveValue:: CSS_RAD:
+    case CSSPrimitiveValue:: CSS_REMS:
+    case CSSPrimitiveValue:: CSS_S:
+    case CSSPrimitiveValue:: CSS_TURN:
+        return true;
+    case CSSPrimitiveValue:: CSS_ATTR:
+    case CSSPrimitiveValue:: CSS_COUNTER:
+    case CSSPrimitiveValue:: CSS_COUNTER_NAME:
+    case CSSPrimitiveValue:: CSS_DASHBOARD_REGION:
+    case CSSPrimitiveValue:: CSS_FROM_FLOW:
+    case CSSPrimitiveValue:: CSS_IDENT:
+    case CSSPrimitiveValue:: CSS_PAIR:
+    case CSSPrimitiveValue:: CSS_PARSER_HEXCOLOR:
+    case CSSPrimitiveValue:: CSS_PARSER_IDENTIFIER:
+    case CSSPrimitiveValue:: CSS_PARSER_INTEGER:
+    case CSSPrimitiveValue:: CSS_PARSER_OPERATOR:
+    case CSSPrimitiveValue:: CSS_RECT:
+    case CSSPrimitiveValue:: CSS_QUAD:
+    case CSSPrimitiveValue:: CSS_RGBCOLOR:
+    case CSSPrimitiveValue:: CSS_SHAPE:
+    case CSSPrimitiveValue:: CSS_STRING:
+    case CSSPrimitiveValue:: CSS_UNICODE_RANGE:
+    case CSSPrimitiveValue:: CSS_UNKNOWN:
+    case CSSPrimitiveValue:: CSS_URI:
+        return false;
+    }
+
+    ASSERT_NOT_REACHED();
+    return false;
+}
 
 static CSSPrimitiveValue::UnitCategory unitCategory(CSSPrimitiveValue::UnitTypes type)
 {
@@ -159,7 +210,6 @@ CSSPrimitiveValue::CSSPrimitiveValue(const Length& length)
             break;
         case WebCore::Fixed:
             m_type = CSS_PX;
-            ASSERT(isfinite(length.value()));
             m_value.num = length.value();
             break;
         case Intrinsic:
@@ -176,6 +226,7 @@ CSSPrimitiveValue::CSSPrimitiveValue(const Length& length)
             m_value.num = length.percent();
             break;
         case Relative:
+        case Undefined:
             ASSERT_NOT_REACHED();
             break;
     }
@@ -185,14 +236,21 @@ void CSSPrimitiveValue::init(PassRefPtr<Counter> c)
 {
     m_type = CSS_COUNTER;
     m_hasCachedCSSText = false;
-    m_value.counter = c.releaseRef();
+    m_value.counter = c.leakRef();
 }
 
 void CSSPrimitiveValue::init(PassRefPtr<Rect> r)
 {
     m_type = CSS_RECT;
     m_hasCachedCSSText = false;
-    m_value.rect = r.releaseRef();
+    m_value.rect = r.leakRef();
+}
+
+void CSSPrimitiveValue::init(PassRefPtr<Quad> quad)
+{
+    m_type = CSS_QUAD;
+    m_hasCachedCSSText = false;
+    m_value.quad = quad.leakRef();
 }
 
 #if ENABLE(DASHBOARD_SUPPORT)
@@ -200,7 +258,7 @@ void CSSPrimitiveValue::init(PassRefPtr<DashboardRegion> r)
 {
     m_type = CSS_DASHBOARD_REGION;
     m_hasCachedCSSText = false;
-    m_value.region = r.releaseRef();
+    m_value.region = r.leakRef();
 }
 #endif
 
@@ -208,14 +266,14 @@ void CSSPrimitiveValue::init(PassRefPtr<Pair> p)
 {
     m_type = CSS_PAIR;
     m_hasCachedCSSText = false;
-    m_value.pair = p.releaseRef();
+    m_value.pair = p.leakRef();
 }
 
 void CSSPrimitiveValue::init(PassRefPtr<CSSWrapShape> shape)
 {
     m_type = CSS_SHAPE;
     m_hasCachedCSSText = false;
-    m_value.shape = shape.releaseRef();
+    m_value.shape = shape.leakRef();
 }
 
 CSSPrimitiveValue::~CSSPrimitiveValue()
@@ -239,6 +297,9 @@ void CSSPrimitiveValue::cleanup()
             break;
         case CSS_RECT:
             m_value.rect->deref();
+            break;
+        case CSS_QUAD:
+            m_value.quad->deref();
             break;
         case CSS_PAIR:
             m_value.pair->deref();
@@ -340,6 +401,7 @@ double CSSPrimitiveValue::computeLengthDouble(RenderStyle* style, RenderStyle* r
             factor = cssPixelsPerInch * 12.0 / 72.0;
             break;
         default:
+            ASSERT_NOT_REACHED();
             return -1.0;
     }
 
@@ -453,7 +515,7 @@ CSSPrimitiveValue::UnitTypes CSSPrimitiveValue::canonicalUnitTypeForCategory(Uni
 
 bool CSSPrimitiveValue::getDoubleValueInternal(UnitTypes requestedUnitType, double* result) const
 {
-    if (m_type < CSS_NUMBER || (m_type > CSS_DIMENSION && m_type < CSS_TURN) || requestedUnitType < CSS_NUMBER || (requestedUnitType > CSS_DIMENSION && requestedUnitType < CSS_TURN))
+    if (!isValidCSSUnitTypeForDoubleConversion(static_cast<UnitTypes>(m_type)) || !isValidCSSUnitTypeForDoubleConversion(requestedUnitType))
         return false;
     if (requestedUnitType == m_type || requestedUnitType == CSS_DIMENSION) {
         *result = m_value.num;
@@ -566,6 +628,17 @@ Rect* CSSPrimitiveValue::getRectValue(ExceptionCode& ec) const
     return m_value.rect;
 }
 
+Quad* CSSPrimitiveValue::getQuadValue(ExceptionCode& ec) const
+{
+    ec = 0;
+    if (m_type != CSS_QUAD) {
+        ec = INVALID_ACCESS_ERR;
+        return 0;
+    }
+
+    return m_value.quad;
+}
+
 PassRefPtr<RGBColor> CSSPrimitiveValue::getRGBColorValue(ExceptionCode& ec) const
 {
     ec = 0;
@@ -610,7 +683,7 @@ int CSSPrimitiveValue::getIdent() const
 static String formatNumber(double number)
 {
     DecimalNumber decimal(number);
-    
+
     StringBuffer buffer(decimal.bufferLengthForStringDecimal());
     unsigned length = decimal.toStringDecimal(buffer.characters(), buffer.length());
     ASSERT_UNUSED(length, length == buffer.length());
@@ -709,14 +782,14 @@ String CSSPrimitiveValue::cssText() const
         case CSS_ATTR: {
             DEFINE_STATIC_LOCAL(const String, attrParen, ("attr("));
 
-            Vector<UChar> result;
-            result.reserveInitialCapacity(6 + m_value.string->length());
+            StringBuilder result;
+            result.reserveCapacity(6 + m_value.string->length());
 
-            append(result, attrParen);
-            append(result, m_value.string);
-            result.uncheckedAppend(')');
+            result.append(attrParen);
+            result.append(m_value.string);
+            result.append(')');
 
-            text = String::adopt(result);
+            text = result.toString();
             break;
         }
         case CSS_COUNTER_NAME:
@@ -724,32 +797,70 @@ String CSSPrimitiveValue::cssText() const
             text += m_value.string;
             text += ")";
             break;
-        case CSS_COUNTER:
-            text = "counter(";
-            text += String::number(m_value.num);
-            text += ")";
-            // FIXME: Add list-style and separator
+        case CSS_COUNTER: {
+            DEFINE_STATIC_LOCAL(const String, counterParen, ("counter("));
+            DEFINE_STATIC_LOCAL(const String, countersParen, ("counters("));
+            DEFINE_STATIC_LOCAL(const String, commaSpace, (", "));
+
+            StringBuilder result;
+            String separator = m_value.counter->separator();
+            result.append(separator.isEmpty() ? counterParen : countersParen);
+
+            result.append(m_value.counter->identifier());
+            if (!separator.isEmpty()) {
+                result.append(commaSpace);
+                result.append(quoteCSSStringIfNeeded(separator));
+            }
+            String listStyle = m_value.counter->listStyle();
+            if (!listStyle.isEmpty()) {
+                result.append(commaSpace);
+                result.append(listStyle);
+            }
+            result.append(')');
+
+            text = result.toString();
             break;
+        }
         case CSS_RECT: {
             DEFINE_STATIC_LOCAL(const String, rectParen, ("rect("));
 
             Rect* rectVal = getRectValue();
-            Vector<UChar> result;
-            result.reserveInitialCapacity(32);
-            append(result, rectParen);
+            StringBuilder result;
+            result.reserveCapacity(32);
+            result.append(rectParen);
 
-            append(result, rectVal->top()->cssText());
+            result.append(rectVal->top()->cssText());
             result.append(' ');
 
-            append(result, rectVal->right()->cssText());
+            result.append(rectVal->right()->cssText());
             result.append(' ');
 
-            append(result, rectVal->bottom()->cssText());
+            result.append(rectVal->bottom()->cssText());
             result.append(' ');
 
-            append(result, rectVal->left()->cssText());
+            result.append(rectVal->left()->cssText());
             result.append(')');
 
+            text = result.toString();
+            break;
+        }
+        case CSS_QUAD: {
+            Quad* quadVal = getQuadValue();
+            Vector<UChar> result;
+            result.reserveInitialCapacity(32);
+            append(result, quadVal->top()->cssText());
+            if (quadVal->right() != quadVal->top() || quadVal->bottom() != quadVal->top() || quadVal->left() != quadVal->top()) {
+                result.append(' ');
+                append(result, quadVal->right()->cssText());
+                if (quadVal->bottom() != quadVal->top() || quadVal->right() != quadVal->left()) {
+                    result.append(' ');
+                    append(result, quadVal->bottom()->cssText());
+                    if (quadVal->left() != quadVal->right()) {
+                        result.append(' ');
+                        append(result, quadVal->left()->cssText());
+                    }
+                }
+            }
             text = String::adopt(result);
             break;
         }
@@ -789,8 +900,10 @@ String CSSPrimitiveValue::cssText() const
         }
         case CSS_PAIR:
             text = m_value.pair->first()->cssText();
-            text += " ";
-            text += m_value.pair->second()->cssText();
+            if (m_value.pair->second() != m_value.pair->first()) {
+                text += " ";
+                text += m_value.pair->second()->cssText();
+            }
             break;
 #if ENABLE(DASHBOARD_SUPPORT)
         case CSS_DASHBOARD_REGION:

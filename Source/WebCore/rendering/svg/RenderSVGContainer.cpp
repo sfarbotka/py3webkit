@@ -27,6 +27,7 @@
 #include "RenderSVGContainer.h"
 
 #include "GraphicsContext.h"
+#include "LayoutRepainter.h"
 #include "RenderSVGResource.h"
 #include "RenderSVGResourceFilter.h"
 #include "RenderView.h"
@@ -91,7 +92,7 @@ bool RenderSVGContainer::selfWillPaint()
 #endif
 }
 
-void RenderSVGContainer::paint(PaintInfo& paintInfo, const IntPoint&)
+void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)
 {
     if (paintInfo.context->paintingDisabled())
         return;

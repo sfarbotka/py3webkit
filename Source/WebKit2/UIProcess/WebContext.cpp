@@ -30,8 +30,10 @@
 #include "ImmutableArray.h"
 #include "InjectedBundleMessageKinds.h"
 #include "Logging.h"
+#include "MutableDictionary.h"
 #include "RunLoop.h"
 #include "SandboxExtension.h"
+#include "StatisticsData.h"
 #include "TextChecker.h"
 #include "WKContextPrivate.h"
 #include "WebApplicationCacheManagerProxy.h"
@@ -59,19 +61,22 @@
 #include <wtf/CurrentTime.h>
 #include <wtf/MainThread.h>
 
+#if PLATFORM(MAC)
+#include "BuiltInPDFView.h"
+#endif
+
 #ifndef NDEBUG
 #include <wtf/RefCountedLeakCounter.h>
 #endif
 
-#define MESSAGE_CHECK(assertion) MESSAGE_CHECK_BASE(assertion, process()->connection())
+#define MESSAGE_CHECK(assertion) MESSAGE_CHECK_BASE(assertion, m_process->connection())
+#define MESSAGE_CHECK_URL(url) MESSAGE_CHECK_BASE(m_process->checkURLReceivedFromWebProcess(url), m_process->connection())
 
 using namespace WebCore;
 
 namespace WebKit {
 
-#ifndef NDEBUG
-static WTF::RefCountedLeakCounter webContextCounter("WebContext");
-#endif
+DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, webContextCounter, ("WebContext"));
 
 WebContext* WebContext::sharedProcessContext()
 {
@@ -115,6 +120,7 @@ WebContext::WebContext(ProcessModel processModel, const String& injectedBundlePa
     , m_injectedBundlePath(injectedBundlePath)
     , m_visitedLinkProvider(this)
     , m_alwaysUsesComplexTextCodePath(false)
+    , m_shouldUseFontSmoothing(true)
     , m_cacheModel(CacheModelDocumentViewer)
     , m_memorySamplerEnabled(false)
     , m_memorySamplerInterval(1400.0)
@@ -181,6 +187,8 @@ WebContext::~WebContext()
 
     m_resourceCacheManagerProxy->invalidate();
     m_resourceCacheManagerProxy->clearContext();
+    
+    invalidateCallbackMap(m_dictionaryCallbacks);
 
     platformInvalidateContext();
     
@@ -245,6 +253,7 @@ void WebContext::ensureWebProcess()
     copyToVector(m_schemesToSetDomainRelaxationForbiddenFor, parameters.urlSchemesForWhichDomainRelaxationIsForbidden);
 
     parameters.shouldAlwaysUseComplexTextCodePath = m_alwaysUsesComplexTextCodePath;
+    parameters.shouldUseFontSmoothing = m_shouldUseFontSmoothing;
     
     parameters.iconDatabaseEnabled = !iconDatabasePath().isEmpty();
 
@@ -428,11 +437,16 @@ void WebContext::didPerformClientRedirect(uint64_t pageID, const String& sourceU
     WebPageProxy* page = m_process->webPage(pageID);
     if (!page)
         return;
+
+    if (sourceURLString.isEmpty() || destinationURLString.isEmpty())
+        return;
     
     WebFrameProxy* frame = m_process->webFrame(frameID);
     MESSAGE_CHECK(frame);
     MESSAGE_CHECK(frame->page() == page);
-    
+    MESSAGE_CHECK_URL(sourceURLString);
+    MESSAGE_CHECK_URL(destinationURLString);
+
     m_historyClient.didPerformClientRedirect(this, page, sourceURLString, destinationURLString, frame);
 }
 
@@ -442,10 +456,15 @@ void WebContext::didPerformServerRedirect(uint64_t pageID, const String& sourceU
     if (!page)
         return;
     
+    if (sourceURLString.isEmpty() || destinationURLString.isEmpty())
+        return;
+    
     WebFrameProxy* frame = m_process->webFrame(frameID);
     MESSAGE_CHECK(frame);
     MESSAGE_CHECK(frame->page() == page);
-    
+    MESSAGE_CHECK_URL(sourceURLString);
+    MESSAGE_CHECK_URL(destinationURLString);
+
     m_historyClient.didPerformServerRedirect(this, page, sourceURLString, destinationURLString, frame);
 }
 
@@ -458,6 +477,7 @@ void WebContext::didUpdateHistoryTitle(uint64_t pageID, const String& title, con
     WebFrameProxy* frame = m_process->webFrame(frameID);
     MESSAGE_CHECK(frame);
     MESSAGE_CHECK(frame->page() == page);
+    MESSAGE_CHECK_URL(url);
 
     m_historyClient.didUpdateHistoryTitle(this, page, title, url, frame);
 }
@@ -486,6 +506,12 @@ void WebContext::setAlwaysUsesComplexTextCodePath(bool alwaysUseComplexText)
 {
     m_alwaysUsesComplexTextCodePath = alwaysUseComplexText;
     sendToAllProcesses(Messages::WebProcess::SetAlwaysUsesComplexTextCodePath(alwaysUseComplexText));
+}
+
+void WebContext::setShouldUseFontSmoothing(bool useFontSmoothing)
+{
+    m_shouldUseFontSmoothing = useFontSmoothing;
+    sendToAllProcesses(Messages::WebProcess::SetShouldUseFontSmoothing(useFontSmoothing));
 }
 
 void WebContext::registerURLSchemeAsEmptyDocument(const String& urlScheme)
@@ -539,13 +565,20 @@ void WebContext::getPlugins(bool refresh, Vector<PluginInfo>& pluginInfos)
     Vector<PluginModuleInfo> plugins = m_pluginInfoStore.plugins();
     for (size_t i = 0; i < plugins.size(); ++i)
         pluginInfos.append(plugins[i].info);
+
+#if PLATFORM(MAC)
+    // Add built-in PDF last, so that it's not used when a real plug-in is installed.
+    pluginInfos.append(BuiltInPDFView::pluginInfo());
+#endif
 }
 
 void WebContext::getPluginPath(const String& mimeType, const String& urlString, String& pluginPath)
 {
+    MESSAGE_CHECK_URL(urlString);
+
     String newMimeType = mimeType.lower();
 
-    PluginModuleInfo plugin = pluginInfoStore().findPlugin(newMimeType, KURL(ParsedURLString, urlString));
+    PluginModuleInfo plugin = pluginInfoStore().findPlugin(newMimeType, KURL(KURL(), urlString));
     if (!plugin.path)
         return;
 
@@ -776,13 +809,58 @@ void WebContext::setHTTPPipeliningEnabled(bool enabled)
 #endif
 }
 
-bool WebContext::httpPipeliningEnabled()
+bool WebContext::httpPipeliningEnabled() const
 {
 #if PLATFORM(MAC)
     return ResourceRequest::httpPipeliningEnabled();
 #else
     return false;
 #endif
+}
+
+void WebContext::getWebCoreStatistics(PassRefPtr<DictionaryCallback> prpCallback)
+{
+    RefPtr<DictionaryCallback> callback = prpCallback;
+    
+    uint64_t callbackID = callback->callbackID();
+    m_dictionaryCallbacks.set(callbackID, callback.get());
+    process()->send(Messages::WebProcess::GetWebCoreStatistics(callbackID), 0);
+}
+
+static PassRefPtr<MutableDictionary> createDictionaryFromHashMap(const HashMap<String, uint64_t>& map)
+{
+    RefPtr<MutableDictionary> result = MutableDictionary::create();
+    HashMap<String, uint64_t>::const_iterator end = map.end();
+    for (HashMap<String, uint64_t>::const_iterator it = map.begin(); it != end; ++it)
+        result->set(it->first, RefPtr<WebUInt64>(WebUInt64::create(it->second)).get());
+    
+    return result;
+}
+
+void WebContext::didGetWebCoreStatistics(const StatisticsData& statisticsData, uint64_t callbackID)
+{
+    RefPtr<DictionaryCallback> callback = m_dictionaryCallbacks.take(callbackID);
+    if (!callback) {
+        // FIXME: Log error or assert.
+        return;
+    }
+
+    RefPtr<MutableDictionary> statistics = createDictionaryFromHashMap(statisticsData.statisticsNumbers);
+    statistics->set("JavaScriptProtectedObjectTypeCounts", createDictionaryFromHashMap(statisticsData.javaScriptProtectedObjectTypeCounts).get());
+    statistics->set("JavaScriptObjectTypeCounts", createDictionaryFromHashMap(statisticsData.javaScriptObjectTypeCounts).get());
+    
+    size_t cacheStatisticsCount = statisticsData.webCoreCacheStatistics.size();
+    Vector<RefPtr<APIObject> > cacheStatisticsVector(cacheStatisticsCount);
+    for (size_t i = 0; i < cacheStatisticsCount; ++i)
+        cacheStatisticsVector[i] = createDictionaryFromHashMap(statisticsData.webCoreCacheStatistics[i]);
+    statistics->set("WebCoreCacheStatistics", ImmutableArray::adopt(cacheStatisticsVector).get());
+    
+    callback->performCallbackWithReturnValue(statistics.get());
+}
+    
+void WebContext::garbageCollectJavaScriptObjects()
+{
+    process()->send(Messages::WebProcess::GarbageCollectJavaScriptObjects(), 0);
 }
 
 } // namespace WebKit

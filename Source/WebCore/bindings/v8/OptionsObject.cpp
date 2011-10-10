@@ -89,6 +89,19 @@ bool OptionsObject::getKeyInt32(const String& key, int32_t& value) const
     return true;
 }
 
+bool OptionsObject::getKeyDouble(const String& key, double& value) const
+{
+    v8::Local<v8::Value> v8Value;
+    if (!getKey(key, v8Value))
+        return false;
+
+    v8::Local<v8::Number> v8Number = v8Value->ToNumber();
+    if (v8Number.IsEmpty())
+        return false;
+    value = v8Number->Value();
+    return true;
+}
+
 bool OptionsObject::getKeyString(const String& key, String& value) const
 {
     v8::Local<v8::Value> v8Value;
@@ -100,6 +113,20 @@ bool OptionsObject::getKeyString(const String& key, String& value) const
     //        See fast/dom/Geolocation/script-tests/argument-types.js for a similar
     //        example.
     value = v8ValueToWebCoreString(v8Value);
+    return true;
+}
+
+bool OptionsObject::getKeyStringWithUndefinedOrNullCheck(const String& key, String& value) const
+{
+    v8::Local<v8::Value> v8Value;
+    if (!getKey(key, v8Value) || v8Value->IsNull() || v8Value->IsUndefined())
+        return false;
+
+    // FIXME: It is possible for this to throw in which case we'd be getting back
+    //        an empty string and returning true when we should be returning false.
+    //        See fast/dom/Geolocation/script-tests/argument-types.js for a similar
+    //        example.
+    value = WebCore::isUndefinedOrNull(v8Value) ? String() : v8ValueToWebCoreString(v8Value);
     return true;
 }
 
@@ -148,9 +175,52 @@ bool OptionsObject::getKey(const String& key, v8::Local<v8::Value>& value) const
     if (!options->Has(v8Key))
         return false;
     value = options->Get(v8Key);
-    if (value.IsEmpty()) 
+    if (value.IsEmpty())
         return false;
-    return !value->IsUndefined(); // FIXME: Is the undefined check necessary?
+    return true;
+}
+
+bool OptionsObject::getKeyValue(const String& key, unsigned short& value) const
+{
+    v8::Local<v8::Value> v8Value;
+    if (!getKey(key, v8Value))
+        return false;
+
+    v8::Local<v8::Int32> v8Int32 = v8Value->ToInt32();
+    if (v8Int32.IsEmpty())
+        return false;
+    value = static_cast<unsigned short>(v8Int32->Value());
+    return true;
+}
+
+bool OptionsObject::getKeyValue(const String& key, unsigned& value) const
+{
+    v8::Local<v8::Value> v8Value;
+    if (!getKey(key, v8Value))
+        return false;
+
+    v8::Local<v8::Int32> v8Int32 = v8Value->ToInt32();
+    if (v8Int32.IsEmpty())
+        return false;
+    value = static_cast<unsigned>(v8Int32->Value());
+    return true;
+}
+
+bool OptionsObject::getKeyValue(const String& key, unsigned long long& value) const
+{
+    v8::Local<v8::Value> v8Value;
+    if (!getKey(key, v8Value))
+        return false;
+
+    v8::Local<v8::Number> v8Number = v8Value->ToNumber();
+    if (v8Number.IsEmpty())
+        return false;
+    double d = v8Number->Value();
+    if (isnan(d) || isinf(d))
+        value = 0;
+    else
+        value = static_cast<unsigned long long>(fmod(trunc(d), std::numeric_limits<unsigned long long>::max() + 1.0));
+    return true;
 }
 
 } // namespace WebCore

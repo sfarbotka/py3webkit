@@ -1751,7 +1751,7 @@ QWebHitTestResultPrivate::QWebHitTestResultPrivate(const WebCore::HitTestResult 
     imageUrl = hitTest.absoluteImageURL();
     innerNode = hitTest.innerNode();
     innerNonSharedNode = hitTest.innerNonSharedNode();
-    boundingRect = innerNonSharedNode ? innerNonSharedNode->renderer()->absoluteBoundingBoxRect(true) : IntRect();
+    boundingRect = innerNonSharedNode ? innerNonSharedNode->renderer()->absoluteBoundingBoxRect() : IntRect();
     WebCore::Image *img = hitTest.image();
     if (img) {
         QPixmap *pix = img->nativeImageForCurrentFrame();
@@ -1924,7 +1924,7 @@ QWebFrame *QWebHitTestResult::linkTargetFrame() const
 {
     if (!d)
         return 0;
-    return d->linkTargetFrame;
+    return d->linkTargetFrame.data();
 }
 
 /*!
@@ -1997,7 +1997,7 @@ QWebFrame *QWebHitTestResult::frame() const
 {
     if (!d)
         return 0;
-    return d->frame;
+    return d->frame.data();
 }
 
 #include "moc_qwebframe.cpp"

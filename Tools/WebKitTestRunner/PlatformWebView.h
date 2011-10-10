@@ -27,12 +27,10 @@
 #define PlatformWebView_h
 
 #if defined(BUILDING_QT__)
-namespace WTR {
-class WebView;
-}
-typedef WTR::WebView* PlatformWKView;
-class QMainWindow;
-typedef QMainWindow* PlatformWindow;
+class QDesktopWebView;
+typedef QDesktopWebView* PlatformWKView;
+class QSGView;
+typedef QSGView* PlatformWindow;
 #elif defined(__APPLE__) && __APPLE__
 #if __OBJC__
 @class WKView;
@@ -61,11 +59,21 @@ public:
 
     WKPageRef page();
     PlatformWKView platformView() { return m_view; }
+    PlatformWindow platformWindow() { return m_window; }
     void resizeTo(unsigned width, unsigned height);
     void focus();
 
+#if PLATFORM(QT)
+    bool sendEvent(QEvent*);
+    void postEvent(QEvent*);
+#endif
+
     WKRect windowFrame();
     void setWindowFrame(WKRect);
+    
+    void addChromeInputField();
+    void removeChromeInputField();
+    void makeWebViewFirstResponder();
 
 private:
     PlatformWKView m_view;

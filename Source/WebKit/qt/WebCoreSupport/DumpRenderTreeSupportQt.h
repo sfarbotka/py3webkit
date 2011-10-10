@@ -163,6 +163,7 @@ public:
     static QString plainText(const QVariant& rng);
 
     static void dumpFrameLoader(bool b);
+    static void dumpProgressFinishedCallback(bool);
     static void dumpUserGestureInFrameLoader(bool b);
     static void dumpResourceLoadCallbacks(bool b);
     static void dumpResourceResponseMIMETypes(bool b);
@@ -213,6 +214,7 @@ public:
     static QString layerTreeAsText(QWebFrame*);
 
     static void injectInternalsObject(QWebFrame*);
+    static void resetInternalsObject(QWebFrame*);
 
     static void setInteractiveFormValidationEnabled(QWebPage*, bool);
 

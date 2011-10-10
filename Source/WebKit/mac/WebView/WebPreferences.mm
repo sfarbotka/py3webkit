@@ -39,6 +39,10 @@
 #import "WebNSDictionaryExtras.h"
 #import "WebNSURLExtras.h"
 #import <WebCore/ApplicationCacheStorage.h>
+#import <WebCore/CookieStorageCFNet.h>
+#import <WebCore/ResourceHandle.h>
+
+using namespace WebCore;
 
 NSString *WebPreferencesChangedNotification = @"WebPreferencesChangedNotification";
 NSString *WebPreferencesRemovedNotification = @"WebPreferencesRemovedNotification";
@@ -380,9 +384,11 @@ static WebCacheModel cacheModelForMainBundle(void)
         [NSNumber numberWithBool:YES],  WebKitHixie76WebSocketProtocolEnabledKey,
         [NSNumber numberWithBool:NO],   WebKitMediaPlaybackRequiresUserGesturePreferenceKey,
         [NSNumber numberWithBool:YES],  WebKitMediaPlaybackAllowsInlinePreferenceKey,
+        [NSNumber numberWithBool:NO],   WebKitWebAudioEnabledPreferenceKey,
+        [NSNumber numberWithBool:NO],   WebKitSuppressIncrementalRenderingKey,
 
-        [NSNumber numberWithLongLong:WebCore::ApplicationCacheStorage::noQuota()], WebKitApplicationCacheTotalQuota,
-        [NSNumber numberWithLongLong:WebCore::ApplicationCacheStorage::noQuota()], WebKitApplicationCacheDefaultOriginQuota,
+        [NSNumber numberWithLongLong:ApplicationCacheStorage::noQuota()], WebKitApplicationCacheTotalQuota,
+        [NSNumber numberWithLongLong:ApplicationCacheStorage::noQuota()], WebKitApplicationCacheDefaultOriginQuota,
         nil];
 
     // This value shouldn't ever change, which is assumed in the initialization of WebKitPDFDisplayModePreferenceKey above
@@ -1223,6 +1229,25 @@ static NSString *classIBCreatorID = nil;
     [old release];
 }
 
++ (void)_switchNetworkLoaderToNewTestingSession
+{
+#if USE(CFURLSTORAGESESSIONS)
+    // Set a private session for testing to avoid interfering with global cookies. This should be different from private browsing session.
+    RetainPtr<CFURLStorageSessionRef> session = ResourceHandle::createPrivateBrowsingStorageSession(CFSTR("WebKit Testing Session"));
+    ResourceHandle::setDefaultStorageSession(session.get());
+#endif
+}
+
++ (void)_setCurrentNetworkLoaderSessionCookieAcceptPolicy:(NSHTTPCookieAcceptPolicy)policy
+{
+    [[NSHTTPCookieStorage sharedHTTPCookieStorage] setCookieAcceptPolicy:policy];
+
+#if USE(CFURLSTORAGESESSIONS)
+    if (RetainPtr<CFHTTPCookieStorageRef> cookieStorage = currentCFHTTPCookieStorage())
+        WKSetHTTPCookieAcceptPolicy(cookieStorage.get(), policy);
+#endif
+}
+
 - (BOOL)isDOMPasteAllowed
 {
     return [self _boolValueForKey:WebKitDOMPasteAllowedPreferenceKey];
@@ -1508,6 +1533,16 @@ static NSString *classIBCreatorID = nil;
     [self _setBoolValue:flag forKey:WebKitMediaPlaybackAllowsInlinePreferenceKey];
 }
 
+- (BOOL)mockScrollbarsEnabled
+{
+    return [self _boolValueForKey:WebKitMockScrollbarsEnabledPreferenceKey];
+}
+
+- (void)setMockScrollbarsEnabled:(BOOL)flag
+{
+    [self _setBoolValue:flag forKey:WebKitMockScrollbarsEnabledPreferenceKey];
+}
+
 - (NSString *)pictographFontFamily
 {
     return [self _stringValueForKey: WebKitPictographFontPreferenceKey];
@@ -1516,6 +1551,16 @@ static NSString *classIBCreatorID = nil;
 - (void)setPictographFontFamily:(NSString *)family
 {
     [self _setStringValue: family forKey: WebKitPictographFontPreferenceKey];
+}
+
+- (void)setSuppressIncrementalRendering:(BOOL)flag
+{
+    [self _setBoolValue:flag forKey:WebKitSuppressIncrementalRenderingKey];
+}
+
+- (BOOL)suppressIncrementalRendering
+{
+    return [self _boolValueForKey:WebKitSuppressIncrementalRenderingKey];
 }
 
 @end

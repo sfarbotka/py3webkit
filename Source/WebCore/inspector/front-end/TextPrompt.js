@@ -26,6 +26,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @param {boolean=} omitHistory
+ */
 WebInspector.TextPrompt = function(element, completions, stopCharacters, omitHistory)
 {
     this.element = element;
@@ -147,6 +151,9 @@ WebInspector.TextPrompt.prototype = {
         return true;
     },
 
+    /**
+     * @param {boolean=} includeTimeout
+     */
     clearAutoComplete: function(includeTimeout)
     {
         if (includeTimeout && "_completeTimeout" in this) {

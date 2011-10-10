@@ -104,6 +104,11 @@ bool RuntimeEnabledFeatures::htmlVideoElementEnabled()
     return MediaPlayer::isAvailable();
 }
 
+bool RuntimeEnabledFeatures::htmlSourceElementEnabled()
+{
+    return MediaPlayer::isAvailable();
+}
+
 bool RuntimeEnabledFeatures::mediaErrorEnabled()
 {
     return MediaPlayer::isAvailable();
@@ -130,7 +135,7 @@ bool RuntimeEnabledFeatures::webSocketEnabled()
 }
 #endif
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 bool RuntimeEnabledFeatures::openDatabaseEnabled()
 {
     return AbstractDatabase::isAvailable();
@@ -148,6 +153,14 @@ bool RuntimeEnabledFeatures::isQuotaEnabled = false;
 
 #if ENABLE(FULLSCREEN_API)
 bool RuntimeEnabledFeatures::isFullScreenAPIEnabled = true;
+#endif
+
+#if ENABLE(MEDIA_SOURCE)
+bool RuntimeEnabledFeatures::isMediaSourceEnabled = false;
+#endif
+
+#if ENABLE(VIDEO_TRACK)
+bool RuntimeEnabledFeatures::isVideoTrackEnabled = false;
 #endif
 
 } // namespace WebCore

@@ -36,16 +36,33 @@
 
 namespace WebCore {
 
+struct CloseEventInit : public EventInit {
+    CloseEventInit()
+        : wasClean(false)
+        , code(0)
+    {
+    };
+
+    bool wasClean;
+    unsigned short code;
+    String reason;
+};
+
 class CloseEvent : public Event {
 public:
     virtual bool isCloseEvent() const { return true; }
 
-    static PassRefPtr<CloseEvent> create(bool wasClean)
+    static PassRefPtr<CloseEvent> create()
     {
-        return adoptRef(new CloseEvent(wasClean));
+        return adoptRef(new CloseEvent());
     }
 
-    void initCloseEvent(const AtomicString& type, bool canBubble, bool cancelable, bool wasClean)
+    static PassRefPtr<CloseEvent> create(const AtomicString& type, const CloseEventInit& initializer)
+    {
+        return adoptRef(new CloseEvent(type, initializer));
+    }
+
+    void initCloseEvent(const AtomicString& type, bool canBubble, bool cancelable, bool wasClean, unsigned short code, const String& reason)
     {
         if (dispatched())
             return;
@@ -53,17 +70,32 @@ public:
         initEvent(type, canBubble, cancelable);
 
         m_wasClean = wasClean;
+        m_code = code;
+        m_reason = reason;
     }
 
     bool wasClean() const { return m_wasClean; }
+    unsigned short code() const { return m_code; }
+    String reason() const { return m_reason; }
 
 private:
-    CloseEvent(bool wasClean)
+    CloseEvent()
         : Event(eventNames().closeEvent, false, false)
-        , m_wasClean(wasClean)
-    { }
+        , m_wasClean(false)
+        , m_code(0)
+    {
+    }
+    CloseEvent(const AtomicString& type, const CloseEventInit& initializer)
+        : Event(type, initializer)
+        , m_wasClean(initializer.wasClean)
+        , m_code(initializer.code)
+        , m_reason(initializer.reason)
+    {
+    }
 
     bool m_wasClean;
+    unsigned short m_code;
+    String m_reason;
 };
 
 } // namespace WebCore

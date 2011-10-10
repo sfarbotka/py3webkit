@@ -38,7 +38,7 @@ static EncodedJSValue JSC_HOST_CALL booleanProtoFuncValueOf(ExecState*);
 
 namespace JSC {
 
-const ClassInfo BooleanPrototype::s_info = { "Boolean", &BooleanObject::s_info, 0, ExecState::booleanPrototypeTable };
+const ClassInfo BooleanPrototype::s_info = { "Boolean", &BooleanObject::s_info, 0, ExecState::booleanPrototypeTable, CREATE_METHOD_TABLE(BooleanPrototype) };
 
 /* Source for BooleanPrototype.lut.h
 @begin booleanPrototypeTable
@@ -49,13 +49,17 @@ const ClassInfo BooleanPrototype::s_info = { "Boolean", &BooleanObject::s_info, 
 
 ASSERT_CLASS_FITS_IN_CELL(BooleanPrototype);
 
-BooleanPrototype::BooleanPrototype(ExecState* exec, JSGlobalObject* globalObject, Structure* structure)
+BooleanPrototype::BooleanPrototype(ExecState* exec, Structure* structure)
     : BooleanObject(exec->globalData(), structure)
 {
+}
+
+void BooleanPrototype::finishCreation(ExecState* exec, JSGlobalObject*)
+{
+    Base::finishCreation(exec->globalData());
     setInternalValue(exec->globalData(), jsBoolean(false));
 
     ASSERT(inherits(&s_info));
-    putAnonymousValue(globalObject->globalData(), 0, globalObject);
 }
 
 bool BooleanPrototype::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot &slot)

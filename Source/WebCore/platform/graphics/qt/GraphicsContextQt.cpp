@@ -186,7 +186,7 @@ public:
     bool antiAliasingForRectsAndLines;
 
     QStack<TransparencyLayer*> layers;
-    // Counting real layers. Required by inTransparencyLayer() calls
+    // Counting real layers. Required by isInTransparencyLayer() calls
     // For example, layers with valid alphaMask are not real layers
     int layerCount;
 
@@ -289,6 +289,9 @@ PlatformGraphicsContext* GraphicsContext::platformContext() const
 
 AffineTransform GraphicsContext::getCTM() const
 {
+    if (paintingDisabled())
+        return AffineTransform();
+
     const QTransform& matrix = platformContext()->combinedTransform();
     return AffineTransform(matrix.m11(), matrix.m12(), matrix.m21(),
                            matrix.m22(), matrix.dx(), matrix.dy());
@@ -763,7 +766,7 @@ void GraphicsContext::fillRoundedRect(const IntRect& rect, const IntSize& topLef
     p->fillPath(path.platformPath(), QColor(color));
 }
 
-bool GraphicsContext::inTransparencyLayer() const
+bool GraphicsContext::isInTransparencyLayer() const
 {
     return m_data->layerCount;
 }
@@ -900,12 +903,106 @@ void GraphicsContext::drawLineForText(const FloatPoint& origin, float width, boo
     drawLine(IntPoint(startPoint.x(), startPoint.y()), IntPoint(endPoint.x(), endPoint.y()));
 }
 
-void GraphicsContext::drawLineForTextChecking(const FloatPoint&, float, TextCheckingLineStyle)
+
+/*
+ *   NOTE: This code is completely based upon the one from
+ *   Source/WebCore/platform/graphics/cairo/DrawErrorUnderline.{h|cpp}
+ *
+ *   Draws an error underline that looks like one of:
+ *
+ *               H       E                H
+ *      /\      /\      /\        /\      /\               -
+ *    A/  \    /  \    /  \     A/  \    /  \              |
+ *     \   \  /    \  /   /D     \   \  /    \             |
+ *      \   \/  C   \/   /        \   \/   C  \            | height = heightSquares * square
+ *       \      /\  F   /          \  F   /\   \           |
+ *        \    /  \    /            \    /  \   \G         |
+ *         \  /    \  /              \  /    \  /          |
+ *          \/      \/                \/      \/           -
+ *          B                         B
+ *          |---|
+ *        unitWidth = (heightSquares - 1) * square
+ *
+ *  The x, y, width, height passed in give the desired bounding box;
+ *  x/width are adjusted to make the underline a integer number of units wide.
+*/
+static void drawErrorUnderline(QPainter *painter, qreal x, qreal y, qreal width, qreal height)
+{
+    const qreal heightSquares = 2.5;
+
+    qreal square = height / heightSquares;
+    qreal halfSquare = 0.5 * square;
+
+    qreal unitWidth = (heightSquares - 1.0) * square;
+    int widthUnits = static_cast<int>((width + 0.5 * unitWidth) / unitWidth);
+
+    x += 0.5 * (width - widthUnits * unitWidth);
+    width = widthUnits * unitWidth;
+
+    qreal bottom = y + height;
+    qreal top = y;
+
+    QPainterPath path;
+
+    // Bottom of squiggle.
+    path.moveTo(x - halfSquare, top + halfSquare); // A
+
+    int i = 0;
+    for (i = 0; i < widthUnits; i += 2) {
+        qreal middle = x + (i + 1) * unitWidth;
+        qreal right = x + (i + 2) * unitWidth;
+
+        path.lineTo(middle, bottom); // B
+
+        if (i + 2 == widthUnits)
+            path.lineTo(right + halfSquare, top + halfSquare); // D
+        else if (i + 1 != widthUnits)
+            path.lineTo(right, top + square); // C
+    }
+
+    // Top of squiggle.
+    for (i -= 2; i >= 0; i -= 2) {
+        qreal left = x + i * unitWidth;
+        qreal middle = x + (i + 1) * unitWidth;
+        qreal right = x + (i + 2) * unitWidth;
+
+        if (i + 1 == widthUnits)
+            path.lineTo(middle + halfSquare, bottom - halfSquare); // G
+        else {
+            if (i + 2 == widthUnits)
+                path.lineTo(right, top); // E
+
+            path.lineTo(middle, bottom - halfSquare); // F
+        }
+
+        path.lineTo(left, top); // H
+    }
+
+    painter->drawPath(path);
+}
+
+
+void GraphicsContext::drawLineForTextChecking(const FloatPoint& origin, float width, TextCheckingLineStyle style)
 {
     if (paintingDisabled())
         return;
 
-    notImplemented();
+    QPainter* painter = platformContext();
+    const QPen originalPen = painter->pen();
+
+    switch (style) {
+    case TextCheckingSpellingLineStyle:
+        painter->setPen(Qt::red);
+        break;
+    case TextCheckingGrammarLineStyle:
+        painter->setPen(Qt::green);
+        break;
+    default:
+        return;
+    }
+
+    drawErrorUnderline(painter, origin.x(), origin.y(), width, cMisspellingLineThickness);
+    painter->setPen(originalPen);
 }
 
 FloatRect GraphicsContext::roundToDevicePixels(const FloatRect& frect, RoundingMode)
@@ -966,7 +1063,7 @@ void GraphicsContext::pushTransparencyLayerInternal(const QRect &rect, qreal opa
     m_data->layers.push(new TransparencyLayer(p, deviceClip, 1.0, alphaMask));
 }
 
-void GraphicsContext::beginTransparencyLayer(float opacity)
+void GraphicsContext::beginPlatformTransparencyLayer(float opacity)
 {
     if (paintingDisabled())
         return;
@@ -990,7 +1087,7 @@ void GraphicsContext::beginTransparencyLayer(float opacity)
     ++m_data->layerCount;
 }
 
-void GraphicsContext::endTransparencyLayer()
+void GraphicsContext::endPlatformTransparencyLayer()
 {
     if (paintingDisabled())
         return;
@@ -1012,6 +1109,11 @@ void GraphicsContext::endTransparencyLayer()
     p->restore();
 
     delete layer;
+}
+
+bool GraphicsContext::supportsTransparencyLayers()
+{
+    return true;
 }
 
 void GraphicsContext::clearRect(const FloatRect& rect)

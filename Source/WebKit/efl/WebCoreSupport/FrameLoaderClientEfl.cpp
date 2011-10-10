@@ -35,6 +35,7 @@
 #include "config.h"
 #include "FrameLoaderClientEfl.h"
 
+#include "APICast.h"
 #include "DocumentLoader.h"
 #include "EWebKit.h"
 #include "FormState.h"
@@ -67,7 +68,7 @@ using namespace WebCore;
 
 namespace WebCore {
 
-FrameLoaderClientEfl::FrameLoaderClientEfl(Evas_Object *view)
+FrameLoaderClientEfl::FrameLoaderClientEfl(Evas_Object* view)
     : m_view(view)
     , m_frame(0)
     , m_userAgent("")
@@ -106,7 +107,7 @@ static String composeUserAgent()
     return makeString("Mozilla/5.0 (", agentOS(), ") AppleWebKit/", webKitVersion, " (KHTML, like Gecko) Safari/", webKitVersion);
 }
 
-void FrameLoaderClientEfl::setCustomUserAgent(const String &agent)
+void FrameLoaderClientEfl::setCustomUserAgent(const String& agent)
 {
     m_customUserAgent = agent;
 }
@@ -168,32 +169,12 @@ void FrameLoaderClientEfl::dispatchDidReplaceStateWithinPage()
     notImplemented();
 }
 
-void FrameLoaderClientEfl::dispatchDidRemoveBackForwardItem(WebCore::HistoryItem*) const
-{
-    notImplemented();
-}
-
 void FrameLoaderClientEfl::dispatchDidPushStateWithinPage()
 {
     notImplemented();
 }
 
 void FrameLoaderClientEfl::dispatchDidPopStateWithinPage()
-{
-    notImplemented();
-}
-
-void FrameLoaderClientEfl::dispatchDidChangeBackForwardIndex() const
-{
-    notImplemented();
-}
-
-void FrameLoaderClientEfl::dispatchDidAddBackForwardItem(WebCore::HistoryItem*) const
-{
-    notImplemented();
-}
-
-void FrameLoaderClientEfl::dispatchDidClearWindowObjectInWorld(DOMWrapperWorld*)
 {
     notImplemented();
 }
@@ -366,9 +347,25 @@ PassRefPtr<Frame> FrameLoaderClientEfl::createFrame(const KURL& url, const Strin
 
 void FrameLoaderClientEfl::didTransferChildFrameToNewDocument(Page*)
 {
+    ASSERT(m_frame);
+
+    Frame* currentFrame = ewk_frame_core_get(m_frame);
+    Evas_Object* currentView = ewk_frame_view_get(m_frame);
+    Frame* parentFrame = currentFrame->tree()->parent();
+
+    FrameLoaderClientEfl* client = static_cast<FrameLoaderClientEfl*>(parentFrame->loader()->client());
+    Evas_Object* clientFrame = client ? client->webFrame() : 0;
+    Evas_Object* clientView = ewk_frame_view_get(clientFrame);
+
+    if (currentView != clientView) {
+        ewk_frame_view_set(m_frame, clientView);
+        m_view = clientView;
+    }
+
+    ASSERT(ewk_view_core_page_get(ewk_frame_view_get(m_frame)) == currentFrame->page());
 }
 
-void FrameLoaderClientEfl::transferLoadingResourceFromPage(unsigned long, DocumentLoader*, const ResourceRequest&, Page*)
+void FrameLoaderClientEfl::transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*)
 {
 }
 
@@ -380,7 +377,7 @@ void FrameLoaderClientEfl::redirectDataToPlugin(Widget* pluginWidget)
 }
 
 PassRefPtr<Widget> FrameLoaderClientEfl::createJavaAppletWidget(const IntSize&, HTMLAppletElement*, const KURL& baseURL,
-                                                  const Vector<String>& paramNames, const Vector<String>& paramValues)
+                                                                const Vector<String>& paramNames, const Vector<String>& paramValues)
 {
     notImplemented();
     return 0;
@@ -426,9 +423,28 @@ String FrameLoaderClientEfl::overrideMediaType() const
     return String();
 }
 
-void FrameLoaderClientEfl::windowObjectCleared()
+void FrameLoaderClientEfl::dispatchDidClearWindowObjectInWorld(DOMWrapperWorld* world)
 {
-    notImplemented();
+    if (world != mainThreadNormalWorld())
+        return;
+
+    Frame* coreFrame = ewk_frame_core_get(m_frame);
+    ASSERT(coreFrame);
+
+    Settings* settings = coreFrame->settings();
+    if (!settings || !settings->isJavaScriptEnabled())
+        return;
+
+    Ewk_Window_Object_Cleared_Event event;
+    event.context = toGlobalRef(coreFrame->script()->globalObject(mainThreadNormalWorld())->globalExec());
+    event.windowObject = toRef(coreFrame->script()->globalObject(mainThreadNormalWorld()));
+    event.frame = m_frame;
+
+    evas_object_smart_callback_call(m_view, "window,object,cleared", &event);
+
+#if ENABLE(NETSCAPE_PLUGIN_API)
+    ewk_view_js_window_object_clear(m_view, m_frame);
+#endif
 }
 
 void FrameLoaderClientEfl::documentElementAvailable()
@@ -662,7 +678,7 @@ void FrameLoaderClientEfl::willChangeTitle(DocumentLoader*)
     // no need for, dispatchDidReceiveTitle is the right callback
 }
 
-void FrameLoaderClientEfl::didChangeTitle(DocumentLoader *l)
+void FrameLoaderClientEfl::didChangeTitle(DocumentLoader*)
 {
     // no need for, dispatchDidReceiveTitle is the right callback
 }

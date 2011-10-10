@@ -48,6 +48,7 @@ protected:
     // LayerTreeHost.
     virtual void invalidate();
     virtual void sizeDidChange(const WebCore::IntSize& newSize);
+    virtual void deviceScaleFactorDidChange();
     virtual void forceRepaint();
     virtual void setRootCompositingLayer(WebCore::GraphicsLayer*);
 
@@ -74,7 +75,7 @@ private:
     virtual void paintContents(const WebCore::GraphicsLayer*, WebCore::GraphicsContext&, WebCore::GraphicsLayerPaintingPhase, const WebCore::IntRect& clipRect);
     virtual bool showDebugBorders() const;
     virtual bool showRepaintCounter() const;
-    virtual float backingScaleFactor() const;
+    virtual float deviceScaleFactor() const;
     virtual void didCommitChangesForLayer(const WebCore::GraphicsLayer*) const { }
 
     // LayerTreeHostCA

@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.Object}
+ */
 WebInspector.CSSStyleModel = function()
 {
     new WebInspector.CSSStyleModelResourceBinding(this);
@@ -187,6 +191,9 @@ WebInspector.CSSStyleModel.prototype = {
         return node.ownerDocumentElement().id;
     },
 
+    /**
+     * @param {function()=} callback
+     */
     _fireStyleSheetChanged: function(styleSheetId, majorChange, callback)
     {
         callback = callback || function() {};
@@ -219,6 +226,10 @@ WebInspector.CSSStyleModel.prototype = {
 
 WebInspector.CSSStyleModel.prototype.__proto__ = WebInspector.Object.prototype;
 
+/**
+ * @constructor
+ * @param {*} payload
+ */
 WebInspector.CSSStyleDeclaration = function(payload)
 {
     this.id = payload.styleId;
@@ -234,7 +245,7 @@ WebInspector.CSSStyleDeclaration = function(payload)
 
     var propertyIndex = 0;
     for (var i = 0; i < payloadPropertyCount; ++i) {
-        var property = new WebInspector.CSSProperty.parsePayload(this, i, payload.cssProperties[i]);
+        var property = WebInspector.CSSProperty.parsePayload(this, i, payload.cssProperties[i]);
         this._allProperties.push(property);
         if (property.disabled)
             this.__disabledProperties[i] = property;
@@ -396,7 +407,7 @@ WebInspector.CSSStyleDeclaration.prototype = {
             }
         }
 
-        CSSAgent.setPropertyText(this.id, index, name + ": " + value + ";", false, callback.bind(null, userCallback));
+        CSSAgent.setPropertyText(this.id, index, name + ": " + value + ";", false, callback.bind(this, userCallback));
     },
 
     appendProperty: function(name, value, userCallback)
@@ -405,6 +416,9 @@ WebInspector.CSSStyleDeclaration.prototype = {
     }
 }
 
+/**
+ * @constructor
+ */
 WebInspector.CSSRule = function(payload)
 {
     this.id = payload.ruleId;
@@ -444,6 +458,9 @@ WebInspector.CSSRule.prototype = {
     }
 }
 
+/**
+ * @constructor
+ */
 WebInspector.CSSProperty = function(ownerStyle, index, name, value, priority, status, parsedOk, implicit, shorthand, text)
 {
     this.ownerStyle = ownerStyle;
@@ -575,6 +592,9 @@ WebInspector.CSSProperty.prototype = {
     }
 }
 
+/**
+ * @constructor
+ */
 WebInspector.CSSStyleSheet = function(payload)
 {
     this.id = payload.styleSheetId;
@@ -622,6 +642,10 @@ WebInspector.CSSStyleSheet.prototype = {
     }
 }
 
+/**
+ * @constructor
+ * @implements {WebInspector.ResourceDomainModelBinding}
+ */
 WebInspector.CSSStyleModelResourceBinding = function(cssModel)
 {
     this._cssModel = cssModel;
@@ -636,10 +660,15 @@ WebInspector.CSSStyleModelResourceBinding.prototype = {
     setContent: function(resource, content, majorChange, userCallback)
     {
         if (this._urlToStyleSheetId[resource.url]) {
-            this._innerSetContent(resource.url, content, majorChange, userCallback);
+            this._innerSetContent(resource.url, content, majorChange, userCallback, null);
             return;
         }
         this._loadStyleSheetHeaders(this._innerSetContent.bind(this, resource.url, content, majorChange, userCallback));
+    },
+
+    canSetContent: function()
+    {
+        return true;
     },
 
     _inspectedURLChanged: function(event)
@@ -692,7 +721,7 @@ WebInspector.CSSStyleModelResourceBinding.prototype = {
             var url = this._styleSheetIdToURL[styleSheetId];
             if (!url)
                 return;
-    
+
             var resource = WebInspector.resourceForURL(url);
             if (!resource)
                 return;
@@ -711,3 +740,8 @@ WebInspector.CSSStyleModelResourceBinding.prototype = {
 }
 
 WebInspector.CSSStyleModelResourceBinding.prototype.__proto__ = WebInspector.ResourceDomainModelBinding.prototype;
+
+/**
+ * @type {WebInspector.CSSStyleModel}
+ */
+WebInspector.cssModel = null;

@@ -65,7 +65,6 @@ public:
     virtual void setWindowRect(const WebCore::FloatRect&);
     virtual WebCore::FloatRect windowRect();
     virtual WebCore::FloatRect pageRect();
-    virtual float scaleFactor();
     virtual void focus();
     virtual void unfocus();
     virtual bool canTakeFocus(WebCore::FocusDirection);
@@ -121,7 +120,7 @@ public:
     virtual void contentsSizeChanged(WebCore::Frame*, const WebCore::IntSize&) const;
     virtual void layoutUpdated(WebCore::Frame*) const;
     virtual void scrollRectIntoView(
-        const WebCore::IntRect&, const WebCore::ScrollView*) const { }
+        const WebCore::IntRect&) const { }
     virtual void scrollbarsModeDidChange() const;
     virtual void mouseDidMoveOverElement(
         const WebCore::HitTestResult& result, unsigned modifierFlags);
@@ -129,13 +128,12 @@ public:
     virtual void print(WebCore::Frame*);
     virtual void exceededDatabaseQuota(
         WebCore::Frame*, const WTF::String& databaseName);
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     virtual void reachedMaxAppCacheSize(int64_t spaceNeeded);
     virtual void reachedApplicationCacheOriginQuota(WebCore::SecurityOrigin*, int64_t totalSpaceNeeded);
-#endif
 #if ENABLE(NOTIFICATIONS)
     virtual WebCore::NotificationPresenter* notificationPresenter() const;
 #endif
+    virtual bool paintCustomOverhangArea(WebCore::GraphicsContext*, const WebCore::IntRect&, const WebCore::IntRect&, const WebCore::IntRect&);
     virtual void requestGeolocationPermissionForFrame(WebCore::Frame*, WebCore::Geolocation*);
     virtual void cancelGeolocationPermissionRequestForFrame(WebCore::Frame*, WebCore::Geolocation*);
     virtual void runOpenPanel(WebCore::Frame*, PassRefPtr<WebCore::FileChooser>);
@@ -198,7 +196,7 @@ public:
 
     virtual bool shouldRunModalDialogDuringPageDismissal(const DialogType&, const String& dialogMessage, WebCore::FrameLoader::PageDismissalType) const;
 
-    virtual bool shouldRubberBandInDirection(WebCore::ScrollDirection) const { return true; }
+    virtual bool shouldRubberBandInDirection(WebCore::ScrollDirection) const;
     virtual void numWheelEventHandlersChanged(unsigned);
 
 private:

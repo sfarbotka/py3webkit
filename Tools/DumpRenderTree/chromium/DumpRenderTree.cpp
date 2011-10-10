@@ -54,6 +54,7 @@ static const char optionCheckLayoutTestSystemDeps[] = "--check-layout-test-sys-d
 
 static const char optionHardwareAcceleratedGL[] = "--enable-hardware-gpu";
 static const char optionEnableAcceleratedCompositing[] = "--enable-accelerated-compositing";
+static const char optionEnableThreadedCompositing[] = "--enable-threaded-compositing";
 static const char optionForceCompositingMode[] = "--force-compositing-mode";
 static const char optionEnableAccelerated2DCanvas[] = "--enable-accelerated-2d-canvas";
 static const char optionEnableLegacyAccelerated2DCanvas[] = "--enable-legacy-accelerated-2d-canvas";
@@ -137,6 +138,7 @@ int main(int argc, char* argv[])
     bool allowExternalPages = false;
     bool startupDialog = false;
     bool acceleratedCompositingEnabled = false;
+    bool threadedCompositingEnabled = false;
     bool compositeToTexture = false;
     bool forceCompositingMode = false;
     bool accelerated2DCanvasEnabled = false;
@@ -175,6 +177,8 @@ int main(int argc, char* argv[])
             hardwareAcceleratedGL = true;
         else if (argument == optionEnableAcceleratedCompositing)
             acceleratedCompositingEnabled = true;
+        else if (argument == optionEnableThreadedCompositing)
+            threadedCompositingEnabled = true;
         else if (argument == optionEnableCompositeToTexture)
             compositeToTexture = true;
         else if (argument == optionForceCompositingMode)
@@ -224,6 +228,7 @@ int main(int argc, char* argv[])
         TestShell shell(testShellMode);
         shell.setAllowExternalPages(allowExternalPages);
         shell.setAcceleratedCompositingEnabled(acceleratedCompositingEnabled);
+        shell.setThreadedCompositingEnabled(threadedCompositingEnabled);
         shell.setCompositeToTexture(compositeToTexture);
         shell.setForceCompositingMode(forceCompositingMode);
         shell.setAccelerated2dCanvasEnabled(accelerated2DCanvasEnabled);
@@ -237,6 +242,11 @@ int main(int argc, char* argv[])
             shell.setLayoutTestTimeout(0x20000000);
         }
         if (serverMode && !tests.size()) {
+#if OS(ANDROID)
+            // Send a signal to host to indicate DRT is ready to process commands.
+            puts("#READY");
+            fflush(stdout);
+#endif
             params.printSeparators = true;
             char testString[2048]; // 2048 is the same as the sizes of other platforms.
             while (fgets(testString, sizeof(testString), stdin)) {
@@ -245,10 +255,13 @@ int main(int argc, char* argv[])
                     *newLinePosition = '\0';
                 if (testString[0] == '\0')
                     continue;
+                // Explicitly quit on platforms where EOF is not reliable.
+                if (!strcmp(testString, "QUIT"))
+                    break;
                 runTest(shell, params, testString, testShellMode);
             }
         } else if (!tests.size())
-            printf("#EOF\n");
+            puts("#EOF");
         else {
             params.printSeparators = tests.size() > 1;
             for (unsigned i = 0; i < tests.size(); i++)

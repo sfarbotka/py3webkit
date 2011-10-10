@@ -88,37 +88,23 @@ class GardeningHTTPServer(BaseHTTPServer.HTTPServer):
         self.tool = config['tool']
         BaseHTTPServer.HTTPServer.__init__(self, (server_name, httpd_port), GardeningHTTPRequestHandler)
 
+    def url(self):
+        return 'file://' + os.path.join(GardeningHTTPRequestHandler.STATIC_FILE_DIRECTORY, 'garden-o-matic.html')
+
 
 class GardeningHTTPRequestHandler(ReflectionHandler):
-    STATIC_FILE_NAMES = frozenset([
-        "base.js",
-        "Bugzilla.js",
-        "builders.js",
-        "checkout.js",
-        "config.js",
-        "favicon-green.png",
-        "favicon-red.png",
-        "garden-o-matic.html",
-        "main.css",
-        "main.js",
-        "model.js",
-        "net.js",
-        "partytime.gif",
-        "results.js",
-        "Trac.js",
-        "ui.js",
-    ])
+    STATIC_FILE_NAMES = frozenset()
 
     STATIC_FILE_DIRECTORY = os.path.join(
         os.path.dirname(__file__),
-        "..",
-        "..",
-        "..",
-        "..",
-        "BuildSlaveSupport",
-        "build.webkit.org-config",
-        "public_html",
-        "TestFailures")
+        '..',
+        '..',
+        '..',
+        '..',
+        'BuildSlaveSupport',
+        'build.webkit.org-config',
+        'public_html',
+        'TestFailures')
 
     allow_cross_origin_requests = True
 
@@ -154,12 +140,10 @@ class GardeningHTTPRequestHandler(ReflectionHandler):
     def rebaseline(self):
         builder = self.query['builder'][0]
         test = self.query['test'][0]
-        extension = self.query['extension'][0]
         self._run_webkit_patch([
             'rebaseline-test',
             builder,
             test,
-            extension,
         ])
         self._serve_text('success')
 

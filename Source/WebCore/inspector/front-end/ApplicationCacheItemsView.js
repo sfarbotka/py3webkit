@@ -23,6 +23,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.View}
+ */
 WebInspector.ApplicationCacheItemsView = function(treeElement, appcacheDomain)
 {
     WebInspector.View.call(this);
@@ -79,7 +83,7 @@ WebInspector.ApplicationCacheItemsView = function(treeElement, appcacheDomain)
     this.divider.style.display = "none";
     this.statusIcon.style.display = "none";
     this.statusMessage.style.display = "none";
-    
+
 }
 
 WebInspector.ApplicationCacheItemsView.prototype = {
@@ -218,7 +222,7 @@ WebInspector.ApplicationCacheItemsView.prototype = {
         }
 
         var comparator;
-        switch (parseInt(this._dataGrid.sortColumnIdentifier)) {
+        switch (parseInt(this._dataGrid.sortColumnIdentifier, 10)) {
             case 0: comparator = localeCompare.bind(this, "name"); break;
             case 1: comparator = localeCompare.bind(this, "type"); break;
             case 2: comparator = numberCompare.bind(this, "size"); break;
@@ -249,7 +253,7 @@ WebInspector.ApplicationCacheItemsView.prototype = {
             this._dataGrid.children[0].selected = true;
     },
 
-    resize: function()
+    onResize: function()
     {
         if (this._dataGrid)
             this._dataGrid.updateWidths();
@@ -280,6 +284,10 @@ WebInspector.ApplicationCacheItemsView.prototype = {
 
 WebInspector.ApplicationCacheItemsView.prototype.__proto__ = WebInspector.View.prototype;
 
+/**
+ * @constructor
+ * @implements {ApplicationCacheAgent.Dispatcher}
+ */
 WebInspector.ApplicationCacheDispatcher = function()
 {
 }
@@ -308,4 +316,4 @@ WebInspector.ApplicationCacheDispatcher.prototype = {
     }
 }
 
-InspectorBackend.registerDomainDispatcher("ApplicationCache", new WebInspector.ApplicationCacheDispatcher());
+InspectorBackend.registerApplicationCacheDispatcher(new WebInspector.ApplicationCacheDispatcher());

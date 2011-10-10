@@ -125,6 +125,7 @@ public:
     void setSpatialNavigationEnabled(bool enable);
     void setScrollbarPolicy(JSStringRef orientation, JSStringRef policy);
     void setEditingBehavior(const char* editingBehavior);
+    void startSpeechInput(JSContextRef inputElement);
 
     void setPageVisibility(const char* visibility) { }
     void resetPageVisibility() { }
@@ -181,6 +182,9 @@ public:
 
     bool dumpFrameLoadCallbacks() const { return m_dumpFrameLoadCallbacks; }
     void setDumpFrameLoadCallbacks(bool dumpFrameLoadCallbacks) { m_dumpFrameLoadCallbacks = dumpFrameLoadCallbacks; }
+
+    bool dumpProgressFinishedCallback() const { return m_dumpProgressFinishedCallback; }
+    void setDumpProgressFinishedCallback(bool dumpProgressFinishedCallback) { m_dumpProgressFinishedCallback = dumpProgressFinishedCallback; }
     
     bool dumpUserGestureInFrameLoadCallbacks() const { return m_dumpUserGestureInFrameLoadCallbacks; }
     void setDumpUserGestureInFrameLoadCallbacks(bool dumpUserGestureInFrameLoadCallbacks) { m_dumpUserGestureInFrameLoadCallbacks = dumpUserGestureInFrameLoadCallbacks; }    
@@ -310,6 +314,10 @@ public:
     bool shouldStayOnPageAfterHandlingBeforeUnload() const { return m_shouldStayOnPageAfterHandlingBeforeUnload; }
     void setShouldStayOnPageAfterHandlingBeforeUnload(bool shouldStayOnPageAfterHandlingBeforeUnload) { m_shouldStayOnPageAfterHandlingBeforeUnload = shouldStayOnPageAfterHandlingBeforeUnload; }
 
+    void addChromeInputField();
+    void removeChromeInputField();
+    void focusWebView();
+    
     void setPOSIXLocale(JSStringRef locale);
 
     void setWebViewEditable(bool);
@@ -369,6 +377,7 @@ private:
     bool m_dumpDatabaseCallbacks;
     bool m_dumpEditingCallbacks;
     bool m_dumpFrameLoadCallbacks;
+    bool m_dumpProgressFinishedCallback;
     bool m_dumpUserGestureInFrameLoadCallbacks;
     bool m_dumpHistoryDelegateCallbacks;
     bool m_dumpResourceLoadCallbacks;

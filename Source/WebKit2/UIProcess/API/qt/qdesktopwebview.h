@@ -28,12 +28,11 @@
 #include <WebKit2/WKBase.h>
 
 class QDesktopWebViewPrivate;
-class QWebError;
 class QWebNavigationController;
 
 QT_BEGIN_NAMESPACE
 class QFocusEvent;
-class QGraphicsSceneMouseEvent;
+class QMouseEvent;
 class QHoverEvent;
 class QInputMethodEvent;
 class QKeyEvent;
@@ -45,7 +44,7 @@ class QWheelEvent;
 QT_END_NAMESPACE
 
 namespace WTR {
-    class WebView;
+    class PlatformWebView;
 }
 
 class QWEBKIT_EXPORT QDesktopWebView : public QSGPaintedItem {
@@ -53,9 +52,22 @@ class QWEBKIT_EXPORT QDesktopWebView : public QSGPaintedItem {
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QUrl url READ url NOTIFY urlChanged)
     Q_PROPERTY(int loadProgress READ loadProgress NOTIFY loadProgressChanged)
-    Q_PROPERTY(QWebNavigationController* navigation READ navigationController CONSTANT)
-
+    Q_PROPERTY(QWebNavigationController* navigation READ navigationController CONSTANT FINAL)
+    Q_ENUMS(NavigationPolicy)
+    Q_ENUMS(ErrorType)
 public:
+    enum NavigationPolicy {
+        UsePolicy,
+        DownloadPolicy,
+        IgnorePolicy
+    };
+
+    enum ErrorType {
+        EngineError,
+        NetworkError,
+        HttpError
+    };
+
     QDesktopWebView(QSGItem* parent = 0);
     virtual ~QDesktopWebView();
 
@@ -69,13 +81,14 @@ public Q_SLOTS:
      void load(const QUrl&);
 
 Q_SIGNALS:
-    void titleChanged(const QString&);
-    void statusBarMessageChanged(const QString&);
+    void titleChanged(const QString& title);
+    void statusBarMessageChanged(const QString& message);
     void loadStarted();
     void loadSucceeded();
-    void loadFailed(const QWebError&);
+    void loadFailed(QDesktopWebView::ErrorType errorType, int errorCode, const QUrl& url);
     void loadProgressChanged(int progress);
-    void urlChanged(const QUrl&);
+    void urlChanged(const QUrl& url);
+    void linkHovered(const QUrl& url, const QString& title);
 
 protected:
     virtual void keyPressEvent(QKeyEvent*);
@@ -83,10 +96,10 @@ protected:
     virtual void inputMethodEvent(QInputMethodEvent*);
     virtual void focusInEvent(QFocusEvent*);
     virtual void focusOutEvent(QFocusEvent*);
-    virtual void mousePressEvent(QGraphicsSceneMouseEvent*);
-    virtual void mouseMoveEvent(QGraphicsSceneMouseEvent*);
-    virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent*);
-    virtual void mouseDoubleClickEvent(QGraphicsSceneMouseEvent*);
+    virtual void mousePressEvent(QMouseEvent *);
+    virtual void mouseMoveEvent(QMouseEvent *);
+    virtual void mouseReleaseEvent(QMouseEvent *);
+    virtual void mouseDoubleClickEvent(QMouseEvent *);
     virtual void wheelEvent(QWheelEvent*);
     virtual void touchEvent(QTouchEvent*);
     virtual void hoverEnterEvent(QHoverEvent*);
@@ -107,8 +120,11 @@ private:
 
     void init();
 
-    friend class WTR::WebView;
+    friend class WTR::PlatformWebView;
     friend class QDesktopWebViewPrivate;
     QDesktopWebViewPrivate *d;
 };
+
+Q_DECLARE_METATYPE(QDesktopWebView::NavigationPolicy)
+
 #endif /* qdesktopwebview_h */

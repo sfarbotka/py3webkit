@@ -27,8 +27,10 @@
 #include "CrossOriginAccessControl.h"
 #include "Document.h"
 #include "Element.h"
+#include "Event.h"
 #include "HTMLNames.h"
 #include "HTMLObjectElement.h"
+#include "HTMLParserIdioms.h"
 #include "RenderImage.h"
 
 #if ENABLE(SVG)
@@ -159,16 +161,14 @@ void ImageLoader::updateFromElement()
         return;
 
     // Do not load any image if the 'src' attribute is missing or if it is
-    // an empty string referring to a local file. The latter condition is
-    // a quirk that preserves old behavior that Dashboard widgets
-    // need (<rdar://problem/5994621>).
+    // an empty string.
     CachedImage* newImage = 0;
-    if (!(attr.isNull() || (attr.isEmpty() && document->baseURI().isLocalFile()))) {
+    if (!attr.isNull() && !stripLeadingAndTrailingHTMLSpaces(attr).isEmpty()) {
         ResourceRequest request = ResourceRequest(document->completeURL(sourceURI(attr)));
 
         String crossOriginMode = m_element->fastGetAttribute(HTMLNames::crossoriginAttr);
         if (!crossOriginMode.isNull()) {
-            bool allowCredentials = equalIgnoringCase(crossOriginMode, "use-credentials");
+            StoredCredentials allowCredentials = equalIgnoringCase(crossOriginMode, "use-credentials") ? AllowStoredCredentials : DoNotAllowStoredCredentials;
             updateRequestForAccessControl(request, document->securityOrigin(), allowCredentials);
         }
 
@@ -186,7 +186,8 @@ void ImageLoader::updateFromElement()
         // If we do not have an image here, it means that a cross-site
         // violation occurred.
         m_failedLoadURL = !newImage ? attr : AtomicString();
-    }
+    } else if (!attr.isNull()) // Fire an error event if the url is empty.
+        m_element->dispatchEvent(Event::create(eventNames().errorEvent, false, false));
     
     CachedImage* oldImage = m_image.get();
     if (newImage != oldImage) {
@@ -201,11 +202,15 @@ void ImageLoader::updateFromElement()
         m_imageComplete = !newImage;
 
         if (newImage) {
-            newImage->addClient(this);
             if (!m_element->document()->hasListenerType(Document::BEFORELOAD_LISTENER))
                 dispatchPendingBeforeLoadEvent();
             else
                 beforeLoadEventSender().dispatchEventSoon(this);
+
+            // If newImage is cached, addClient() will result in the load event
+            // being queued to fire. Ensure this happens after beforeload is
+            // dispatched.
+            newImage->addClient(this);
         }
         if (oldImage)
             oldImage->removeClient(this);
@@ -234,8 +239,10 @@ void ImageLoader::notifyFinished(CachedResource* resource)
     if (m_firedLoad)
         return;
 
-    if (resource->wasCanceled())
+    if (resource->wasCanceled()) {
+        m_firedLoad = true;
         return;
+    }
 
     loadEventSender().dispatchEventSoon(this);
 }
@@ -295,7 +302,9 @@ void ImageLoader::dispatchPendingBeforeLoadEvent()
         m_image->removeClient(this);
         m_image = 0;
     }
+
     loadEventSender().cancelEvent(this);
+    m_firedLoad = true;
     
     if (m_element->hasTagName(HTMLNames::objectTag))
         static_cast<HTMLObjectElement*>(m_element)->renderFallbackContent();

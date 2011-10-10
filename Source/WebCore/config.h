@@ -29,7 +29,7 @@
 
 #include <wtf/Platform.h>
 
-#if OS(WINDOWS) && !OS(WINCE) && !PLATFORM(QT) && !PLATFORM(CHROMIUM)
+#if OS(WINDOWS) && !OS(WINCE) && !PLATFORM(QT) && !PLATFORM(CHROMIUM) && !PLATFORM(GTK) && !PLATFORM(WX)
 #include <WebCore/WebCoreHeaderDetection.h>
 #endif
 
@@ -221,10 +221,9 @@ typedef float CGFloat;
 #include <bridge/npruntime_internal.h>
 #endif
 
-#if PLATFORM(MAC) && !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
-#define WTF_USE_AVFOUNDATION 1
-#endif
-
+// FIXME: Move this to JavaScriptCore/wtf/Platform.h, which is where we define WTF_USE_AVFOUNDATION on the Mac.
+// https://bugs.webkit.org/show_bug.cgi?id=67334
 #if PLATFORM(WIN) && HAVE(AVCF)
 #define WTF_USE_AVFOUNDATION 1
 #endif
+

@@ -167,8 +167,8 @@ JSObject* throwSyntaxError(ExecState* exec)
 
 class StrictModeTypeErrorFunction : public InternalFunction {
 private:
-    StrictModeTypeErrorFunction(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, const UString& message)
-        : InternalFunction(&exec->globalData(), globalObject, structure, exec->globalData().propertyNames->emptyIdentifier)
+    StrictModeTypeErrorFunction(JSGlobalObject* globalObject, Structure* structure, const UString& message)
+        : InternalFunction(globalObject, structure)
         , m_message(message)
     {
     }
@@ -178,7 +178,9 @@ public:
 
     static StrictModeTypeErrorFunction* create(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, const UString& message)
     {
-        return new (allocateCell<StrictModeTypeErrorFunction>(*exec->heap())) StrictModeTypeErrorFunction(exec, globalObject, structure, message);
+        StrictModeTypeErrorFunction* function = new (allocateCell<StrictModeTypeErrorFunction>(*exec->heap())) StrictModeTypeErrorFunction(globalObject, structure, message);
+        function->finishCreation(exec->globalData(), exec->globalData().propertyNames->emptyIdentifier);
+        return function;
     }
     
     static EncodedJSValue JSC_HOST_CALL constructThrowTypeError(ExecState* exec)
@@ -199,10 +201,22 @@ public:
         return JSValue::encode(jsNull());
     }
 
-    CallType getCallData(CallData& callData)
+    virtual CallType getCallDataVirtual(CallData& callData)
+    {
+        return getCallData(this, callData);
+    }
+
+    static CallType getCallData(JSCell*, CallData& callData)
     {
         callData.native.function = callThrowTypeError;
         return CallTypeHost;
+    }
+
+    static const ClassInfo s_info;
+
+    static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype) 
+    { 
+        return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info); 
     }
 
 private:
@@ -210,6 +224,8 @@ private:
 };
 
 ASSERT_CLASS_FITS_IN_CELL(StrictModeTypeErrorFunction);
+
+const ClassInfo StrictModeTypeErrorFunction::s_info = { "Function", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(StrictModeTypeErrorFunction) };
 
 JSValue createTypeErrorFunction(ExecState* exec, const UString& message)
 {

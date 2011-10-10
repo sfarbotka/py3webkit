@@ -48,20 +48,62 @@ class ChromiumMacPort(chromium.ChromiumPort):
     FALLBACK_PATHS = {
         'leopard': [
             'chromium-mac-leopard',
+            'chromium-mac-snowleopard',
             'chromium-mac',
             'chromium',
             'mac-leopard',
             'mac-snowleopard',
+            'mac-lion',
             'mac',
         ],
         'snowleopard': [
+            'chromium-mac-snowleopard',
             'chromium-mac',
             'chromium',
             'mac-snowleopard',
+            'mac-lion',
+            'mac',
+        ],
+        'lion': [
+            'chromium-mac',
+            'chromium',
+            'mac-lion',
             'mac',
         ],
         'future': [
             'chromium-mac',
+            'chromium',
+            'mac',
+        ],
+    }
+
+    FALLBACK_PATHS_CG = {
+        'leopard': [
+            'chromium-cg-mac-leopard',
+            'chromium-cg-mac-snowleopard',
+            'chromium-cg-mac',
+            'chromium',
+            'mac-leopard',
+            'mac-snowleopard',
+            'mac-lion',
+            'mac',
+        ],
+        'snowleopard': [
+            'chromium-cg-mac-snowleopard',
+            'chromium-cg-mac',
+            'chromium',
+            'mac-snowleopard',
+            'mac-lion',
+            'mac',
+        ],
+        'lion': [
+            'chromium-cg-mac',
+            'chromium',
+            'mac-lion',
+            'mac',
+        ],
+        'future': [
+            'chromium-cg-mac',
             'chromium',
             'mac',
         ],
@@ -78,10 +120,18 @@ class ChromiumMacPort(chromium.ChromiumPort):
         else:
             self._version = port_name[port_name.index('-mac-') + len('-mac-'):]
             assert self._version in self.SUPPORTED_OS_VERSIONS
+        self._using_core_graphics = port_name.find('-cg-') != -1
+        if self._using_core_graphics:
+            self._graphics_type = 'cpu-cg'
+        else:
+            self._graphics_type = 'cpu'
         self._operating_system = 'mac'
 
     def baseline_search_path(self):
-        return map(self._webkit_baseline_path, self.FALLBACK_PATHS[self._version])
+        fallback_paths = self.FALLBACK_PATHS
+        if self._using_core_graphics:
+            fallback_paths = self.FALLBACK_PATHS_CG
+        return map(self._webkit_baseline_path, fallback_paths[self._version])
 
     def check_build(self, needs_http):
         result = chromium.ChromiumPort.check_build(self, needs_http)

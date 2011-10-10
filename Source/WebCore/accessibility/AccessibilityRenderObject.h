@@ -1,4 +1,3 @@
-
 /*
  * Copyright (C) 2008 Apple Inc. All rights reserved.
  *
@@ -31,6 +30,7 @@
 #define AccessibilityRenderObject_h
 
 #include "AccessibilityObject.h"
+#include "LayoutTypes.h"
 #include <wtf/Forward.h>
 
 namespace WebCore {
@@ -163,10 +163,10 @@ public:
     AccessibilityObject* menuForMenuButton() const;
     AccessibilityObject* menuButtonForMenu() const;
     
-    virtual IntRect boundingBoxRect() const;
-    virtual IntRect elementRect() const;
-    virtual IntSize size() const;
-    virtual IntPoint clickPoint() const;
+    virtual LayoutRect boundingBoxRect() const;
+    virtual LayoutRect elementRect() const;
+    virtual LayoutSize size() const;
+    virtual LayoutPoint clickPoint();
     
     void setRenderer(RenderObject* renderer) { m_renderer = renderer; }
     virtual RenderObject* renderer() const { return m_renderer; }
@@ -229,7 +229,7 @@ public:
     
     virtual VisiblePositionRange visiblePositionRange() const;
     virtual VisiblePositionRange visiblePositionRangeForLine(unsigned) const;
-    virtual IntRect boundsForVisiblePositionRange(const VisiblePositionRange&) const;
+    virtual LayoutRect boundsForVisiblePositionRange(const VisiblePositionRange&) const;
     virtual void setSelectedVisiblePositionRange(const VisiblePositionRange&) const;
     virtual bool supportsARIAFlowTo() const;
     virtual void ariaFlowToElements(AccessibilityChildrenVector&) const;
@@ -240,18 +240,18 @@ public:
     virtual bool isARIAGrabbed();
     virtual void determineARIADropEffects(Vector<String>&);
     
-    virtual VisiblePosition visiblePositionForPoint(const IntPoint&) const;
+    virtual VisiblePosition visiblePositionForPoint(const LayoutPoint&) const;
     virtual VisiblePosition visiblePositionForIndex(unsigned indexValue, bool lastIndexOK) const;    
     virtual int index(const VisiblePosition&) const;
 
     virtual VisiblePosition visiblePositionForIndex(int) const;
     virtual int indexForVisiblePosition(const VisiblePosition&) const;
-    
+
     virtual PlainTextRange doAXRangeForLine(unsigned) const;
     virtual PlainTextRange doAXRangeForIndex(unsigned) const;
     
     virtual String doAXStringForRange(const PlainTextRange&) const;
-    virtual IntRect doAXBoundsForRange(const PlainTextRange&) const;
+    virtual LayoutRect doAXBoundsForRange(const PlainTextRange&) const;
     
     virtual String stringValueForMSAA() const;
     virtual String stringRoleForMSAA() const;
@@ -279,23 +279,27 @@ private:
     bool hasTextAlternative() const;
     String positionalDescriptionForMSAA() const;
     PlainTextRange ariaSelectedTextRange() const;
+    Element* rootEditableElementForPosition(const Position&) const;
+    bool nodeIsTextControl(const Node*) const;
 
     Element* menuElementForMenuButton() const;
     Element* menuItemElementForMenu() const;
     AccessibilityRole determineAccessibilityRole();
     AccessibilityRole determineAriaRoleAttribute() const;
+    AccessibilityRole remapAriaRoleDueToParent(AccessibilityRole) const;
 
     bool isTabItemSelected() const;
     void alterSliderValue(bool increase);
     void changeValueByStep(bool increase);
     bool isNativeCheckboxOrRadio() const;
-    IntRect checkboxOrRadioRect() const;
+    LayoutRect checkboxOrRadioRect() const;
     void addRadioButtonGroupMembers(AccessibilityChildrenVector& linkedUIElements) const;
     AccessibilityObject* internalLinkElement() const;
     AccessibilityObject* accessibilityImageMapHitTest(HTMLAreaElement*, const IntPoint&) const;
     AccessibilityObject* accessibilityParentForImageMap(HTMLMapElement*) const;
     bool renderObjectIsObservable(RenderObject*) const;
     RenderObject* renderParentObject() const;
+    bool isDescendantOfElementType(const QualifiedName& tagName) const;
     
     void ariaSelectedRows(AccessibilityChildrenVector&);
     

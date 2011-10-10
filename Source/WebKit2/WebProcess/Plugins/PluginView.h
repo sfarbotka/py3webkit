@@ -47,7 +47,7 @@ namespace WebCore {
 
 namespace WebKit {
 
-class PluginView : public WebCore::PluginViewBase, WebCore::MediaCanStartListener, PluginController, WebFrame::LoadListener {
+class PluginView : public WebCore::PluginViewBase, public PluginController, private WebCore::MediaCanStartListener, private WebFrame::LoadListener {
 public:
     static PassRefPtr<PluginView> create(PassRefPtr<WebCore::HTMLPlugInElement>, PassRefPtr<Plugin>, const Plugin::Parameters&);
 
@@ -103,10 +103,12 @@ private:
     virtual JSC::JSObject* scriptObject(JSC::JSGlobalObject*);
     virtual void privateBrowsingStateChanged(bool);
     virtual bool getFormValue(String&);
+    virtual bool scroll(WebCore::ScrollDirection, WebCore::ScrollGranularity);
+    virtual WebCore::Scrollbar* horizontalScrollbar();
+    virtual WebCore::Scrollbar* verticalScrollbar();
 
     // WebCore::Widget
     virtual void setFrameRect(const WebCore::IntRect&);
-    virtual void setBoundsSize(const WebCore::IntSize&);
     virtual void paint(WebCore::GraphicsContext*, const WebCore::IntRect&);
     virtual void invalidateRect(const WebCore::IntRect&);
     virtual void setFocus(bool);
@@ -141,7 +143,8 @@ private:
     virtual void scheduleWindowedPluginGeometryUpdate(const WindowGeometry&);
 #endif
 #if PLATFORM(MAC)
-    virtual void setComplexTextInputEnabled(bool);
+    virtual void pluginFocusOrWindowFocusChanged(bool pluginHasFocusAndWindowHasFocus);
+    virtual void setComplexTextInputState(PluginComplexTextInputState);
     virtual mach_port_t compositingRenderServerPort();
 #endif
     virtual String proxiesForURL(const String&);
@@ -194,7 +197,6 @@ private:
     RefPtr<WebCore::SharedBuffer> m_manualStreamData;
     
     RefPtr<ShareableBitmap> m_snapshot;
-    WebCore::IntSize m_boundsSize;
 };
 
 } // namespace WebKit

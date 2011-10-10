@@ -81,9 +81,6 @@ class FrameLoaderClientEfl : public FrameLoaderClient {
     virtual void dispatchDidPushStateWithinPage();
     virtual void dispatchDidPopStateWithinPage();
     virtual void dispatchDidReplaceStateWithinPage();
-    virtual void dispatchDidAddBackForwardItem(WebCore::HistoryItem*) const;
-    virtual void dispatchDidRemoveBackForwardItem(WebCore::HistoryItem*) const;
-    virtual void dispatchDidChangeBackForwardIndex() const;
     virtual void dispatchDidClearWindowObjectInWorld(WebCore::DOMWrapperWorld*);
 
     virtual void dispatchDidCancelAuthenticationChallenge(DocumentLoader*, unsigned long  identifier, const AuthenticationChallenge&);
@@ -136,13 +133,12 @@ class FrameLoaderClientEfl : public FrameLoaderClient {
     virtual PassRefPtr<Frame> createFrame(const KURL&, const String& name, HTMLFrameOwnerElement*,
                                const String& referrer, bool allowsScrolling, int marginWidth, int marginHeight);
     virtual void didTransferChildFrameToNewDocument(Page*);
-    virtual void transferLoadingResourceFromPage(unsigned long, WebCore::DocumentLoader*, const ResourceRequest&, WebCore::Page*);
+    virtual void transferLoadingResourceFromPage(WebCore::ResourceLoader*, const ResourceRequest&, WebCore::Page*);
 
     virtual PassRefPtr<Widget> createPlugin(const IntSize&, HTMLPlugInElement*, const KURL&, const WTF::Vector<String>&, const WTF::Vector<String>&, const String&, bool);
     virtual void redirectDataToPlugin(Widget* pluginWidget);
     virtual PassRefPtr<Widget> createJavaAppletWidget(const IntSize&, HTMLAppletElement*, const KURL& baseURL, const WTF::Vector<String>& paramNames, const WTF::Vector<String>& paramValues);
     virtual String overrideMediaType() const;
-    virtual void windowObjectCleared();
     virtual void documentElementAvailable();
 
     virtual void didPerformFirstNavigation() const;

@@ -26,6 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import datetime
 import os
 import StringIO
 import threading
@@ -47,13 +48,11 @@ def _id_to_object_dictionary(*objects):
 
 # Testing
 
-# FIXME: The ids should be 1, 2, 3 instead of crazy numbers.
-
 
 _patch1 = {
-    "id": 197,
-    "bug_id": 42,
-    "url": "http://example.com/197",
+    "id": 10000,
+    "bug_id": 50000,
+    "url": "http://example.com/10000",
     "name": "Patch1",
     "is_obsolete": False,
     "is_patch": True,
@@ -66,14 +65,14 @@ _patch1 = {
 
 
 _patch2 = {
-    "id": 128,
-    "bug_id": 42,
-    "url": "http://example.com/128",
+    "id": 10001,
+    "bug_id": 50000,
+    "url": "http://example.com/10001",
     "name": "Patch2",
     "is_obsolete": False,
     "is_patch": True,
     "review": "+",
-    "reviewer_email": "foo@bar.com",
+    "reviewer_email": "reviewer2@webkit.org",
     "commit-queue": "+",
     "committer_email": "non-committer@example.com",
     "attacher_email": "eric@webkit.org",
@@ -81,9 +80,9 @@ _patch2 = {
 
 
 _patch3 = {
-    "id": 103,
-    "bug_id": 75,
-    "url": "http://example.com/103",
+    "id": 10002,
+    "bug_id": 50001,
+    "url": "http://example.com/10002",
     "name": "Patch3",
     "is_obsolete": False,
     "is_patch": True,
@@ -93,9 +92,9 @@ _patch3 = {
 
 
 _patch4 = {
-    "id": 104,
-    "bug_id": 77,
-    "url": "http://example.com/103",
+    "id": 10003,
+    "bug_id": 50003,
+    "url": "http://example.com/10002",
     "name": "Patch3",
     "is_obsolete": False,
     "is_patch": True,
@@ -107,9 +106,9 @@ _patch4 = {
 
 
 _patch5 = {
-    "id": 105,
-    "bug_id": 77,
-    "url": "http://example.com/103",
+    "id": 10004,
+    "bug_id": 50003,
+    "url": "http://example.com/10002",
     "name": "Patch5",
     "is_obsolete": False,
     "is_patch": True,
@@ -120,9 +119,9 @@ _patch5 = {
 
 
 _patch6 = { # Valid committer, but no reviewer.
-    "id": 106,
-    "bug_id": 77,
-    "url": "http://example.com/103",
+    "id": 10005,
+    "bug_id": 50003,
+    "url": "http://example.com/10002",
     "name": "ROLLOUT of r3489",
     "is_obsolete": False,
     "is_patch": True,
@@ -133,9 +132,9 @@ _patch6 = { # Valid committer, but no reviewer.
 
 
 _patch7 = { # Valid review, patch is marked obsolete.
-    "id": 107,
-    "bug_id": 76,
-    "url": "http://example.com/103",
+    "id": 10006,
+    "bug_id": 50002,
+    "url": "http://example.com/10002",
     "name": "Patch7",
     "is_obsolete": True,
     "is_patch": True,
@@ -152,58 +151,69 @@ _unassigned_email = "webkit-unassigned@lists.webkit.org"
 _commit_queue_email = "commit-queue@webkit.org"
 
 
-# FIXME: The ids should be 1, 2, 3 instead of crazy numbers.
-
-
 _bug1 = {
-    "id": 42,
+    "id": 50000,
     "title": "Bug with two r+'d and cq+'d patches, one of which has an "
              "invalid commit-queue setter.",
     "reporter_email": "foo@foo.com",
     "assigned_to_email": _unassigned_email,
+    "cc_emails": [],
     "attachments": [_patch1, _patch2],
     "bug_status": "UNCONFIRMED",
+    "comments": [],
 }
 
 
 _bug2 = {
-    "id": 75,
+    "id": 50001,
     "title": "Bug with a patch needing review.",
     "reporter_email": "foo@foo.com",
     "assigned_to_email": "foo@foo.com",
+    "cc_emails": ["abarth@webkit.org", ],
     "attachments": [_patch3],
     "bug_status": "ASSIGNED",
+    "comments": [{"comment_date":  datetime.datetime(2011, 6, 11, 9, 4, 3),
+                  "comment_email": "bar@foo.com",
+                  "text": "Message1.",
+        },
+    ],
 }
 
 
 _bug3 = {
-    "id": 76,
+    "id": 50002,
     "title": "The third bug",
     "reporter_email": "foo@foo.com",
     "assigned_to_email": _unassigned_email,
+    "cc_emails": [],
     "attachments": [_patch7],
     "bug_status": "NEW",
+    "comments": [],
 }
 
 
 _bug4 = {
-    "id": 77,
+    "id": 50003,
     "title": "The fourth bug",
     "reporter_email": "foo@foo.com",
     "assigned_to_email": "foo@foo.com",
+    "cc_emails": [],
     "attachments": [_patch4, _patch5, _patch6],
     "bug_status": "REOPENED",
+    "comments": [],
 }
 
 
 _bug5 = {
-    "id": 78,
+    "id": 50004,
     "title": "The fifth bug",
     "reporter_email": _commit_queue_email,
     "assigned_to_email": "foo@foo.com",
+    "cc_emails": [],
     "attachments": [],
     "bug_status": "RESOLVED",
-    "dup_id": 76,
+    "dup_id": 50002,
+    "comments": [],
 }
 
 
@@ -238,16 +248,17 @@ class MockBugzillaQueries(object):
         # NOTE: This manual hack here is to allow testing logging in
         # test_assign_to_committer the real pending-commit query on bugzilla
         # will return bugs with patches which have r+, but are also obsolete.
-        return bug_ids + [76]
+        return bug_ids + [50002]
 
     def fetch_patches_from_pending_commit_list(self):
         return sum([bug.reviewed_patches() for bug in self._all_bugs()], [])
 
     def fetch_bugs_matching_search(self, search_string, author_email=None):
-        return [self._bugzilla.fetch_bug(78), self._bugzilla.fetch_bug(77)]
+        return [self._bugzilla.fetch_bug(50004), self._bugzilla.fetch_bug(50003)]
 
 
-_mock_reviewer = Reviewer("Foo Bar", "foo@bar.com")
+_mock_reviewers = [Reviewer("Foo Bar", "foo@bar.com"),
+                   Reviewer("Reviewer2", "reviewer2@webkit.org")]
 
 
 # FIXME: Bugzilla is the wrong Mock-point.  Once we have a BugzillaNetwork
@@ -269,7 +280,7 @@ class MockBugzilla(object):
 
     def __init__(self):
         self.queries = MockBugzillaQueries(self)
-        self.committers = CommitterList(reviewers=[_mock_reviewer])
+        self.committers = CommitterList(reviewers=_mock_reviewers)
         self._override_patch = None
 
     def create_bug(self,
@@ -291,13 +302,13 @@ class MockBugzilla(object):
             log("cc: %s" % cc)
         if blocked:
             log("blocked: %s" % blocked)
-        return 78
+        return 50004
 
     def quips(self):
         return ["Good artists copy. Great artists steal. - Pablo Picasso"]
 
     def fetch_bug(self, bug_id):
-        return Bug(self.bug_cache.get(bug_id), self)
+        return Bug(self.bug_cache.get(int(bug_id)), self)
 
     def set_override_patch(self, patch):
         self._override_patch = patch
@@ -537,10 +548,10 @@ class MockSCM(object):
     def commit_message_for_local_commit(self, commit_id):
         if commit_id == "Commitish1":
             return CommitMessage("CommitMessage1\n" \
-                "https://bugs.example.org/show_bug.cgi?id=42\n")
+                "https://bugs.example.org/show_bug.cgi?id=50000\n")
         if commit_id == "Commitish2":
             return CommitMessage("CommitMessage2\n" \
-                "https://bugs.example.org/show_bug.cgi?id=75\n")
+                "https://bugs.example.org/show_bug.cgi?id=50001\n")
         raise Exception("Bogus commit_id in commit_message_for_local_commit.")
 
     def diff_for_file(self, path, log=None):
@@ -583,7 +594,7 @@ class MockCheckout(object):
         if not svn_revision:
             return None
         return CommitInfo(svn_revision, "eric@webkit.org", {
-            "bug_id": 42,
+            "bug_id": 50000,
             "author_name": "Adam Barth",
             "author_email": "abarth@webkit.org",
             "author": self._committer_list.contributor_by_email("abarth@webkit.org"),
@@ -622,7 +633,7 @@ class MockCheckout(object):
         pass
 
     def suggested_reviewers(self, git_commit, changed_files=None):
-        return [_mock_reviewer]
+        return [_mock_reviewers[0]]
 
 
 class MockUser(object):
@@ -790,19 +801,16 @@ class MockPort(object):
 
 
 class MockTestPort1(object):
-
     def skips_layout_test(self, test_name):
         return test_name in ["media/foo/bar.html", "foo"]
 
 
 class MockTestPort2(object):
-
     def skips_layout_test(self, test_name):
         return test_name == "media/foo/bar.html"
 
 
 class MockPortFactory(object):
-
     def get_all(self, options=None):
         return {"test_port1": MockTestPort1(), "test_port2": MockTestPort2()}
 
@@ -810,6 +818,12 @@ class MockPortFactory(object):
 class MockPlatformInfo(object):
     def display_name(self):
         return "MockPlatform 1.0"
+
+
+class MockWatchList(object):
+    def determine_cc_and_messages(self, diff):
+        log("MockWatchList: determine_cc_and_messages")
+        return {'cc_list': ['abarth@webkit.org', 'levin@chromium.org'], 'messages': ['Message1.', 'Message2.'], }
 
 
 class MockWorkspace(object):
@@ -826,7 +840,6 @@ class MockWeb(object):
 
 
 class MockTool(object):
-
     def __init__(self, log_executive=False):
         self.wakeup_event = threading.Event()
         self.bugs = MockBugzilla()
@@ -847,6 +860,7 @@ class MockTool(object):
         self.irc_password = "MOCK irc password"
         self.port_factory = MockPortFactory()
         self.platform = MockPlatformInfo()
+        self._watch_list = MockWatchList()
 
     def scm(self):
         return self._scm
@@ -856,6 +870,9 @@ class MockTool(object):
 
     def chromium_buildbot(self):
         return self._chromium_buildbot
+
+    def watch_list(self):
+        return self._watch_list
 
     def ensure_irc_connected(self, delegate):
         if not self._irc:

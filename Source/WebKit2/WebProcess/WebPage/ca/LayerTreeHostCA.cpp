@@ -150,6 +150,12 @@ void LayerTreeHostCA::sizeDidChange(const IntSize& newSize)
     flushPendingLayerChanges();
 }
 
+void LayerTreeHostCA::deviceScaleFactorDidChange()
+{
+    // Other layers learn of the scale factor change via WebPage::setDeviceScaleFactor.
+    m_nonCompositedContentLayer->deviceOrPageScaleFactorChanged();
+}
+
 void LayerTreeHostCA::forceRepaint()
 {
     scheduleLayerFlush();
@@ -206,9 +212,9 @@ bool LayerTreeHostCA::showRepaintCounter() const
     return m_webPage->corePage()->settings()->showRepaintCounter();
 }
 
-float LayerTreeHostCA::backingScaleFactor() const
+float LayerTreeHostCA::deviceScaleFactor() const
 {
-    return m_webPage->userSpaceScaleFactor();
+    return m_webPage->corePage()->deviceScaleFactor();
 }
 
 void LayerTreeHostCA::performScheduledLayerFlush()

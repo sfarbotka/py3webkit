@@ -1,3 +1,346 @@
+2011-09-28  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Move drag-and-drop code which can be shared with WebKit2 to WebCore
+        https://bugs.webkit.org/show_bug.cgi?id=66890
+
+        Use the new GtkWidgetDragAndDropGlue class to hold the logic that will be
+        common between WebKit1 and WebKit2. Modify WebKitWebView to use this class.
+
+        Reviewed by Philippe Normand.
+
+        * WebCoreSupport/DragClientGtk.cpp:
+        (WebKit::DragClient::startDrag): Inform the drag-and-drop glue about the drag.
+        * webkit/webkitwebview.cpp: Use GtkWidgetDragAndDropGlue wherever this class was
+        maintaining drag-and-drop state itself.
+        * webkit/webkitwebviewprivate.h: Swap out the drag-and-drop state for an instance
+        of the glue class.
+
+2011-09-28  Kaustubh Atrawalkar  <kaustubh@motorola.com>
+
+        [Gtk] Implement textInputController.doCommand
+        https://bugs.webkit.org/show_bug.cgi?id=66496
+
+        Reviewed by Martin Robinson.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::doCommand): Function definition for doCommand 
+        callback. Converted Incoming command to match with WebCore::Editor CommandMap.
+        * WebCoreSupport/DumpRenderTreeSupportGtk.h:
+
+2011-09-27  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Reorganize header files
+        https://bugs.webkit.org/show_bug.cgi?id=65616
+
+        Reviewed by Martin Robinson.
+
+        Install header files under $libwebkitgtkincludedir/webkit.
+
+        * GNUmakefile.am: Use $libwebkitgtkincludedir.
+        * webkit.pc.in: Use webkitgtk-<api-version> as include dir.
+
+2011-09-26  Gustavo Noronha Silva  <gustavo.noronha@collabora.com>
+
+        Fix documentation generation by specifying the sources
+        directory with $(top_srcdir).
+
+        Reviewed by Xan Lopez.
+
+        * docs/GNUmakefile.am:
+
+2011-09-26  Gustavo Noronha Silva  <gustavo.noronha@collabora.com>
+
+        REGRESSION: Empathy crashes when switching theme
+        https://bugs.webkit.org/show_bug.cgi?id=68600
+
+        Reviewed by Martin Robinson.
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_set_scroll_adjustments): use the existing
+        set{Horizontal,Vertical}Adjustment functions, so the code is not
+        duplicated
+        (webkit_web_view_dispose): unset the adjustments during dispose,
+        to avoid late adjustment change notifications hitting the
+        adjustment watcher
+
+2011-09-24  Adam Barth  <abarth@webkit.org>
+
+        Always enable ENABLE(OFFLINE_WEB_APPLICATIONS)
+        https://bugs.webkit.org/show_bug.cgi?id=68767
+
+        Reviewed by Eric Seidel.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::reachedApplicationCacheOriginQuota):
+        * WebCoreSupport/ChromeClientGtk.h:
+        * webkit/webkitapplicationcache.cpp:
+        (webkit_application_cache_get_maximum_size):
+        (webkit_application_cache_set_maximum_size):
+        (webkit_application_cache_get_database_directory_path):
+        * webkit/webkitglobals.cpp:
+        (webkitInit):
+
+2011-09-22  Gustavo Noronha Silva  <gustavo.noronha@collabora.com>
+
+        Remove useless empty WebKit namespace.
+
+        Reviewed by Xan Lopez.
+
+        * webkit/webkitglobals.cpp:
+        (webkitInit):
+
+2011-09-20  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] WebProcess shouldn't use the GTK+ API
+        https://bugs.webkit.org/show_bug.cgi?id=68062
+
+        Reviewed by Martin Robinson.
+
+        Use WebCore API to create errors in frame loader.
+
+        * WebCoreSupport/AssertMatchingEnums.cpp:
+        * WebCoreSupport/FrameLoaderClientGtk.cpp:
+        (WebKit::FrameLoaderClient::cancelledError):
+        (WebKit::FrameLoaderClient::blockedError):
+        (WebKit::FrameLoaderClient::cannotShowURLError):
+        (WebKit::FrameLoaderClient::interruptedForPolicyChangeError):
+        (WebKit::FrameLoaderClient::cannotShowMIMETypeError):
+        (WebKit::FrameLoaderClient::fileDoesNotExistError):
+        (WebKit::FrameLoaderClient::pluginWillHandleLoadError):
+        * webkit/webkiterror.cpp:
+        (webkit_network_error_quark):
+        (webkit_policy_error_quark):
+        (webkit_plugin_error_quark):
+
+2011-09-20  Philippe Normand  <pnormand@igalia.com>
+
+        [GTK] Update NEWS and configure.ac for 1.5.90 release
+
+        Reviewed by Martin Robinson.
+
+        * NEWS:
+
+2011-09-19  Leandro Pereira  <leandro@profusion.mobi>
+
+        GTK DRT leaks memory while comparing history items
+        https://bugs.webkit.org/show_bug.cgi?id=68086
+
+        Reviewed by Martin Robinson.
+        
+        webkit_web_history_item_get_target() function returns a g_strdup()'d
+        string, so it should return "gchar*" instead of "const gchar*".
+
+        * webkit/webkitwebhistoryitem.cpp:
+        (webkit_web_history_item_get_target): Change return type to "gchar*".
+        * webkit/webkitwebhistoryitemprivate.h: Ditto.
+
+2011-09-19  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Fix distcheck build
+        https://bugs.webkit.org/show_bug.cgi?id=68346
+
+        Reviewed by Philippe Normand.
+
+        * tests/testmimehandling.c: Remove ogg tests, since the behavious
+        has changed in libsoup (https://bugzilla.gnome.org/show_bug.cgi?id=648846#c8)
+        (server_callback):
+        (mime_type_policy_decision_requested_cb):
+        (main):
+        * webkit/webkitwebplugin.cpp: Fix introspection annotation.
+
+2011-09-17  Mihai Parparita  <mihaip@chromium.org>
+
+        FrameLoaderClient BackForwardList-related methods are unsued
+        https://bugs.webkit.org/show_bug.cgi?id=68293
+
+        Reviewed by Darin Adler.
+
+        Remove FrameLoaderClient methods that were added by r51629, since only        
+        the old (since-deleted) Android port needed them.
+
+        * WebCoreSupport/FrameLoaderClientGtk.cpp:
+        * WebCoreSupport/FrameLoaderClientGtk.h:
+
+2011-09-15  Adam Barth  <abarth@webkit.org>
+
+        Rename ENABLE(DATABASE) to ENABLE(SQL_DATABASE)
+        https://bugs.webkit.org/show_bug.cgi?id=68205
+
+        Reviewed by Eric Seidel.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        * WebCoreSupport/ChromeClientGtk.h:
+        * webkit/webkitsecurityorigin.cpp:
+        (webkit_security_origin_get_web_database_usage):
+        (webkit_security_origin_get_web_database_quota):
+        (webkit_security_origin_set_web_database_quota):
+        (webkit_security_origin_get_all_web_databases):
+        * webkit/webkitwebdatabase.cpp:
+        (webkit_web_database_get_display_name):
+        (webkit_web_database_get_expected_size):
+        (webkit_web_database_get_size):
+        (webkit_web_database_get_filename):
+        (webkit_web_database_remove):
+        (webkit_remove_all_web_databases):
+        (webkit_get_web_database_directory_path):
+        (webkit_set_web_database_directory_path):
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_update_settings):
+        (webkit_web_view_settings_notify):
+
+2011-09-10  Adam Barth  <abarth@webkit.org>
+
+        Fix build break.
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_get_encoding):
+
+2011-09-09  Fady Samuel  <fsamuel@chromium.org>
+
+        Move pageScaleFactor code from Frame.{h|cpp} to Page.{h|cpp}
+        https://bugs.webkit.org/show_bug.cgi?id=67250
+
+        Reviewed by Simon Fraser.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::scalePageBy):
+
+2011-09-08  Daniel Bates  <dbates@webkit.org>
+
+        Fix the GTK build after <http://trac.webkit.org/changeset/94810>
+        (https://bugs.webkit.org/show_bug.cgi?id=67807).
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_get_encoding): Substitute DocumentWriter::deprecatedFrameEncoding() for
+        DocumentWriter::encoding().
+
+2011-09-06  Ryosuke Niwa  <rniwa@webkit.org>
+
+        Rename confirmCompositionWithoutDisturbingSelection to cancelComposition
+        https://bugs.webkit.org/show_bug.cgi?id=67569
+
+        Reviewed by Antonio Gomes.
+
+        * WebCoreSupport/EditorClientGtk.cpp:
+        (WebKit::EditorClient::respondToChangedSelection):
+
+2011-08-30  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r94142, r94144, r94145, and r94148.
+        http://trac.webkit.org/changeset/94142
+        http://trac.webkit.org/changeset/94144
+        http://trac.webkit.org/changeset/94145
+        http://trac.webkit.org/changeset/94148
+        https://bugs.webkit.org/show_bug.cgi?id=67262
+
+        Broke isindex element (Requested by rniwa on #webkit).
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::setAutofilled):
+        (DumpRenderTreeSupportGtk::setValueForUser):
+
+2011-08-30  Ryosuke Niwa  <rniwa@webkit.org>
+
+        GTK build fix after r94142.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::setAutofilled):
+        (DumpRenderTreeSupportGtk::setValueForUser):
+
+2011-08-30  Kaustubh Atrawalkar  <kaustubh@motorola.com>
+
+        The unused ScrollView* argument can and should be removed from
+        scrollRectIntoView.
+        https://bugs.webkit.org/show_bug.cgi?id=67117
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/ChromeClientGtk.h:
+        (WebKit::ChromeClient::scrollRectIntoView):
+
+2011-08-26  Gustavo Noronha Silva  <gns@gnome.org>
+
+        Minor style fix in the sample code for WebKitWebFrame.
+
+        * webkit/webkitwebframe.cpp:
+
+2011-08-17  Alejandro G. Castro  <alex@igalia.com>
+
+        [GTK] Fix compilation problems with deprecations in gtk+
+        https://bugs.webkit.org/show_bug.cgi?id=66073
+
+        Reviewed by Martin Robinson.
+
+        * WebCoreSupport/FullscreenVideoController.cpp:
+        (FullscreenVideoController::createHud): Added gtk_box_new
+        conditional compilation for gtk+-3.
+
+2011-08-18  Caio Marcelo de Oliveira Filho  <caio.oliveira@openbossa.org>
+
+        [GTK] Change webview API tests to use "load-status" signal instead of "load-progress"
+        https://bugs.webkit.org/show_bug.cgi?id=66243
+
+        Reviewed by Martin Robinson.
+
+        The idle_quit_loop_cb() already checks the "load-status" flag, so it is enough to
+        call it only when the "load-status" change.
+
+        This change is important in the context of bug 28851, which aims to change the
+        order in which "progress finished" and "load finished" callbacks are called. In
+        this new scenario, at the progress callback the load will never be finished.
+
+        * tests/testwebview.c:
+        (test_webkit_web_view_grab_focus):
+
+2011-08-17  Adam Roben  <aroben@apple.com>
+
+        Make WebCore keep track of the current device scale factor
+
+        Fixes <http://webkit.org/b/66413> WebCore requires every WebKit port to keep track of the
+        device scale factor
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        * WebCoreSupport/ChromeClientGtk.h:
+        Removed deviceScaleFactor.
+
+2011-08-16  Gustavo Noronha Silva  <gustavo.noronha@collabora.com>
+
+        Add javascriptcoregtk to the introspection build, to fix it.
+
+        Reviewed by Xan Lopez.
+
+        * GNUmakefile.am:
+
+2011-08-15  Dmitry Titov  <dimich@chromium.org>
+
+        FrameLoaderClient::transferLoadingResourceFromPage does not have enough parameters
+        https://bugs.webkit.org/show_bug.cgi?id=66165
+
+        Reviewed by Darin Fisher.
+
+        * WebCoreSupport/FrameLoaderClientGtk.cpp:
+        (WebKit::FrameLoaderClient::transferLoadingResourceFromPage):
+        * WebCoreSupport/FrameLoaderClientGtk.h:
+
+2011-08-10  Adam Roben  <aroben@apple.com>
+
+        Clear up scale factor terminology
+
+        WebKit by and large deals with two scale factors: one intrinsic to the device on which the
+        software is running, and one that is per-Page and can be controlled via API calls. This
+        patch names the former "deviceScaleFactor" and the latter "pageScaleFactor", and makes the
+        code use those names. It should introduce no behavior changes.
+
+        Fixes <http://webkit.org/b/55787> WebKit uses multiple conflicting names to refer to the
+        device scale factor
+
+        Reviewed by Simon Fraser.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        * WebCoreSupport/ChromeClientGtk.h:
+
 2011-08-11  Gustavo Noronha Silva  <gns@gnome.org>
 
         Add the javascript core dynamic library for gtk-doc's introspection helper.

@@ -41,13 +41,18 @@ using namespace Bindings;
 
 ASSERT_CLASS_FITS_IN_CELL(RuntimeMethod);
 
-const ClassInfo RuntimeMethod::s_info = { "RuntimeMethod", &InternalFunction::s_info, 0, 0 };
+const ClassInfo RuntimeMethod::s_info = { "RuntimeMethod", &InternalFunction::s_info, 0, 0, CREATE_METHOD_TABLE(RuntimeMethod) };
 
-RuntimeMethod::RuntimeMethod(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, const Identifier& ident, Bindings::MethodList& m)
+RuntimeMethod::RuntimeMethod(JSGlobalObject* globalObject, Structure* structure, Bindings::MethodList& m)
     // Callers will need to pass in the right global object corresponding to this native object "m".
-    : InternalFunction(&exec->globalData(), globalObject, structure, ident)
+    : InternalFunction(globalObject, structure)
     , _methodList(adoptPtr(new MethodList(m)))
 {
+}
+
+void RuntimeMethod::finishCreation(JSGlobalData& globalData, const Identifier& ident)
+{
+    Base::finishCreation(globalData, ident);
     ASSERT(inherits(&s_info));
 }
 
@@ -118,7 +123,12 @@ static EncodedJSValue JSC_HOST_CALL callRuntimeMethod(ExecState* exec)
     return JSValue::encode(result);
 }
 
-CallType RuntimeMethod::getCallData(CallData& callData)
+CallType RuntimeMethod::getCallDataVirtual(CallData& callData)
+{
+    return getCallData(this, callData);
+}
+
+CallType RuntimeMethod::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = callRuntimeMethod;
     return CallTypeHost;

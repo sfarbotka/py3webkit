@@ -28,24 +28,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.ExtensionPanel = function(id, label, iconURL, options)
+WebInspector.ExtensionPanel = function(id, label, iconURL)
 {
-    this.toolbarItemLabel = label;
-    if (iconURL)
+    this._toolbarItemLabel = label;
+    if (iconURL) {
         this._addStyleRule(".toolbar-item." + id + " .toolbar-icon", "background-image: url(" + iconURL + ");");
+        this._addStyleRule(".toolbar-small .toolbar-item." + id + " .toolbar-icon", "background-position-x: -32px;");
+    }
     WebInspector.Panel.call(this, id);
 }
 
 WebInspector.ExtensionPanel.prototype = {
+    get toolbarItemLabel()
+    {
+        return this._toolbarItemLabel;
+    },
+
     get defaultFocusedElement()
     {
         return this.sidebarTreeElement || this.element;
-    },
-
-    updateMainViewWidth: function(width)
-    {
-        this.bodyElement.style.left = width + "px";
-        this.resize();
     },
 
     searchCanceled: function(startingNewSearch)

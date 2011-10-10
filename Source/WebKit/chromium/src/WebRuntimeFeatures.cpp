@@ -44,14 +44,14 @@ namespace WebKit {
 
 void WebRuntimeFeatures::enableDatabase(bool enable)
 {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     AbstractDatabase::setIsAvailable(enable);
 #endif
 }
 
 bool WebRuntimeFeatures::isDatabaseEnabled()
 {
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     return AbstractDatabase::isAvailable();
 #else
     return false;
@@ -140,18 +140,12 @@ bool WebRuntimeFeatures::isNotificationsEnabled()
 
 void WebRuntimeFeatures::enableApplicationCache(bool enable)
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     RuntimeEnabledFeatures::setApplicationCacheEnabled(enable);
-#endif
 }
 
 bool WebRuntimeFeatures::isApplicationCacheEnabled()
 {
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     return RuntimeEnabledFeatures::applicationCacheEnabled();
-#else
-    return false;
-#endif
 }
 
 void WebRuntimeFeatures::enableDataTransferItems(bool enable)
@@ -369,6 +363,42 @@ bool WebRuntimeFeatures::isFullScreenAPIEnabled()
 {
 #if ENABLE(FULLSCREEN_API)
     return RuntimeEnabledFeatures::webkitFullScreenAPIEnabled();
+#else
+    return false;
+#endif
+}
+
+void WebRuntimeFeatures::enableMediaSource(bool enable)
+{
+#if ENABLE(MEDIA_SOURCE)
+    RuntimeEnabledFeatures::setWebkitMediaSourceEnabled(enable);
+#else
+    UNUSED_PARAM(enable);
+#endif
+}
+
+bool WebRuntimeFeatures::isMediaSourceEnabled()
+{
+#if ENABLE(MEDIA_SOURCE)
+    return RuntimeEnabledFeatures::webkitMediaSourceEnabled();
+#else
+    return false;
+#endif
+}
+
+void WebRuntimeFeatures::enableVideoTrack(bool enable)
+{
+#if ENABLE(VIDEO_TRACK)
+    RuntimeEnabledFeatures::setWebkitVideoTrackEnabled(enable);
+#else
+    UNUSED_PARAM(enable);
+#endif
+}
+
+bool WebRuntimeFeatures::isVideoTrackEnabled()
+{
+#if ENABLE(VIDEO_TRACK)
+    return RuntimeEnabledFeatures::webkitVideoTrackEnabled();
 #else
     return false;
 #endif

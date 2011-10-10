@@ -30,15 +30,16 @@
 
 namespace WebCore {
 
-GraphicsContext3D* SharedGraphicsContext3D::create(HostWindow* window)
+GraphicsContext3D* SharedGraphicsContext3D::get()
 {
     GraphicsContext3D::Attributes attributes;
     attributes.depth = false;
     attributes.stencil = true;
     attributes.antialias = false;
     attributes.canRecoverFromContextLoss = false; // Canvas contexts can not handle lost contexts.
-    static RefPtr<GraphicsContext3D> context = GraphicsContext3D::create(attributes, window);
-    return context.get();
+    attributes.shareResources = true;
+    static GraphicsContext3D* context = GraphicsContext3D::create(attributes, 0).leakRef();
+    return context;
 }
 
 }

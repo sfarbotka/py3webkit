@@ -43,8 +43,7 @@ inline SVGStyleElement::SVGStyleElement(const QualifiedName& tagName, Document* 
 
 SVGStyleElement::~SVGStyleElement()
 {
-    if (m_sheet)
-        m_sheet->clearOwnerNode();
+    StyleElement::clearDocumentData(document(), this);
 }
 
 PassRefPtr<SVGStyleElement> SVGStyleElement::create(const QualifiedName& tagName, Document* document, bool createdByParser)
@@ -93,7 +92,7 @@ bool SVGStyleElement::isSupportedAttribute(const QualifiedName& attrName)
         SVGLangSpace::addSupportedAttributes(supportedAttributes);
         supportedAttributes.add(SVGNames::titleAttr);
     }
-    return supportedAttributes.contains(attrName);
+    return supportedAttributes.contains<QualifiedName, SVGAttributeHashTranslator>(attrName);
 }
 
 void SVGStyleElement::parseMappedAttribute(Attribute* attr)

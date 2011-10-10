@@ -389,6 +389,18 @@
 			Name="win"
 			>
 			<File
+				RelativePath=".\HostWindow.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\HostWindow.h"
+				>
+			</File>
+			<File
+				RelativePath=".\InjectedBundleControllerWin.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\main.cpp"
 				>
 			</File>
@@ -398,10 +410,6 @@
 			</File>
 			<File
 				RelativePath=".\PlatformWebViewWin.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\InjectedBundleControllerWin.cpp"
 				>
 			</File>
 			<File
@@ -484,6 +492,10 @@
 					>
 				</File>
 				<File
+					RelativePath="..\Tests\WebKit2\LoadCanceledNoServerRedirectCallback.cpp"
+					>
+				</File>
+				<File
 					RelativePath="..\Tests\WebKit2\mouse-move-listener.html"
 					>
 				</File>
@@ -504,6 +516,14 @@
 					>
 				</File>
 				<File
+					RelativePath="..\Tests\WebKit2\PrivateBrowsingPushStateNoHistoryCallback.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\Tests\WebKit2\push-state.html"
+					>
+				</File>
+				<File
 					RelativePath="..\Tests\WebKit2\ResponsivenessTimerDoesntFireEarly.cpp"
 					>
 				</File>
@@ -520,6 +540,10 @@
 					>
 				</File>
 				<File
+					RelativePath="..\Tests\WebKit2\simple-iframe.html"
+					>
+				</File>
+				<File
 					RelativePath="..\Tests\WebKit2\simple.html"
 					>
 				</File>
@@ -529,6 +553,10 @@
 				</File>
 				<File
 					RelativePath="..\Tests\WebKit2\SpacebarScrolling.cpp"
+					>
+				</File>
+				<File
+					RelativePath="..\Tests\WebKit2\WebArchive.cpp"
 					>
 				</File>
 				<File
@@ -591,6 +619,18 @@
 			<Filter
 				Name="WTF"
 				>
+                                <Filter
+                                        Name="cf"
+                                        >
+                                        <File
+                                                RelativePath="..\Tests\WTF\cf\RetainPtrHashing.cpp"
+                                                >
+                                        </File>
+                                </Filter>
+				<File
+					RelativePath="..\Tests\WTF\CheckedArithmeticOperations.cpp"
+					>
+				</File>
 				<File
 					RelativePath="..\Tests\WTF\StringOperators.cpp"
 					>
@@ -604,7 +644,23 @@
 					>
 				</File>
 			</Filter>
+			<Filter
+				Name="WebKit"
+				>
+				<Filter
+					Name="win"
+					>
+					<File
+						RelativePath="..\Tests\WebKit\win\WebViewDestruction.cpp"
+						>
+					</File>
+				</Filter>
+			</Filter>
 		</Filter>
+		<File
+			RelativePath="..\config.h"
+			>
+		</File>
 		<File
 			RelativePath="..\JavaScriptTest.cpp"
 			>
@@ -635,10 +691,6 @@
 		</File>
 		<File
 			RelativePath="..\TestsController.h"
-			>
-		</File>
-		<File
-			RelativePath="..\TestWebKitAPIPrefix.h"
 			>
 		</File>
 	</Files>

@@ -26,8 +26,6 @@
 #include "config.h"
 #include "SQLiteStatement.h"
 
-#if ENABLE(DATABASE)
-
 #include "Logging.h"
 #include "SQLValue.h"
 #include <sqlite3.h>
@@ -345,7 +343,7 @@ String SQLiteStatement::getColumnText(int col)
             return String();
     if (columnCount() <= col)
         return String();
-    return String(reinterpret_cast<const UChar*>(sqlite3_column_text16(m_statement, col)));
+    return String(reinterpret_cast<const UChar*>(sqlite3_column_text16(m_statement, col)), sqlite3_column_bytes16(m_statement, col) / sizeof(UChar));
 }
     
 double SQLiteStatement::getColumnDouble(int col)
@@ -545,5 +543,3 @@ bool SQLiteStatement::isExpired()
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(DATABASE)

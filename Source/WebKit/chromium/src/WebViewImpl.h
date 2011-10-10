@@ -60,6 +60,7 @@ class GraphicsContext3D;
 class HistoryItem;
 class HitTestResult;
 class KeyboardEvent;
+class NonCompositedContentHost;
 class Page;
 class PlatformKeyboardEvent;
 class PopupContainer;
@@ -81,6 +82,7 @@ class DragScrollTimer;
 class GeolocationClientProxy;
 class SpeechInputClientImpl;
 class WebAccessibilityObject;
+class WebCompositorImpl;
 class WebDevToolsAgentClient;
 class WebDevToolsAgentPrivate;
 class WebFrameImpl;
@@ -117,6 +119,7 @@ public:
     virtual bool confirmComposition(const WebString& text);
     virtual bool compositionRange(size_t* location, size_t* length);
     virtual WebTextInputType textInputType();
+    virtual bool getSelectionOffsetsAndTextInEditableContent(WebString&, size_t& focus, size_t& anchor) const;
     virtual WebRect caretOrSelectionBounds();
     virtual bool selectionRange(WebPoint& start, WebPoint& end) const;
     virtual bool caretOrSelectionRange(size_t* location, size_t* length);
@@ -151,12 +154,17 @@ public:
     virtual void setInitialFocus(bool reverse);
     virtual void clearFocusedNode();
     virtual void scrollFocusedNodeIntoView();
+    virtual void scrollFocusedNodeIntoRect(const WebRect&);
     virtual double zoomLevel();
     virtual double setZoomLevel(bool textOnly, double zoomLevel);
     virtual void zoomLimitsChanged(double minimumZoomLevel,
                                    double maximumZoomLevel);
     virtual float pageScaleFactor() const;
     virtual void scalePage(float scaleFactor, WebPoint origin);
+    virtual bool isFixedLayoutModeEnabled() const;
+    virtual void enableFixedLayoutMode(bool enable);
+    virtual WebSize fixedLayoutSize() const;
+    virtual void setFixedLayoutSize(const WebSize&);
     virtual void performMediaPlayerAction(
         const WebMediaPlayerAction& action,
         const WebPoint& location);
@@ -208,11 +216,12 @@ public:
                                     unsigned inactiveBackgroundColor,
                                     unsigned inactiveForegroundColor);
     virtual void performCustomContextMenuAction(unsigned action);
+    virtual void exitFullscreen();
 
     // CCLayerTreeHostClient
     virtual void animateAndLayout(double frameBeginTime);
+    virtual void applyScrollDelta(const WebCore::IntSize&);
     virtual PassRefPtr<WebCore::GraphicsContext3D> createLayerTreeHostContext3D();
-    virtual PassOwnPtr<WebCore::LayerPainterChromium> createRootLayerPainter();
     virtual void didRecreateGraphicsContext(bool success);
 #if !USE(THREADED_COMPOSITING)
     virtual void scheduleComposite();
@@ -369,7 +378,6 @@ public:
     bool allowsAcceleratedCompositing();
     bool pageHasRTLStyle() const;
     void setRootGraphicsLayer(WebCore::GraphicsLayer*);
-    void setRootPlatformLayer(WebCore::PlatformLayer*);
     void setRootLayerNeedsDisplay();
     void scrollRootLayerRect(const WebCore::IntSize& scrollDelta, const WebCore::IntRect& clipRect);
     void invalidateRootLayerRect(const WebCore::IntRect&);
@@ -400,6 +408,8 @@ public:
 #if ENABLE(GESTURE_RECOGNIZER)
     void resetGestureRecognizer();
 #endif
+
+    void loseCompositorContext(int numTimes);
 
 private:
     friend class WebView;  // So WebView::Create can call our constructor
@@ -564,6 +574,7 @@ private:
 
 #if USE(ACCELERATED_COMPOSITING)
     WebCore::IntRect m_rootLayerScrollDamage;
+    OwnPtr<WebCore::NonCompositedContentHost> m_nonCompositedContentHost;
     RefPtr<WebCore::CCLayerTreeHost> m_layerTreeHost;
     WebCore::GraphicsLayer* m_rootGraphicsLayer;
     bool m_isAcceleratedCompositingActive;

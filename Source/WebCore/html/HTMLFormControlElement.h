@@ -43,6 +43,10 @@ public:
 
     HTMLFormElement* form() const { return FormAssociatedElement::form(); }
 
+    String formEnctype() const;
+    void setFormEnctype(const String&);
+    String formMethod() const;
+    void setFormMethod(const String&);
     bool formNoValidate() const;
 
     virtual void reset() { }
@@ -99,7 +103,8 @@ public:
 
     bool readOnly() const { return m_readOnly; }
 
-    virtual void attributeChanged(Attribute*, bool preserveDecls = false);
+    bool hasAutofocused() { return m_hasAutofocused; }
+    void setAutofocused() { m_hasAutofocused = true; }
 
     using TreeShared<ContainerNode>::ref;
     using TreeShared<ContainerNode>::deref;
@@ -115,13 +120,14 @@ protected:
     virtual void removedFromDocument();
     virtual void willMoveToNewOwnerDocument();
 
+    virtual const AtomicString& formControlName() const;
     virtual bool supportsFocus() const;
     virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual bool isMouseFocusable() const;
 
-    virtual void recalcStyle(StyleChange);
+    virtual void didRecalcStyle(StyleChange);
 
-    virtual void dispatchBlurEvent();
+    virtual void dispatchBlurEvent(PassRefPtr<Node> newFocusedNode);
     virtual void detach();
 
     // This must be called any time the result of willValidate() has changed.
@@ -129,7 +135,6 @@ protected:
     virtual bool recalcWillValidate() const;
 
 private:
-    virtual const AtomicString& formControlName() const;
     virtual const AtomicString& formControlType() const = 0;
 
     virtual void refFormAssociatedElement() { ref(); }
@@ -161,6 +166,8 @@ private:
     bool m_isValid : 1;
 
     bool m_wasChangedSinceLastFormControlChangeEvent : 1;
+
+    bool m_hasAutofocused : 1;
 };
 
 // FIXME: Give this class its own header file.

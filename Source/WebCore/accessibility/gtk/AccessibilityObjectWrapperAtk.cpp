@@ -50,6 +50,7 @@
 #include "GOwnPtr.h"
 #include "HostWindow.h"
 #include "HTMLNames.h"
+#include "HTMLSelectElement.h"
 #include "HTMLTableCaptionElement.h"
 #include "HTMLTableElement.h"
 #include "InlineTextBox.h"
@@ -58,7 +59,6 @@
 #include "RenderListItem.h"
 #include "RenderListMarker.h"
 #include "RenderText.h"
-#include "SelectElement.h"
 #include "Settings.h"
 #include "TextEncoding.h"
 #include "TextIterator.h"
@@ -962,7 +962,7 @@ static AccessibilityObject* optionFromSelection(AtkSelection* selection, gint i)
         if (!renderer)
             return 0;
 
-        SelectElement* selectNode = toSelectElement(static_cast<Element*>(renderer->node()));
+        HTMLSelectElement* selectNode = toSelectElement(static_cast<Element*>(renderer->node()));
         int selectedIndex = selectNode->selectedIndex();
         const Vector<Element*> listItems = selectNode->listItems();
 
@@ -1039,7 +1039,7 @@ static gint webkit_accessible_selection_get_selection_count(AtkSelection* select
         if (!renderer)
             return 0;
 
-        SelectElement* selectNode = toSelectElement(static_cast<Element*>(renderer->node()));
+        HTMLSelectElement* selectNode = toSelectElement(static_cast<Element*>(renderer->node()));
         int selectedIndex = selectNode->selectedIndex();
         const Vector<Element*> listItems = selectNode->listItems();
 
@@ -1423,8 +1423,8 @@ static AtkAttributeSet* getAttributeSetForAccessibilityObject(const Accessibilit
         result = addAttributeToSet(result, atk_text_attribute_get_name(ATK_TEXT_ATTR_RISE), buffer.get());
     }
 
-    int indentation = style->textIndent().calcValue(object->size().width());
-    if (indentation != undefinedLength) {
+    if (!style->textIndent().isUndefined()) {
+        int indentation = style->textIndent().calcValue(object->size().width());
         buffer.set(g_strdup_printf("%i", indentation));
         result = addAttributeToSet(result, atk_text_attribute_get_name(ATK_TEXT_ATTR_INDENT), buffer.get());
     }

@@ -37,7 +37,8 @@
 #include "LayerPainterChromium.h"
 #include "LayerRendererChromium.h"
 #include "LayerTextureUpdaterCanvas.h"
-#include "PlatformBridge.h"
+#include "PlatformSupport.h"
+#include "cc/CCLayerTreeHost.h"
 #include <wtf/CurrentTime.h>
 
 namespace WebCore {
@@ -45,9 +46,9 @@ namespace WebCore {
 class ContentLayerPainter : public LayerPainterChromium {
     WTF_MAKE_NONCOPYABLE(ContentLayerPainter);
 public:
-    static PassOwnPtr<ContentLayerPainter> create(GraphicsLayerChromium* owner)
+    static PassOwnPtr<ContentLayerPainter> create(CCLayerDelegate* delegate)
     {
-        return adoptPtr(new ContentLayerPainter(owner));
+        return adoptPtr(new ContentLayerPainter(delegate));
     }
 
     virtual void paint(GraphicsContext& context, const IntRect& contentRect)
@@ -55,28 +56,28 @@ public:
         double paintStart = currentTime();
         context.clearRect(contentRect);
         context.clip(contentRect);
-        m_owner->paintGraphicsLayerContents(context, contentRect);
+        m_delegate->paintContents(context, contentRect);
         double paintEnd = currentTime();
         double pixelsPerSec = (contentRect.width() * contentRect.height()) / (paintEnd - paintStart);
-        PlatformBridge::histogramCustomCounts("Renderer4.AccelContentPaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
-        PlatformBridge::histogramCustomCounts("Renderer4.AccelContentPaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.AccelContentPaintDurationMS", (paintEnd - paintStart) * 1000, 0, 120, 30);
+        PlatformSupport::histogramCustomCounts("Renderer4.AccelContentPaintMegapixPerSecond", pixelsPerSec / 1000000, 10, 210, 30);
     }
 private:
-    explicit ContentLayerPainter(GraphicsLayerChromium* owner)
-        : m_owner(owner)
+    explicit ContentLayerPainter(CCLayerDelegate* delegate)
+        : m_delegate(delegate)
     {
     }
 
-    GraphicsLayerChromium* m_owner;
+    CCLayerDelegate* m_delegate;
 };
 
-PassRefPtr<ContentLayerChromium> ContentLayerChromium::create(GraphicsLayerChromium* owner)
+PassRefPtr<ContentLayerChromium> ContentLayerChromium::create(CCLayerDelegate* delegate)
 {
-    return adoptRef(new ContentLayerChromium(owner));
+    return adoptRef(new ContentLayerChromium(delegate));
 }
 
-ContentLayerChromium::ContentLayerChromium(GraphicsLayerChromium* owner)
-    : TiledLayerChromium(owner)
+ContentLayerChromium::ContentLayerChromium(CCLayerDelegate* delegate)
+    : TiledLayerChromium(delegate)
 {
 }
 
@@ -94,7 +95,6 @@ void ContentLayerChromium::cleanupResources()
 void ContentLayerChromium::paintContentsIfDirty()
 {
     ASSERT(drawsContent());
-    ASSERT(layerRenderer());
 
     updateTileSizeAndTilingOption();
 
@@ -104,31 +104,33 @@ void ContentLayerChromium::paintContentsIfDirty()
 
     IntRect dirty = enclosingIntRect(m_dirtyRect);
     dirty.intersect(IntRect(IntPoint(), contentBounds()));
-    m_tiler->invalidateRect(dirty);
+    invalidateRect(dirty);
 
     if (!drawsContent())
         return;
 
-    m_tiler->prepareToUpdate(layerRect, textureUpdater());
-    m_dirtyRect = FloatRect();
+    prepareToUpdate(layerRect);
+    resetNeedsDisplay();
 }
 
 bool ContentLayerChromium::drawsContent() const
 {
-    return m_owner && m_owner->drawsContent() && TiledLayerChromium::drawsContent();
+    return m_delegate && m_delegate->drawsContent() && TiledLayerChromium::drawsContent();
 }
 
-void ContentLayerChromium::createTextureUpdaterIfNeeded()
+void ContentLayerChromium::createTextureUpdater(const CCLayerTreeHost* host)
 {
-    if (m_textureUpdater)
-        return;
-#if USE(SKIA)
-    if (layerRenderer()->settings().acceleratePainting) {
-        m_textureUpdater = LayerTextureUpdaterSkPicture::create(layerRendererContext(), ContentLayerPainter::create(m_owner), layerRenderer()->skiaContext());
+#if USE(SKIA) && USE(ACCELERATED_DRAWING)
+    // Note that host->skiaContext() will crash if called while in threaded
+    // mode. This thus depends on CCLayerTreeHost::initialize turning off
+    // acceleratePainting to prevent this from crashing.
+    if (host->settings().acceleratePainting) {
+        m_textureUpdater = LayerTextureUpdaterSkPicture::create(ContentLayerPainter::create(m_delegate));
         return;
     }
-#endif
-    m_textureUpdater = LayerTextureUpdaterBitmap::create(layerRendererContext(), ContentLayerPainter::create(m_owner), layerRenderer()->contextSupportsMapSub());
+#endif // USE(SKIA) && USE(ACCELERATED_DRAWING)
+
+    m_textureUpdater = LayerTextureUpdaterBitmap::create(ContentLayerPainter::create(m_delegate), host->layerRendererCapabilities().usingMapSub);
 }
 
 }

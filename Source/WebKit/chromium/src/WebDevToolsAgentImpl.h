@@ -73,6 +73,7 @@ public:
 
     // WebDevToolsAgent implementation.
     virtual void attach();
+    virtual void reattach(const WebString& savedState);
     virtual void detach();
     virtual void frontendLoaded();
     virtual void didNavigate();
@@ -80,7 +81,6 @@ public:
     virtual void inspectElementAt(const WebPoint& point);
     virtual void evaluateInWebInspector(long callId, const WebString& script);
     virtual void setJavaScriptProfilingEnabled(bool);
-    virtual void setRuntimeProperty(const WebString& name, const WebString& value);
     virtual void setProcessId(long);
 
     // InspectorClient implementation.

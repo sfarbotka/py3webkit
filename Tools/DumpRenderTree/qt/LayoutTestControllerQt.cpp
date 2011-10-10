@@ -33,6 +33,7 @@
 #include "DumpRenderTreeQt.h"
 #include "WorkQueue.h"
 #include "WorkQueueItemQt.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QLocale>
 #include <qwebsettings.h>
@@ -76,6 +77,7 @@ void LayoutTestController::reset()
 
     DumpRenderTreeSupportQt::dumpEditingCallbacks(false);
     DumpRenderTreeSupportQt::dumpFrameLoader(false);
+    DumpRenderTreeSupportQt::dumpProgressFinishedCallback(false);
     DumpRenderTreeSupportQt::dumpUserGestureInFrameLoader(false);
     DumpRenderTreeSupportQt::dumpResourceLoadCallbacks(false);
     DumpRenderTreeSupportQt::dumpResourceResponseMIMETypes(false);
@@ -240,8 +242,19 @@ void LayoutTestController::clearBackForwardList()
 
 QString LayoutTestController::pathToLocalResource(const QString& url)
 {
-    // Function introduced in r28690.
-    return QDir::toNativeSeparators(url);
+    QString localTmpUrl(QLatin1String("file:///tmp/LayoutTests"));
+
+    // Translate a request for /tmp/LayoutTests to the repository LayoutTests directory.
+    // Do not rely on a symlink to be created via the test runner, which will not work on Windows.
+    if (url.startsWith(localTmpUrl)) {
+        // DumpRenderTree lives in WebKit/WebKitBuild/<build_mode>/bin.
+        // Translate from WebKit/WebKitBuild/Release/bin => WebKit/LayoutTests.
+        QFileInfo layoutTestsRoot(QCoreApplication::applicationDirPath() + QLatin1String("/../../../LayoutTests/"));
+        if (layoutTestsRoot.exists())
+            return QLatin1String("file://") + layoutTestsRoot.absolutePath() + url.mid(localTmpUrl.length());
+    }
+
+    return url;
 }
 
 void LayoutTestController::dumpConfigurationForViewport(int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight)
@@ -259,6 +272,11 @@ void LayoutTestController::dumpEditingCallbacks()
 void LayoutTestController::dumpFrameLoadCallbacks()
 {
     DumpRenderTreeSupportQt::dumpFrameLoader(true);
+}
+
+void LayoutTestController::dumpProgressFinishedCallback()
+{
+    DumpRenderTreeSupportQt::dumpProgressFinishedCallback(true);
 }
 
 void LayoutTestController::dumpUserGestureInFrameLoadCallbacks()
@@ -681,7 +699,8 @@ void LayoutTestController::overridePreference(const QString& name, const QVarian
 
 void LayoutTestController::setUserStyleSheetLocation(const QString& url)
 {
-    m_userStyleSheetLocation = QUrl::fromEncoded(url.toAscii(), QUrl::StrictMode);
+    QByteArray urlData = pathToLocalResource(url).toLatin1();
+    m_userStyleSheetLocation = QUrl::fromEncoded(urlData, QUrl::StrictMode);
 
     if (m_userStyleSheetEnabled)
         setUserStyleSheetEnabled(true);
@@ -864,6 +883,12 @@ void LayoutTestController::setMockGeolocationPosition(double latitude, double lo
 }
 
 void LayoutTestController::addMockSpeechInputResult(const QString& result, double confidence, const QString& language)
+{
+    // FIXME: Implement for speech input layout tests.
+    // See https://bugs.webkit.org/show_bug.cgi?id=39485.
+}
+
+void LayoutTestController::startSpeechInput(const QString& inputElement)
 {
     // FIXME: Implement for speech input layout tests.
     // See https://bugs.webkit.org/show_bug.cgi?id=39485.

@@ -709,15 +709,6 @@ private:
         evalJS("delete retvalue; delete typevalue");
         return ret;
     }
-    QObject* firstChildByClassName(QObject* parent, const char* className) {
-        const QObjectList & children = parent->children();
-        foreach (QObject* child, children) {
-            if (!strcmp(child->metaObject()->className(), className)) {
-                return child;
-            }
-        }
-        return 0;
-    }
 
     const QString sTrue;
     const QString sFalse;
@@ -2711,8 +2702,8 @@ void tst_QWebFrame::popupFocus()
     // open the popup by clicking. check if focus is on the popup
     const QWebElement webCombo = view.page()->mainFrame()->documentElement().findFirst(QLatin1String("select[name=select]"));
     QTest::mouseClick(&view, Qt::LeftButton, 0, webCombo.geometry().center());
-    QObject* webpopup = firstChildByClassName(&view, "QComboBox");
-    QComboBox* combo = qobject_cast<QComboBox*>(webpopup);
+
+    QComboBox* combo = view.findChild<QComboBox*>();
     QVERIFY(combo != 0);
     QTRY_VERIFY(!view.hasFocus() && combo->view()->hasFocus()); // Focus should be on the popup
 
@@ -2782,26 +2773,26 @@ void tst_QWebFrame::ownership()
 {
     // test ownership
     {
-        QPointer<QObject> ptr = new QObject();
+        QWeakPointer<QObject> ptr = new QObject();
         QVERIFY(ptr != 0);
         {
             QWebPage page;
             QWebFrame* frame = page.mainFrame();
-            frame->addToJavaScriptWindowObject("test", ptr, QScriptEngine::ScriptOwnership);
+            frame->addToJavaScriptWindowObject("test", ptr.data(), QScriptEngine::ScriptOwnership);
         }
         QVERIFY(ptr == 0);
     }
     {
-        QPointer<QObject> ptr = new QObject();
+        QWeakPointer<QObject> ptr = new QObject();
         QVERIFY(ptr != 0);
-        QObject* before = ptr;
+        QObject* before = ptr.data();
         {
             QWebPage page;
             QWebFrame* frame = page.mainFrame();
-            frame->addToJavaScriptWindowObject("test", ptr, QScriptEngine::QtOwnership);
+            frame->addToJavaScriptWindowObject("test", ptr.data(), QScriptEngine::QtOwnership);
         }
-        QVERIFY(ptr == before);
-        delete ptr;
+        QVERIFY(ptr.data() == before);
+        delete ptr.data();
     }
     {
         QObject* parent = new QObject();
@@ -2816,24 +2807,24 @@ void tst_QWebFrame::ownership()
         QCOMPARE(qvariant_cast<QObject*>(v), (QObject *)0);
     }
     {
-        QPointer<QObject> ptr = new QObject();
+        QWeakPointer<QObject> ptr = new QObject();
         QVERIFY(ptr != 0);
         {
             QWebPage page;
             QWebFrame* frame = page.mainFrame();
-            frame->addToJavaScriptWindowObject("test", ptr, QScriptEngine::AutoOwnership);
+            frame->addToJavaScriptWindowObject("test", ptr.data(), QScriptEngine::AutoOwnership);
         }
         // no parent, so it should be like ScriptOwnership
         QVERIFY(ptr == 0);
     }
     {
         QObject* parent = new QObject();
-        QPointer<QObject> child = new QObject(parent);
+        QWeakPointer<QObject> child = new QObject(parent);
         QVERIFY(child != 0);
         {
             QWebPage page;
             QWebFrame* frame = page.mainFrame();
-            frame->addToJavaScriptWindowObject("test", child, QScriptEngine::AutoOwnership);
+            frame->addToJavaScriptWindowObject("test", child.data(), QScriptEngine::AutoOwnership);
         }
         // has parent, so it should be like QtOwnership
         QVERIFY(child != 0);

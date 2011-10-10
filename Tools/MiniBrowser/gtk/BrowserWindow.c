@@ -64,8 +64,9 @@ G_DEFINE_TYPE(BrowserWindow, browser_window, GTK_TYPE_WINDOW)
 
 static void activateUriEntryCallback(BrowserWindow* window)
 {
-    const gchar *uri = gtk_entry_get_text(GTK_ENTRY(window->uriEntry));
-    WKPageLoadURL(WKViewGetPage(window->webView), WKURLCreateWithUTF8CString(uri));
+    WKURLRef url = WKURLCreateWithUTF8CString(gtk_entry_get_text(GTK_ENTRY(window->uriEntry)));
+    WKPageLoadURL(WKViewGetPage(window->webView), url);
+    WKRelease(url);
 }
 
 static void goBackCallback(BrowserWindow* window)
@@ -159,7 +160,7 @@ static void browser_window_init(BrowserWindow* window)
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), item, -1);
     gtk_widget_show(GTK_WIDGET(item));
 
-    GtkWidget *vbox = gtk_vbox_new(FALSE, 0);
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     window->mainBox = vbox;
     gtk_box_pack_start(GTK_BOX(vbox), toolbar, FALSE, FALSE, 0);
     gtk_widget_show(toolbar);
@@ -185,6 +186,10 @@ static void browserWindowConstructed(GObject* gObject)
     browserWindowLoaderClientInit(window);
     browserWindowUIClientInit(window);
     browserWindowPolicyClientInit(window);
+
+    WKPageGroupRef groupRef = WKPageGetPageGroup(WKViewGetPage(window->webView));
+    WKPreferencesRef preferencesRef = WKPageGroupGetPreferences(groupRef);
+    WKPreferencesSetDeveloperExtrasEnabled(preferencesRef, true);
 }
 
 static void browser_window_class_init(BrowserWindowClass* klass)
@@ -522,7 +527,7 @@ static void browserWindowLoaderClientInit(BrowserWindow* window)
 }
 
 // UI Client.
-static WKPageRef createNewPage(WKPageRef page, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton button, const void *clientInfo)
+static WKPageRef createNewPage(WKPageRef page, WKURLRequestRef request, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton button, const void *clientInfo)
 {
     WKViewRef webView = WKViewCreate(WKPageGetContext(page), 0);
     BrowserWindow* window = BROWSER_WINDOW(browser_window_new(webView));
@@ -592,18 +597,17 @@ static WKStringRef runJavaScriptPrompt(WKPageRef page, WKStringRef message, WKSt
     return returnValue;
 }
 
-static void mouseDidMoveOverElement(WKPageRef page, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo)
+static void mouseDidMoveOverElement(WKPageRef page, WKHitTestResultRef hitTestResult, WKEventModifiers modifiers, WKTypeRef userData, const void *clientInfo)
 {
     BrowserWindow *window = BROWSER_WINDOW(clientInfo);
     gtk_statusbar_pop(GTK_STATUSBAR(window->statusBar), window->statusBarContextId);
 
-    if (!userData)
+    WKURLRef linkUrlRef = WKHitTestResultCopyAbsoluteLinkURL(hitTestResult);
+    if (!linkUrlRef)
         return;
 
-    if (WKGetTypeID(userData) != WKURLGetTypeID())
-        return;
-
-    gchar *link = WKURLGetCString((WKURLRef)userData);
+    gchar *link = WKURLGetCString(linkUrlRef);
+    WKRelease(linkUrlRef);
     gtk_statusbar_push(GTK_STATUSBAR(window->statusBar), window->statusBarContextId, link);
     g_free(link);
 }
@@ -613,7 +617,7 @@ static void browserWindowUIClientInit(BrowserWindow *window)
     WKPageUIClient uiClient = {
         kWKPageUIClientCurrentVersion,
         window, /* clientInfo */
-        createNewPage,
+        0,      /* createNewPage_deprecatedForUseWithV0 */
         showPage,
         closePage,
         0,      /* takeFocus */
@@ -623,7 +627,7 @@ static void browserWindowUIClientInit(BrowserWindow *window)
         runJavaScriptConfirm,
         runJavaScriptPrompt,
         0,      /* setStatusText */
-        mouseDidMoveOverElement,
+        0,      /* mouseDidMoveOverElement_deprecatedForUseWithV0 */
         0,      /* missingPluginButtonClicked */
         0,      /* didNotHandleKeyEvent */
         0,      /* didNotHandleWheelEvent */
@@ -651,7 +655,9 @@ static void browserWindowUIClientInit(BrowserWindow *window)
         0,      /* runModal */
         0,      /* didCompleteRubberBandForMainFrame */
         0,      /* saveDataToFileInDownloadsFolder */
-        0       /* shouldInterruptJavaScript */
+        0,      /* shouldInterruptJavaScript */
+        createNewPage,
+        mouseDidMoveOverElement
     };
     WKPageSetPageUIClient(WKViewGetPage(window->webView), &uiClient);
 }

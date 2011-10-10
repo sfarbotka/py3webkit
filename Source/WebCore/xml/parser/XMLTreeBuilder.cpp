@@ -26,15 +26,20 @@
 #include "config.h"
 #include "XMLTreeBuilder.h"
 
+#include "CachedScript.h"
 #include "CDATASection.h"
 #include "Comment.h"
 #include "Document.h"
+#include "DocumentFragment.h"
 #include "DocumentType.h"
 #include "Frame.h"
 #include "HTMLEntitySearch.h"
 #include "NewXMLDocumentParser.h"
 #include "ProcessingInstruction.h"
+#include "ScriptElement.h"
+#include "ScriptSourceCode.h"
 #include "XMLNSNames.h"
+#include "XMLNames.h"
 
 namespace WebCore {
 
@@ -42,8 +47,53 @@ XMLTreeBuilder::XMLTreeBuilder(NewXMLDocumentParser* parser, Document* document)
     : m_document(document)
     , m_parser(parser)
     , m_isXHTML(false)
+    , m_sawFirstElement(false)
 {
     m_currentNodeStack.append(NodeStackItem(document));
+}
+
+XMLTreeBuilder::XMLTreeBuilder(NewXMLDocumentParser* parser, DocumentFragment* fragment, Element* parent)
+    : m_document(fragment->document())
+    , m_parser(parser)
+    , m_isXHTML(false)
+    , m_sawFirstElement(true)
+{
+    NodeStackItem stackItem(fragment);
+
+    // Figure out namespaces
+    Vector<Element*> nodeStack;
+    while (parent) {
+        nodeStack.append(parent);
+
+        ContainerNode* node = parent->parentNode();
+        if (!node || !node->isElementNode())
+            break;
+        parent = static_cast<Element*>(node);
+    }
+
+    if (nodeStack.isEmpty()) {
+        m_currentNodeStack.append(stackItem);
+        return;
+    }
+
+    for (Element* element; !nodeStack.isEmpty(); nodeStack.removeLast()) {
+        element = nodeStack.last();
+        if (NamedNodeMap* attrs = element->attributes()) {
+            for (size_t i = 0; i < attrs->length(); ++i) {
+                Attribute* attr = attrs->attributeItem(i);
+                if (attr->localName() == xmlnsAtom)
+                    stackItem.setNamespaceURI(attr->value());
+                else if (attr->prefix() == xmlnsAtom)
+                    stackItem.setNamespaceURI(attr->localName(), attr->value());
+            }
+        }
+    }
+
+    // If the parent element is not in document tree, there may be no xmlns attribute; just default to the parent's namespace.
+    if (stackItem.namespaceURI().isNull() && !parent->inDocument())
+        stackItem.setNamespaceURI(parent->namespaceURI());
+
+    m_currentNodeStack.append(stackItem);
 }
 
 void XMLTreeBuilder::processToken(const AtomicXMLToken& token)
@@ -80,12 +130,19 @@ void XMLTreeBuilder::processToken(const AtomicXMLToken& token)
         processEntity(token);
         break;
     case XMLTokenTypes::EndOfFile:
+        exitText();
         return;
     }
 }
 
+void XMLTreeBuilder::finish()
+{
+    exitText();
+}
+
 void XMLTreeBuilder::pushCurrentNode(const NodeStackItem& stackItem)
 {
+    ASSERT(stackItem.node());
     m_currentNodeStack.append(stackItem);
     // FIXME: is there a maximum DOM depth?
 }
@@ -97,9 +154,22 @@ void XMLTreeBuilder::popCurrentNode()
     m_currentNodeStack.removeLast();
 }
 
+void XMLTreeBuilder::closeElement(PassRefPtr<Element> element)
+{
+    element->finishParsingChildren();
+
+    ScriptElement* scriptElement = toScriptElement(element.get());
+    if (scriptElement)
+        m_parser->processScript(scriptElement);
+
+    popCurrentNode();
+}
+
 void XMLTreeBuilder::processProcessingInstruction(const AtomicXMLToken& token)
 {
-    ASSERT(!m_leafText);
+    if (!failOnText())
+        return;
+
     // FIXME: fall back if we can't handle the PI ourself.
 
     add(ProcessingInstruction::create(m_document, token.target(), token.data()));
@@ -107,7 +177,8 @@ void XMLTreeBuilder::processProcessingInstruction(const AtomicXMLToken& token)
 
 void XMLTreeBuilder::processXMLDeclaration(const AtomicXMLToken& token)
 {
-    ASSERT(!m_leafText);
+    if (!failOnText())
+        return;
 
     ExceptionCode ec = 0;
 
@@ -133,12 +204,14 @@ void XMLTreeBuilder::processDOCTYPE(const AtomicXMLToken& token)
     DEFINE_STATIC_LOCAL(AtomicString, xhtmlMathMLSVG, ("-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"));
     DEFINE_STATIC_LOCAL(AtomicString, xhtmlMobile, ("-//WAPFORUM//DTD XHTML Mobile 1.0//EN"));
 
-    ASSERT(!m_leafText);
+    if (!failOnText())
+        return;
 
     AtomicString publicIdentifier(token.publicIdentifier().data(), token.publicIdentifier().size());
     AtomicString systemIdentifier(token.systemIdentifier().data(), token.systemIdentifier().size());
     RefPtr<DocumentType> doctype = DocumentType::create(m_document, token.name(), publicIdentifier, systemIdentifier);
     m_document->setDocType(doctype);
+    m_document->parserAddChild(doctype);
 
     if ((publicIdentifier == xhtmlTransitional)
         || (publicIdentifier == xhtml11)
@@ -179,10 +252,8 @@ void XMLTreeBuilder::processStartTag(const AtomicXMLToken& token)
     if (isFirstElement && m_document->frame())
         m_document->frame()->loader()->dispatchDocumentElementAvailable();
 
-    if (token.selfClosing()) {
-        popCurrentNode();
-        newElement->finishParsingChildren();
-    }
+    if (token.selfClosing())
+        closeElement(newElement);
 }
 
 void XMLTreeBuilder::processEndTag(const AtomicXMLToken& token)
@@ -194,8 +265,7 @@ void XMLTreeBuilder::processEndTag(const AtomicXMLToken& token)
     if (!node->hasTagName(QualifiedName(token.prefix(), token.name(), m_currentNodeStack.last().namespaceForPrefix(token.prefix(), m_currentNodeStack.last().namespaceURI()))))
         m_parser->stopParsing();
 
-    popCurrentNode();
-    node->finishParsingChildren();
+    closeElement(toElement(node.get()));
 }
 
 void XMLTreeBuilder::processCharacter(const AtomicXMLToken& token)
@@ -226,31 +296,29 @@ void XMLTreeBuilder::processEntity(const AtomicXMLToken& token)
 
 void XMLTreeBuilder::processNamespaces(const AtomicXMLToken& token, NodeStackItem& stackItem)
 {
-    DEFINE_STATIC_LOCAL(AtomicString, xmlnsPrefix, ("xmlns"));
     if (!token.attributes())
         return;
 
     for (size_t i = 0; i < token.attributes()->length(); ++i) {
         Attribute* attribute = token.attributes()->attributeItem(i);
-        if (attribute->name().prefix() == xmlnsPrefix)
+        if (attribute->name().prefix() == xmlnsAtom)
             stackItem.setNamespaceURI(attribute->name().localName(), attribute->value());
-        else if (attribute->name() == xmlnsPrefix)
+        else if (attribute->name() == xmlnsAtom)
             stackItem.setNamespaceURI(attribute->value());
     }
 }
 
 void XMLTreeBuilder::processAttributes(const AtomicXMLToken& token, NodeStackItem& stackItem, PassRefPtr<Element> newElement)
 {
-    DEFINE_STATIC_LOCAL(AtomicString, xmlnsPrefix, ("xmlns"));
     if (!token.attributes())
         return;
 
     for (size_t i = 0; i < token.attributes()->length(); ++i) {
         Attribute* attribute = token.attributes()->attributeItem(i);
         ExceptionCode ec = 0;
-        if (attribute->name().prefix() == xmlnsPrefix)
+        if (attribute->name().prefix() == xmlnsAtom)
             newElement->setAttributeNS(XMLNSNames::xmlnsNamespaceURI, "xmlns:" + attribute->name().localName(), attribute->value(), ec);
-        else if (attribute->name() == xmlnsPrefix)
+        else if (attribute->name() == xmlnsAtom)
             newElement->setAttributeNS(XMLNSNames::xmlnsNamespaceURI, xmlnsAtom, attribute->value(), ec);
         else {
             QualifiedName qName(attribute->prefix(), attribute->localName(), stackItem.namespaceForPrefix(attribute->prefix(), nullAtom));
@@ -331,11 +399,12 @@ void XMLTreeBuilder::appendToText(const UChar* text, size_t length)
 void XMLTreeBuilder::enterText()
 {
     if (!m_sawFirstElement) {
-        // FIXME: ensure it's just whitespace
+        // FIXME: Guarantee the text is only whitespace.
         return;
     }
 
-    m_leafText = adoptPtr(new StringBuilder());
+    if (!m_leafText)
+        m_leafText = adoptPtr(new StringBuilder());
 }
 
 void XMLTreeBuilder::exitText()
@@ -348,14 +417,27 @@ void XMLTreeBuilder::exitText()
     m_leafText.clear();
 }
 
+bool XMLTreeBuilder::failOnText()
+{
+    if (!m_leafText)
+        return true;
+
+    // FIXME: Guarantee the text is only whitespace.
+
+    m_leafText.clear();
+    return true;
+}
+
 XMLTreeBuilder::NodeStackItem::NodeStackItem(PassRefPtr<ContainerNode> n, NodeStackItem* parent)
     : m_node(n)
 {
-    if (!parent)
+    if (!parent) {
+        m_scopedNamespaces.set(xmlAtom, XMLNames::xmlNamespaceURI);
         return;
+    }
 
-        m_namespace = parent->m_namespace;
-        m_scopedNamespaces = parent->m_scopedNamespaces;
+    m_namespace = parent->m_namespace;
+    m_scopedNamespaces = parent->m_scopedNamespaces;
 }
 
 bool XMLTreeBuilder::NodeStackItem::hasNamespaceURI(AtomicString prefix)

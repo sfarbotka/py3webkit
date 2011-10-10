@@ -29,6 +29,7 @@
 #ifndef AccessibilitySlider_h
 #define AccessibilitySlider_h
 
+#include "AccessibilityMockObject.h"
 #include "AccessibilityRenderObject.h"
 
 namespace WebCore {
@@ -66,7 +67,7 @@ private:
     virtual AccessibilityOrientation orientation() const;    
 };
 
-class AccessibilitySliderThumb : public AccessibilityObject {
+class AccessibilitySliderThumb : public AccessibilityMockObject {
     
 public:
     static PassRefPtr<AccessibilitySliderThumb> create();
@@ -74,18 +75,13 @@ public:
 
     virtual AccessibilityRole roleValue() const { return SliderThumbRole; }
 
-    void setParentObject(AccessibilitySlider* slider) { m_parentSlider = slider; }
-    virtual AccessibilityObject* parentObject() const { return m_parentSlider; }
-
-    virtual IntSize size() const;
-    virtual IntRect elementRect() const;
+    virtual LayoutSize size() const;
+    virtual LayoutRect elementRect() const;
 
     virtual bool accessibilityIsIgnored() const;
 
 private:
     AccessibilitySliderThumb();
-
-    AccessibilitySlider* m_parentSlider;
 };
 
 

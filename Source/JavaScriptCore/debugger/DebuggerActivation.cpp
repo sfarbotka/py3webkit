@@ -30,23 +30,29 @@
 
 namespace JSC {
 
-DebuggerActivation::DebuggerActivation(JSGlobalData& globalData, JSObject* activation)
+DebuggerActivation::DebuggerActivation(JSGlobalData& globalData)
     : JSNonFinalObject(globalData, globalData.debuggerActivationStructure.get())
 {
+}
+
+void DebuggerActivation::finishCreation(JSGlobalData& globalData, JSObject* activation)
+{
+    Base::finishCreation(globalData);
     ASSERT(activation);
     ASSERT(activation->isActivationObject());
     m_activation.set(globalData, this, static_cast<JSActivation*>(activation));
 }
 
-void DebuggerActivation::visitChildren(SlotVisitor& visitor)
+void DebuggerActivation::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ASSERT_GC_OBJECT_INHERITS(this, &s_info);
+    DebuggerActivation* thisObject = static_cast<DebuggerActivation*>(cell);
+    ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
-    ASSERT(structure()->typeInfo().overridesVisitChildren());
-    JSObject::visitChildren(visitor);
+    ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
+    JSObject::visitChildren(thisObject, visitor);
 
-    if (m_activation)
-        visitor.append(&m_activation);
+    if (thisObject->m_activation)
+        visitor.append(&thisObject->m_activation);
 }
 
 UString DebuggerActivation::className() const
@@ -61,7 +67,12 @@ bool DebuggerActivation::getOwnPropertySlot(ExecState* exec, const Identifier& p
 
 void DebuggerActivation::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    m_activation->put(exec, propertyName, value, slot);
+    put(this, exec, propertyName, value, slot);
+}
+
+void DebuggerActivation::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
+{
+    static_cast<DebuggerActivation*>(cell)->m_activation->put(exec, propertyName, value, slot);
 }
 
 void DebuggerActivation::putWithAttributes(ExecState* exec, const Identifier& propertyName, JSValue value, unsigned attributes)
@@ -71,7 +82,12 @@ void DebuggerActivation::putWithAttributes(ExecState* exec, const Identifier& pr
 
 bool DebuggerActivation::deleteProperty(ExecState* exec, const Identifier& propertyName)
 {
-    return m_activation->deleteProperty(exec, propertyName);
+    return deleteProperty(this, exec, propertyName);
+}
+
+bool DebuggerActivation::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
+{
+    return static_cast<DebuggerActivation*>(cell)->m_activation->deleteProperty(exec, propertyName);
 }
 
 void DebuggerActivation::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)

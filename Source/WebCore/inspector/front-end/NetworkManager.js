@@ -28,6 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @constructor
+ * @extends {WebInspector.Object}
+ */
 WebInspector.NetworkManager = function()
 {
     WebInspector.Object.call(this);
@@ -35,7 +39,7 @@ WebInspector.NetworkManager = function()
     if (WebInspector.settings.cacheDisabled.get())
         NetworkAgent.setCacheDisabled(true);
     NetworkAgent.enable();
-    
+
     WebInspector.settings.cacheDisabled.addChangeListener(this._cacheDisabledSettingChanged.bind(this));
 }
 
@@ -55,10 +59,10 @@ WebInspector.NetworkManager.prototype = {
             else
                 callback(content, content && contentEncoded);
         }
-        // FIXME: https://bugs.webkit.org/show_bug.cgi?id=61363 We should separate NetworkResource (NetworkPanel resource) 
+        // FIXME: https://bugs.webkit.org/show_bug.cgi?id=61363 We should separate NetworkResource (NetworkPanel resource)
         // from ResourceRevision (ResourcesPanel/ScriptsPanel resource) and request content accordingly.
         if (resource.requestId)
-            NetworkAgent.getResourceContent(resource.requestId, callbackWrapper);
+            NetworkAgent.getResponseBody(resource.requestId, callbackWrapper);
         else
             PageAgent.getResourceContent(resource.frameId, resource.url, callbackWrapper);
     },
@@ -67,7 +71,7 @@ WebInspector.NetworkManager.prototype = {
     {
         return this._dispatcher._inflightResourcesByURL[url];
     },
-    
+
     _cacheDisabledSettingChanged: function(event)
     {
         NetworkAgent.setCacheDisabled(event.data);
@@ -76,12 +80,16 @@ WebInspector.NetworkManager.prototype = {
 
 WebInspector.NetworkManager.prototype.__proto__ = WebInspector.Object.prototype;
 
+/**
+ * @constructor
+ * @implements {NetworkAgent.Dispatcher}
+ */
 WebInspector.NetworkDispatcher = function(manager)
 {
     this._manager = manager;
     this._inflightResourcesById = {};
     this._inflightResourcesByURL = {};
-    InspectorBackend.registerDomainDispatcher("Network", this);
+    InspectorBackend.registerNetworkDispatcher(this);
 }
 
 WebInspector.NetworkDispatcher.prototype = {
@@ -117,6 +125,42 @@ WebInspector.NetworkDispatcher.prototype = {
             resource.cached = true;
         else
             resource.timing = response.timing;
+
+        if (!this._mimeTypeIsConsistentWithType(resource)) {
+            WebInspector.console.addMessage(WebInspector.ConsoleMessage.create(WebInspector.ConsoleMessage.MessageSource.Other,
+                WebInspector.ConsoleMessage.MessageType.Log,
+                WebInspector.ConsoleMessage.MessageLevel.Warning,
+                -1,
+                this.url,
+                1,
+                WebInspector.UIString("Resource interpreted as %s but transferred with MIME type %s.", WebInspector.Resource.Type.toUIString(this.type), this.mimeType)));
+        }
+    },
+
+    _mimeTypeIsConsistentWithType: function(resource)
+    {
+        // If status is an error, content is likely to be of an inconsistent type,
+        // as it's going to be an error message. We do not want to emit a warning
+        // for this, though, as this will already be reported as resource loading failure.
+        // Also, if a URL like http://localhost/wiki/load.php?debug=true&lang=en produces text/css and gets reloaded,
+        // it is 304 Not Modified and its guessed mime-type is text/php, which is wrong.
+        // Don't check for mime-types in 304-resources.
+        if (resource.hasErrorStatusCode() || resource.statusCode === 304)
+            return true;
+
+        if (typeof resource.type === "undefined"
+            || resource.type === WebInspector.Resource.Type.Other
+            || resource.type === WebInspector.Resource.Type.XHR
+            || resource.type === WebInspector.Resource.Type.WebSocket)
+            return true;
+
+        if (!resource.mimeType)
+            return true; // Might be not known for cached resources with null responses.
+
+        if (resource.mimeType in WebInspector.MIMETypes)
+            return resource.type in WebInspector.MIMETypes[resource.mimeType];
+
+        return false;
     },
 
     _updateResourceWithCachedResource: function(resource, cachedResource)
@@ -136,7 +180,7 @@ WebInspector.NetworkDispatcher.prototype = {
         var resource = this._inflightResourcesById[requestId];
         if (resource) {
             // FIXME: move this check to the backend.
-            if (this._isNull(redirectResponse))
+            if (!redirectResponse)
                 return;
             this.responseReceived(requestId, time, "Other", redirectResponse);
             resource = this._appendRedirect(requestId, time, request.url);
@@ -149,7 +193,7 @@ WebInspector.NetworkDispatcher.prototype = {
         this._startResource(resource);
     },
 
-    resourceMarkedAsCached: function(requestId)
+    requestServedFromCache: function(requestId)
     {
         var resource = this._inflightResourcesById[requestId];
         if (!resource)
@@ -212,9 +256,9 @@ WebInspector.NetworkDispatcher.prototype = {
         this._finishResource(resource, time);
     },
 
-    resourceLoadedFromMemoryCache: function(requestId, frameId, loaderId, documentURL, time, initiator, cachedResource)
+    requestServedFromMemoryCache: function(requestId, frameId, loaderId, documentURL, time, initiator, cachedResource)
     {
-        var resource = this._createResource(requestId, frameId, loaderId, cachedResource.url, documentURL, initiator);
+        var resource = this._createResource(requestId, frameId, loaderId, cachedResource.url, documentURL, initiator, null);
         this._updateResourceWithCachedResource(resource, cachedResource);
         resource.cached = true;
         resource.requestMethod = "GET";
@@ -225,7 +269,7 @@ WebInspector.NetworkDispatcher.prototype = {
 
     webSocketCreated: function(requestId, requestURL)
     {
-        var resource = this._createResource(requestId, null, null, requestURL);
+        var resource = new WebInspector.Resource(requestId, requestURL, null, null);
         resource.type = WebInspector.Resource.Type.WebSocket;
         this._startResource(resource);
     },
@@ -273,6 +317,8 @@ WebInspector.NetworkDispatcher.prototype = {
         var previousRedirects = originalResource.redirects || [];
         originalResource.requestId = "redirected:" + requestId + "." + previousRedirects.length;
         delete originalResource.redirects;
+        if (previousRedirects.length > 0)
+            originalResource.redirectSource = previousRedirects[previousRedirects.length - 1];
         this._finishResource(originalResource, time);
         var newResource = this._createResource(requestId, originalResource.frameId, originalResource.loaderId,
              redirectURL, originalResource.documentURL, originalResource.initiator, originalResource.stackTrace);
@@ -306,44 +352,26 @@ WebInspector.NetworkDispatcher.prototype = {
         this._manager.dispatchEventToListeners(eventType, resource);
     },
 
+    /**
+     * @param {NetworkAgent.RequestId} requestId
+     * @param {string} frameId
+     * @param {NetworkAgent.LoaderId} loaderId
+     * @param {string} url
+     * @param {string} documentURL
+     * @param {NetworkAgent.Initiator} initiator
+     * @param {ConsoleAgent.StackTrace=} stackTrace
+     */
     _createResource: function(requestId, frameId, loaderId, url, documentURL, initiator, stackTrace)
     {
-        var resource = new WebInspector.Resource(requestId, url, loaderId);
+        var resource = new WebInspector.Resource(requestId, url, frameId, loaderId);
         resource.documentURL = documentURL;
-        resource.frameId = frameId;
         resource.initiator = initiator;
         resource.stackTrace = stackTrace;
         return resource;
     }
 }
 
-WebInspector.NetworkLog = function()
-{
-    this._resources = [];
-    WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.ResourceStarted, this._onResourceStarted, this);
-    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, this._frameNavigated, this);
-}
-
-WebInspector.NetworkLog.prototype = {
-    get resources()
-    {
-        return this._resources;
-    },
-
-    _frameNavigated: function(event)
-    {
-        if (!event.data.isMainFrame)
-            return;
-        // Preserve resources from the new session.
-        var oldResources = this._resources.splice(0, this._resources.length);
-        for (var i = 0; i < oldResources.length; ++i) {
-            if (oldResources[i].loaderId === event.data.loaderId)
-                this._resources.push(oldResources[i]);
-        }
-    },
-
-    _onResourceStarted: function(event)
-    {
-        this._resources.push(event.data);
-    }
-}
+/**
+ * @type {?WebInspector.NetworkManager}
+ */
+WebInspector.networkManager = null;

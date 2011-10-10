@@ -72,6 +72,7 @@ public:
     void dumpStatusCallbacks() { m_dumpStatusCallbacks = true; }
     void dumpTitleChanges() { m_dumpTitleChanges = true; }
     void dumpFullScreenCallbacks() { m_dumpFullScreenCallbacks = true; }
+    void dumpConfigurationForViewport(int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight);
 
     // Special options.
     void keepWebHistory();
@@ -125,6 +126,10 @@ public:
     void setDatabaseQuota(uint64_t);
     JSRetainPtr<JSStringRef> pathToLocalResource(JSStringRef);
 
+    // Application Cache
+    void clearAllApplicationCaches();
+    void setAppCacheMaximumSize(uint64_t);
+
     // Printing
     int numberOfPages(double pageWidthInPixels, double pageHeightInPixels);
     int pageNumberForElementById(JSStringRef, double pageWidthInPixels, double pageHeightInPixels);
@@ -169,6 +174,16 @@ public:
     void setTextDirection(JSStringRef);
 
     void setShouldStayOnPageAfterHandlingBeforeUnload(bool);
+    
+    bool globalFlag() const { return m_globalFlag; }
+    void setGlobalFlag(bool value) { m_globalFlag = value; }
+    
+    void addChromeInputField(JSValueRef);
+    void removeChromeInputField(JSValueRef);
+    void focusWebView(JSValueRef);
+    void callAddChromeInputFieldCallback();
+    void callRemoveChromeInputFieldCallback();
+    void callFocusWebViewCallback();
 
 private:
     static const double waitToDumpWatchdogTimerInterval;
@@ -198,6 +213,8 @@ private:
 
     bool m_policyDelegateEnabled;
     bool m_policyDelegatePermissive;
+    
+    bool m_globalFlag;
 
     PlatformTimerRef m_waitToDumpWatchdogTimer;
 };

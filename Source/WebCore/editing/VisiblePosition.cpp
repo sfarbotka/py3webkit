@@ -70,7 +70,7 @@ VisiblePosition VisiblePosition::next(EditingBoundaryCrossingRule rule) const
     if (rule == CanCrossEditingBoundary)
         return next;
 
-    return honorEditableBoundaryAtOrAfter(next);
+    return honorEditingBoundaryAtOrAfter(next);
 }
 
 VisiblePosition VisiblePosition::previous(EditingBoundaryCrossingRule rule) const
@@ -100,7 +100,7 @@ VisiblePosition VisiblePosition::previous(EditingBoundaryCrossingRule rule) cons
     if (rule == CanCrossEditingBoundary)
         return prev;
     
-    return honorEditableBoundaryAtOrBefore(prev);
+    return honorEditingBoundaryAtOrBefore(prev);
 }
 
 Position VisiblePosition::leftVisuallyDistinctCandidate() const
@@ -251,7 +251,7 @@ VisiblePosition VisiblePosition::left(bool stayInEditableContent) const
         return left;
 
     // FIXME: This may need to do something different from "before".
-    return honorEditableBoundaryAtOrBefore(left);
+    return honorEditingBoundaryAtOrBefore(left);
 }
 
 Position VisiblePosition::rightVisuallyDistinctCandidate() const
@@ -403,10 +403,10 @@ VisiblePosition VisiblePosition::right(bool stayInEditableContent) const
         return right;
 
     // FIXME: This may need to do something different from "after".
-    return honorEditableBoundaryAtOrAfter(right);
+    return honorEditingBoundaryAtOrAfter(right);
 }
 
-VisiblePosition VisiblePosition::honorEditableBoundaryAtOrBefore(const VisiblePosition &pos) const
+VisiblePosition VisiblePosition::honorEditingBoundaryAtOrBefore(const VisiblePosition &pos) const
 {
     if (pos.isNull())
         return pos;
@@ -432,7 +432,7 @@ VisiblePosition VisiblePosition::honorEditableBoundaryAtOrBefore(const VisiblePo
     return lastEditablePositionBeforePositionInRoot(pos.deepEquivalent(), highestRoot);
 }
 
-VisiblePosition VisiblePosition::honorEditableBoundaryAtOrAfter(const VisiblePosition &pos) const
+VisiblePosition VisiblePosition::honorEditingBoundaryAtOrAfter(const VisiblePosition &pos) const
 {
     if (pos.isNull())
         return pos;
@@ -484,10 +484,10 @@ Position VisiblePosition::canonicalPosition(const Position& passedPosition)
     if (position.isNull())
         return Position();
 
-    Node* node = position.containerNode();
-
     ASSERT(position.document());
     position.document()->updateLayoutIgnorePendingStylesheets();
+
+    Node* node = position.containerNode();
 
     Position candidate = position.upstream();
     if (candidate.isCandidate())
@@ -607,7 +607,10 @@ int VisiblePosition::lineDirectionPointForBlockDirectionNavigation() const
     // without consulting transforms, so that 'up' in transformed text is 'up'
     // relative to the text, not absolute 'up'.
     FloatPoint caretPoint = renderer->localToAbsolute(localRect.location());
-    return renderer->containingBlock()->isHorizontalWritingMode() ? caretPoint.x() : caretPoint.y();
+    RenderObject* containingBlock = renderer->containingBlock();
+    if (!containingBlock)
+        containingBlock = renderer; // Just use ourselves to determine the writing mode if we have no containing block.
+    return containingBlock->isHorizontalWritingMode() ? caretPoint.x() : caretPoint.y();
 }
 
 #ifndef NDEBUG

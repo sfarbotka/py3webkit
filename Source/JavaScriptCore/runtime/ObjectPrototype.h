@@ -31,23 +31,28 @@ namespace JSC {
 
         static ObjectPrototype* create(ExecState* exec, JSGlobalObject* globalObject, Structure* structure)
         {
-            return new (allocateCell<ObjectPrototype>(*exec->heap())) ObjectPrototype(exec, globalObject, structure);
+            ObjectPrototype* prototype = new (allocateCell<ObjectPrototype>(*exec->heap())) ObjectPrototype(exec, structure);
+            prototype->finishCreation(exec->globalData(), globalObject);
+            return prototype;
         }
 
         static const ClassInfo s_info;
 
-        static Structure* createStructure(JSGlobalData& globalData, JSValue prototype)
+        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
         {
-            return Structure::create(globalData, prototype, TypeInfo(ObjectType, StructureFlags), AnonymousSlotCount, &s_info);
+            return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info);
         }
 
     protected:
         static const unsigned StructureFlags = OverridesGetOwnPropertySlot | JSNonFinalObject::StructureFlags;
-        static const unsigned AnonymousSlotCount = JSNonFinalObject::AnonymousSlotCount + 1;
+
+        void finishCreation(JSGlobalData&, JSGlobalObject*);
 
     private:
-        ObjectPrototype(ExecState*, JSGlobalObject*, Structure*);
+        ObjectPrototype(ExecState*, Structure*);
         virtual void put(ExecState*, const Identifier&, JSValue, PutPropertySlot&);
+        static void put(JSCell*, ExecState*, const Identifier&, JSValue, PutPropertySlot&);
+
         virtual bool getOwnPropertySlot(ExecState*, const Identifier&, PropertySlot&);
         virtual bool getOwnPropertySlot(ExecState*, unsigned propertyName, PropertySlot&);
         virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);

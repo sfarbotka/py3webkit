@@ -45,20 +45,20 @@
 
 namespace WebCore {
 
-IntRect SVGRenderSupport::clippedOverflowRectForRepaint(const RenderObject* object, RenderBoxModelObject* repaintContainer)
+LayoutRect SVGRenderSupport::clippedOverflowRectForRepaint(const RenderObject* object, RenderBoxModelObject* repaintContainer)
 {
     // Return early for any cases where we don't actually paint
     if (object->style()->visibility() != VISIBLE && !object->enclosingLayer()->hasVisibleContent())
-        return IntRect();
+        return LayoutRect();
 
     // Pass our local paint rect to computeRectForRepaint() which will
     // map to parent coords and recurse up the parent chain.
-    IntRect repaintRect = enclosingIntRect(object->repaintRectInLocalCoordinates());
+    LayoutRect repaintRect = enclosingLayoutRect(object->repaintRectInLocalCoordinates());
     object->computeRectForRepaint(repaintContainer, repaintRect);
     return repaintRect;
 }
 
-void SVGRenderSupport::computeRectForRepaint(const RenderObject* object, RenderBoxModelObject* repaintContainer, IntRect& repaintRect, bool fixed)
+void SVGRenderSupport::computeRectForRepaint(const RenderObject* object, RenderBoxModelObject* repaintContainer, LayoutRect& repaintRect, bool fixed)
 {
     const SVGRenderStyle* svgStyle = object->style()->svgStyle();
     if (const ShadowData* shadow = svgStyle->shadow())
@@ -70,12 +70,10 @@ void SVGRenderSupport::computeRectForRepaint(const RenderObject* object, RenderB
     object->parent()->computeRectForRepaint(repaintContainer, repaintRect, fixed);
 }
 
-void SVGRenderSupport::mapLocalToContainer(const RenderObject* object, RenderBoxModelObject* repaintContainer, bool fixed, bool useTransforms, TransformState& transformState, bool* wasFixed)
+void SVGRenderSupport::mapLocalToContainer(const RenderObject* object, RenderBoxModelObject* repaintContainer, TransformState& transformState, bool* wasFixed)
 {
-    ASSERT(!fixed); // We should have no fixed content in the SVG rendering tree.
-    ASSERT(useTransforms); // Mapping a point through SVG w/o respecting transforms is useless.
     transformState.applyTransform(object->localToParentTransform());
-    object->parent()->mapLocalToContainer(repaintContainer, fixed, useTransforms, transformState, wasFixed);
+    object->parent()->mapLocalToContainer(repaintContainer, false, true, transformState, wasFixed);
 }
 
 bool SVGRenderSupport::prepareToRenderSVGContent(RenderObject* object, PaintInfo& paintInfo)

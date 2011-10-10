@@ -35,6 +35,7 @@ namespace WTR {
 
 class TestInvocation;
 class PlatformWebView;
+class EventSenderProxy;
 
 // FIXME: Rename this TestRunner?
 class TestController {
@@ -88,7 +89,7 @@ private:
     static void processDidCrash(WKPageRef, const void* clientInfo);
     void processDidCrash();
 
-    static WKPageRef createOtherPage(WKPageRef oldPage, WKDictionaryRef, WKEventModifiers, WKEventMouseButton, const void*);
+    static WKPageRef createOtherPage(WKPageRef oldPage, WKURLRequestRef, WKDictionaryRef, WKEventModifiers, WKEventMouseButton, const void*);
 
     static void runModal(WKPageRef, const void* clientInfo);
     static void runModal(PlatformWebView*);
@@ -126,6 +127,8 @@ private:
     bool m_shouldExitWhenWebProcessCrashes;
     
     bool m_beforeUnloadReturnValue;
+
+    EventSenderProxy* m_eventSenderProxy;
 };
 
 } // namespace WTR

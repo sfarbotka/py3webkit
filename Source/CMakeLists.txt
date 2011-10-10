@@ -62,7 +62,7 @@ IF (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
     SET(WTF_CPU_ARM 1)
 ELSEIF (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "^mips")
     SET(WTF_CPU_MIPS 1)
-ELSEIF (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)")
+ELSEIF (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|amd64)")
     SET(WTF_CPU_X86_64 1)
 ELSEIF (LOWERCASE_CMAKE_SYSTEM_PROCESSOR MATCHES "(i[3-6]86|x86)")
     SET(WTF_CPU_X86 1)
@@ -73,11 +73,11 @@ ENDIF ()
 # -----------------------------------------------------------------------------
 # Determine the operating system
 # -----------------------------------------------------------------------------
-IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
-    SET(WTF_OS_UNIX 1)
-
+IF (UNIX)
     IF (APPLE)
         SET(WTF_OS_MAC_OS_X 1)
+    ELSE ()
+        SET(WTF_OS_UNIX 1)
     ENDIF ()
 ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Windows")
     SET(WTF_OS_WINDOWS 1)

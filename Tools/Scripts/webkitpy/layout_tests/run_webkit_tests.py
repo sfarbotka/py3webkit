@@ -219,6 +219,9 @@ def parse_args(args=None):
             action="store_false",
             dest="accelerated_compositing",
             help="Don't use hardware-accelerated compositing for rendering"),
+        optparse.make_option("--threaded-compositing",
+            action="store_true",
+            help="Use threaded compositing for rendering"),
         optparse.make_option("--accelerated-2d-canvas",
             action="store_true",
             help="Use hardware-accelerated 2D Canvas calls"),
@@ -377,8 +380,12 @@ def parse_args(args=None):
             default=None, help=("controls worker model. Valid values are "
                                 "'inline' and 'processes'.")),
         optparse.make_option("-f", "--experimental-fully-parallel",
-            action="store_true", default=False,
+            action="store_true",
             help="run all tests in parallel"),
+        optparse.make_option("--no-experimental-fully-parallel",
+            action="store_false",
+            dest="experimental_fully_parallel",
+            help="do not run all tests in parallel"),
         optparse.make_option("--exit-after-n-failures", type="int", default=500,
             help="Exit after the first N failures instead of running all "
             "tests"),

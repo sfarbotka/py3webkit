@@ -501,11 +501,9 @@ void DOMWindow::clear()
     m_localStorage = 0;
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
     if (m_applicationCache)
         m_applicationCache->disconnectFrame();
     m_applicationCache = 0;
-#endif
 
 #if ENABLE(NOTIFICATIONS)
     if (m_notifications)
@@ -598,14 +596,12 @@ Console* DOMWindow::console() const
     return m_console.get();
 }
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 DOMApplicationCache* DOMWindow::applicationCache() const
 {
     if (!m_applicationCache)
         m_applicationCache = DOMApplicationCache::create(m_frame);
     return m_applicationCache.get();
 }
-#endif
 
 Navigator* DOMWindow::navigator() const
 {
@@ -1092,7 +1088,7 @@ int DOMWindow::innerHeight() const
     if (!view)
         return 0;
     
-    return static_cast<int>(view->height() / m_frame->pageZoomFactor());
+    return static_cast<int>(view->visibleContentRect(/* includeScrollbars */ true).height() / m_frame->pageZoomFactor());
 }
 
 int DOMWindow::innerWidth() const
@@ -1104,7 +1100,7 @@ int DOMWindow::innerWidth() const
     if (!view)
         return 0;
 
-    return static_cast<int>(view->width() / m_frame->pageZoomFactor());
+    return static_cast<int>(view->visibleContentRect(/* includeScrollbars */ true).width() / m_frame->pageZoomFactor());
 }
 
 int DOMWindow::screenX() const
@@ -1142,7 +1138,7 @@ int DOMWindow::scrollX() const
 
     m_frame->document()->updateLayoutIgnorePendingStylesheets();
 
-    return static_cast<int>(view->scrollX() / m_frame->pageZoomFactor());
+    return static_cast<int>(view->scrollX() / (m_frame->pageZoomFactor() * m_frame->frameScaleFactor()));
 }
 
 int DOMWindow::scrollY() const
@@ -1156,7 +1152,7 @@ int DOMWindow::scrollY() const
 
     m_frame->document()->updateLayoutIgnorePendingStylesheets();
 
-    return static_cast<int>(view->scrollY() / m_frame->pageZoomFactor());
+    return static_cast<int>(view->scrollY() / (m_frame->pageZoomFactor() * m_frame->frameScaleFactor()));
 }
 
 bool DOMWindow::closed() const
@@ -1341,10 +1337,10 @@ double DOMWindow::devicePixelRatio() const
     if (!page)
         return 0.0;
 
-    return page->chrome()->scaleFactor();
+    return page->deviceScaleFactor();
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 PassRefPtr<Database> DOMWindow::openDatabase(const String& name, const String& version, const String& displayName, unsigned long estimatedSize, PassRefPtr<DatabaseCallback> creationCallback, ExceptionCode& ec)
 {
     RefPtr<Database> database = 0;
@@ -1383,8 +1379,8 @@ void DOMWindow::scrollTo(int x, int y) const
     if (!view)
         return;
 
-    int zoomedX = static_cast<int>(x * m_frame->pageZoomFactor());
-    int zoomedY = static_cast<int>(y * m_frame->pageZoomFactor());
+    int zoomedX = static_cast<int>(x * m_frame->pageZoomFactor() * m_frame->frameScaleFactor());
+    int zoomedY = static_cast<int>(y * m_frame->pageZoomFactor() * m_frame->frameScaleFactor());
     view->setScrollPosition(IntPoint(zoomedX, zoomedY));
 }
 
@@ -1579,7 +1575,7 @@ void DOMWindow::dispatchLoadEvent()
     if (ownerElement)
         ownerElement->dispatchEvent(Event::create(eventNames().loadEvent, false, false));
 
-    InspectorInstrumentation::loadEventFired(frame(), url());
+    InspectorInstrumentation::loadEventFired(frame());
 }
 
 bool DOMWindow::dispatchEvent(PassRefPtr<Event> prpEvent, PassRefPtr<EventTarget> prpTarget)

@@ -7,6 +7,7 @@ WEBKIT2_API_SOURCES = \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKContextMenuItem.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKDictionary.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKError.cpp \
+    $$SOURCE_DIR/WebKit2/Shared/API/c/WKGeometry.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKGraphicsContext.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKImage.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKMutableDictionary.cpp \
@@ -19,6 +20,7 @@ WEBKIT2_API_SOURCES = \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKURLRequest.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKURLResponse.cpp \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKUserContentURLPattern.cpp \
+    $$SOURCE_DIR/WebKit2/Shared/API/c/qt/WKImageQt.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKAuthenticationChallenge.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKAuthenticationDecisionListener.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKBackForwardList.cpp \
@@ -32,6 +34,7 @@ WEBKIT2_API_SOURCES = \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationManager.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationPermissionRequest.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationPosition.cpp \
+    $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKHitTestResult.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKIconDatabase.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKInspector.cpp \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKOpenPanelParameters.cpp \
@@ -89,6 +92,7 @@ WEBKIT2_API_HEADERS += \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKURLRequest.h \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKURLResponse.h \
     $$SOURCE_DIR/WebKit2/Shared/API/c/WKUserContentURLPattern.h \
+    $$SOURCE_DIR/WebKit2/Shared/API/c/qt/WKImageQt.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKAPICast.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKAuthenticationChallenge.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKAuthenticationDecisionListener.h \
@@ -105,6 +109,7 @@ WEBKIT2_API_HEADERS += \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationManager.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationPermissionRequest.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKGeolocationPosition.h \
+    $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKHitTestResult.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKIconDatabase.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKInspector.h \
     $$SOURCE_DIR/WebKit2/UIProcess/API/C/WKOpenPanelParameters.h \

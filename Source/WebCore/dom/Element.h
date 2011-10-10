@@ -108,8 +108,6 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitfullscreenchange);
 #endif
 
-    virtual PassRefPtr<DocumentFragment> deprecatedCreateContextualFragment(const String&, FragmentScriptingPermission = FragmentScriptingAllowed);
-
     bool hasAttribute(const QualifiedName&) const;
     const AtomicString& getAttribute(const QualifiedName&) const;
     void setAttribute(const QualifiedName&, const AtomicString& value, ExceptionCode&);
@@ -168,13 +166,14 @@ public:
     virtual int scrollWidth();
     virtual int scrollHeight();
 
-    IntRect boundsInWindowSpace();
+    // Note that the 'window space' has a flipped coordinate system on some platforms.
+    LayoutRect boundsInWindowSpace();
 
     PassRefPtr<ClientRectList> getClientRects();
     PassRefPtr<ClientRect> getBoundingClientRect();
     
     // Returns the absolute bounding box translated into screen coordinates:
-    IntRect screenRect() const;
+    LayoutRect screenRect() const;
 
     void removeAttribute(const String& name, ExceptionCode&);
     void removeAttributeNS(const String& namespaceURI, const String& localName, ExceptionCode&);
@@ -212,9 +211,6 @@ public:
     // convenience methods which ignore exceptions
     void setAttribute(const QualifiedName&, const AtomicString& value);
     void setBooleanAttribute(const QualifiedName& name, bool);
-    // Please don't use setCStringAttribute in performance-sensitive code;
-    // use a static AtomicString value instead to avoid the conversion overhead.
-    void setCStringAttribute(const QualifiedName&, const char* cStringValue);
 
     NamedNodeMap* attributes(bool readonly = false) const;
 
@@ -229,7 +225,7 @@ public:
     virtual void attach();
     virtual void detach();
     virtual RenderObject* createRenderer(RenderArena*, RenderStyle*);
-    virtual void recalcStyle(StyleChange = NoChange);
+    void recalcStyle(StyleChange = NoChange);
 
     ShadowRoot* shadowRoot() const;
     void setShadowRoot(PassRefPtr<ShadowRoot>, ExceptionCode&);
@@ -268,12 +264,10 @@ public:
  
     virtual String title() const;
 
-    String openTagStartToString() const;
-
     void updateId(const AtomicString& oldId, const AtomicString& newId);
 
-    IntSize minimumSizeForResizing() const;
-    void setMinimumSizeForResizing(const IntSize&);
+    LayoutSize minimumSizeForResizing() const;
+    void setMinimumSizeForResizing(const LayoutSize&);
 
     // Use Document::registerForDocumentActivationCallbacks() to subscribe to these
     virtual void documentWillBecomeInactive() { }
@@ -337,9 +331,6 @@ public:
 
     virtual bool canContainRangeEndPoint() const { return true; }
 
-    virtual bool formControlValueMatchesRenderer() const { return false; }
-    virtual void setFormControlValueMatchesRenderer(bool) { }
-
     virtual const AtomicString& formControlName() const { return nullAtom; }
     virtual const AtomicString& formControlType() const { return nullAtom; }
 
@@ -369,6 +360,8 @@ public:
     virtual bool isSpellCheckingEnabled() const;
 
     PassRefPtr<WebKitAnimationList> webkitGetAnimations() const;
+    
+    PassRefPtr<RenderStyle> styleForRenderer();
 
 protected:
     Element(const QualifiedName& tagName, Document* document, ConstructionType type)
@@ -383,6 +376,9 @@ protected:
     virtual void insertedIntoTree(bool);
     virtual void removedFromTree(bool);
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
+    virtual bool willRecalcStyle(StyleChange) { return true; }
+    virtual void didRecalcStyle(StyleChange) { }
+    virtual PassRefPtr<RenderStyle> customStyleForRenderer();
 
     // The implementation of Element::attributeChanged() calls the following two functions.
     // They are separated to allow a different flow of control in StyledElement::attributeChanged().
@@ -427,7 +423,7 @@ private:
     virtual PassRefPtr<Element> cloneElementWithoutAttributesAndChildren();
 
     QualifiedName m_tagName;
-    virtual NodeRareData* createRareData();
+    virtual OwnPtr<NodeRareData> createRareData();
 
     ElementRareData* rareData() const;
     ElementRareData* ensureRareData();

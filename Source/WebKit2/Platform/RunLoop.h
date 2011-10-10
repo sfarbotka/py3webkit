@@ -44,7 +44,7 @@ typedef int gboolean;
 class WorkItem;
 
 namespace CoreIPC {
-    class BinarySemaphore;
+class BinarySemaphore;
 }
 
 class RunLoop {
@@ -104,7 +104,6 @@ public:
         bool m_isRepeating;
 #elif PLATFORM(GTK)
         static gboolean timerFiredCallback(RunLoop::TimerBase*);
-        static void destroyNotifyCallback(RunLoop::TimerBase*);
         gboolean isRepeating() const { return m_isRepeating; }
         void clearTimerSource();
         GRefPtr<GSource> m_timerSource;
@@ -155,6 +154,7 @@ private:
     static void performWork(void*);
     CFRunLoopRef m_runLoop;
     CFRunLoopSourceRef m_runLoopSource;
+    int m_nestingLevel;
 #elif PLATFORM(QT)
     typedef HashMap<int, TimerBase*> TimerMap;
     TimerMap m_activeTimers;

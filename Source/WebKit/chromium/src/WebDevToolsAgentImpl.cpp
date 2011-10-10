@@ -39,6 +39,7 @@
 #include "InspectorBackendDispatcher.h"
 #include "InspectorController.h"
 #include "InspectorInstrumentation.h"
+#include "InspectorProtocolVersion.h"
 #include "MemoryCache.h"
 #include "Page.h"
 #include "PageGroup.h"
@@ -69,9 +70,6 @@
 using namespace WebCore;
 
 namespace WebKit {
-
-static const char kFrontendConnectedFeatureName[] = "frontend-connected";
-static const char kInspectorStateFeatureName[] = "inspector-state";
 
 class ClientMessageLoopAdapter : public PageScriptDebugServer::ClientMessageLoop {
 public:
@@ -206,6 +204,12 @@ void WebDevToolsAgentImpl::attach()
     m_attached = true;
 }
 
+void WebDevToolsAgentImpl::reattach(const WebString& savedState)
+{
+    attach();
+    inspectorController()->restoreInspectorStateFromCookie(savedState);
+}
+
 void WebDevToolsAgentImpl::detach()
 {
     // Prevent controller from sending messages to the frontend.
@@ -241,14 +245,6 @@ void WebDevToolsAgentImpl::dispatchOnInspectorBackend(const WebString& message)
 void WebDevToolsAgentImpl::inspectElementAt(const WebPoint& point)
 {
     m_webViewImpl->inspectElementAt(point);
-}
-
-void WebDevToolsAgentImpl::setRuntimeProperty(const WebString& name, const WebString& value)
-{
-    if (name == kInspectorStateFeatureName) {
-        InspectorController* ic = inspectorController();
-        ic->restoreInspectorStateFromCookie(value);
-    }
 }
 
 InspectorController* WebDevToolsAgentImpl::inspectorController()
@@ -304,7 +300,7 @@ bool WebDevToolsAgentImpl::sendMessageToFrontend(const String& message)
 
 void WebDevToolsAgentImpl::updateInspectorStateCookie(const String& state)
 {
-    m_client->runtimePropertyChanged(kInspectorStateFeatureName, state);
+    m_client->saveAgentRuntimeState(state);
 }
 
 void WebDevToolsAgentImpl::clearBrowserCache()
@@ -335,6 +331,16 @@ void WebDevToolsAgentImpl::setJavaScriptProfilingEnabled(bool enabled)
         ic->enableProfiler();
     else
         ic->disableProfiler();
+}
+
+WebString WebDevToolsAgent::inspectorProtocolVersion()
+{
+    return WebCore::inspectorProtocolVersion();
+}
+
+bool WebDevToolsAgent::supportsInspectorProtocolVersion(const WebString& version)
+{
+    return WebCore::supportsInspectorProtocolVersion(version);
 }
 
 void WebDevToolsAgent::executeDebuggerCommand(const WebString& command, int callerId)

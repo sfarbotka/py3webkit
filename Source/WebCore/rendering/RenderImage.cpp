@@ -84,9 +84,18 @@ IntSize RenderImage::imageSizeForError(CachedImage* newImage) const
     ASSERT_ARG(newImage, newImage);
     ASSERT_ARG(newImage, newImage->image());
 
+    IntSize imageSize;
+    if (newImage->willPaintBrokenImage()) {
+        float deviceScaleFactor = WebCore::deviceScaleFactor(frame());
+        pair<Image*, float> brokenImageAndImageScaleFactor = newImage->brokenImage(deviceScaleFactor);
+        imageSize = brokenImageAndImageScaleFactor.first->size();
+        imageSize.scale(1 / brokenImageAndImageScaleFactor.second);
+    } else
+        imageSize = newImage->image()->size();
+
     // imageSize() returns 0 for the error image. We need the true size of the
     // error image, so we have to get it by grabbing image() directly.
-    return IntSize(paddingWidth + newImage->image()->width() * style()->effectiveZoom(), paddingHeight + newImage->image()->height() * style()->effectiveZoom());
+    return IntSize(paddingWidth + imageSize.width() * style()->effectiveZoom(), paddingHeight + imageSize.height() * style()->effectiveZoom());
 }
 
 // Sets the image height and width to fit the alt text.  Returns true if the
@@ -268,15 +277,21 @@ void RenderImage::paintReplaced(PaintInfo& paintInfo, const LayoutPoint& paintOf
             RefPtr<Image> image = m_imageResource->image();
 
             if (m_imageResource->errorOccurred() && !image->isNull() && usableWidth >= image->width() && usableHeight >= image->height()) {
+                float deviceScaleFactor = WebCore::deviceScaleFactor(frame());
+                // Call brokenImage() explicitly to ensure we get the broken image icon at the appropriate resolution.
+                pair<Image*, float> brokenImageAndImageScaleFactor = m_imageResource->cachedImage()->brokenImage(deviceScaleFactor);
+                image = brokenImageAndImageScaleFactor.first;
+                IntSize imageSize = image->size();
+                imageSize.scale(1 / brokenImageAndImageScaleFactor.second);
                 // Center the error image, accounting for border and padding.
-                LayoutUnit centerX = (usableWidth - image->width()) / 2;
+                LayoutUnit centerX = (usableWidth - imageSize.width()) / 2;
                 if (centerX < 0)
                     centerX = 0;
-                LayoutUnit centerY = (usableHeight - image->height()) / 2;
+                LayoutUnit centerY = (usableHeight - imageSize.height()) / 2;
                 if (centerY < 0)
                     centerY = 0;
                 imageOffset = LayoutSize(leftBorder + leftPad + centerX + 1, topBorder + topPad + centerY + 1);
-                context->drawImage(image.get(), style()->colorSpace(), paintOffset + imageOffset);
+                context->drawImage(image.get(), style()->colorSpace(), IntRect(paintOffset + imageOffset, imageSize));
                 errorPictureDrawn = true;
             }
 
@@ -408,13 +423,9 @@ bool RenderImage::backgroundIsObscured() const
 
     // Check for bitmap image with alpha.
     Image* image = m_imageResource->image().get();
-    if (!image || !image->isBitmapImage())
+    if (!image || !image->isBitmapImage() || image->currentFrameHasAlpha())
         return false;
         
-    BitmapImage* bitmapImage = static_cast<BitmapImage*>(image);
-    if (bitmapImage->currentFrameHasAlpha())
-        return false;
-
     return true;
 }
 
@@ -437,10 +448,11 @@ bool RenderImage::nodeAtPoint(const HitTestRequest& request, HitTestResult& resu
     if (tempResult.innerNode() && node()) {
         if (HTMLMapElement* map = imageMap()) {
             IntRect contentBox = contentBoxRect();
-            float zoom = style()->effectiveZoom();
-            LayoutUnit mapX = roundedLayoutUnit((pointInContainer.x() - accumulatedOffset.x() - this->x() - contentBox.x()) / zoom);
-            LayoutUnit mapY = roundedLayoutUnit((pointInContainer.y() - accumulatedOffset.y() - this->y() - contentBox.y()) / zoom);
-            if (map->mapMouseEvent(mapX, mapY, contentBox.size(), tempResult))
+            float scaleFactor = 1 / style()->effectiveZoom();
+            LayoutPoint mapLocation(pointInContainer.x() - accumulatedOffset.x() - this->x() - contentBox.x(), pointInContainer.y() - accumulatedOffset.y() - this->y() - contentBox.y());
+            mapLocation.scale(scaleFactor, scaleFactor);
+            
+            if (map->mapMouseEvent(mapLocation, contentBox.size(), tempResult))
                 tempResult.setInnerNonSharedNode(node());
         }
     }
@@ -474,8 +486,11 @@ bool RenderImage::isLogicalWidthSpecified() const
         case Intrinsic:
         case MinIntrinsic:
             return false;
+        case Undefined:
+            ASSERT_NOT_REACHED();
+            return false;
     }
-    ASSERT(false);
+    ASSERT_NOT_REACHED();
     return false;
 }
 
@@ -490,8 +505,11 @@ bool RenderImage::isLogicalHeightSpecified() const
         case Intrinsic:
         case MinIntrinsic:
             return false;
+        case Undefined:
+            ASSERT_NOT_REACHED();
+            return false;
     }
-    ASSERT(false);
+    ASSERT_NOT_REACHED();
     return false;
 }
 

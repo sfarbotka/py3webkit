@@ -36,7 +36,25 @@
 #include "cookiejar.h"
 #include "urlloader.h"
 
+#include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
+#include <QDialogButtonBox>
+#include <QInputDialog>
+#include <QLabel>
+#ifndef QT_NO_LINEEDIT
+#include <QLineEdit>
+#endif
+#ifndef QT_NO_SHORTCUT
+#include <QMenuBar>
+#endif
+#include <QSlider>
+#include <QSplitter>
+#include <QStatusBar>
+#include <QToolButton>
+#include <QToolTip>
+#include <QVBoxLayout>
 
 #if !defined(QT_NO_FILEDIALOG) && !defined(QT_NO_MESSAGEBOX)
 #include <QFileDialog>
@@ -782,7 +800,9 @@ void LauncherWindow::screenshot()
 void LauncherWindow::setEditable(bool on)
 {
     page()->setContentEditable(on);
+#ifndef QT_NO_SHORTCUT
     m_formatMenuAction->setVisible(on);
+#endif
 }
 
 /*
@@ -843,7 +863,9 @@ void LauncherWindow::toggleWebView(bool graphicsBased)
 {
     m_windowOptions.useGraphicsView = graphicsBased;
     initializeView();
+#ifndef QT_NO_SHORTCUT
     menuBar()->clear();
+#endif
     createChrome();
 }
 

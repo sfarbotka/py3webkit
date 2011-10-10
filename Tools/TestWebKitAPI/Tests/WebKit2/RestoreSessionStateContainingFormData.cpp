@@ -23,11 +23,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "Test.h"
-
+#include "config.h"
 #include "JavaScriptTest.h"
 #include "PlatformUtilities.h"
 #include "PlatformWebView.h"
+#include "Test.h"
 
 namespace TestWebKitAPI {
 
@@ -57,7 +57,7 @@ static WKRetainPtr<WKDataRef> createSessionStateContainingFormData(WKContextRef 
     Util::run(&didFinishLoad);
     didFinishLoad = false;
 
-    TEST_ASSERT_RETURN(runJSTest(webView.page(), "submitForm()", "undefined"), 0);
+    EXPECT_JS_EQ(webView.page(), "submitForm()", "undefined");
     Util::run(&didFinishLoad);
     didFinishLoad = false;
 

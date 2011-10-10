@@ -227,7 +227,6 @@ public:
     
     // Widget override to update our scrollbars and notify our contents of the resize.
     virtual void setFrameRect(const IntRect&);
-    virtual void setBoundsSize(const IntSize&);
 
     // For platforms that need to hit test scrollbars from within the engine's event handlers (like Win32).
     Scrollbar* scrollbarAtPoint(const IntPoint& windowPoint);
@@ -235,7 +234,7 @@ public:
     // This function exists for scrollviews that need to handle wheel events manually.
     // On Mac the underlying NSScrollView just does the scrolling, but on other platforms
     // (like Windows), we need this function in order to do the scroll ourselves.
-    void wheelEvent(PlatformWheelEvent&);
+    bool wheelEvent(const PlatformWheelEvent&);
 #if ENABLE(GESTURE_EVENTS)
     void gestureEvent(const PlatformGestureEvent&);
 #endif
@@ -286,6 +285,8 @@ public:
     bool containsScrollableAreaWithOverlayScrollbars() const { return m_containsScrollableAreaWithOverlayScrollbars; }
     void setContainsScrollableAreaWithOverlayScrollbars(bool contains) { m_containsScrollableAreaWithOverlayScrollbars = contains; }
 
+    void calculateAndPaintOverhangAreas(GraphicsContext*, const IntRect& dirtyRect);
+
 protected:
     ScrollView();
 
@@ -299,9 +300,6 @@ protected:
     virtual void visibleContentsResized() = 0;
 
     IntRect fixedVisibleContentRect() const { return m_fixedVisibleContentRect; }
-
-    IntSize boundsSize() const { return m_boundsSize; }
-    void setInitialBoundsSize(const IntSize&);
 
     // These functions are used to create/destroy scrollbars.
     void setHasHorizontalScrollbar(bool);
@@ -361,8 +359,6 @@ private:
 
     bool m_containsScrollableAreaWithOverlayScrollbars;
 
-    IntSize m_boundsSize;
-
     void init();
     void destroy();
 
@@ -382,7 +378,6 @@ private:
     void platformSetCanBlitOnScroll(bool);
     bool platformCanBlitOnScroll() const;
     IntRect platformVisibleContentRect(bool includeScrollbars) const;
-    IntSize platformContentsSize() const;
     void platformSetContentsSize();
     IntRect platformContentsToScreen(const IntRect&) const;
     IntPoint platformScreenToContents(const IntPoint&) const;

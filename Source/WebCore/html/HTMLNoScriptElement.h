@@ -35,9 +35,12 @@ private:
     HTMLNoScriptElement(const QualifiedName&, Document*);
 
     virtual void attach();
-    virtual void recalcStyle(StyleChange);
+    virtual bool willRecalcStyle(StyleChange);
     virtual bool childShouldCreateRenderer(Node*) const;
     virtual bool rendererIsNeeded(const NodeRenderingContext&) {  return true; }
+#if ENABLE(XHTMLMP)
+    virtual PassRefPtr<RenderStyle> customStyleForRenderer();
+#endif
 };
 
 } //namespace

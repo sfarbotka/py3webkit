@@ -28,6 +28,7 @@
 
 #include <WebCore/GraphicsLayer.h>
 #include <WebCore/KURL.h>
+#include <WebCore/ScrollTypes.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 
@@ -41,6 +42,7 @@ namespace CoreIPC {
 namespace WebCore {
     class GraphicsContext;
     class IntRect;
+    class Scrollbar;
 }
 
 namespace WebKit {
@@ -80,6 +82,7 @@ public:
 
     // Returns the plug-in controller for this plug-in.
     PluginController* controller() { return m_pluginController; }
+    const PluginController* controller() const { return m_pluginController; }
 
     virtual ~Plugin();
 
@@ -97,6 +100,9 @@ public:
     // Tells the plug-in to paint itself into the given graphics context. The passed-in context and
     // dirty rect are in window coordinates. The context is saved/restored by the caller.
     virtual void paint(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRect) = 0;
+
+    // Invalidate native tintable controls. The passed-in context is in window coordinates.
+    virtual void updateControlTints(WebCore::GraphicsContext*);
 
     // Tells the plug-in to draw itself into a bitmap, and return that.
     virtual PassRefPtr<ShareableBitmap> snapshot() = 0;
@@ -194,6 +200,14 @@ public:
 
     // Gets the form value representation for the plug-in, letting plug-ins participate in form submission.
     virtual bool getFormValue(String& formValue) = 0;
+
+    // Tells the plug-in that it should scroll. The plug-in should return true if it did scroll.
+    virtual bool handleScroll(WebCore::ScrollDirection, WebCore::ScrollGranularity) = 0;
+
+    // A plug-in can use WebCore scroll bars. Make them known, so that hit testing can find them.
+    // FIXME: This code should be in PluginView or its base class, not in individual plug-ins.
+    virtual WebCore::Scrollbar* horizontalScrollbar() = 0;
+    virtual WebCore::Scrollbar* verticalScrollbar() = 0;
 
 protected:
     Plugin();

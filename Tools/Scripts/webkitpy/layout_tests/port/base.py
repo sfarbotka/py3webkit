@@ -257,7 +257,7 @@ class Port(object):
         return expected_audio != actual_audio
 
     def diff_image(self, expected_contents, actual_contents, tolerance=0):
-        """Compare two images and return an image diff.
+        """Compare two images and return a tuple of an image diff, and a percentage difference (0-100).
 
         |tolerance| should be a percentage value (0.0 - 100.0).
         If it is omitted, the port default tolerance value is used.
@@ -373,7 +373,7 @@ class Port(object):
             or '.png'.  This should not be None, but may be an empty string.
         platform: the most-specific directory name to use to build the
             search list of directories, e.g., 'chromium-win', or
-            'chromium-mac-leopard' (we follow the WebKit format)
+            'chromium-cg-mac-leopard' (we follow the WebKit format)
 
         This routine is generic but is implemented here to live alongside
         the other baseline and filename manipulation routines.

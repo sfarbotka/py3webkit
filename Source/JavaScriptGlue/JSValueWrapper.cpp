@@ -31,6 +31,7 @@
 #include "JSRun.h"
 #include <JavaScriptCore/JSArray.h>
 #include <JavaScriptCore/PropertyNameArray.h>
+#include <JavaScriptCore/StrongInlines.h>
 #include <pthread.h>
 
 JSValueWrapper::JSValueWrapper(JSValue inValue)
@@ -163,7 +164,7 @@ JSObjectRef JSValueWrapper::JSObjectCallFunction(void *data, JSObjectRef thisObj
         }
 
         CallData callData;
-        CallType callType = objValue->getCallData(callData);
+        CallType callType = objValue->getCallDataVirtual(callData);
         if (callType == CallTypeNone)
             return 0;
         JSValue  resultValue = call(exec, objValue, callType, callData, ksjThisObj, listArgs);

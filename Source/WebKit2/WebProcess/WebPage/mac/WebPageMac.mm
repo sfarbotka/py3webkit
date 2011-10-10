@@ -26,11 +26,11 @@
 #import "config.h"
 #import "WebPage.h"
 
-#import "AccessibilityWebPageObject.h"
 #import "AttributedString.h"
 #import "DataReference.h"
 #import "EditorState.h"
 #import "PluginView.h"
+#import "WKAccessibilityWebPageObject.h"
 #import "WebCoreArgumentCoders.h"
 #import "WebEvent.h"
 #import "WebEventConversion.h"
@@ -69,7 +69,7 @@ void WebPage::platformInitialize()
     m_page->addSchedulePair(SchedulePair::create([NSRunLoop currentRunLoop], kCFRunLoopCommonModes));
 #endif
 
-    AccessibilityWebPageObject* mockAccessibilityElement = [[[AccessibilityWebPageObject alloc] init] autorelease];
+    WKAccessibilityWebPageObject* mockAccessibilityElement = [[[WKAccessibilityWebPageObject alloc] init] autorelease];
 
     // Get the pid for the starting process.
     pid_t pid = WebProcess::shared().presenterApplicationPid();    
@@ -251,11 +251,11 @@ void WebPage::confirmComposition(EditorState& newState)
     newState = editorState();
 }
 
-void WebPage::confirmCompositionWithoutDisturbingSelection(EditorState& newState)
+void WebPage::cancelComposition(EditorState& newState)
 {
     Frame* frame = m_page->focusController()->focusedOrMainFrame();
 
-    frame->editor()->confirmCompositionWithoutDisturbingSelection();
+    frame->editor()->cancelComposition();
 
     newState = editorState();
 }
@@ -621,7 +621,7 @@ void WebPage::readSelectionFromPasteboard(const String& pasteboardName, bool& re
     result = true;
 }
     
-AccessibilityWebPageObject* WebPage::accessibilityRemoteObject()
+WKAccessibilityWebPageObject* WebPage::accessibilityRemoteObject()
 {
     return m_mockAccessibilityElement.get();
 }
@@ -632,7 +632,7 @@ bool WebPage::platformHasLocalDataForURL(const WebCore::KURL& url)
     [request setValue:(NSString*)userAgent() forHTTPHeaderField:@"User-Agent"];
     NSCachedURLResponse *cachedResponse;
 #if USE(CFURLSTORAGESESSIONS)
-    if (CFURLStorageSessionRef storageSession = ResourceHandle::privateBrowsingStorageSession())
+    if (CFURLStorageSessionRef storageSession = ResourceHandle::currentStorageSession())
         cachedResponse = WKCachedResponseForRequest(storageSession, request);
     else
 #endif
@@ -648,7 +648,7 @@ static NSCachedURLResponse *cachedResponseForURL(WebPage* webPage, const KURL& u
     [request.get() setValue:(NSString *)webPage->userAgent() forHTTPHeaderField:@"User-Agent"];
 
 #if USE(CFURLSTORAGESESSIONS)
-    if (CFURLStorageSessionRef storageSession = ResourceHandle::privateBrowsingStorageSession())
+    if (CFURLStorageSessionRef storageSession = ResourceHandle::currentStorageSession())
         return WKCachedResponseForRequest(storageSession, request.get());
 #endif
 

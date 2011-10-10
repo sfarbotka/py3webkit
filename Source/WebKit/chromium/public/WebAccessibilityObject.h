@@ -70,6 +70,12 @@ public:
 
     bool isNull() const { return m_private.isNull(); }
 
+    // Static methods for enabling accessibility.
+    WEBKIT_EXPORT static void enableAccessibility();
+    WEBKIT_EXPORT static bool accessibilityEnabled();
+
+    WEBKIT_EXPORT int axID() const;
+
     WEBKIT_EXPORT WebString accessibilityDescription() const;
     WEBKIT_EXPORT WebString actionVerb() const;
     WEBKIT_EXPORT bool canSetFocusAttribute() const;
@@ -87,26 +93,41 @@ public:
     WEBKIT_EXPORT WebAccessibilityObject previousSibling() const;
 
     WEBKIT_EXPORT bool canSetSelectedAttribute() const;
+
     WEBKIT_EXPORT bool isAnchor() const;
+    WEBKIT_EXPORT bool isAriaReadOnly() const;
+    WEBKIT_EXPORT bool isButtonStateMixed() const;
     WEBKIT_EXPORT bool isChecked() const;
     WEBKIT_EXPORT bool isCollapsed() const;
-    WEBKIT_EXPORT bool isFocused() const;
+    WEBKIT_EXPORT bool isControl() const;
     WEBKIT_EXPORT bool isEnabled() const;
+    WEBKIT_EXPORT bool isFocused() const;
     WEBKIT_EXPORT bool isHovered() const;
     WEBKIT_EXPORT bool isIndeterminate() const;
     WEBKIT_EXPORT bool isLinked() const;
+    WEBKIT_EXPORT bool isLoaded() const;
     WEBKIT_EXPORT bool isMultiSelectable() const;
     WEBKIT_EXPORT bool isOffScreen() const;
     WEBKIT_EXPORT bool isPasswordField() const;
     WEBKIT_EXPORT bool isPressed() const;
     WEBKIT_EXPORT bool isReadOnly() const;
+    WEBKIT_EXPORT bool isRequired() const;
     WEBKIT_EXPORT bool isSelected() const;
+    WEBKIT_EXPORT bool isVertical() const;
     WEBKIT_EXPORT bool isVisible() const;
     WEBKIT_EXPORT bool isVisited() const;
 
+    WEBKIT_EXPORT WebString accessKey() const;
+    WEBKIT_EXPORT bool ariaHasPopup() const;
+    WEBKIT_EXPORT bool ariaLiveRegionAtomic() const;
+    WEBKIT_EXPORT bool ariaLiveRegionBusy() const;
+    WEBKIT_EXPORT WebString ariaLiveRegionRelevant() const;
+    WEBKIT_EXPORT WebString ariaLiveRegionStatus() const;
     WEBKIT_EXPORT WebRect boundingBoxRect() const;
+    WEBKIT_EXPORT double estimatedLoadingProgress() const;
     WEBKIT_EXPORT WebString helpText() const;
     WEBKIT_EXPORT int headingLevel() const;
+    WEBKIT_EXPORT int hierarchicalLevel() const;
     WEBKIT_EXPORT WebAccessibilityObject hitTest(const WebPoint&) const;
     WEBKIT_EXPORT WebString keyboardShortcut() const;
     WEBKIT_EXPORT bool performDefaultAction() const;
@@ -117,6 +138,11 @@ public:
     WEBKIT_EXPORT WebString stringValue() const;
     WEBKIT_EXPORT WebString title() const;
     WEBKIT_EXPORT WebURL url() const;
+
+    WEBKIT_EXPORT WebString valueDescription() const;
+    WEBKIT_EXPORT float valueForRange() const;
+    WEBKIT_EXPORT float maxValueForRange() const;
+    WEBKIT_EXPORT float minValueForRange() const;
 
     WEBKIT_EXPORT WebNode node() const;
     WEBKIT_EXPORT WebDocument document() const;

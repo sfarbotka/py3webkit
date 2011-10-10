@@ -25,10 +25,12 @@
 
 #include "LayerTreeContext.h"
 #include "PageClient.h"
+#include "PolicyInterface.h"
 #include "qwebkittypes.h"
 #include "ShareableBitmap.h"
 #include "ViewportArguments.h"
 #include "ViewInterface.h"
+#include "WebContext.h"
 #include "WebPageProxy.h"
 #include <wtf/RefPtr.h>
 #include <QBasicTimer>
@@ -41,13 +43,11 @@ QT_BEGIN_NAMESPACE
 class QUndoStack;
 QT_END_NAMESPACE
 
-class QWKContext;
+class QWebError;
 class QWKHistory;
 class QWKPreferences;
 
 using namespace WebKit;
-
-QWKContext *defaultWKContext();
 
 WebCore::DragOperation dropActionToDragOperation(Qt::DropActions actions);
 
@@ -70,7 +70,7 @@ public:
         WebActionCount
     };
 
-    QtWebPageProxy(WebKit::ViewInterface* viewInterface, QWKContext*, WKPageGroupRef = 0);
+    QtWebPageProxy(WebKit::ViewInterface*, WebKit::PolicyInterface* = 0, WKContextRef = 0, WKPageGroupRef = 0);
     ~QtWebPageProxy();
 
     virtual bool handleEvent(QEvent*);
@@ -126,7 +126,6 @@ public:
     virtual void flashBackingStoreUpdates(const Vector<WebCore::IntRect>& updateRects);
     virtual void findStringInCustomRepresentation(const String&, FindOptions, unsigned maxMatchCount) { }
     virtual void countStringMatchesInCustomRepresentation(const String&, FindOptions, unsigned maxMatchCount) { }
-    virtual float userSpaceScaleFactor() const { return 1; }
 
     virtual void didFindZoomableArea(const WebCore::IntPoint&, const WebCore::IntRect&);
 
@@ -134,12 +133,13 @@ public:
     void didChangeTitle(const QString&);
 
     void loadDidBegin();
+    void loadDidCommit();
     void loadDidSucceed();
     void loadDidFail(const QWebError&);
     void didChangeLoadProgress(int);
     int loadProgress() const { return m_loadProgress; }
 
-    void paint(QPainter* painter, QRect);
+    void paint(QPainter*, const QRect&);
 
     void updateAction(QtWebPageProxy::WebAction action);
     void updateNavigationActions();
@@ -187,6 +187,7 @@ protected:
     virtual void paintContent(QPainter* painter, const QRect& area) = 0;
     RefPtr<WebKit::WebPageProxy> m_webPageProxy;
     WebKit::ViewInterface* const m_viewInterface;
+    WebKit::PolicyInterface* const m_policyInterface;
 
 private:
     bool handleKeyPressEvent(QKeyEvent*);
@@ -194,7 +195,11 @@ private:
     bool handleFocusInEvent(QFocusEvent*);
     bool handleFocusOutEvent(QFocusEvent*);
 
-    QWKContext* m_context;
+    static PassRefPtr<WebContext> defaultWKContext();
+    static RefPtr<WebContext> s_defaultContext;
+    static unsigned s_defaultPageProxyCount;
+
+    RefPtr<WebContext> m_context;
     QWKHistory* m_history;
 
     mutable QAction* m_actions[QtWebPageProxy::WebActionCount];

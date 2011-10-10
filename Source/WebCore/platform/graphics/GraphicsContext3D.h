@@ -108,10 +108,7 @@ struct ActiveInfo {
     GC3Dint size;
 };
 
-// FIXME: ideally this would be used on all platforms.
-#if PLATFORM(CHROMIUM) || PLATFORM(QT) || PLATFORM(GTK) || PLATFORM(EFL)
-class GraphicsContext3DInternal;
-#endif
+class GraphicsContext3DPrivate;
 
 class GraphicsContext3D : public RefCounted<GraphicsContext3D> {
 public:
@@ -436,6 +433,7 @@ public:
             , canRecoverFromContextLoss(true)
             , preserveDrawingBuffer(false)
             , noExtensions(false)
+            , shareResources(true)
         {
         }
 
@@ -447,6 +445,7 @@ public:
         bool canRecoverFromContextLoss;
         bool preserveDrawingBuffer;
         bool noExtensions;
+        bool shareResources;
     };
 
     enum RenderStyle {
@@ -522,10 +521,10 @@ public:
     // Computes the components per pixel and bytes per component
     // for the given format and type combination. Returns false if
     // either was an invalid enum.
-    bool computeFormatAndTypeParameters(GC3Denum format,
-                                        GC3Denum type,
-                                        unsigned int* componentsPerPixel,
-                                        unsigned int* bytesPerComponent);
+    static bool computeFormatAndTypeParameters(GC3Denum format,
+                                               GC3Denum type,
+                                               unsigned int* componentsPerPixel,
+                                               unsigned int* bytesPerComponent);
 
     // Computes the image size in bytes. If paddingInBytes is not null, padding
     // is also calculated in return. Returns NO_ERROR if succeed, otherwise
@@ -905,7 +904,7 @@ public:
 #endif
 
     int m_currentWidth, m_currentHeight;
-    bool m_isResourceSafe;
+    bool isResourceSafe();
 
 #if PLATFORM(MAC)
     CGLContextObj m_contextObj;
@@ -952,11 +951,8 @@ public:
     ListHashSet<GC3Denum> m_syntheticErrors;
 #endif
 
-    // FIXME: ideally this would be used on all platforms.
-#if PLATFORM(CHROMIUM) || PLATFORM(QT) || PLATFORM(GTK) || PLATFORM(EFL)
-    friend class GraphicsContext3DInternal;
-    OwnPtr<GraphicsContext3DInternal> m_internal;
-#endif
+    friend class GraphicsContext3DPrivate;
+    OwnPtr<GraphicsContext3DPrivate> m_private;
 };
 
 } // namespace WebCore

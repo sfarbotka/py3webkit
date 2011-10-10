@@ -93,8 +93,10 @@ private:
     virtual void enterAcceleratedCompositingMode(const LayerTreeContext&);
     virtual void exitAcceleratedCompositingMode();
 
-    virtual void accessibilityWebProcessTokenReceived(const CoreIPC::DataReference&);    
-    virtual void setComplexTextInputEnabled(uint64_t pluginComplexTextInputIdentifier, bool complexTextInputEnabled);
+    virtual void accessibilityWebProcessTokenReceived(const CoreIPC::DataReference&);
+
+    virtual void pluginFocusOrWindowFocusChanged(uint64_t pluginComplexTextInputIdentifier, bool pluginHasFocusAndWindowHasFocus);
+    virtual void setPluginComplexTextInputState(uint64_t pluginComplexTextInputIdentifier, PluginComplexTextInputState);
 
     virtual void makeFirstResponder();
     
@@ -120,8 +122,6 @@ private:
     virtual String dismissCorrectionPanelSoon(WebCore::ReasonForDismissingCorrectionPanel);
     virtual void recordAutocorrectionResponse(WebCore::EditorClient::AutocorrectionResponseType, const String& replacedString, const String& replacementString);
 
-    virtual float userSpaceScaleFactor() const;
-    
     virtual WKView* wkView() const { return m_wkView; }
 
     WKView* m_wkView;

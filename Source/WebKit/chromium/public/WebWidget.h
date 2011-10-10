@@ -47,9 +47,6 @@ class WebString;
 struct WebPoint;
 template <typename T> class WebVector;
 
-// FIXME: remove this define once render_widget has been changed to issue threaded compositor calls
-#define WEBWIDGET_HAS_ANIMATE_CHANGES 1
-
 class WebWidget {
 public:
     // This method closes and deletes the WebWidget.
@@ -147,12 +144,18 @@ public:
     // Returns the current text input type of this WebWidget.
     virtual WebTextInputType textInputType() { return WebKit::WebTextInputTypeNone; }
 
+    // Returns the plain text around the edit caret and the focus index in the
+    // text. If selection exists, it will return the anchor index as well,
+    // otherwise the anchor index will be the same value of the focus index.
+    virtual bool getSelectionOffsetsAndTextInEditableContent(WebString&, size_t& focus, size_t& anchor) const { return false; }
+
     // Returns the current caret bounds of this WebWidget. The selection bounds
     // will be returned if a selection range is available.
     virtual WebRect caretOrSelectionBounds() { return WebRect(); }
 
     // Returns the start and end point for the current selection, aligned to the
-    // bottom of the selected line.
+    // bottom of the selected line. start and end are the logical beginning and
+    // ending positions of the selection. Visually, start may lie after end.
     virtual bool selectionRange(WebPoint& start, WebPoint& end) const { return false; }
 
     // Fetch the current selection range of this WebWidget. If there is no

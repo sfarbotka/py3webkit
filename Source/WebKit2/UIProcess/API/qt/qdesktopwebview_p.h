@@ -25,20 +25,31 @@
 #include "qwebnavigationcontroller.h"
 #include "ViewInterface.h"
 
-class QDesktopWebView;
+#include <QtCore/QObject>
 
-class QDesktopWebViewPrivate : public WebKit::ViewInterface
+class QDesktopWebView;
+class QFileDialog;
+
+class QDesktopWebViewPrivate : public QObject, public WebKit::ViewInterface, public WebKit::PolicyInterface
 {
+    Q_OBJECT
 public:
     QDesktopWebViewPrivate(QDesktopWebView*, WKContextRef = 0, WKPageGroupRef = 0);
 
     static QDesktopWebView* createViewWithPageGroup(WKPageGroupRef);
+
+    void enableMouseEvents();
+    void disableMouseEvents();
 
     QDesktopWebView* q;
     QDesktopWebPageProxy page;
 
     bool isCrashed;
     QWebNavigationController* navigationController;
+
+private Q_SLOTS:
+    void onOpenPanelFilesSelected();
+    void onOpenPanelFinished(int result);
 
 private:
     /* Implementation of ViewInterface */
@@ -61,6 +72,7 @@ private:
     virtual void didChangeStatusText(const QString&);
     virtual void didChangeCursor(const QCursor&);
     virtual void loadDidBegin();
+    virtual void loadDidCommit();
     virtual void loadDidSucceed();
     virtual void loadDidFail(const QWebError&);
     virtual void didChangeLoadProgress(int);
@@ -68,10 +80,29 @@ private:
     virtual void showContextMenu(QSharedPointer<QMenu>);
     virtual void hideContextMenu();
 
+    virtual void runJavaScriptAlert(const QString&);
+    virtual bool runJavaScriptConfirm(const QString&);
+    virtual QString runJavaScriptPrompt(const QString&, const QString& defaultValue, bool& ok);
+
     virtual void processDidCrash();
     virtual void didRelaunchProcess();
 
+    virtual QJSEngine* engine();
+
+    virtual void chooseFiles(WKOpenPanelResultListenerRef, const QStringList& selectedFileNames, ViewInterface::FileChooserType);
+
+    virtual void didMouseMoveOverElement(const QUrl&, const QString&);
+
+    // PolicyInterface.
+    virtual PolicyInterface::PolicyAction navigationPolicyForURL(const QUrl&, Qt::MouseButton, Qt::KeyboardModifiers);
+
     QSharedPointer<QMenu> activeMenu;
+
+    QFileDialog* fileDialog;
+    WKOpenPanelResultListenerRef openPanelResultListener;
+
+    QUrl lastHoveredURL;
+    QString lastHoveredTitle;
 };
 
 #endif /* qdesktopwebview_p_h */

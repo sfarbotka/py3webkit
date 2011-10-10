@@ -48,6 +48,7 @@
 namespace WebCore {
 
     class Blob;
+    class ContentSecurityPolicy;
     class DOMTimer;
     class DOMURL;
     class EventListener;
@@ -56,7 +57,7 @@ namespace WebCore {
     class ScriptCallStack;
     class SecurityOrigin;
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
     class Database;
     class DatabaseTaskSynchronizer;
     class DatabaseThread;
@@ -64,6 +65,10 @@ namespace WebCore {
 
 #if ENABLE(BLOB) || ENABLE(FILE_SYSTEM)
     class FileThread;
+#endif
+
+#if ENABLE(MEDIA_STREAM)
+    class MediaStream;
 #endif
 
     class ScriptExecutionContext {
@@ -74,7 +79,7 @@ namespace WebCore {
         virtual bool isDocument() const { return false; }
         virtual bool isWorkerContext() const { return false; }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         virtual bool allowDatabaseAccess() const = 0;
         virtual void databaseExceededQuota(const String& name) = 0;
         DatabaseThread* databaseThread();
@@ -91,7 +96,10 @@ namespace WebCore {
 
         virtual String userAgent(const KURL&) const = 0;
 
+        virtual void disableEval() = 0;
+
         SecurityOrigin* securityOrigin() const { return m_securityOrigin.get(); }
+        ContentSecurityPolicy* contentSecurityPolicy() { return m_contentSecurityPolicy.get(); }
 
         bool sanitizeScriptError(String& errorMessage, int& lineNumber, String& sourceURL);
         void reportException(const String& errorMessage, int lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack>);
@@ -144,9 +152,12 @@ namespace WebCore {
         DOMTimer* findTimeout(int timeoutId);
 
 #if ENABLE(BLOB)
+#if ENABLE(MEDIA_STREAM)
+        KURL createPublicBlobURL(MediaStream*);
+#endif // ENABLE(MEDIA_STREAM)
         KURL createPublicBlobURL(Blob*);
         void revokePublicBlobURL(const KURL&);
-#endif
+#endif // ENABLE(BLOB)
 
 #if USE(JSC)
         JSC::JSGlobalData* globalData();
@@ -167,6 +178,8 @@ namespace WebCore {
         //       that already contains content.
         void setSecurityOrigin(PassRefPtr<SecurityOrigin>);
 
+        void setContentSecurityPolicy(PassRefPtr<ContentSecurityPolicy>);
+
     private:
         virtual const KURL& virtualURL() const = 0;
         virtual KURL virtualCompleteURL(const String&) const = 0;
@@ -178,6 +191,7 @@ namespace WebCore {
         void closeMessagePorts();
 
         RefPtr<SecurityOrigin> m_securityOrigin;
+        RefPtr<ContentSecurityPolicy> m_contentSecurityPolicy;
 
         HashSet<MessagePort*> m_messagePorts;
 
@@ -190,6 +204,7 @@ namespace WebCore {
 
 #if ENABLE(BLOB)
         HashSet<String> m_publicBlobURLs;
+        HashSet<String> m_publicStreamURLs;
         HashSet<DOMURL*> m_domUrls;
 #endif
 
@@ -200,7 +215,7 @@ namespace WebCore {
         class PendingException;
         OwnPtr<Vector<OwnPtr<PendingException> > > m_pendingExceptions;
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
         RefPtr<DatabaseThread> m_databaseThread;
         bool m_hasOpenDatabases; // This never changes back to false, even after the database thread is closed.
 #endif

@@ -28,11 +28,12 @@
 
 # Request a modern Django
 from google.appengine.dist import use_library
-use_library('django', '1.1')
+use_library('django', '1.2')  # Must agree with __init.py__
 
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
+from handlers.activebots import ActiveBots
 from handlers.dashboard import Dashboard
 from handlers.gc import GC
 from handlers.nextpatch import NextPatch
@@ -69,6 +70,7 @@ routes = [
     ('/update-status', UpdateStatus),
     ('/update-work-items', UpdateWorkItems),
     ('/update-svn-revision', UpdateSVNRevision),
+    ('/active-bots', ActiveBots),
 ]
 
 application = webapp.WSGIApplication(routes, debug=True)

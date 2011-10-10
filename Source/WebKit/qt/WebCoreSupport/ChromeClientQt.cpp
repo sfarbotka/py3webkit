@@ -74,9 +74,9 @@
 #include "qwebview.h"
 #include <qdebug.h>
 #include <qeventloop.h>
-#include <qtextdocument.h>
 #include <qtooltip.h>
 #include <wtf/OwnPtr.h>
+#include <wtf/qt/UtilsQt.h>
 
 #if ENABLE(VIDEO) && (USE(GSTREAMER) || USE(QT_MULTIMEDIA) || USE(QTKIT))
 #include "FullScreenVideoQt.h"
@@ -144,13 +144,6 @@ FloatRect ChromeClientQt::pageRect()
     if (!m_webPage)
         return FloatRect();
     return FloatRect(QRectF(QPointF(0, 0), m_webPage->viewportSize()));
-}
-
-float ChromeClientQt::scaleFactor()
-{
-    if (!m_webPage)
-        return 1;
-    return m_webPage->d->pixelRatio;
 }
 
 void ChromeClientQt::focus()
@@ -523,7 +516,7 @@ void ChromeClientQt::setToolTip(const String &tip, TextDirection)
         view->setToolTip(QString());
         QToolTip::hideText();
     } else {
-        QString dtip = QLatin1String("<p>") + Qt::escape(tip) + QLatin1String("</p>");
+        QString dtip = QLatin1String("<p>") + escapeHtml(tip) + QLatin1String("</p>");
         view->setToolTip(dtip);
     }
 #else
@@ -536,7 +529,7 @@ void ChromeClientQt::print(Frame* frame)
     emit m_webPage->printRequested(QWebFramePrivate::kit(frame));
 }
 
-#if ENABLE(DATABASE)
+#if ENABLE(SQL_DATABASE)
 void ChromeClientQt::exceededDatabaseQuota(Frame* frame, const String& databaseName)
 {
     quint64 quota = QWebSettings::offlineStorageDefaultQuota();
@@ -548,7 +541,6 @@ void ChromeClientQt::exceededDatabaseQuota(Frame* frame, const String& databaseN
 }
 #endif
 
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
 void ChromeClientQt::reachedMaxAppCacheSize(int64_t)
 {
     // FIXME: Free some space.
@@ -568,7 +560,6 @@ void ChromeClientQt::reachedApplicationCacheOriginQuota(SecurityOrigin* origin, 
 
     emit m_webPage->applicationCacheQuotaExceeded(securityOrigin, defaultOriginQuota, static_cast<quint64>(totalSpaceNeeded));
 }
-#endif
 
 #if ENABLE(NOTIFICATIONS)
 NotificationPresenter* ChromeClientQt::notificationPresenter() const

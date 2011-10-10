@@ -30,7 +30,6 @@
 #include "AuthenticationClient.h"
 #include "HTTPHeaderMap.h"
 #include "NetworkingContext.h"
-#include "ThreadableLoader.h"
 #include <wtf/OwnPtr.h>
 
 #if USE(SOUP)
@@ -48,8 +47,11 @@ typedef void* LPVOID;
 typedef LPVOID HINTERNET;
 #endif
 
-#if PLATFORM(MAC)
+#if PLATFORM(MAC) || USE(CFURLSTORAGESESSIONS)
 #include <wtf/RetainPtr.h>
+#endif
+
+#if PLATFORM(MAC)
 #ifdef __OBJC__
 @class NSData;
 @class NSError;
@@ -90,6 +92,11 @@ class ResourceRequest;
 class ResourceResponse;
 class SchedulePair;
 class SharedBuffer;
+
+enum StoredCredentials {
+    AllowStoredCredentials,
+    DoNotAllowStoredCredentials
+};
 
 template <typename T> class Timer;
 
@@ -151,9 +158,6 @@ public:
     static void setClientCertificate(const String& host, CFDataRef);
 #endif
 
-    PassRefPtr<SharedBuffer> bufferedData();
-    static bool supportsBufferedData();
-
     bool shouldContentSniff() const;
     static bool shouldContentSniffURL(const KURL&);
 
@@ -167,7 +171,7 @@ public:
     static void CALLBACK internetStatusCallback(HINTERNET, DWORD_PTR, DWORD, LPVOID, DWORD);
 #endif
 
-#if PLATFORM(QT) || USE(CURL) || USE(SOUP) || PLATFORM(ANDROID)
+#if PLATFORM(QT) || USE(CURL) || USE(SOUP)
     ResourceHandleInternal* getInternal() { return d.get(); }
 #endif
 
@@ -194,14 +198,13 @@ public:
     void fireFailure(Timer<ResourceHandle>*);
 
 #if USE(CFURLSTORAGESESSIONS)
-    static void setPrivateBrowsingEnabled(bool);
-    static CFURLStorageSessionRef privateBrowsingStorageSession();
-    static void setPrivateBrowsingStorageSessionIdentifierBase(const String&);
     static CFURLStorageSessionRef currentStorageSession();
-#if PLATFORM(WIN)
     static void setDefaultStorageSession(CFURLStorageSessionRef);
     static CFURLStorageSessionRef defaultStorageSession();
-#endif // PLATFORM(WIN)
+    static void setPrivateBrowsingEnabled(bool);
+
+    static void setPrivateBrowsingStorageSessionIdentifierBase(const String&);
+    static RetainPtr<CFURLStorageSessionRef> createPrivateBrowsingStorageSession(CFStringRef identifier);
 #endif // USE(CFURLSTORAGESESSIONS)
 
     using RefCounted<ResourceHandle>::ref;
@@ -211,7 +214,7 @@ public:
     static CFStringRef synchronousLoadRunLoopMode();
 #endif
 
-#if HAVE(CFNETWORK_DATA_ARRAY_CALLBACK)
+#if HAVE(NETWORK_CFDATA_ARRAY_CALLBACK)
     void handleDataArray(CFArrayRef dataArray);
 #endif
 
@@ -241,8 +244,8 @@ private:
 #endif
 
 #if USE(CFURLSTORAGESESSIONS)
-    static RetainPtr<CFURLStorageSessionRef> createPrivateBrowsingStorageSession(CFStringRef identifier);
     static String privateBrowsingStorageSessionIdentifierDefaultBase();
+    static CFURLStorageSessionRef privateBrowsingStorageSession();
 #endif
 
     friend class ResourceHandleInternal;

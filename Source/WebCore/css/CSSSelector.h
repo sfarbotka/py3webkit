@@ -220,7 +220,6 @@ namespace WebCore {
         CSSSelector* tagHistory() const { return m_isLastInTagHistory ? 0 : const_cast<CSSSelector*>(this + 1); }
 
         bool hasTag() const { return m_tag != anyQName(); }
-        bool hasAttribute() const { return m_match == Id || m_match == Class || (m_hasRareData && m_data.m_rareData->m_attribute != anyQName()); }
         
         const QualifiedName& tag() const { return m_tag; }
         // AtomicString is really just an AtomicStringImpl* so the cast below is safe.
@@ -229,7 +228,7 @@ namespace WebCore {
         const QualifiedName& attribute() const;
         const AtomicString& argument() const { return m_hasRareData ? m_data.m_rareData->m_argument : nullAtom; }
         CSSSelectorList* selectorList() const { return m_hasRareData ? m_data.m_rareData->m_selectorList.get() : 0; }
-        
+
         void setTag(const QualifiedName& value) { m_tag = value; }
         void setValue(const AtomicString&);
         void setAttribute(const QualifiedName&);
@@ -242,6 +241,7 @@ namespace WebCore {
         bool matchesPseudoElement() const;
         bool isUnknownPseudoElement() const;
         bool isSiblingSelector() const;
+        bool isAttributeSelector() const;
 
         Relation relation() const { return static_cast<Relation>(m_relation); }
 
@@ -296,6 +296,13 @@ namespace WebCore {
         
         QualifiedName m_tag;
     };
+
+inline const QualifiedName& CSSSelector::attribute() const
+{ 
+    ASSERT(isAttributeSelector());
+    ASSERT(m_hasRareData);
+    return m_data.m_rareData->m_attribute;
+}
     
 inline bool CSSSelector::matchesPseudoElement() const 
 { 
@@ -326,15 +333,30 @@ inline bool CSSSelector::isSiblingSelector() const
         || type == PseudoNthLastChild
         || type == PseudoNthLastOfType;
 }
-    
+
+inline bool CSSSelector::isAttributeSelector() const
+{
+    return m_match == CSSSelector::Exact
+        || m_match ==  CSSSelector::Set
+        || m_match == CSSSelector::List
+        || m_match == CSSSelector::Hyphen
+        || m_match == CSSSelector::Contain
+        || m_match == CSSSelector::Begin
+        || m_match == CSSSelector::End;
+}
+
 inline void CSSSelector::setValue(const AtomicString& value)
-{ 
+{
     // Need to do ref counting manually for the union.
     if (m_hasRareData) {
+        if (m_data.m_rareData->m_value)
+            m_data.m_rareData->m_value->deref();
         m_data.m_rareData->m_value = value.impl();
         m_data.m_rareData->m_value->ref();
         return;
     }
+    if (m_data.m_value)
+        m_data.m_value->deref();
     m_data.m_value = value.impl();
     m_data.m_value->ref();
 }

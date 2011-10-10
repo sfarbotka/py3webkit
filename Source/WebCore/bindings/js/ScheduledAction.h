@@ -24,6 +24,7 @@
 #include "PlatformString.h"
 #include "ScheduledActionBase.h"
 #include <heap/Strong.h>
+#include <heap/StrongInlines.h>
 #include <runtime/JSCell.h>
 #include <wtf/PassOwnPtr.h>
 #include <wtf/Vector.h>

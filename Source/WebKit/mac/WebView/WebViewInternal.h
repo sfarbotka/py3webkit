@@ -34,6 +34,7 @@
 #import "WebTypesInternal.h"
 
 #ifdef __cplusplus
+#import <WebCore/FindOptions.h>
 #import <WebCore/WebCoreKeyboardUIMode.h>
 
 #include <wtf/Forward.h>
@@ -55,6 +56,8 @@ namespace WebCore {
 @class WebNodeHighlight;
 
 #ifdef __cplusplus
+
+WebCore::FindOptions coreOptions(WebFindOptions options);
 
 @interface WebView (WebViewEditingExtras)
 - (BOOL)_shouldChangeSelectedDOMRange:(DOMRange *)currentRange toDOMRange:(DOMRange *)proposedRange affinity:(NSSelectionAffinity)selectionAffinity stillSelecting:(BOOL)flag;
@@ -82,8 +85,6 @@ namespace WebCore {
 - (void)_dispatchDidReceiveIconFromWebFrame:(WebFrame *)webFrame;
 #endif
 
-- (void)_selectionChanged;
-
 #if USE(ACCELERATED_COMPOSITING)
 - (BOOL)_needsOneShotDrawingSynchronization;
 - (void)_setNeedsOneShotDrawingSynchronization:(BOOL)needsSynchronization;
@@ -97,14 +98,6 @@ namespace WebCore {
 @end
 
 #endif
-
-@interface WebView (WebViewEventHandling)
-- (void)_closingEventHandling;
-- (void)_updateMouseoverWithFakeEvent;
-- (void)_cancelUpdateMouseoverTimer;
-- (void)_stopAutoscrollTimer;
-- (void)_setToolTip:(NSString *)toolTip;
-@end
 
 // FIXME: Temporary way to expose methods that are in the wrong category inside WebView.
 @interface WebView (WebViewOtherInternal)
@@ -176,8 +169,6 @@ namespace WebCore {
 - (IBAction)_zoomIn:(id)sender isTextOnly:(BOOL)isTextOnly;
 - (BOOL)_canResetZoom:(BOOL)isTextOnly;
 - (IBAction)_resetZoom:(id)sender isTextOnly:(BOOL)isTextOnly;
-
-- (BOOL)_mustDrawUnionedRect:(NSRect)rect singleRects:(const NSRect *)rects count:(NSInteger)count;
 
 + (BOOL)_canHandleRequest:(NSURLRequest *)request forMainFrame:(BOOL)forMainFrame;
 

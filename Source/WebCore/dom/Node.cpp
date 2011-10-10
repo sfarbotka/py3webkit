@@ -48,6 +48,7 @@
 #include "Element.h"
 #include "Event.h"
 #include "EventContext.h"
+#include "EventDispatchMediator.h"
 #include "EventDispatcher.h"
 #include "EventException.h"
 #include "EventHandler.h"
@@ -80,7 +81,7 @@
 #include "RenderTextControl.h"
 #include "RenderView.h"
 #include "ScopedEventQueue.h"
-#include "SelectorNodeList.h"
+#include "SelectorQuery.h"
 #include "ShadowRoot.h"
 #include "StaticNodeList.h"
 #include "TagNodeList.h"
@@ -283,11 +284,11 @@ void Node::dumpStatistics()
 #endif
 }
 
-#ifndef NDEBUG
-static WTF::RefCountedLeakCounter nodeCounter("WebCoreNode");
+DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, nodeCounter, ("WebCoreNode"));
+DEFINE_DEBUG_ONLY_GLOBAL(HashSet<Node*>, ignoreSet, );
 
+#ifndef NDEBUG
 static bool shouldIgnoreLeaks = false;
-static HashSet<Node*> ignoreSet;
 #endif
 
 void Node::startIgnoringLeaks()
@@ -535,15 +536,15 @@ NodeRareData* Node::ensureRareData()
         return rareData();
     
     ASSERT(!NodeRareData::rareDataMap().contains(this));
-    NodeRareData* data = createRareData();
+    NodeRareData* data = createRareData().leakPtr();
     NodeRareData::rareDataMap().set(this, data);
     setFlag(HasRareDataFlag);
     return data;
 }
     
-NodeRareData* Node::createRareData()
+OwnPtr<NodeRareData> Node::createRareData()
 {
-    return new NodeRareData;
+    return adoptPtr(new NodeRareData);
 }
 
 void Node::clearRareData()
@@ -562,17 +563,12 @@ void Node::clearRareData()
 
 Element* Node::shadowHost() const
 {
-    return toElement(getFlag(IsShadowRootFlag) ? parent() : 0);
+    return toElement(isShadowRoot() ? parent() : 0);
 }
 
 void Node::setShadowHost(Element* host)
 {
-    ASSERT(!parentNode() && !isSVGShadowRoot());
-    if (host)
-        setFlag(IsShadowRootFlag);
-    else
-        clearFlag(IsShadowRootFlag);
-
+    ASSERT(!parentNode() && isShadowRoot());
     setParent(host);
 }
 
@@ -819,14 +815,14 @@ RenderBoxModelObject* Node::renderBoxModelObject() const
     return m_renderer && m_renderer->isBoxModelObject() ? toRenderBoxModelObject(m_renderer) : 0;
 }
 
-IntRect Node::getRect() const
+LayoutRect Node::getRect() const
 {
     if (renderer())
-        return renderer()->absoluteBoundingBoxRect(true);
-    return IntRect();
+        return renderer()->absoluteBoundingBoxRect();
+    return LayoutRect();
 }
     
-IntRect Node::renderRect(bool* isReplaced)
+LayoutRect Node::renderRect(bool* isReplaced)
 {    
     RenderObject* hitRenderer = this->renderer();
     ASSERT(hitRenderer);
@@ -834,11 +830,11 @@ IntRect Node::renderRect(bool* isReplaced)
     while (renderer && !renderer->isBody() && !renderer->isRoot()) {
         if (renderer->isRenderBlock() || renderer->isInlineBlockOrInlineTable() || renderer->isReplaced()) {
             *isReplaced = renderer->isReplaced();
-            return renderer->absoluteBoundingBoxRect(true);
+            return renderer->absoluteBoundingBoxRect();
         }
         renderer = renderer->parent();
     }
-    return IntRect();    
+    return LayoutRect();    
 }
 
 bool Node::hasNonEmptyBoundingBox() const
@@ -851,9 +847,9 @@ bool Node::hasNonEmptyBoundingBox() const
     if (!box->borderBoundingBox().isEmpty())
         return true;
 
-    Vector<IntRect> rects;
+    Vector<LayoutRect> rects;
     FloatPoint absPos = renderer()->localToAbsolute();
-    renderer()->absoluteRects(rects, flooredIntPoint(absPos));
+    renderer()->absoluteRects(rects, flooredLayoutPoint(absPos));
     size_t n = rects.size();
     for (size_t i = 0; i < n; ++i)
         if (!rects[i].isEmpty())
@@ -1192,6 +1188,20 @@ Node* Node::traversePreviousNode(const Node* stayWithin) const
     return parentNode();
 }
 
+Node* Node::traversePreviousSibling(const Node* stayWithin) const
+{
+    if (this == stayWithin)
+        return 0;
+    if (previousSibling())
+        return previousSibling();
+    const Node *n = this;
+    while (n && !n->previousSibling() && (!stayWithin || n->parentNode() != stayWithin))
+        n = n->parentNode();
+    if (n)
+        return n->previousSibling();
+    return 0;
+}
+
 Node* Node::traversePreviousNodePostOrder(const Node* stayWithin) const
 {
     if (lastChild())
@@ -1337,6 +1347,8 @@ bool Node::contains(const Node* node) const
 {
     if (!node)
         return false;
+    if (document() == this)
+        return node->document() == this && node->inDocument();
     return this == node || node->isDescendantOf(this);
 }
 
@@ -1461,21 +1473,6 @@ ContainerNode* Node::parentNodeForRenderingAndStyle()
 void Node::createRendererIfNeeded()
 {
     NodeRendererFactory(this).createRendererIfNeeded();
-}
-
-PassRefPtr<RenderStyle> Node::styleForRenderer(const NodeRenderingContext& context)
-{
-    if (isElementNode()) {
-        bool allowSharing = true;
-#if ENABLE(XHTMLMP)
-        // noscript needs the display property protected - it's a special case
-        allowSharing = localName() != HTMLNames::noscriptTag.localName();
-#endif
-        return document()->styleSelector()->styleForElement(static_cast<Element*>(this), 0, allowSharing);
-    }
-    if (RenderObject* renderer = context.parentRenderer())
-        return renderer->style();
-    return 0;
 }
 
 bool Node::rendererIsNeeded(const NodeRenderingContext& context)
@@ -1764,29 +1761,9 @@ PassRefPtr<Element> Node::querySelector(const String& selectors, ExceptionCode& 
         ec = NAMESPACE_ERR;
         return 0;
     }
-
-    CSSStyleSelector::SelectorChecker selectorChecker(document(), strictParsing);
-
-    // FIXME: we could also optimize for the the [id="foo"] case
-    if (strictParsing && inDocument() && querySelectorList.hasOneSelector() && querySelectorList.first()->m_match == CSSSelector::Id) {
-        Element* element = treeScope()->getElementById(querySelectorList.first()->value());
-        if (element && (isDocumentNode() || element->isDescendantOf(this)) && selectorChecker.checkSelector(querySelectorList.first(), element))
-            return element;
-        return 0;
-    }
-
-    // FIXME: We can speed this up by implementing caching similar to the one use by getElementById
-    for (Node* n = firstChild(); n; n = n->traverseNextNode(this)) {
-        if (n->isElementNode()) {
-            Element* element = static_cast<Element*>(n);
-            for (CSSSelector* selector = querySelectorList.first(); selector; selector = CSSSelectorList::next(selector)) {
-                if (selectorChecker.checkSelector(selector, element))
-                    return element;
-            }
-        }
-    }
     
-    return 0;
+    SelectorQuery selectorQuery(this, querySelectorList);
+    return selectorQuery.queryFirst();
 }
 
 PassRefPtr<NodeList> Node::querySelectorAll(const String& selectors, ExceptionCode& ec)
@@ -1812,7 +1789,8 @@ PassRefPtr<NodeList> Node::querySelectorAll(const String& selectors, ExceptionCo
         return 0;
     }
 
-    return createSelectorNodeList(this, querySelectorList);
+    SelectorQuery selectorQuery(this, querySelectorList);
+    return selectorQuery.queryAll();
 }
 
 Document *Node::ownerDocument() const
@@ -2651,33 +2629,7 @@ bool Node::removeEventListener(const AtomicString& eventType, EventListener* lis
         EventTargetData* data = shadowTreeElement->eventTargetData();
         ASSERT(data);
 
-        EventListenerMap::iterator result = data->eventListenerMap.find(eventType);
-        ASSERT(result != data->eventListenerMap.end());
-
-        EventListenerVector* entry = result->second;
-        ASSERT(entry);
-
-        unsigned int index = 0;
-        bool foundListener = false;
-
-        EventListenerVector::iterator end = entry->end();
-        for (EventListenerVector::iterator it = entry->begin(); it != end; ++it) {
-            if (!(*it).listener->wasCreatedFromMarkup()) {
-                ++index;
-                continue;
-            }
-
-            foundListener = true;
-            entry->remove(index);
-            break;
-        }
-
-        ASSERT_UNUSED(foundListener, foundListener);
-
-        if (entry->isEmpty()) {                
-            delete entry;
-            data->eventListenerMap.remove(result);
-        }
+        data->eventListenerMap.removeFirstEventListenerCreatedFromMarkup(eventType);
     }
 
     return true;
@@ -2734,15 +2686,24 @@ void Node::dispatchSubtreeModifiedEvent()
     dispatchScopedEvent(MutationEvent::create(eventNames().DOMSubtreeModifiedEvent, true));
 }
 
-void Node::dispatchUIEvent(const AtomicString& eventType, int detail, PassRefPtr<Event> underlyingEvent)
+void Node::dispatchFocusInEvent(const AtomicString& eventType, PassRefPtr<Node> oldFocusedNode)
 {
     ASSERT(!eventDispatchForbidden());
-    ASSERT(eventType == eventNames().focusinEvent || eventType == eventNames().focusoutEvent || 
-           eventType == eventNames().DOMFocusInEvent || eventType == eventNames().DOMFocusOutEvent || eventType == eventNames().DOMActivateEvent);
-    
-    bool cancelable = eventType == eventNames().DOMActivateEvent;
+    ASSERT(eventType == eventNames().focusinEvent || eventType == eventNames().DOMFocusInEvent);
+    dispatchScopedEventDispatchMediator(FocusInEventDispatchMediator::create(UIEvent::create(eventType, true, false, document()->defaultView(), 0), oldFocusedNode));
+}
 
-    RefPtr<UIEvent> event = UIEvent::create(eventType, true, cancelable, document()->defaultView(), detail);
+void Node::dispatchFocusOutEvent(const AtomicString& eventType, PassRefPtr<Node> newFocusedNode)
+{
+    ASSERT(!eventDispatchForbidden());
+    ASSERT(eventType == eventNames().focusoutEvent || eventType == eventNames().DOMFocusOutEvent);
+    dispatchScopedEventDispatchMediator(FocusOutEventDispatchMediator::create(UIEvent::create(eventType, true, false, document()->defaultView(), 0), newFocusedNode));
+}
+
+void Node::dispatchDOMActivateEvent(int detail, PassRefPtr<Event> underlyingEvent)
+{
+    ASSERT(!eventDispatchForbidden());
+    RefPtr<UIEvent> event = UIEvent::create(eventNames().DOMActivateEvent, true, true, document()->defaultView(), detail);
     event->setUnderlyingEvent(underlyingEvent);
     dispatchScopedEvent(event.release());
 }
@@ -2768,24 +2729,20 @@ bool Node::dispatchWheelEvent(const PlatformWheelEvent& event)
     return EventDispatcher::dispatchEvent(this, WheelEventDispatchMediator::create(event, document()->defaultView()));
 }
 
-void Node::dispatchFocusEvent()
+void Node::dispatchFocusEvent(PassRefPtr<Node> oldFocusedNode)
 {
     if (document()->page())
         document()->page()->chrome()->client()->elementDidFocus(this);
     
-    dispatchEvent(Event::create(eventNames().focusEvent, false, false));
+    EventDispatcher::dispatchEvent(this, FocusEventDispatchMediator::create(oldFocusedNode));
 }
 
-void Node::willBlur()
-{
-}
-
-void Node::dispatchBlurEvent()
+void Node::dispatchBlurEvent(PassRefPtr<Node> newFocusedNode)
 {
     if (document()->page())
         document()->page()->chrome()->client()->elementDidBlur(this);
-    
-    dispatchEvent(Event::create(eventNames().blurEvent, false, false));
+
+    EventDispatcher::dispatchEvent(this, BlurEventDispatchMediator::create(newFocusedNode));
 }
 
 void Node::dispatchChangeEvent()
@@ -2814,7 +2771,7 @@ void Node::defaultEventHandler(Event* event)
                 frame->eventHandler()->defaultKeyboardEventHandler(static_cast<KeyboardEvent*>(event));
     } else if (eventType == eventNames().clickEvent) {
         int detail = event->isUIEvent() ? static_cast<UIEvent*>(event)->detail() : 0;
-        dispatchUIEvent(eventNames().DOMActivateEvent, detail, event);
+        dispatchDOMActivateEvent(detail, event);
 #if ENABLE(CONTEXT_MENUS)
     } else if (eventType == eventNames().contextmenuEvent) {
         if (Frame* frame = document()->frame())

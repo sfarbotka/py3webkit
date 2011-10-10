@@ -49,7 +49,14 @@ class WebDevToolsAgent {
 public:
     virtual ~WebDevToolsAgent() {}
 
+    // Returns WebKit WebInspector protocol version.
+    WEBKIT_EXPORT static WebString inspectorProtocolVersion();
+
+    // Returns true if and only if the given protocol version is supported by the WebKit Web Inspector.
+    WEBKIT_EXPORT static bool supportsInspectorProtocolVersion(const WebString& version);
+
     virtual void attach() = 0;
+    virtual void reattach(const WebString& savedState) = 0;
     virtual void detach() = 0;
     virtual void frontendLoaded() = 0;
 
@@ -58,7 +65,6 @@ public:
     virtual void dispatchOnInspectorBackend(const WebString& message) = 0;
 
     virtual void inspectElementAt(const WebPoint&) = 0;
-    virtual void setRuntimeProperty(const WebString& name, const WebString& value) = 0;
     virtual void setProcessId(long) = 0;
 
     // Exposed for LayoutTestController.

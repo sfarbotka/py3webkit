@@ -33,9 +33,12 @@
 
 #include "Element.h"
 #include "FontCache.h"
+#include "FontFamily.h"
 #include "Frame.h"
 #include "FrameView.h"
 #include "GraphicsContext.h"
+#include "GraphicsTypes.h"
+#include "Node.h"
 #include "Page.h"
 #include "Range.h"
 #include "RenderInline.h"
@@ -46,6 +49,20 @@
 namespace WebCore {
 
 namespace {
+
+#if OS(WINDOWS)
+static const unsigned fontHeightPx = 12;
+#elif OS(MAC_OS_X) || OS(UNIX)
+static const unsigned fontHeightPx = 11;
+#endif
+
+const static int rectInflatePx = 4;
+const static int borderWidthPx = 1;
+const static int tooltipPadding = 4;
+
+const static int arrowTipOffset = 20;
+const static float arrowHeight = 7;
+const static float arrowHalfWidth = 7;
 
 Path quadToPath(const FloatQuad& quad)
 {
@@ -58,10 +75,9 @@ Path quadToPath(const FloatQuad& quad)
     return quadPath;
 }
 
-void drawOutlinedQuad(GraphicsContext& context, const FloatQuad& quad, const Color& fillColor)
+void drawOutlinedQuad(GraphicsContext& context, const FloatQuad& quad, const Color& fillColor, const Color& outlineColor)
 {
     static const int outlineThickness = 2;
-    static const Color outlineColor(62, 86, 180, 228);
 
     Path quadPath = quadToPath(quad);
 
@@ -88,110 +104,188 @@ void drawOutlinedQuadWithClip(GraphicsContext& context, const FloatQuad& quad, c
     context.save();
     Path clipQuadPath = quadToPath(clipQuad);
     context.clipOut(clipQuadPath);
-    drawOutlinedQuad(context, quad, fillColor);
+    drawOutlinedQuad(context, quad, fillColor, Color::transparent);
     context.restore();
 }
 
-void drawHighlightForBox(GraphicsContext& context, const FloatQuad& contentQuad, const FloatQuad& paddingQuad, const FloatQuad& borderQuad, const FloatQuad& marginQuad, DOMNodeHighlighter::HighlightMode mode)
+void drawHighlightForBox(GraphicsContext& context, const FloatQuad& contentQuad, const FloatQuad& paddingQuad, const FloatQuad& borderQuad, const FloatQuad& marginQuad, HighlightData* highlightData)
 {
-    static const Color contentBoxColor(125, 173, 217, 128);
-    static const Color paddingBoxColor(125, 173, 217, 160);
-    static const Color borderBoxColor(125, 173, 217, 192);
-    static const Color marginBoxColor(125, 173, 217, 228);
+    bool hasMargin = highlightData->margin != Color::transparent;
+    bool hasBorder = highlightData->border != Color::transparent;
+    bool hasPadding = highlightData->padding != Color::transparent;
+    bool hasContent = highlightData->content != Color::transparent || highlightData->contentOutline != Color::transparent;
 
     FloatQuad clipQuad;
-    if (mode == DOMNodeHighlighter::HighlightMargin || (mode == DOMNodeHighlighter::HighlightAll && marginQuad != borderQuad)) {
-        drawOutlinedQuadWithClip(context, marginQuad, borderQuad, marginBoxColor);
+    Color clipColor;
+    if (hasMargin && (!hasBorder || marginQuad != borderQuad)) {
+        drawOutlinedQuadWithClip(context, marginQuad, borderQuad, highlightData->margin);
         clipQuad = borderQuad;
     }
-    if (mode == DOMNodeHighlighter::HighlightBorder || (mode == DOMNodeHighlighter::HighlightAll && borderQuad != paddingQuad)) {
-        drawOutlinedQuadWithClip(context, borderQuad, paddingQuad, borderBoxColor);
+    if (hasBorder && (!hasPadding || borderQuad != paddingQuad)) {
+        drawOutlinedQuadWithClip(context, borderQuad, paddingQuad, highlightData->border);
         clipQuad = paddingQuad;
     }
-    if (mode == DOMNodeHighlighter::HighlightPadding || (mode == DOMNodeHighlighter::HighlightAll && paddingQuad != contentQuad)) {
-        drawOutlinedQuadWithClip(context, paddingQuad, contentQuad, paddingBoxColor);
+    if (hasPadding && (!hasContent || paddingQuad != contentQuad)) {
+        drawOutlinedQuadWithClip(context, paddingQuad, contentQuad, highlightData->padding);
         clipQuad = contentQuad;
     }
-    if (mode == DOMNodeHighlighter::HighlightContent || mode == DOMNodeHighlighter::HighlightAll)
-        drawOutlinedQuad(context, contentQuad, contentBoxColor);
-    else
-        drawOutlinedQuadWithClip(context, clipQuad, clipQuad, contentBoxColor);
+    if (hasContent)
+        drawOutlinedQuad(context, contentQuad, highlightData->content, highlightData->contentOutline);
 }
 
-void drawHighlightForLineBoxesOrSVGRenderer(GraphicsContext& context, const Vector<FloatQuad>& lineBoxQuads)
+void drawHighlightForSVGRenderer(GraphicsContext& context, const Vector<FloatQuad>& absoluteQuads, HighlightData* highlightData)
 {
-    static const Color lineBoxColor(125, 173, 217, 128);
-
-    for (size_t i = 0; i < lineBoxQuads.size(); ++i)
-        drawOutlinedQuad(context, lineBoxQuads[i], lineBoxColor);
+    for (size_t i = 0; i < absoluteQuads.size(); ++i)
+        drawOutlinedQuad(context, absoluteQuads[i], highlightData->content, Color::transparent);
 }
 
-inline IntSize frameToMainFrameOffset(Frame* frame)
+inline LayoutSize frameToMainFrameOffset(Frame* frame)
 {
-    IntPoint mainFramePoint = frame->page()->mainFrame()->view()->windowToContents(frame->view()->contentsToWindow(IntPoint()));
-    return mainFramePoint - IntPoint();
+    LayoutPoint mainFramePoint = frame->page()->mainFrame()->view()->windowToContents(frame->view()->contentsToWindow(LayoutPoint()));
+    return toLayoutSize(mainFramePoint);
 }
 
-void drawElementTitle(GraphicsContext& context, Node* node, const IntRect& boundingBox, const IntRect& anchorBox, const FloatRect& overlayRect, WebCore::Settings* settings)
+int drawSubstring(const TextRun& globalTextRun, int offset, int length, const Color& textColor, const Font& font, GraphicsContext& context, const LayoutRect& titleRect)
 {
-    static const int rectInflatePx = 4;
-    static const int fontHeightPx = 12;
-    static const int borderWidthPx = 1;
-    DEFINE_STATIC_LOCAL(Color, tooltipBackgroundColor, (255, 255, 194, 255));
-    DEFINE_STATIC_LOCAL(Color, tooltipBorderColor, (Color::black));
-    DEFINE_STATIC_LOCAL(Color, tooltipFontColor, (Color::black));
+    context.setFillColor(textColor, ColorSpaceDeviceRGB);
+    context.drawText(font, globalTextRun, LayoutPoint(titleRect.x() + rectInflatePx, titleRect.y() + font.fontMetrics().height()), offset, offset + length);
+    return offset + length;
+}
+
+float calculateArrowTipX(const LayoutRect& anchorBox, const LayoutRect& titleRect)
+{
+    const static int anchorTipOffsetPx = 2;
+
+    int minX = titleRect.x() + arrowHalfWidth;
+    int maxX = titleRect.maxX() - arrowHalfWidth;
+    int anchorX = anchorBox.x();
+    int anchorMaxX = anchorBox.maxX();
+
+    int x = titleRect.x() + arrowTipOffset; // Default tooltip position.
+    if (x < anchorX)
+        x = anchorX + anchorTipOffsetPx;
+    else if (x > anchorMaxX)
+        x = anchorMaxX - anchorTipOffsetPx;
+
+    if (x < minX)
+        x = minX;
+    else if (x > maxX)
+        x = maxX;
+
+    return x;
+}
+
+void setUpFontDescription(FontDescription& fontDescription, WebCore::Settings* settings)
+{
+#define TOOLTIP_FONT_FAMILIES(size, ...) \
+static const unsigned tooltipFontFaceSize = size;\
+static const AtomicString* tooltipFontFace[size] = { __VA_ARGS__ };
+
+#if OS(WINDOWS)
+TOOLTIP_FONT_FAMILIES(2, new AtomicString("Consolas"), new AtomicString("Lucida Console"))
+#elif OS(MAC_OS_X)
+TOOLTIP_FONT_FAMILIES(2, new AtomicString("Menlo"), new AtomicString("Monaco"))
+#elif OS(UNIX)
+TOOLTIP_FONT_FAMILIES(1, new AtomicString("dejavu sans mono"))
+#endif
+// In the default case, we get the settings-provided monospace font.
+
+#undef TOOLTIP_FONT_FAMILIES
+
+    fontDescription.setRenderingMode(settings->fontRenderingMode());
+    fontDescription.setComputedSize(fontHeightPx);
+
+    const AtomicString& fixedFontFamily = settings->fixedFontFamily();
+    if (!fixedFontFamily.isEmpty()) {
+        fontDescription.setGenericFamily(FontDescription::MonospaceFamily);
+        FontFamily* currentFamily = 0;
+        for (unsigned i = 0; i < tooltipFontFaceSize; ++i) {
+            if (!currentFamily) {
+                fontDescription.firstFamily().setFamily(*tooltipFontFace[i]);
+                fontDescription.firstFamily().appendFamily(0);
+                currentFamily = &fontDescription.firstFamily();
+            } else {
+                RefPtr<SharedFontFamily> newFamily = SharedFontFamily::create();
+                newFamily->setFamily(*tooltipFontFace[i]);
+                currentFamily->appendFamily(newFamily);
+                currentFamily = newFamily.get();
+            }
+        }
+        RefPtr<SharedFontFamily> newFamily = SharedFontFamily::create();
+        newFamily->setFamily(fixedFontFamily);
+        currentFamily->appendFamily(newFamily);
+        currentFamily = newFamily.get();
+    }
+}
+
+void drawElementTitle(GraphicsContext& context, Node* node, const LayoutRect& boundingBox, const LayoutRect& anchorBox, const FloatRect& overlayRect, WebCore::Settings* settings)
+{
+
+    DEFINE_STATIC_LOCAL(Color, backgroundColor, (255, 255, 194));
+    DEFINE_STATIC_LOCAL(Color, tagColor, (136, 18, 128)); // Same as .webkit-html-tag.
+    DEFINE_STATIC_LOCAL(Color, attrColor, (26, 26, 166)); // Same as .webkit-html-attribute-value.
+    DEFINE_STATIC_LOCAL(Color, normalColor, (Color::black));
+    DEFINE_STATIC_LOCAL(Color, pxAndBorderColor, (128, 128, 128));
+
+    DEFINE_STATIC_LOCAL(String, pxString, ("px"));
+    const static UChar timesUChar[] = { 0x00D7, 0 };
+    DEFINE_STATIC_LOCAL(String, timesString, (timesUChar)); // &times; string
+
     FontCachePurgePreventer fontCachePurgePreventer;
 
     Element* element = static_cast<Element*>(node);
     bool isXHTML = element->document()->isXHTMLDocument();
-    String nodeTitle = isXHTML ? element->nodeName() : element->nodeName().lower();
+    String nodeTitle(isXHTML ? element->nodeName() : element->nodeName().lower());
+    unsigned tagNameLength = nodeTitle.length();
+
     const AtomicString& idValue = element->getIdAttribute();
+    unsigned idStringLength = 0;
+    String idString;
     if (!idValue.isNull() && !idValue.isEmpty()) {
         nodeTitle += "#";
         nodeTitle += idValue;
+        idStringLength = 1 + idValue.length();
     }
+
+    HashSet<AtomicString> usedClassNames;
+    unsigned classesStringLength = 0;
     if (element->hasClass() && element->isStyledElement()) {
         const SpaceSplitString& classNamesString = static_cast<StyledElement*>(element)->classNames();
         size_t classNameCount = classNamesString.size();
-        if (classNameCount) {
-            HashSet<AtomicString> usedClassNames;
-            for (size_t i = 0; i < classNameCount; ++i) {
-                const AtomicString& className = classNamesString[i];
-                if (usedClassNames.contains(className))
-                    continue;
-                usedClassNames.add(className);
-                nodeTitle += ".";
-                nodeTitle += className;
-            }
+        for (size_t i = 0; i < classNameCount; ++i) {
+            const AtomicString& className = classNamesString[i];
+            if (usedClassNames.contains(className))
+                continue;
+            usedClassNames.add(className);
+            nodeTitle += ".";
+            nodeTitle += className;
+            classesStringLength += 1 + className.length();
         }
     }
 
-    nodeTitle += " [";
-    nodeTitle += String::number(boundingBox.width());
-    nodeTitle.append(static_cast<UChar>(0x00D7)); // &times;
-    nodeTitle += String::number(boundingBox.height());
-    nodeTitle += "]";
+    String widthNumberPart = " " + String::number(boundingBox.width());
+    nodeTitle += widthNumberPart + pxString;
+    nodeTitle += timesString;
+    String heightNumberPart = String::number(boundingBox.height());
+    nodeTitle += heightNumberPart + pxString;
 
     FontDescription desc;
-    FontFamily family;
-    family.setFamily(settings->fixedFontFamily());
-    desc.setFamily(family);
-    desc.setComputedSize(fontHeightPx);
+    setUpFontDescription(desc, settings);
     Font font = Font(desc, 0, 0);
     font.update(0);
 
     TextRun nodeTitleRun(nodeTitle);
-    IntPoint titleBasePoint = IntPoint(anchorBox.x(), anchorBox.maxY() - 1);
+    LayoutPoint titleBasePoint = LayoutPoint(anchorBox.x(), anchorBox.maxY() - 1);
     titleBasePoint.move(rectInflatePx, rectInflatePx);
-    IntRect titleRect = enclosingIntRect(font.selectionRectForText(nodeTitleRun, titleBasePoint, fontHeightPx));
+    LayoutRect titleRect = enclosingLayoutRect(font.selectionRectForText(nodeTitleRun, titleBasePoint, fontHeightPx));
     titleRect.inflate(rectInflatePx);
 
     // The initial offsets needed to compensate for a 1px-thick border stroke (which is not a part of the rectangle).
-    int dx = -borderWidthPx;
-    int dy = borderWidthPx;
+    LayoutUnit dx = -borderWidthPx;
+    LayoutUnit dy = borderWidthPx;
 
     // If the tip sticks beyond the right of overlayRect, right-align the tip with the said boundary.
-    if (titleRect.maxX() > overlayRect.maxX())
+    if (titleRect.maxX() + dx > overlayRect.maxX())
         dx = overlayRect.maxX() - titleRect.maxX();
 
     // If the tip sticks beyond the left of overlayRect, left-align the tip with the said boundary.
@@ -199,7 +293,7 @@ void drawElementTitle(GraphicsContext& context, Node* node, const IntRect& bound
         dx = overlayRect.x() - titleRect.x() - borderWidthPx;
 
     // If the tip sticks beyond the bottom of overlayRect, show the tip at top of bounding box.
-    if (titleRect.maxY() > overlayRect.maxY()) {
+    if (titleRect.maxY() + dy > overlayRect.maxY()) {
         dy = anchorBox.y() - titleRect.maxY() - borderWidthPx;
         // If the tip still sticks beyond the bottom of overlayRect, bottom-align the tip with the said boundary.
         if (titleRect.maxY() + dy > overlayRect.maxY())
@@ -211,20 +305,55 @@ void drawElementTitle(GraphicsContext& context, Node* node, const IntRect& bound
         dy = overlayRect.y() - titleRect.y() + borderWidthPx;
 
     titleRect.move(dx, dy);
-    context.setStrokeColor(tooltipBorderColor, ColorSpaceDeviceRGB);
-    context.setStrokeThickness(borderWidthPx);
-    context.setFillColor(tooltipBackgroundColor, ColorSpaceDeviceRGB);
-    context.drawRect(titleRect);
-    context.setFillColor(tooltipFontColor, ColorSpaceDeviceRGB);
-    context.drawText(font, nodeTitleRun, IntPoint(titleRect.x() + rectInflatePx, titleRect.y() + font.fontMetrics().height()));
+
+    bool isArrowAtTop = titleRect.y() > anchorBox.y();
+    titleRect.move(0, tooltipPadding * (isArrowAtTop ? 1 : -1));
+
+    {
+        float arrowTipX = calculateArrowTipX(anchorBox, titleRect);
+        int arrowBaseY = isArrowAtTop ? titleRect.y() : titleRect.maxY();
+        int arrowOppositeY = isArrowAtTop ? titleRect.maxY() : titleRect.y();
+
+        FloatPoint points[8];
+        points[0] = FloatPoint(arrowTipX - arrowHalfWidth, arrowBaseY);
+        points[1] = FloatPoint(arrowTipX, arrowBaseY + arrowHeight * (isArrowAtTop ? -1 : 1));
+        points[2] = FloatPoint(arrowTipX + arrowHalfWidth, arrowBaseY);
+        points[3] = FloatPoint(titleRect.maxX(), arrowBaseY);
+        points[4] = FloatPoint(titleRect.maxX(), arrowOppositeY);
+        points[5] = FloatPoint(titleRect.x(), arrowOppositeY);
+        points[6] = FloatPoint(titleRect.x(), arrowBaseY);
+        points[7] = points[0];
+
+        Path path;
+        path.moveTo(points[0]);
+        for (int i = 1; i < 8; ++i)
+            path.addLineTo(points[i]);
+
+        context.save();
+        context.translate(0.5f, 0.5f);
+        context.setStrokeColor(pxAndBorderColor, ColorSpaceDeviceRGB);
+        context.setFillColor(backgroundColor, ColorSpaceDeviceRGB);
+        context.setStrokeThickness(borderWidthPx);
+        context.fillPath(path);
+        context.strokePath(path);
+        context.restore();
+    }
+
+    int currentPos = 0;
+    currentPos = drawSubstring(nodeTitleRun, currentPos, tagNameLength, tagColor, font, context, titleRect);
+    if (idStringLength)
+        currentPos = drawSubstring(nodeTitleRun, currentPos, idStringLength, attrColor, font, context, titleRect);
+    if (classesStringLength)
+        currentPos = drawSubstring(nodeTitleRun, currentPos, classesStringLength, attrColor, font, context, titleRect);
+    currentPos = drawSubstring(nodeTitleRun, currentPos, widthNumberPart.length(), normalColor, font, context, titleRect);
+    currentPos = drawSubstring(nodeTitleRun, currentPos, pxString.length() + timesString.length(), pxAndBorderColor, font, context, titleRect);
+    currentPos = drawSubstring(nodeTitleRun, currentPos, heightNumberPart.length(), normalColor, font, context, titleRect);
+    drawSubstring(nodeTitleRun, currentPos, pxString.length(), pxAndBorderColor, font, context, titleRect);
 }
 
-} // anonymous namespace
-
-namespace DOMNodeHighlighter {
-
-void drawNodeHighlight(GraphicsContext& context, Node* node, HighlightMode mode)
+void drawNodeHighlight(GraphicsContext& context, HighlightData* highlightData)
 {
+    Node* node = highlightData->node.get();
     RenderObject* renderer = node->renderer();
     Frame* containingFrame = node->document()->frame();
 
@@ -232,15 +361,15 @@ void drawNodeHighlight(GraphicsContext& context, Node* node, HighlightMode mode)
         return;
 
     LayoutSize mainFrameOffset = frameToMainFrameOffset(containingFrame);
-    LayoutRect boundingBox = renderer->absoluteBoundingBoxRect(true);
+    LayoutRect boundingBox = renderer->absoluteBoundingBoxRect();
 
     boundingBox.move(mainFrameOffset);
 
-    IntRect titleAnchorBox = boundingBox;
+    LayoutRect titleAnchorBox = boundingBox;
 
     FrameView* view = containingFrame->page()->mainFrame()->view();
     FloatRect overlayRect = view->visibleContentRect();
-    if (!overlayRect.contains(boundingBox) && !boundingBox.contains(enclosingIntRect(overlayRect)))
+    if (!overlayRect.contains(boundingBox) && !boundingBox.contains(enclosingLayoutRect(overlayRect)))
         overlayRect = view->visibleContentRect();
     context.translate(-overlayRect.x(), -overlayRect.y());
 
@@ -251,26 +380,51 @@ void drawNodeHighlight(GraphicsContext& context, Node* node, HighlightMode mode)
     bool isSVGRenderer = false;
 #endif
 
-    if (renderer->isBox() && !isSVGRenderer) {
-        RenderBox* renderBox = toRenderBox(renderer);
+    if (isSVGRenderer) {
+        Vector<FloatQuad> absoluteQuads;
+        renderer->absoluteQuads(absoluteQuads);
+        for (unsigned i = 0; i < absoluteQuads.size(); ++i)
+            absoluteQuads[i] += mainFrameOffset;
 
-        // RenderBox returns the "pure" content area box, exclusive of the scrollbars (if present), which also count towards the content area in CSS.
-        LayoutRect contentBox = renderBox->contentBoxRect();
-        contentBox.setWidth(contentBox.width() + renderBox->verticalScrollbarWidth());
-        contentBox.setHeight(contentBox.height() + renderBox->horizontalScrollbarHeight());
+        drawHighlightForSVGRenderer(context, absoluteQuads, highlightData);
+    } else if (renderer->isBox() || renderer->isRenderInline()) {
+        LayoutRect contentBox;
+        LayoutRect paddingBox;
+        LayoutRect borderBox;
+        LayoutRect marginBox;
 
-        LayoutRect paddingBox(contentBox.x() - renderBox->paddingLeft(), contentBox.y() - renderBox->paddingTop(),
-                           contentBox.width() + renderBox->paddingLeft() + renderBox->paddingRight(), contentBox.height() + renderBox->paddingTop() + renderBox->paddingBottom());
-        LayoutRect borderBox(paddingBox.x() - renderBox->borderLeft(), paddingBox.y() - renderBox->borderTop(),
-                          paddingBox.width() + renderBox->borderLeft() + renderBox->borderRight(), paddingBox.height() + renderBox->borderTop() + renderBox->borderBottom());
-        LayoutRect marginBox(borderBox.x() - renderBox->marginLeft(), borderBox.y() - renderBox->marginTop(),
-                          borderBox.width() + renderBox->marginLeft() + renderBox->marginRight(), borderBox.height() + renderBox->marginTop() + renderBox->marginBottom());
+        if (renderer->isBox()) {
+            RenderBox* renderBox = toRenderBox(renderer);
 
+            // RenderBox returns the "pure" content area box, exclusive of the scrollbars (if present), which also count towards the content area in CSS.
+            contentBox = renderBox->contentBoxRect();
+            contentBox.setWidth(contentBox.width() + renderBox->verticalScrollbarWidth());
+            contentBox.setHeight(contentBox.height() + renderBox->horizontalScrollbarHeight());
 
-        FloatQuad absContentQuad = renderBox->localToAbsoluteQuad(FloatRect(contentBox));
-        FloatQuad absPaddingQuad = renderBox->localToAbsoluteQuad(FloatRect(paddingBox));
-        FloatQuad absBorderQuad = renderBox->localToAbsoluteQuad(FloatRect(borderBox));
-        FloatQuad absMarginQuad = renderBox->localToAbsoluteQuad(FloatRect(marginBox));
+            paddingBox = LayoutRect(contentBox.x() - renderBox->paddingLeft(), contentBox.y() - renderBox->paddingTop(),
+                    contentBox.width() + renderBox->paddingLeft() + renderBox->paddingRight(), contentBox.height() + renderBox->paddingTop() + renderBox->paddingBottom());
+            borderBox = LayoutRect(paddingBox.x() - renderBox->borderLeft(), paddingBox.y() - renderBox->borderTop(),
+                    paddingBox.width() + renderBox->borderLeft() + renderBox->borderRight(), paddingBox.height() + renderBox->borderTop() + renderBox->borderBottom());
+            marginBox = LayoutRect(borderBox.x() - renderBox->marginLeft(), borderBox.y() - renderBox->marginTop(),
+                    borderBox.width() + renderBox->marginLeft() + renderBox->marginRight(), borderBox.height() + renderBox->marginTop() + renderBox->marginBottom());
+        } else {
+            RenderInline* renderInline = toRenderInline(renderer);
+
+            // RenderInline's bounding box includes paddings and borders, excludes margins.
+            borderBox = renderInline->linesBoundingBox();
+            paddingBox = LayoutRect(borderBox.x() + renderInline->borderLeft(), borderBox.y() + renderInline->borderTop(),
+                    borderBox.width() - renderInline->borderLeft() - renderInline->borderRight(), borderBox.height() - renderInline->borderTop() - renderInline->borderBottom());
+            contentBox = LayoutRect(paddingBox.x() + renderInline->paddingLeft(), paddingBox.y() + renderInline->paddingTop(),
+                    paddingBox.width() - renderInline->paddingLeft() - renderInline->paddingRight(), paddingBox.height() - renderInline->paddingTop() - renderInline->paddingBottom());
+            // Ignore marginTop and marginBottom for inlines.
+            marginBox = LayoutRect(borderBox.x() - renderInline->marginLeft(), borderBox.y(),
+                    borderBox.width() + renderInline->marginLeft() + renderInline->marginRight(), borderBox.height());
+        }
+
+        FloatQuad absContentQuad = renderer->localToAbsoluteQuad(FloatRect(contentBox));
+        FloatQuad absPaddingQuad = renderer->localToAbsoluteQuad(FloatRect(paddingBox));
+        FloatQuad absBorderQuad = renderer->localToAbsoluteQuad(FloatRect(borderBox));
+        FloatQuad absMarginQuad = renderer->localToAbsoluteQuad(FloatRect(marginBox));
 
         absContentQuad.move(mainFrameOffset);
         absPaddingQuad.move(mainFrameOffset);
@@ -279,15 +433,7 @@ void drawNodeHighlight(GraphicsContext& context, Node* node, HighlightMode mode)
 
         titleAnchorBox = absMarginQuad.enclosingBoundingBox();
 
-        drawHighlightForBox(context, absContentQuad, absPaddingQuad, absBorderQuad, absMarginQuad, mode);
-    } else if (renderer->isRenderInline() || isSVGRenderer) {
-        // FIXME: We should show margins/padding/border for inlines.
-        Vector<FloatQuad> lineBoxQuads;
-        renderer->absoluteQuads(lineBoxQuads);
-        for (unsigned i = 0; i < lineBoxQuads.size(); ++i)
-            lineBoxQuads[i] += mainFrameOffset;
-
-        drawHighlightForLineBoxesOrSVGRenderer(context, lineBoxQuads);
+        drawHighlightForBox(context, absContentQuad, absPaddingQuad, absBorderQuad, absMarginQuad, highlightData);
     }
 
     // Draw node title if necessary.
@@ -295,12 +441,11 @@ void drawNodeHighlight(GraphicsContext& context, Node* node, HighlightMode mode)
     if (!node->isElementNode())
         return;
 
-    WebCore::Settings* settings = containingFrame->settings();
-    if (mode == DOMNodeHighlighter::HighlightAll)
-        drawElementTitle(context, node, boundingBox, titleAnchorBox, overlayRect, settings);
+    if (highlightData->showInfo)
+        drawElementTitle(context, node, boundingBox, titleAnchorBox, overlayRect, containingFrame->settings());
 }
 
-void drawRectHighlight(GraphicsContext& context, Document* document, IntRect* rect)
+void drawRectHighlight(GraphicsContext& context, Document* document, HighlightData* highlightData)
 {
     if (!document)
         return;
@@ -310,10 +455,8 @@ void drawRectHighlight(GraphicsContext& context, Document* document, IntRect* re
     context.translate(-overlayRect.x(), -overlayRect.y());
 
     static const int outlineThickness = 2;
-    DEFINE_STATIC_LOCAL(Color, outlineColor, (255, 0, 0, 228));
-    DEFINE_STATIC_LOCAL(Color, fillColor, (255, 0, 0, 20));
 
-    Path quadPath = quadToPath(FloatRect(*rect));
+    Path quadPath = quadToPath(FloatRect(*(highlightData->rect)));
 
     // Clip out the quad, then draw with a 2px stroke to get a pixel
     // of outline (because inflating a quad is hard)
@@ -322,15 +465,30 @@ void drawRectHighlight(GraphicsContext& context, Document* document, IntRect* re
         context.clipOut(quadPath);
 
         context.setStrokeThickness(outlineThickness);
-        context.setStrokeColor(outlineColor, ColorSpaceDeviceRGB);
+        context.setStrokeColor(highlightData->contentOutline, ColorSpaceDeviceRGB);
         context.strokePath(quadPath);
 
         context.restore();
     }
 
     // Now do the fill
-    context.setFillColor(fillColor, ColorSpaceDeviceRGB);
+    context.setFillColor(highlightData->content, ColorSpaceDeviceRGB);
     context.fillPath(quadPath);
+}
+
+} // anonymous namespace
+
+namespace DOMNodeHighlighter {
+
+void drawHighlight(GraphicsContext& context, Document* document, HighlightData* highlightData)
+{
+    if (!highlightData)
+        return;
+
+    if (highlightData->node)
+        drawNodeHighlight(context, highlightData);
+    else if (highlightData->rect)
+        drawRectHighlight(context, document, highlightData);
 }
 
 } // namespace DOMNodeHighlighter
