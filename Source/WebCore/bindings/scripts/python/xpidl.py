@@ -1420,21 +1420,12 @@ class IDLDefsParser(defsparser.DefsParser):
                         # XXX HACK! Skip it for now (FSV)
                         continue
                     
-                    if obj.name == 'XMLHttpRequest' and m.name == 'asBlob':
-                        # XXX HACK! Skip it (need implement Conditional attribute) (FSV)
-                        continue
-                    
                     if m.attributes.has_key("Replaceable"):
                         m.readonly = True
-                    if m.attributes.has_key("Conditional"):
-                        if m.attributes['Conditional'][0] == ["TOUCH_EVENTS"]:
-                            continue
-                        if m.attributes['Conditional'][0] == ["FULLSCREEN_API"]:
-                            continue
-                        if m.attributes['Conditional'][0] == ["DEVICE_ORIENTATION"]:
-                            continue
+                    
                     atts.append((typeMap(m.type), m.name))
                     attsd[m.name] = m
+                
                 args = [ ("in-module", modulename),
                          ("gtype-id", "core"+obj.name), # XXX
                          ("c-name", obj.nativename) # XXX

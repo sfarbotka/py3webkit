@@ -168,6 +168,7 @@ class Wrapper:
         ]
 
     setter_tmpl = (
+        '%(conditional_if)s'
         'static int\n'
         '%(funcname)s(PyObject *self, PyObject *args, void *closure)\n'
         '{\n'
@@ -177,10 +178,12 @@ class Wrapper:
         '    %(setreturn)s%(field)s%(arglist)s);\n'
         '%(codeafter)s\n'
         '    return 0;\n'
-        '}\n\n'
+        '}\n'
+        '%(conditional_endif)s\n'
         )
 
     getter_tmpl = (
+        '%(conditional_if)s'
         'static PyObject *\n'
         '%(funcname)s(PyObject *self, void *closure)\n'
         '{\n'
@@ -188,7 +191,8 @@ class Wrapper:
         '%(codebefore)s'
         '    ret = %(field)s%(farg)s;\n'
         '%(codeafter)s\n'
-        '}\n\n'
+        '}\n'
+        '%(conditional_endif)s\n'
         )
 
     dealloc_tmpl = (
@@ -312,6 +316,11 @@ class Wrapper:
     def write_class(self):
         if self.overrides.is_type_ignored(self.objinfo.c_name):
             return
+
+        cond = get_conditional_substitutions(self.objinfo.orig_obj.attributes)
+
+        self.fp.write(cond['conditional_if'])
+
         self.fp.write('\n/* ----------- %s ----------- */\n\n' %
                       self.objinfo.c_name)
         self.fp.write('namespace WebKit {\n')
@@ -363,6 +372,8 @@ class Wrapper:
 
         self.write_virtuals()
 
+        self.fp.write(cond['conditional_endif'])
+
         self.fp.write('\n')
 
     def find_function_ptypes(self, function_obj, handle_return=0):
@@ -373,6 +384,7 @@ class Wrapper:
         if handle_return:
             includes.add(function_obj.ret)
         return includes
+
 
     def write_flags(self):
         return 'Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE'
@@ -794,6 +806,7 @@ static int
             fname = cfname.replace('.', '_')
             gettername = '0'
             settername = '0'
+            
             attrname = self.objinfo.c_name + '.' + fname
             if self.overrides.attr_is_overriden(attrname):
                 code = self.overrides.attr_override(attrname)
@@ -802,7 +815,10 @@ static int
                     gettername = getterprefix + fname
                 if string.find(code, setterprefix + fname) >= 0:
                     settername = setterprefix + fname
+            
+            
             attribs = self.objinfo.attributes[fname]
+            conditional = get_conditional_substitutions(attribs) 
             if gettername == '0':
                 try:
                     funcname = getterprefix + fname
@@ -817,18 +833,24 @@ static int
                     else:
                         field_args = ")"
                     facc = self.get_field_accessor(cfname, ftype, attribs.attributes)
-                    self.fp.write(self.getter_tmpl %
-                                  { 'funcname': funcname,
-                                    'varlist': info.varlist,
-                                    'field': facc,
-                                    'farg': field_args,
-                                    'codebefore': info.get_codebefore(),
-                                    'codeafter': info.get_codeafter() })
+
+                    substdict = { 'funcname': funcname,
+                                  'varlist': info.varlist,
+                                  'field': facc,
+                                  'farg': field_args,
+                                  'codebefore': info.get_codebefore(),
+                                  'codeafter': info.get_codeafter() }
+                    substdict.update(conditional)
+
+                    self.fp.write(self.getter_tmpl % substdict)
+
                     gettername = "WebKit::"+funcname
                 except argtypes.ArgTypeError, ex:
                     sys.stderr.write(
                         "Could not write getter for %s.%s: %s\n"
                         % (self.objinfo.c_name, fname, str(ex)))
+            
+                    
             readonly = attribs.readonly
             if settername == '0' and not readonly:
                 try:
@@ -867,7 +889,10 @@ static int
                                        'return ' + substdict['errorreturn']))
 
                     substdict['parseargs'] = self.parseset_tmpl % substdict
+                    substdict.update(conditional)
+                    
                     self.fp.write(self.setter_tmpl % substdict)
+                    
                     settername = "WebKit::"+funcname
                 except argtypes.ArgTypeError, ex:
                     traceback.print_exc()
@@ -875,8 +900,17 @@ static int
                         "Could not write setter for %s.%s: %s\n"
                         % (self.objinfo.c_name, fname, str(ex)))
             if gettername != '0' or settername != '0':
-                getsets.append('    { (char*)"%s", (getter)%s, (setter)%s, 0, 0 },\n' %
-                               (fixname(fname), gettername, settername))
+                substdict = {}
+                substdict['getter'] = gettername
+                substdict['setter'] = settername
+                substdict['name'] = fixname(fname)
+                substdict.update(conditional)
+                tmpl = (
+                    '%(conditional_if)s'
+                    '    {(char*)"%(name)s", (getter)%(getter)s, (setter)%(setter)s, 0, 0 },\n'
+                    '%(conditional_endif)s')
+
+                getsets.append(tmpl % substdict)
 
         if not getsets:
             return '0'
@@ -1100,6 +1134,7 @@ class GObjectWrapper(Wrapper):
         )
 
     method_tmpl = (
+        '%(conditional_if)s'
         'static PyObject *\n'
         '_wrap_%(typename)s_%(cname)s(PyDOMObject *self%(extraparams)s)\n'
         '{\n'
@@ -1110,8 +1145,10 @@ class GObjectWrapper(Wrapper):
         '    %(setreturn)s%(cast)s(self)->%(cname)s(%(arglist)s);\n'
         '    %(end_allow_threads)s\n'
         '%(codeafter)s\n'
-        '}\n\n'
+        '}\n'
+        '%(conditional_endif)s\n'
         )
+
     def __init__(self, parser, objinfo, overrides, fp=FileOutput(sys.stdout)):
         Wrapper.__init__(self, parser, objinfo, overrides, fp)
         if self.objinfo:
@@ -1292,6 +1329,8 @@ class GObjectWrapper(Wrapper):
         substdict = Wrapper.get_initial_method_substdict(self, method)
         substdict['cast'] = string.replace(self.objinfo.typecode,
                                            '_TYPE_', '_', 1)
+        substdict.update(get_conditional_substitutions(method.orig_method))
+
         return substdict
 
     def write_default_constructor(self):
@@ -1728,11 +1767,10 @@ PyObject* toPython(WebCore::%(classname)s* obj)
 
     return PythonObjectCache::putDOMObject(obj, WebKit::pywrap%(classname)s(obj));
 }
-
 """
     
     topython_manual_tmpl = (
-        'PyObject* toPython(WebCore::%(classname)s*);\n\n'
+        'PyObject* toPython(WebCore::%(classname)s*);\n'
         )
 
     def __init__(self, parser, overrides, prefix, fp=FileOutput(sys.stdout)):
@@ -1848,7 +1886,13 @@ typedef intobjargproc ssizeobjargproc;
         self.fp.write('namespace WebKit {\n')
         self.fp.write('using namespace WebCore;\n')
         self.fp.write('\n')
+        
         for obj in self.parser.objects:
+            cond = get_conditional_substitutions(obj.orig_obj.attributes)
+            substdict = {'classname': obj.c_name}
+            
+            self.fp.write(cond['conditional_if'])
+            
             if not self.overrides.is_type_ignored(obj.c_name):
                 txt = self.wrapnode_tmpl % {'classname': obj.c_name}
                 self.fp.write(txt)
@@ -1857,18 +1901,24 @@ typedef intobjargproc ssizeobjargproc;
                 elif obj.c_name == 'EventListener':
                     tmpl = self.wrapcore_eventlistener_tmpl 
                 else:
-                    tmpl = self.wrapcore_tmpl 
-                txt = tmpl % {'classname': obj.c_name}
-                self.fp.write(txt)
+                    tmpl = self.wrapcore_tmpl
+
+                
+                self.fp.write(tmpl % substdict)
+            
             if obj.c_name not in \
                     ["Node", "Document", "HTMLCollection", "SVGPathSeg",
                      "StyleSheet", "CSSRule", "CSSValue", "Object", "Event",
                      "Element", "Text", "EventTarget"]:
-                txt = self.topython_tmpl % {'classname': obj.c_name}
+                tmpl = self.topython_tmpl
             else:
-                txt = self.topython_manual_tmpl % {'classname': obj.c_name}
+                tmpl = self.topython_manual_tmpl
+            
             self.fp.write("#define PyDOM%s PyDOMObject\n" % obj.c_name)
-            self.fp.write(txt)
+            self.fp.write(tmpl % substdict)
+
+            self.fp.write(cond['conditional_endif'])
+            self.fp.write('\n')
 
         self.fp.write('} // namespace WebKit\n')
         self.fp.write('\n')
@@ -1883,15 +1933,25 @@ typedef intobjargproc ssizeobjargproc;
 
         self.fp.write('/* ---------- forward type declarations ---------- */\n')
         self.fp.write('extern "C" {\n\n')
+
         for obj in self.parser.boxes:
             if not self.overrides.is_type_ignored(obj.c_name):
+                cond = get_conditional_substitutions(obj.orig_obj.attributes)
+                self.fp.write(cond['conditional_if'])
                 self.fp.write('PyTypeObject *PtrPy' + obj.c_name + '_Type;\n')
+                self.fp.write(cond['conditional_endif'])
+        
         for obj in self.parser.objects:
             if not self.overrides.is_type_ignored(obj.c_name):
+                cond = get_conditional_substitutions(obj.orig_obj.attributes)
+                self.fp.write(cond['conditional_if'])
                 self.fp.write('PyTypeObject *PtrPyDOM' + obj.c_name + '_Type;\n')
+                self.fp.write(cond['conditional_endif'])
+        
         for interface in self.parser.interfaces:
             if not self.overrides.is_type_ignored(interface.c_name):
                 self.fp.write('PyTypeObject *PtrPy' + interface.c_name + '_Type;\n')
+        
         self.fp.write('\n')
         self.fp.write('}; // extern "C"\n')
 
@@ -2188,6 +2248,39 @@ def register_types(parser):
             argtypes.matcher.register_flag(enum.c_name, enum.typecode)
         else:
             argtypes.matcher.register_enum(enum.c_name, enum.typecode)
+
+def get_conditional_substitutions(member):
+    ret = {"conditional_if": "", "conditional_endif": ""}
+    
+    cond = get_conditional_string(member)
+    if cond is None:
+        return ret
+
+    ret['conditional_if'] = "#if {0}\n".format(cond)
+    ret['conditional_endif'] = "#endif //{0}\n".format(cond)
+        
+    return ret
+
+def get_conditional_string(member):
+    cond = get_conditional(member)
+    if cond is None:
+        return None
+    
+    if cond.find('&') != -1:
+        vals = cond.split('&')
+        return "ENABLE({)}) && ENABLE({1})".format(vals[0], vals[1])
+    elif cond.find('|') != -1:
+        vals = cond.split('|')
+        return "ENABLE({)}) || ENABLE({1})".format(vals[0], vals[1])
+    
+    return "ENABLE({0})".format(cond)
+
+def get_conditional(member):
+    if member.attributes.has_key('Conditional'):
+        val = member.attributes['Conditional'][0]
+        return val[0]
+
+    return None
 
 usage = 'usage: codegen.py [-o overridesfile] [-p prefix] defsfile'
 def main(argv):
