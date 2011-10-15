@@ -318,7 +318,7 @@ class Wrapper:
         self.fp.write('using namespace WebCore;\n')
         substdict = self.get_initial_class_substdict()
         if not substdict.has_key('tp_flags'):
-            substdict['tp_flags'] = 'Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE'
+            substdict['tp_flags'] = self.write_flags()
         substdict['typename'] = self.objinfo.c_name
         if self.overrides.modulename:
             substdict['classname'] = '%s.%s' % (self.overrides.modulename,
@@ -336,6 +336,9 @@ class Wrapper:
         substdict['tp_getset'] = self.write_getsets()
         substdict['tp_dealloc'] = self.write_dealloc()
         substdict['tp_new'] = 'DOMObject_new'
+        substdict['tp_iter'] = self.write_iter()
+        substdict['tp_iternext'] = self.write_iternext()
+
 
         # handle slots ...
         for slot in self.slots_list:
@@ -370,6 +373,9 @@ class Wrapper:
         if handle_return:
             includes.add(function_obj.ret)
         return includes
+
+    def write_flags(self):
+        return 'Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE'
 
     def write_function_wrapper(self, function_obj, template,
                                handle_return=0, is_method=0, kwargs_needed=0,
@@ -629,6 +635,12 @@ static int
         else:
             methoddefs = 'NULL'
         return methoddefs
+
+    def write_iter(self):
+        return "0"
+
+    def write_iternext(self):
+        return "0"
 
     def write_virtual_accessors(self):
         klass = self.objinfo.c_name
@@ -1105,6 +1117,85 @@ class GObjectWrapper(Wrapper):
         if self.objinfo:
             self.castmacro = string.replace(self.objinfo.typecode,
                                             '_TYPE_', '_', 1)
+
+    def is_iterator(self):
+        o = self.objinfo.orig_obj
+        if not o.attributes.attributes.has_key("HasIndexGetter"):
+            return False
+
+        return self.get_iter_method() != None
+
+    def write_flags(self):
+        if self.is_iterator():
+            return Wrapper.write_flags(self) #+ " | Py_TPFLAGS_HAVE_ITER"
+
+        return Wrapper.write_flags(self)
+
+    def write_iter(self):
+        if not self.is_iterator():
+            return "0";
+        
+        tmpl = ( 
+        'PyDOMObject* \n'
+        '%(typename)s_iter(PyDOMObject* self)\n'
+        '{\n'
+        '   self->iter_index = 0;\n'
+        '   self->iter_count = %(cast)s(self)->length();\n'
+        '   Py_INCREF(self);\n'
+        '   return self;\n'
+        '}\n\n'
+        )
+
+        substdict = {}
+        substdict['typename'] = self.objinfo.c_name
+        substdict['cast'] = string.replace(self.objinfo.typecode, '_TYPE_', '_', 1)
+
+        self.fp.write(tmpl % substdict)
+
+        return "WebKit::%(typename)s_iter" % substdict
+
+    def write_iternext(self):
+        if not self.is_iterator():
+            return "0";
+
+        tmpl = ( 
+        'PyObject* \n'
+        '%(typename)s_iternext(PyDOMObject* self)\n'
+        '{\n'
+        '    unsigned long index = self->iter_index++;\n'
+        '    if (index >= self->iter_count)\n'
+        '    {\n'
+        '        PyErr_SetNone(PyExc_StopIteration);\n'
+        '        return NULL;\n'
+        '    }\n\n'
+        '    PyObject* args = Py_BuildValue("(k)", index);\n'
+        '    PyObject* kwargs = PyDict_New();\n\n'
+        '    return _wrap_%(typename)s_%(cname)s(self, args, kwargs);\n'
+        '}\n\n'
+        )
+        
+        m = self.get_iter_method()
+        
+        substdict = {}
+        substdict['typename'] = self.objinfo.c_name
+        substdict['cname'] = m.c_name
+        
+        self.fp.write(tmpl % substdict)
+
+        return "WebKit::%(typename)s_iternext" % substdict
+
+    def get_iter_method(self):
+        for meth in self.parser.find_methods(self.objinfo):
+            pp = meth.orig_method.params
+
+            if len(pp) != 1:
+                continue
+
+            for att, val, loc in pp[0].attlist:
+                if att == 'IsIndex':
+                    return meth
+        
+        return None
 
     def get_initial_class_substdict(self):
         return { 'tp_basicsize'      : 'PyDOM%s' % self.objinfo.name,

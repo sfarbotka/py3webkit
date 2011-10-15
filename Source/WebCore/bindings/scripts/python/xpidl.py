@@ -1420,6 +1420,10 @@ class IDLDefsParser(defsparser.DefsParser):
                         # XXX HACK! Skip it for now (FSV)
                         continue
                     
+                    if obj.name == 'XMLHttpRequest' and m.name == 'asBlob':
+                        # XXX HACK! Skip it (need implement Conditional attribute) (FSV)
+                        continue
+                    
                     if m.attributes.has_key("Replaceable"):
                         m.readonly = True
                     if m.attributes.has_key("Conditional"):
@@ -1443,6 +1447,8 @@ class IDLDefsParser(defsparser.DefsParser):
                     args.append( tuple(["fields"] + atts) )
                 odef = self.define_object(obj.name, *args)
                 odef.attributes = attsd
+                odef.orig_obj = obj
+                
             for m in obj.members:
                 if isinstance(m, CDATA):
                     continue
@@ -1519,6 +1525,7 @@ class IDLDefsParser(defsparser.DefsParser):
                     mth.attributes = m.attributes
                     mth.raises = m.raises
                     mth.return_param = return_param
+                    mth.orig_method = m
         # debug output
         self.write_defs()
 

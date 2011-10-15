@@ -30,9 +30,12 @@ static void py_wk_exc(WebCore::ExceptionCode &ec)
     PyErr_SetString(PyExc_Exception, ecdesc.name);
 }
 
-typedef struct {
+typedef struct
+{
     PyObject_HEAD
     void * ptr;
+    unsigned long iter_index;
+    unsigned long iter_count;
 } PyDOMObject;
 
 static PyObject *

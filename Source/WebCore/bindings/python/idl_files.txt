@@ -1,6 +1,5 @@
 WebCore/dom/Attr.idl
 WebCore/dom/BeforeLoadEvent.idl
-WebCore/dom/BeforeProcessEvent.idl
 WebCore/dom/CDATASection.idl
 WebCore/dom/CharacterData.idl
 WebCore/dom/ClientRect.idl
@@ -58,7 +57,6 @@ WebCore/html/HTMLAreaElement.idl
 WebCore/html/HTMLAudioElement.idl
 WebCore/html/HTMLBaseElement.idl
 WebCore/html/HTMLBaseFontElement.idl
-WebCore/html/HTMLBlockquoteElement.idl
 WebCore/html/HTMLBodyElement.idl
 WebCore/html/HTMLBRElement.idl
 WebCore/html/HTMLButtonElement.idl
@@ -111,6 +109,7 @@ WebCore/html/HTMLQuoteElement.idl
 WebCore/html/HTMLScriptElement.idl
 WebCore/html/HTMLSelectElement.idl
 WebCore/html/HTMLSourceElement.idl
+WebCore/html/HTMLSpanElement.idl
 WebCore/html/HTMLStyleElement.idl
 WebCore/html/HTMLTableCaptionElement.idl
 WebCore/html/HTMLTableCellElement.idl
@@ -137,7 +136,6 @@ WebCore/page/BarInfo.idl
 WebCore/page/Coordinates.idl
 WebCore/page/DOMSelection.idl
 WebCore/page/DOMWindow.idl
-WebCore/page/EventSource.idl
 WebCore/page/History.idl
 WebCore/page/Location.idl
 WebCore/page/Navigator.idl
@@ -168,7 +166,6 @@ WebCore/css/StyleSheet.idl
 WebCore/css/StyleSheetList.idl
 WebCore/css/WebKitCSSKeyframeRule.idl
 WebCore/css/WebKitCSSKeyframesRule.idl
-WebCore/css/WebKitCSSMatrix.idl
 WebCore/css/WebKitCSSTransformValue.idl
 WebCore/storage/Storage.idl
 WebCore/storage/StorageEvent.idl
