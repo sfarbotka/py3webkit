@@ -5,12 +5,6 @@ __all__ = [
     'codegen',
     'definitions',
     'defsparser',
-    'docextract',
-    'docgen',
-    'h2def',
-    'defsgen'
-    'mergedefs',
-    'mkskel',
     'override',
     'scmexpr'
 ]
