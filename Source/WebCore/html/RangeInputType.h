@@ -64,11 +64,11 @@ private:
     virtual void createShadowSubtree();
     virtual double parseToDouble(const String&, double) const;
     virtual String serialize(double) const;
-    virtual void accessKeyAction(bool sendToAnyElement);
+    virtual void accessKeyAction(bool sendMouseEvents);
     virtual void minOrMaxAttributeChanged();
     virtual void setValue(const String&, bool valueChanged, bool sendChangeEvent);
-    virtual String fallbackValue();
-    virtual String sanitizeValue(const String& proposedValue);
+    virtual String fallbackValue() const OVERRIDE;
+    virtual String sanitizeValue(const String& proposedValue) const;
     virtual bool shouldRespectListAttribute();
 };
 

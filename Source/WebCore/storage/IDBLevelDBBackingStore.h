@@ -41,12 +41,14 @@ class IDBFactoryBackendImpl;
 
 class IDBLevelDBBackingStore : public IDBBackingStore {
 public:
-    static PassRefPtr<IDBBackingStore> open(SecurityOrigin*, const String& pathBase, int64_t maximumSize, const String& fileIdentifier, IDBFactoryBackendImpl*);
+    static PassRefPtr<IDBBackingStore> open(SecurityOrigin*, const String& pathBase, const String& fileIdentifier, IDBFactoryBackendImpl*);
     virtual ~IDBLevelDBBackingStore();
 
     virtual void getDatabaseNames(Vector<String>& foundNames);
-    virtual bool extractIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId);
-    virtual bool setIDBDatabaseMetaData(const String& name, const String& version, int64_t& rowId, bool invalidRowId);
+    virtual bool getIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId);
+    virtual bool createIDBDatabaseMetaData(const String& name, const String& version, int64_t& rowId);
+    virtual bool updateIDBDatabaseMetaData(int64_t rowId, const String& version);
+    virtual bool deleteDatabase(const String& name);
 
     virtual void getObjectStores(int64_t databaseId, Vector<int64_t>& foundIds, Vector<String>& foundNames, Vector<String>& foundKeyPaths, Vector<bool>& foundAutoIncrementFlags);
     virtual bool createObjectStore(int64_t databaseId, const String& name, const String& keyPath, bool autoIncrement, int64_t& assignedObjectStoreId);
@@ -75,7 +77,6 @@ public:
     virtual PassRefPtr<Cursor> openIndexCursor(int64_t databaseId, int64_t objectStoreId, int64_t indexId, const IDBKeyRange*, IDBCursor::Direction);
 
     virtual PassRefPtr<Transaction> createTransaction();
-    virtual IDBFactoryBackendInterface::BackingStoreType backingStoreType() const { return IDBFactoryBackendInterface::LevelDBBackingStore; }
 
     static bool backingStoreExists(SecurityOrigin*, const String& name, const String& pathBase);
 

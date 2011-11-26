@@ -117,6 +117,11 @@ WebInspector.KeyboardShortcut.makeKeyFromEvent = function(keyboardEvent)
     return WebInspector.KeyboardShortcut._makeKeyFromCodeAndModifiers(keyboardEvent.keyCode, modifiers);
 }
 
+WebInspector.KeyboardShortcut.eventHasCtrlOrMeta = function(event)
+{
+    return WebInspector.isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+}
+
 /**
  * @param {number=} modifiers
  */
@@ -142,7 +147,7 @@ WebInspector.KeyboardShortcut._keyName = function(key)
         return key.toUpperCase();
     if (typeof key.name === "string")
         return key.name;
-    return key.name[WebInspector.platform] || key.name.other;
+    return key.name[WebInspector.platform()] || key.name.other;
 }
 
 WebInspector.KeyboardShortcut._makeKeyFromCodeAndModifiers = function(keyCode, modifiers)

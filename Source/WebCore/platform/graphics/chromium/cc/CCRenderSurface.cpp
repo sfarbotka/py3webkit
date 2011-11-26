@@ -43,6 +43,7 @@ CCRenderSurface::CCRenderSurface(CCLayerImpl* owningLayer)
     : m_owningLayer(owningLayer)
     , m_maskLayer(0)
     , m_skipsDraw(false)
+    , m_surfacePropertyChanged(false)
     , m_drawOpacity(1)
 {
 }
@@ -112,8 +113,8 @@ void CCRenderSurface::draw(LayerRendererChromium* layerRenderer, const IntRect&)
     if (!m_maskLayer && m_owningLayer->replicaLayer())
         replicaMaskLayer = m_owningLayer->replicaLayer()->maskLayer();
 
-    if (m_owningLayer->parent() && m_owningLayer->parent()->usesLayerScissor())
-        layerRenderer->setScissorToRect(m_scissorRect);
+    if (m_owningLayer->parent() && m_owningLayer->parent()->usesLayerClipping())
+        layerRenderer->setScissorToRect(m_clipRect);
     else
         GLC(layerRenderer->context(), layerRenderer->context()->disable(GraphicsContext3D::SCISSOR_TEST));
 
@@ -228,11 +229,50 @@ void CCRenderSurface::dumpSurface(TextStream& ts, int indent) const
 
     writeIndent(ts, indent+1);
     ts << "contentRect: (" << m_contentRect.x() << ", " << m_contentRect.y() << ", " << m_contentRect.width() << ", " << m_contentRect.height() << "\n";
+
+    writeIndent(ts, indent+1);
+    ts << "drawTransform: ";
+    ts << m_drawTransform.m11() << ", " << m_drawTransform.m12() << ", " << m_drawTransform.m13() << ", " << m_drawTransform.m14() << "  //  ";
+    ts << m_drawTransform.m21() << ", " << m_drawTransform.m22() << ", " << m_drawTransform.m23() << ", " << m_drawTransform.m24() << "  //  ";
+    ts << m_drawTransform.m31() << ", " << m_drawTransform.m32() << ", " << m_drawTransform.m33() << ", " << m_drawTransform.m34() << "  //  ";
+    ts << m_drawTransform.m41() << ", " << m_drawTransform.m42() << ", " << m_drawTransform.m43() << ", " << m_drawTransform.m44() << "\n";
 }
 
 int CCRenderSurface::owningLayerId() const
 {
     return m_owningLayer ? m_owningLayer->id() : 0;
+}
+
+void CCRenderSurface::setClipRect(const IntRect& clipRect)
+{
+    if (m_clipRect == clipRect)
+        return;
+
+    m_surfacePropertyChanged = true;
+    m_clipRect = clipRect;
+}
+
+void CCRenderSurface::setContentRect(const IntRect& contentRect)
+{
+    if (m_contentRect == contentRect)
+        return;
+
+    m_surfacePropertyChanged = true;
+    m_contentRect = contentRect;
+}
+
+bool CCRenderSurface::surfacePropertyChanged() const
+{
+    // Surface property changes are tracked as follows:
+    //
+    // - m_surfacePropertyChanged is flagged when the clipRect or contentRect change. As
+    //   of now, these are the only two properties that can be affected by descendant layers.
+    //
+    // - all other property changes come from the owning layer (or some ancestor layer
+    //   that propagates its change to the owning layer).
+    //
+    ASSERT(m_owningLayer);
+    return m_surfacePropertyChanged || m_owningLayer->layerPropertyChanged();
 }
 
 }

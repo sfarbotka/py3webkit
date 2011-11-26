@@ -32,9 +32,9 @@
 #define WebAccessibilityObject_h
 
 #include "WebAccessibilityRole.h"
-#include "WebCommon.h"
-#include "WebPrivatePtr.h"
-#include "WebVector.h"
+#include "platform/WebCommon.h"
+#include "platform/WebPrivatePtr.h"
+#include "platform/WebVector.h"
 
 #if WEBKIT_IMPLEMENTATION
 namespace WTF { template <typename T> class PassRefPtr; }
@@ -113,6 +113,7 @@ public:
     WEBKIT_EXPORT bool isReadOnly() const;
     WEBKIT_EXPORT bool isRequired() const;
     WEBKIT_EXPORT bool isSelected() const;
+    WEBKIT_EXPORT bool isSelectedOptionActive() const;
     WEBKIT_EXPORT bool isVertical() const;
     WEBKIT_EXPORT bool isVisible() const;
     WEBKIT_EXPORT bool isVisited() const;
@@ -137,6 +138,7 @@ public:
     WEBKIT_EXPORT void setFocused(bool) const;
     WEBKIT_EXPORT WebString stringValue() const;
     WEBKIT_EXPORT WebString title() const;
+    WEBKIT_EXPORT WebAccessibilityObject titleUIElement() const;
     WEBKIT_EXPORT WebURL url() const;
 
     WEBKIT_EXPORT WebString valueDescription() const;

@@ -60,6 +60,9 @@ PlatformMouseEventBuilder::PlatformMouseEventBuilder(Widget* widget, const WebMo
     // to get rid of this once we abstract popups into a WebKit API.
     m_position = widget->convertFromContainingWindow(IntPoint(e.x, e.y));
     m_globalPosition = IntPoint(e.globalX, e.globalY);
+#if ENABLE(POINTER_LOCK)
+    m_movementDelta = IntPoint(e.movementX, e.movementY);
+#endif
     m_button = static_cast<MouseButton>(e.button);
     m_shiftKey = (e.modifiers & WebInputEvent::ShiftKey);
     m_ctrlKey = (e.modifiers & WebInputEvent::ControlKey);
@@ -124,6 +127,9 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
     case WebInputEvent::GestureScrollEnd:
         m_type = PlatformGestureEvent::ScrollEndType;
         break;
+    case WebInputEvent::GestureScrollUpdate:
+        m_type = PlatformGestureEvent::ScrollUpdateType;
+        break;
     case WebInputEvent::GestureTap:
         m_type = PlatformGestureEvent::TapType;
         break;
@@ -132,6 +138,8 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
     }
     m_position = widget->convertFromContainingWindow(IntPoint(e.x, e.y));
     m_globalPosition = IntPoint(e.globalX, e.globalY);
+    m_deltaX = e.deltaX;
+    m_deltaY = e.deltaY;
     m_timestamp = e.timeStampSeconds;
     m_shiftKey = (e.modifiers & WebInputEvent::ShiftKey);
     m_ctrlKey = (e.modifiers & WebInputEvent::ControlKey);

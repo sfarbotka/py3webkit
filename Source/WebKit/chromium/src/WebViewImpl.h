@@ -48,6 +48,7 @@
 #include "IntRect.h"
 #include "NotificationPresenterImpl.h"
 #include "PageOverlay.h"
+#include "UserMediaClientImpl.h"
 #include "cc/CCLayerTreeHost.h"
 #include <wtf/OwnPtr.h>
 #include <wtf/RefCounted.h>
@@ -81,6 +82,7 @@ class DeviceOrientationClientProxy;
 class DragScrollTimer;
 class GeolocationClientProxy;
 class SpeechInputClientImpl;
+class UserMediaClientImpl;
 class WebAccessibilityObject;
 class WebCompositorImpl;
 class WebDevToolsAgentClient;
@@ -102,6 +104,10 @@ public:
     virtual void willStartLiveResize();
     virtual void resize(const WebSize&);
     virtual void willEndLiveResize();
+    virtual void willEnterFullScreen();
+    virtual void didEnterFullScreen();
+    virtual void willExitFullScreen();
+    virtual void didExitFullScreen();
     virtual void animate(double frameBeginTime);
     virtual void layout();
     virtual void paint(WebCanvas*, const WebRect&);
@@ -119,9 +125,7 @@ public:
     virtual bool confirmComposition(const WebString& text);
     virtual bool compositionRange(size_t* location, size_t* length);
     virtual WebTextInputType textInputType();
-    virtual bool getSelectionOffsetsAndTextInEditableContent(WebString&, size_t& focus, size_t& anchor) const;
-    virtual WebRect caretOrSelectionBounds();
-    virtual bool selectionRange(WebPoint& start, WebPoint& end) const;
+    virtual bool selectionBounds(WebRect& start, WebRect& end) const;
     virtual bool caretOrSelectionRange(size_t* location, size_t* length);
     virtual void setTextDirection(WebTextDirection direction);
     virtual bool isAcceleratedCompositingActive() const;
@@ -160,7 +164,14 @@ public:
     virtual void zoomLimitsChanged(double minimumZoomLevel,
                                    double maximumZoomLevel);
     virtual float pageScaleFactor() const;
-    virtual void scalePage(float scaleFactor, WebPoint origin);
+    virtual void setPageScaleFactorPreservingScrollOffset(float);
+    virtual void setPageScaleFactor(float scaleFactor, const WebPoint& origin);
+    virtual void setPageScaleFactorLimits(float minPageScale, float maxPageScale);
+    virtual float minimumPageScaleFactor() const;
+    virtual float maximumPageScaleFactor() const;
+
+    virtual float deviceScaleFactor() const;
+    virtual void setDeviceScaleFactor(float);
     virtual bool isFixedLayoutModeEnabled() const;
     virtual void enableFixedLayoutMode(bool enable);
     virtual WebSize fixedLayoutSize() const;
@@ -216,16 +227,15 @@ public:
                                     unsigned inactiveBackgroundColor,
                                     unsigned inactiveForegroundColor);
     virtual void performCustomContextMenuAction(unsigned action);
-    virtual void exitFullscreen();
 
     // CCLayerTreeHostClient
     virtual void animateAndLayout(double frameBeginTime);
-    virtual void applyScrollDelta(const WebCore::IntSize&);
+    virtual void applyScrollAndScale(const WebCore::IntSize&, float);
     virtual PassRefPtr<WebCore::GraphicsContext3D> createLayerTreeHostContext3D();
+    virtual void didCommitAndDrawFrame();
+    virtual void didCompleteSwapBuffers();
     virtual void didRecreateGraphicsContext(bool success);
-#if !USE(THREADED_COMPOSITING)
     virtual void scheduleComposite();
-#endif
 
     // WebViewImpl
 
@@ -297,6 +307,8 @@ public:
     bool keyEvent(const WebKeyboardEvent&);
     bool charEvent(const WebKeyboardEvent&);
     bool touchEvent(const WebTouchEvent&);
+
+    void numberOfWheelEventHandlersChanged(unsigned);
 
     // Handles context menu events orignated via the the keyboard. These
     // include the VK_APPS virtual key and the Shift+F10 combine. Code is
@@ -381,7 +393,10 @@ public:
     void setRootLayerNeedsDisplay();
     void scrollRootLayerRect(const WebCore::IntSize& scrollDelta, const WebCore::IntRect& clipRect);
     void invalidateRootLayerRect(const WebCore::IntRect&);
-    void doUpdateAndComposite();
+    WebCore::NonCompositedContentHost* nonCompositedContentHost();
+#endif
+#if ENABLE(REQUEST_ANIMATION_FRAME)
+    void scheduleAnimation();
 #endif
 
     // Returns the onscreen 3D context used by the compositor. This is
@@ -411,7 +426,13 @@ public:
 
     void loseCompositorContext(int numTimes);
 
+    void enterFullScreenForElement(WebCore::Element*);
+    void exitFullScreenForElement(WebCore::Element*);
+
 private:
+    float computePageScaleFactorWithinLimits(float scale);
+    WebPoint clampOffsetAtScale(const WebPoint& offset, float scale);
+
     friend class WebView;  // So WebView::Create can call our constructor
     friend class WTF::RefCounted<WebViewImpl>;
 
@@ -452,9 +473,7 @@ private:
 
 #if USE(ACCELERATED_COMPOSITING)
     void setIsAcceleratedCompositingActive(bool);
-#if !USE(THREADED_COMPOSITING)
     void doComposite();
-#endif
     void doPixelReadbackToCanvas(WebCanvas*, const WebCore::IntRect&);
     void reallocateRenderer();
     void updateLayerTreeViewport();
@@ -509,6 +528,10 @@ private:
     double m_minimumZoomLevel;
 
     double m_maximumZoomLevel;
+
+    float m_minimumPageScaleFactor;
+
+    float m_maximumPageScaleFactor;
 
     bool m_contextMenuAllowed;
 
@@ -572,6 +595,12 @@ private:
     // If set, the (plugin) node which has mouse capture.
     RefPtr<WebCore::Node> m_mouseCaptureNode;
 
+    // If set, the WebView is transitioning to fullscreen for this element.
+    RefPtr<WebCore::Element> m_provisionalFullScreenElement;
+
+    // If set, the WebView is in fullscreen mode for an element in this frame.
+    RefPtr<WebCore::Frame> m_fullScreenFrame;
+
 #if USE(ACCELERATED_COMPOSITING)
     WebCore::IntRect m_rootLayerScrollDamage;
     OwnPtr<WebCore::NonCompositedContentHost> m_nonCompositedContentHost;
@@ -582,6 +611,7 @@ private:
     // If true, the graphics context is being restored.
     bool m_recreatingGraphicsContext;
 #endif
+    bool m_haveWheelEventHandlers;
     static const WebInputEvent* m_currentInputEvent;
 
 #if ENABLE(INPUT_SPEECH)
@@ -596,6 +626,10 @@ private:
 
 #if ENABLE(GESTURE_RECOGNIZER)
     OwnPtr<WebCore::PlatformGestureRecognizer> m_gestureRecognizer;
+#endif
+
+#if ENABLE(MEDIA_STREAM)
+    UserMediaClientImpl m_userMediaClientImpl;
 #endif
 };
 

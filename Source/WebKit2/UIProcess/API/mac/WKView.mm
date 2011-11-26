@@ -43,6 +43,7 @@
 #import "RunLoop.h"
 #import "TextChecker.h"
 #import "TextCheckerState.h"
+#import "TiledCoreAnimationDrawingAreaProxy.h"
 #import "WKAPICast.h"
 #import "WKFullScreenWindowController.h"
 #import "WKPrintingView.h"
@@ -61,16 +62,23 @@
 #import <WebCore/ColorMac.h>
 #import <WebCore/DragController.h>
 #import <WebCore/DragData.h>
-#import <WebCore/LocalizedStrings.h>
+#import <WebCore/DragSession.h>
 #import <WebCore/FloatRect.h>
 #import <WebCore/IntRect.h>
 #import <WebCore/KeyboardEvent.h>
+#import <WebCore/LocalizedStrings.h>
 #import <WebCore/PlatformMouseEvent.h>
 #import <WebCore/PlatformScreen.h>
 #import <WebCore/Region.h>
 #import <WebKitSystemInterface.h>
 #import <wtf/RefPtr.h>
 #import <wtf/RetainPtr.h>
+
+/* API internals. */
+#import "WKBrowsingContextControllerInternal.h"
+#import "WKBrowsingContextGroupInternal.h"
+#import "WKProcessGroupInternal.h"
+
 
 @interface NSApplication (WKNSApplicationDetails)
 - (void)speakString:(NSString *)string;
@@ -114,12 +122,16 @@ struct WKViewInterpretKeyEventsParameters {
 - (void)_setDrawingAreaSize:(NSSize)size;
 - (void)_setPluginComplexTextInputState:(PluginComplexTextInputState)pluginComplexTextInputState;
 - (void)_disableComplexTextInputIfNecessary;
+- (BOOL)_shouldUseTiledDrawingArea;
 @end
 
 @interface WKViewData : NSObject {
 @public
     OwnPtr<PageClientImpl> _pageClient;
     RefPtr<WebPageProxy> _page;
+    
+    // Cache of the associated WKBrowsingContextController.
+    RetainPtr<WKBrowsingContextController> _browsingContextController;
 
     // For ToolTips.
     NSToolTipTag _lastToolTipTag;
@@ -170,8 +182,14 @@ struct WKViewInterpretKeyEventsParameters {
     BOOL _inSecureInputState;
 
     NSRect _windowBottomCornerIntersectionRect;
+    
+    unsigned _frameSizeUpdatesDisabledCount;
 }
 @end
+
+@implementation WKViewData
+@end
+
 
 @interface WKResponderChainSink : NSResponder {
     NSResponder *_lastResponderInChain;
@@ -182,79 +200,23 @@ struct WKViewInterpretKeyEventsParameters {
 - (bool)didReceiveUnhandledCommand;
 @end
 
-@implementation WKViewData
+@interface WKFlippedView : NSView
+@end
+
+@implementation WKFlippedView
+
+- (BOOL)isFlipped
+{
+    return YES;
+}
+
 @end
 
 @implementation WKView
 
-- (id)initWithFrame:(NSRect)frame
+- (id)initWithFrame:(NSRect)frame processGroup:(WKProcessGroup *)processGroup browsingContextGroup:(WKBrowsingContextGroup *)browsingContextGroup
 {
-    return [self initWithFrame:frame contextRef:toAPI(WebContext::sharedProcessContext())];
-}
-
-- (id)initWithFrame:(NSRect)frame contextRef:(WKContextRef)contextRef
-{   
-    return [self initWithFrame:frame contextRef:contextRef pageGroupRef:nil];
-}
-
-- (void)_registerDraggedTypes
-{
-    NSMutableSet *types = [[NSMutableSet alloc] initWithArray:PasteboardTypes::forEditing()];
-    [types addObjectsFromArray:PasteboardTypes::forURL()];
-    [self registerForDraggedTypes:[types allObjects]];
-    [types release];
-}
-
-- (void)_updateRemoteAccessibilityRegistration:(BOOL)registerProcess
-{
-    // When the tree is connected/disconnected, the remote accessibility registration
-    // needs to be updated with the pid of the remote process. If the process is going
-    // away, that information is not present in WebProcess
-    pid_t pid = 0;
-    if (registerProcess && _data->_page->process())
-        pid = _data->_page->process()->processIdentifier();
-    else if (!registerProcess) {
-        pid = WKAXRemoteProcessIdentifier(_data->_remoteAccessibilityChild.get());
-        _data->_remoteAccessibilityChild = nil;
-    }
-    if (pid)
-        WKAXRegisterRemoteProcess(registerProcess, pid); 
-}
-
-- (id)initWithFrame:(NSRect)frame contextRef:(WKContextRef)contextRef pageGroupRef:(WKPageGroupRef)pageGroupRef
-{
-    self = [super initWithFrame:frame];
-    if (!self)
-        return nil;
-
-    [NSApp registerServicesMenuSendTypes:PasteboardTypes::forSelection() returnTypes:PasteboardTypes::forEditing()];
-
-    InitWebCoreSystemInterface();
-    RunLoop::initializeMainRunLoop();
-
-    NSTrackingArea *trackingArea = [[NSTrackingArea alloc] initWithRect:frame
-                                                                options:(NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
-                                                                  owner:self
-                                                               userInfo:nil];
-    [self addTrackingArea:trackingArea];
-    [trackingArea release];
-
-    _data = [[WKViewData alloc] init];
-
-    _data->_pageClient = PageClientImpl::create(self);
-    _data->_page = toImpl(contextRef)->createWebPage(_data->_pageClient.get(), toImpl(pageGroupRef));
-    _data->_page->initializeWebPage();
-#if ENABLE(FULLSCREEN_API)
-    _data->_page->fullScreenManager()->setWebView(self);
-#endif
-    _data->_mouseDownEvent = nil;
-    _data->_ignoringMouseDraggedEvents = NO;
-
-    [self _registerDraggedTypes];
-
-    WebContext::statistics().wkViewCount++;
-
-    return self;
+    return [self initWithFrame:frame contextRef:processGroup.contextRef pageGroupRef:browsingContextGroup.pageGroupRef];
 }
 
 - (void)dealloc
@@ -271,9 +233,11 @@ struct WKViewInterpretKeyEventsParameters {
     [super dealloc];
 }
 
-- (WKPageRef)pageRef
+- (WKBrowsingContextController *)browsingContextController
 {
-    return toAPI(_data->_page.get());
+    if (!_data->_browsingContextController)
+        _data->_browsingContextController.adoptNS([[WKBrowsingContextController alloc] initWithPageRef:[self pageRef]]);
+    return _data->_browsingContextController.get();
 }
 
 - (void)setDrawsBackground:(BOOL)drawsBackground
@@ -353,14 +317,6 @@ struct WKViewInterpretKeyEventsParameters {
 - (BOOL)isFlipped
 {
     return YES;
-}
-
-- (void)setFrame:(NSRect)rect andScrollBy:(NSSize)offset
-{
-    ASSERT(NSEqualSizes(_data->_resizeScrollOffset, NSZeroSize));
-
-    _data->_resizeScrollOffset = offset;
-    [self setFrame:rect];
 }
 
 - (void)setFrameSize:(NSSize)size
@@ -1645,7 +1601,20 @@ static void extractUnderlines(NSAttributedString *string, Vector<CompositionUnde
     IntPoint global(globalPoint([draggingInfo draggingLocation], [self window]));
     DragData dragData(draggingInfo, client, global, static_cast<DragOperation>([draggingInfo draggingSourceOperationMask]), [self applicationFlags:draggingInfo]);
     _data->_page->dragUpdated(&dragData, [[draggingInfo draggingPasteboard] name]);
-    return _data->_page->dragOperation();
+    
+    WebCore::DragSession dragSession = _data->_page->dragSession();
+#if !defined(BUILDING_ON_SNOW_LEOPARD)
+    NSInteger numberOfValidItemsForDrop = dragSession.numberOfItemsToBeAccepted;
+    NSDraggingFormation draggingFormation = NSDraggingFormationNone;
+    if (dragSession.mouseIsOverFileInput && numberOfValidItemsForDrop > 0)
+        draggingFormation = NSDraggingFormationList;
+
+    if ([draggingInfo numberOfValidItemsForDrop] != numberOfValidItemsForDrop)
+        [draggingInfo setNumberOfValidItemsForDrop:numberOfValidItemsForDrop];
+    if ([draggingInfo draggingFormation] != draggingFormation)
+        [draggingInfo setDraggingFormation:draggingFormation];
+#endif
+    return dragSession.operation;
 }
 
 - (void)draggingExited:(id <NSDraggingInfo>)draggingInfo
@@ -1773,8 +1742,9 @@ static bool maybeCreateSandboxExtensionFromPasteboard(NSPasteboard *pasteboard, 
     return ownsGrowBox;
 }
 
-// FIXME: Use an AppKit constant for this once one is available.
-static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidChangeResolutionNotification";
+// FIXME: Use AppKit constants for these when they are available.
+static NSString * const windowDidChangeBackingPropertiesNotification = @"NSWindowDidChangeBackingPropertiesNotification";
+static NSString * const backingPropertyOldScaleFactorKey = @"NSBackingPropertyOldScaleFactorKey";
 
 - (void)addWindowObserversForWindow:(NSWindow *)window
 {
@@ -1795,9 +1765,10 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
                                                      name:@"NSWindowDidOrderOffScreenNotification" object:window];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidOrderOnScreen:) 
                                                      name:@"_NSWindowDidBecomeVisible" object:window];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeResolution:)
-                                                     name:windowDidChangeResolutionNotification object:window];
-
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeBackingProperties:)
+                                                     name:windowDidChangeBackingPropertiesNotification object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeScreen:)
+                                                     name:NSWindowDidChangeScreenNotification object:window];
     }
 }
 
@@ -1815,8 +1786,8 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidResizeNotification object:window];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"NSWindowDidOrderOffScreenNotification" object:window];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"_NSWindowDidBecomeVisible" object:window];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:windowDidChangeResolutionNotification object:window];
-
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:windowDidChangeBackingPropertiesNotification object:window];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowDidChangeScreenNotification object:window];
 }
 
 - (void)viewWillMoveToWindow:(NSWindow *)window
@@ -1868,6 +1839,11 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     _data->_page->setIntrinsicDeviceScaleFactor([self _intrinsicDeviceScaleFactor]);
 }
 
+- (void)doWindowDidChangeScreen
+{
+    _data->_page->windowScreenDidChange((PlatformDisplayID)[[[[[self window] screen] deviceDescription] objectForKey:@"NSScreenNumber"] intValue]);
+}
+
 - (void)_windowDidBecomeKey:(NSNotification *)notification
 {
     NSWindow *keyWindow = [notification object];
@@ -1875,6 +1851,14 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
         [self _updateSecureInputState];
         _data->_page->viewStateDidChange(WebPageProxy::ViewWindowIsActive);
     }
+
+    // Send a change screen to make sure the initial displayID is set
+    [self doWindowDidChangeScreen];
+}
+
+- (void)_windowDidChangeScreen:(NSNotification *)notification
+{
+    [self doWindowDidChangeScreen];
 }
 
 - (void)_windowDidResignKey:(NSNotification *)notification
@@ -1903,17 +1887,28 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
 
 - (void)_windowDidOrderOffScreen:(NSNotification *)notification
 {
+    // We want to make sure to update the active state while hidden, so since the view is about to be hidden,
+    // we hide it first and then update the active state.
     _data->_page->viewStateDidChange(WebPageProxy::ViewIsVisible);
+    _data->_page->viewStateDidChange(WebPageProxy::ViewWindowIsActive);
 }
 
 - (void)_windowDidOrderOnScreen:(NSNotification *)notification
 {
+    // We want to make sure to update the active state while hidden, so since the view is about to become visible,
+    // we update the active state first and then make it visible.
+    _data->_page->viewStateDidChange(WebPageProxy::ViewWindowIsActive);
     _data->_page->viewStateDidChange(WebPageProxy::ViewIsVisible);
 }
 
-- (void)_windowDidChangeResolution:(NSNotification *)notification
+- (void)_windowDidChangeBackingProperties:(NSNotification *)notification
 {
-    _data->_page->setIntrinsicDeviceScaleFactor([self _intrinsicDeviceScaleFactor]);
+    CGFloat oldBackingScaleFactor = [[notification.userInfo objectForKey:backingPropertyOldScaleFactorKey] doubleValue]; 
+    CGFloat newBackingScaleFactor = [self _intrinsicDeviceScaleFactor]; 
+    if (oldBackingScaleFactor == newBackingScaleFactor) 
+        return; 
+
+    _data->_page->setIntrinsicDeviceScaleFactor(newBackingScaleFactor);
 }
 
 static void drawPageBackground(CGContextRef context, WebPageProxy* page, const IntRect& rect)
@@ -1940,6 +1935,12 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 {
     LOG(View, "drawRect: x:%g, y:%g, width:%g, height:%g", rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
     _data->_page->endPrinting();
+
+    if ([self _shouldUseTiledDrawingArea]) {
+        // Nothing to do here.
+        return;
+    }
+
     CGContextRef context = static_cast<CGContextRef>([[NSGraphicsContext currentContext] graphicsPort]);
 
     if (DrawingAreaProxyImpl* drawingArea = static_cast<DrawingAreaProxyImpl*>(_data->_page->drawingArea())) {
@@ -1981,6 +1982,22 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 - (void)viewDidUnhide
 {
     _data->_page->viewStateDidChange(WebPageProxy::ViewIsVisible);
+}
+
+- (void)_updateRemoteAccessibilityRegistration:(BOOL)registerProcess
+{
+    // When the tree is connected/disconnected, the remote accessibility registration
+    // needs to be updated with the pid of the remote process. If the process is going
+    // away, that information is not present in WebProcess
+    pid_t pid = 0;
+    if (registerProcess && _data->_page->process())
+        pid = _data->_page->process()->processIdentifier();
+    else if (!registerProcess) {
+        pid = WKAXRemoteProcessIdentifier(_data->_remoteAccessibilityChild.get());
+        _data->_remoteAccessibilityChild = nil;
+    }
+    if (pid)
+        WKAXRegisterRemoteProcess(registerProcess, pid); 
 }
 
 - (id)accessibilityFocusedUIElement
@@ -2044,33 +2061,6 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     return (NSInteger)self;
 }
 
-
-- (BOOL)canChangeFrameLayout:(WKFrameRef)frameRef
-{
-    // PDF documents are already paginated, so we can't change them to add headers and footers.
-    return !toImpl(frameRef)->isMainFrame() || !_data->_pdfViewController;
-}
-
-- (NSPrintOperation *)printOperationWithPrintInfo:(NSPrintInfo *)printInfo forFrame:(WKFrameRef)frameRef
-{
-    LOG(View, "Creating an NSPrintOperation for frame '%s'", toImpl(frameRef)->url().utf8().data());
-
-    // Only the top frame can currently contain a PDF view.
-    if (_data->_pdfViewController) {
-        if (!toImpl(frameRef)->isMainFrame())
-            return 0;
-        return _data->_pdfViewController->makePrintOperation(printInfo);
-    } else {
-        RetainPtr<WKPrintingView> printingView(AdoptNS, [[WKPrintingView alloc] initWithFrameProxy:toImpl(frameRef) view:self]);
-        // NSPrintOperation takes ownership of the view.
-        NSPrintOperation *printOperation = [NSPrintOperation printOperationWithView:printingView.get()];
-        [printOperation setCanSpawnSeparateThread:YES];
-        [printOperation setJobTitle:toImpl(frameRef)->title()];
-        printingView->_printOperation = printOperation;
-        return printOperation;
-    }
-}
-
 - (float)_intrinsicDeviceScaleFactor
 {
     NSWindow *window = [self window];
@@ -2094,12 +2084,20 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     _data->_resizeScrollOffset = NSZeroSize;
 }
 
+- (BOOL)_shouldUseTiledDrawingArea
+{
+    return NO;
+}
+
 @end
 
 @implementation WKView (Internal)
 
 - (PassOwnPtr<WebKit::DrawingAreaProxy>)_createDrawingAreaProxy
 {
+    if ([self _shouldUseTiledDrawingArea])
+        return TiledCoreAnimationDrawingAreaProxy::create(_data->_page.get());
+
     return DrawingAreaProxyImpl::create(_data->_page.get());
 }
 
@@ -2114,7 +2112,6 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 
 - (void)_processDidCrash
 {
-    [self setNeedsDisplay:YES];
     [self _updateRemoteAccessibilityRegistration:NO];
 }
 
@@ -2125,7 +2122,6 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 
 - (void)_didRelaunchProcess
 {
-    [self setNeedsDisplay:YES];
 }
 
 - (void)_setCursor:(NSCursor *)cursor
@@ -2341,7 +2337,7 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     }
 }
 
-- (void)_setFindIndicator:(PassRefPtr<FindIndicator>)findIndicator fadeOut:(BOOL)fadeOut
+- (void)_setFindIndicator:(PassRefPtr<FindIndicator>)findIndicator fadeOut:(BOOL)fadeOut animate:(BOOL)animate
 {
     if (!findIndicator) {
         _data->_findIndicatorWindow = nullptr;
@@ -2351,7 +2347,7 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     if (!_data->_findIndicatorWindow)
         _data->_findIndicatorWindow = FindIndicatorWindow::create(self);
 
-    _data->_findIndicatorWindow->setFindIndicator(findIndicator, fadeOut);
+    _data->_findIndicatorWindow->setFindIndicator(findIndicator, fadeOut, animate);
 }
 
 - (void)_enterAcceleratedCompositingMode:(const LayerTreeContext&)layerTreeContext
@@ -2360,7 +2356,7 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
     ASSERT(!layerTreeContext.isEmpty());
 
     // Create an NSView that will host our layer tree.
-    _data->_layerHostingView.adoptNS([[NSView alloc] initWithFrame:[self bounds]]);
+    _data->_layerHostingView.adoptNS([[WKFlippedView alloc] initWithFrame:[self bounds]]);
     [_data->_layerHostingView.get() setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     [CATransaction begin];
@@ -2607,38 +2603,6 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 #endif
 }
 
-@end
-
-@implementation WKView (Private)
-
-- (void)disableFrameSizeUpdates
-{
-    _frameSizeUpdatesDisabledCount++;
-}
-
-- (void)enableFrameSizeUpdates
-{
-    if (!_frameSizeUpdatesDisabledCount)
-        return;
-    
-    if (!(--_frameSizeUpdatesDisabledCount))
-        [self _setDrawingAreaSize:[self frame].size];
-}
-
-- (BOOL)frameSizeUpdatesDisabled
-{
-    return _frameSizeUpdatesDisabledCount > 0;
-}
-
-- (void)performDictionaryLookupAtCurrentMouseLocation
-{
-    NSPoint thePoint = [NSEvent mouseLocation];
-    thePoint = [[self window] convertScreenToBase:thePoint];
-    thePoint = [self convertPoint:thePoint fromView:nil];
-
-    _data->_page->performDictionaryLookupAtLocation(FloatPoint(thePoint.x, thePoint.y));
-}
-
 - (NSInteger)spellCheckerDocumentTag
 {
     if (!_data->_hasSpellCheckerDocumentTag) {
@@ -2651,6 +2615,148 @@ static void drawPageBackground(CGContextRef context, WebPageProxy* page, const I
 - (void)handleCorrectionPanelResult:(NSString*)result
 {
     _data->_page->handleCorrectionPanelResult(result);
+}
+
+@end
+
+@implementation WKView (Private)
+
+- (void)_registerDraggedTypes
+{
+    NSMutableSet *types = [[NSMutableSet alloc] initWithArray:PasteboardTypes::forEditing()];
+    [types addObjectsFromArray:PasteboardTypes::forURL()];
+    [self registerForDraggedTypes:[types allObjects]];
+    [types release];
+}
+
+- (id)initWithFrame:(NSRect)frame contextRef:(WKContextRef)contextRef pageGroupRef:(WKPageGroupRef)pageGroupRef
+{
+    self = [super initWithFrame:frame];
+    if (!self)
+        return nil;
+
+    [NSApp registerServicesMenuSendTypes:PasteboardTypes::forSelection() returnTypes:PasteboardTypes::forEditing()];
+
+    InitWebCoreSystemInterface();
+    RunLoop::initializeMainRunLoop();
+
+    // Legacy style scrollbars have design details that rely on tracking the mouse all the time.
+    NSTrackingAreaOptions options = NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingInVisibleRect;
+#if !defined(BUILDING_ON_SNOW_LEOPARD)
+    if (WKRecommendedScrollerStyle() == NSScrollerStyleLegacy)
+        options |= NSTrackingActiveAlways;
+    else
+        options |= NSTrackingActiveInKeyWindow;
+#else
+    options |= NSTrackingActiveInKeyWindow;
+#endif
+
+    NSTrackingArea *trackingArea = [[NSTrackingArea alloc] initWithRect:frame
+                                                                options:options
+                                                                  owner:self
+                                                               userInfo:nil];
+    [self addTrackingArea:trackingArea];
+    [trackingArea release];
+
+    _data = [[WKViewData alloc] init];
+
+    _data->_pageClient = PageClientImpl::create(self);
+    _data->_page = toImpl(contextRef)->createWebPage(_data->_pageClient.get(), toImpl(pageGroupRef));
+    _data->_page->initializeWebPage();
+#if ENABLE(FULLSCREEN_API)
+    _data->_page->fullScreenManager()->setWebView(self);
+#endif
+    _data->_mouseDownEvent = nil;
+    _data->_ignoringMouseDraggedEvents = NO;
+
+    [self _registerDraggedTypes];
+
+    if ([self _shouldUseTiledDrawingArea]) {
+        CALayer *layer = [CALayer layer];
+        layer.backgroundColor = CGColorGetConstantColor(kCGColorWhite);
+        self.layer = layer;
+
+        self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawNever;
+        self.wantsLayer = YES;
+    }
+
+    WebContext::statistics().wkViewCount++;
+
+    return self;
+}
+
+- (WKPageRef)pageRef
+{
+    return toAPI(_data->_page.get());
+}
+
+- (BOOL)canChangeFrameLayout:(WKFrameRef)frameRef
+{
+    // PDF documents are already paginated, so we can't change them to add headers and footers.
+    return !toImpl(frameRef)->isMainFrame() || !_data->_pdfViewController;
+}
+
+- (NSPrintOperation *)printOperationWithPrintInfo:(NSPrintInfo *)printInfo forFrame:(WKFrameRef)frameRef
+{
+    LOG(View, "Creating an NSPrintOperation for frame '%s'", toImpl(frameRef)->url().utf8().data());
+
+    // Only the top frame can currently contain a PDF view.
+    if (_data->_pdfViewController) {
+        if (!toImpl(frameRef)->isMainFrame())
+            return 0;
+        return _data->_pdfViewController->makePrintOperation(printInfo);
+    } else {
+        RetainPtr<WKPrintingView> printingView(AdoptNS, [[WKPrintingView alloc] initWithFrameProxy:toImpl(frameRef) view:self]);
+        // NSPrintOperation takes ownership of the view.
+        NSPrintOperation *printOperation = [NSPrintOperation printOperationWithView:printingView.get()];
+        [printOperation setCanSpawnSeparateThread:YES];
+        [printOperation setJobTitle:toImpl(frameRef)->title()];
+        printingView->_printOperation = printOperation;
+        return printOperation;
+    }
+}
+
+- (void)setFrame:(NSRect)rect andScrollBy:(NSSize)offset
+{
+    ASSERT(NSEqualSizes(_data->_resizeScrollOffset, NSZeroSize));
+
+    _data->_resizeScrollOffset = offset;
+    [self setFrame:rect];
+}
+
+- (void)disableFrameSizeUpdates
+{
+    _data->_frameSizeUpdatesDisabledCount++;
+}
+
+- (void)enableFrameSizeUpdates
+{
+    if (!_data->_frameSizeUpdatesDisabledCount)
+        return;
+    
+    if (!(--_data->_frameSizeUpdatesDisabledCount))
+        [self _setDrawingAreaSize:[self frame].size];
+}
+
+- (BOOL)frameSizeUpdatesDisabled
+{
+    return _data->_frameSizeUpdatesDisabledCount > 0;
+}
+
+- (void)performDictionaryLookupAtCurrentMouseLocation
+{
+    NSPoint thePoint = [NSEvent mouseLocation];
+    thePoint = [[self window] convertScreenToBase:thePoint];
+    thePoint = [self convertPoint:thePoint fromView:nil];
+
+    _data->_page->performDictionaryLookupAtLocation(FloatPoint(thePoint.x, thePoint.y));
+}
+
++ (void)hideWordDefinitionWindow
+{
+#if !defined(BUILDING_ON_SNOW_LEOPARD)
+    WKHideWordDefinitionWindow();
+#endif
 }
 
 @end

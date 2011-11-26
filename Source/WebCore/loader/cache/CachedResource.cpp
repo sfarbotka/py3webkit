@@ -3,7 +3,7 @@
     Copyright (C) 2001 Dirk Mueller (mueller@kde.org)
     Copyright (C) 2002 Waldo Bastian (bastian@kde.org)
     Copyright (C) 2006 Samuel Weinig (sam.weinig@gmail.com)
-    Copyright (C) 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
+    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -30,15 +30,17 @@
 #include "CachedResourceClientWalker.h"
 #include "CachedResourceHandle.h"
 #include "CachedResourceLoader.h"
-#include "CachedResourceRequest.h"
 #include "CrossOriginAccessControl.h"
+#include "Document.h"
 #include "Frame.h"
 #include "FrameLoaderClient.h"
 #include "KURL.h"
 #include "Logging.h"
 #include "PurgeableBuffer.h"
 #include "ResourceHandle.h"
+#include "ResourceLoadScheduler.h"
 #include "SharedBuffer.h"
+#include "SubresourceLoader.h"
 #include <wtf/CurrentTime.h>
 #include <wtf/MathExtras.h>
 #include <wtf/RefCountedLeakCounter.h>
@@ -59,9 +61,9 @@ static ResourceLoadPriority defaultPriorityForResourceType(CachedResource::Type 
             return ResourceLoadPriorityHigh;
         case CachedResource::Script:
         case CachedResource::FontResource:
+        case CachedResource::RawResource:
             return ResourceLoadPriorityMedium;
         case CachedResource::ImageResource:
-        case CachedResource::RawResource:
             return ResourceLoadPriorityLow;
 #if ENABLE(LINK_PREFETCH)
         case CachedResource::LinkPrefetch:
@@ -71,10 +73,53 @@ static ResourceLoadPriority defaultPriorityForResourceType(CachedResource::Type 
         case CachedResource::LinkSubresource:
             return ResourceLoadPriorityVeryLow;
 #endif
+#if ENABLE(VIDEO_TRACK)
+        case CachedResource::TextTrackResource:
+            return ResourceLoadPriorityLow;
+#endif
+#if ENABLE(CSS_SHADERS)
+        case CachedResource::ShaderResource:
+            return ResourceLoadPriorityMedium;
+#endif
     }
     ASSERT_NOT_REACHED();
     return ResourceLoadPriorityLow;
 }
+
+#if PLATFORM(CHROMIUM)
+static ResourceRequest::TargetType cachedResourceTypeToTargetType(CachedResource::Type type)
+{
+    switch (type) {
+    case CachedResource::CSSStyleSheet:
+#if ENABLE(XSLT)
+    case CachedResource::XSLStyleSheet:
+#endif
+        return ResourceRequest::TargetIsStyleSheet;
+    case CachedResource::Script: 
+        return ResourceRequest::TargetIsScript;
+    case CachedResource::FontResource:
+        return ResourceRequest::TargetIsFontResource;
+    case CachedResource::ImageResource:
+        return ResourceRequest::TargetIsImage;
+    case CachedResource::RawResource:
+        return ResourceRequest::TargetIsSubresource;    
+#if ENABLE(LINK_PREFETCH)
+    case CachedResource::LinkPrefetch:
+        return ResourceRequest::TargetIsPrefetch;
+    case CachedResource::LinkPrerender:
+        return ResourceRequest::TargetIsPrerender;
+    case CachedResource::LinkSubresource:
+        return ResourceRequest::TargetIsSubresource;
+#endif
+#if ENABLE(VIDEO_TRACK)
+    case CachedResource::TextTrackResource:
+        return ResourceRequest::TargetIsTextTrack;
+#endif
+    }
+    ASSERT_NOT_REACHED();
+    return ResourceRequest::TargetIsSubresource;
+}
+#endif
 
 DEFINE_DEBUG_ONLY_GLOBAL(RefCountedLeakCounter, cachedResourceLeakCounter, ("CachedResource"));
 
@@ -83,6 +128,7 @@ CachedResource::CachedResource(const ResourceRequest& request, Type type)
     , m_loadPriority(defaultPriorityForResourceType(type))
     , m_responseTimestamp(currentTime())
     , m_lastDecodedAccessTime(0)
+    , m_loadFinishTime(0)
     , m_encodedSize(0)
     , m_decodedSize(0)
     , m_accessCount(0)
@@ -107,6 +153,7 @@ CachedResource::CachedResource(const ResourceRequest& request, Type type)
     , m_resourceToRevalidate(0)
     , m_proxyResource(0)
 {
+    ASSERT(m_type == unsigned(type)); // m_type is a bitfield, so this tests careless updates of the enum.
 #ifndef NDEBUG
     cachedResourceLeakCounter.increment();
 #endif
@@ -133,11 +180,50 @@ void CachedResource::load(CachedResourceLoader* cachedResourceLoader, const Reso
 {
     m_options = options;
     m_loading = true;
-    m_request = CachedResourceRequest::load(cachedResourceLoader, this, options);
-    if (m_request) {
-        m_status = Pending;
-        cachedResourceLoader->incrementRequestCount(this);
+
+#if PLATFORM(CHROMIUM)
+    if (m_resourceRequest.targetType() == ResourceRequest::TargetIsUnspecified)
+        m_resourceRequest.setTargetType(cachedResourceTypeToTargetType(type()));
+#endif
+
+    if (!accept().isEmpty())
+        m_resourceRequest.setHTTPAccept(accept());
+
+    if (isCacheValidator()) {
+        CachedResource* resourceToRevalidate = m_resourceToRevalidate;
+        ASSERT(resourceToRevalidate->canUseCacheValidator());
+        ASSERT(resourceToRevalidate->isLoaded());
+        const String& lastModified = resourceToRevalidate->response().httpHeaderField("Last-Modified");
+        const String& eTag = resourceToRevalidate->response().httpHeaderField("ETag");
+        if (!lastModified.isEmpty() || !eTag.isEmpty()) {
+            ASSERT(cachedResourceLoader->cachePolicy() != CachePolicyReload);
+            if (cachedResourceLoader->cachePolicy() == CachePolicyRevalidate)
+                m_resourceRequest.setHTTPHeaderField("Cache-Control", "max-age=0");
+            if (!lastModified.isEmpty())
+                m_resourceRequest.setHTTPHeaderField("If-Modified-Since", lastModified);
+            if (!eTag.isEmpty())
+                m_resourceRequest.setHTTPHeaderField("If-None-Match", eTag);
+        }
     }
+
+#if ENABLE(LINK_PREFETCH)
+    if (type() == CachedResource::LinkPrefetch || type() == CachedResource::LinkPrerender || type() == CachedResource::LinkSubresource)
+        m_resourceRequest.setHTTPHeaderField("Purpose", "prefetch");
+#endif
+    m_resourceRequest.setPriority(loadPriority());
+    
+    m_loader = resourceLoadScheduler()->scheduleSubresourceLoad(cachedResourceLoader->document()->frame(), this, m_resourceRequest, m_resourceRequest.priority(), options);
+    if (!m_loader || m_loader->reachedTerminalState()) {
+        // FIXME: What if resources in other frames were waiting for this revalidation?
+        LOG(ResourceLoading, "Cannot start loading '%s'", url().string().latin1().data());
+        if (m_resourceToRevalidate) 
+            memoryCache()->revalidationFailed(this); 
+        error(CachedResource::LoadError);
+        return;
+    }
+
+    m_status = Pending;
+    cachedResourceLoader->incrementRequestCount(this);
 }
 
 void CachedResource::checkNotify()
@@ -145,7 +231,7 @@ void CachedResource::checkNotify()
     if (isLoading())
         return;
 
-    CachedResourceClientWalker w(m_clients);
+    CachedResourceClientWalker<CachedResourceClient> w(m_clients);
     while (CachedResourceClient* c = w.next())
         c->notifyFinished(this);
 }
@@ -171,7 +257,8 @@ void CachedResource::error(CachedResource::Status status)
 
 void CachedResource::finish()
 {
-    m_status = Cached;
+    if (!errorOccurred())
+        m_status = Cached;
 }
 
 bool CachedResource::passesAccessControlCheck(SecurityOrigin* securityOrigin)
@@ -226,6 +313,9 @@ void CachedResource::setResponse(const ResourceResponse& response)
 {
     m_response = response;
     m_responseTimestamp = currentTime();
+    String encoding = response.textEncodingName();
+    if (!encoding.isNull())
+        setEncoding(encoding);
 }
 
 void CachedResource::setSerializedCachedMetadata(const char* data, size_t size)
@@ -258,8 +348,8 @@ CachedMetadata* CachedResource::cachedMetadata(unsigned dataTypeID) const
 
 void CachedResource::stopLoading()
 {
-    ASSERT(m_request);            
-    m_request.clear();
+    ASSERT(m_loader);            
+    m_loader = 0;
 
     CachedResourceHandle<CachedResource> protect(this);
 

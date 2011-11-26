@@ -26,7 +26,7 @@
 #include "config.h"
 #include "QtPinchGestureRecognizer.h"
 
-#include "ViewportInteractionEngine.h"
+#include "QtWebPageEventHandler.h"
 #include <QtCore/QLineF>
 
 namespace WebKit {
@@ -44,23 +44,26 @@ static inline int findTouchPointIndex(const QList<QTouchEvent::TouchPoint>& touc
     return -1;
 }
 
-static inline QPointF computeTouchCenter(const QTouchEvent::TouchPoint& point1, const QTouchEvent::TouchPoint& point2)
+static inline QPointF computePinchCenter(const QTouchEvent::TouchPoint& point1, const QTouchEvent::TouchPoint& point2)
 {
     return (point1.pos() + point2.pos()) / 2.0f;
 }
 
-QtPinchGestureRecognizer::QtPinchGestureRecognizer(ViewportInteractionEngine* interactionEngine)
-    : QtGestureRecognizer(interactionEngine)
+QtPinchGestureRecognizer::QtPinchGestureRecognizer(QtWebPageEventHandler* eventHandler)
+    : QtGestureRecognizer(eventHandler)
 {
     reset();
 }
 
 bool QtPinchGestureRecognizer::recognize(const QTouchEvent* event)
 {
+    if (!interactionEngine())
+        return false;
+
     const QList<QTouchEvent::TouchPoint>& touchPoints = event->touchPoints();
     if (touchPoints.size() < 2) {
         if (m_state == GestureRecognized)
-            m_viewportInteractionEngine->pinchGestureEnded();
+            interactionEngine()->pinchGestureEnded();
         reset();
         return false;
     }
@@ -96,7 +99,7 @@ bool QtPinchGestureRecognizer::recognize(const QTouchEvent* event)
                 if (pinchDistance < pinchInitialTriggerDistanceThreshold)
                     return false;
                 m_state = GestureRecognized;
-                m_viewportInteractionEngine->pinchGestureStarted();
+                interactionEngine()->pinchGestureStarted(computePinchCenter(point1, point2));
 
                 // We reset the initial position to the previous position in order to avoid the jump caused
                 // by skipping all the events between the beginning and when the threshold is hit.
@@ -109,15 +112,15 @@ bool QtPinchGestureRecognizer::recognize(const QTouchEvent* event)
             const qreal currentSpanDistance = QLineF(point1.screenPos(), point2.screenPos()).length();
             const qreal initialSpanDistance = QLineF(m_point1.initialScreenPosition, m_point2.initialScreenPosition).length();
             const qreal totalScaleFactor = currentSpanDistance / initialSpanDistance;
-            const QPointF touchCenterInPageViewCoordinate = computeTouchCenter(point1, point2);
-            m_viewportInteractionEngine->pinchGestureRequestUpdate(touchCenterInPageViewCoordinate, totalScaleFactor);
+            const QPointF touchCenterInPageViewCoordinates = computePinchCenter(point1, point2);
+            interactionEngine()->pinchGestureRequestUpdate(touchCenterInPageViewCoordinates, totalScaleFactor);
             return true;
             break;
         }
         break;
     case QEvent::TouchEnd:
         if (m_state == GestureRecognized) {
-            m_viewportInteractionEngine->pinchGestureEnded();
+            interactionEngine()->pinchGestureEnded();
             reset();
             return true;
         }

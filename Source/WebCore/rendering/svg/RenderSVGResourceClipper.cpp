@@ -41,6 +41,7 @@
 #include "SVGNames.h"
 #include "SVGRenderSupport.h"
 #include "SVGResources.h"
+#include "SVGResourcesCache.h"
 #include "SVGStyledElement.h"
 #include "SVGStyledTransformableElement.h"
 #include "SVGUnitTypes.h"
@@ -96,11 +97,7 @@ bool RenderSVGResourceClipper::applyResource(RenderObject* object, RenderStyle*,
 {
     ASSERT(object);
     ASSERT(context);
-#ifndef NDEBUG
-    ASSERT(resourceMode == ApplyToDefaultMode);
-#else
-    UNUSED_PARAM(resourceMode);
-#endif
+    ASSERT_UNUSED(resourceMode, resourceMode == ApplyToDefaultMode);
 
     return applyClippingToContext(object, object->objectBoundingBox(), object->repaintRectInLocalCoordinates(), context);
 }

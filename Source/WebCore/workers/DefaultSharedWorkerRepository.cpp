@@ -37,6 +37,7 @@
 #include "ActiveDOMObject.h"
 #include "CrossThreadTask.h"
 #include "Document.h"
+#include "ExceptionCode.h"
 #include "InspectorInstrumentation.h"
 #include "MessageEvent.h"
 #include "MessagePort.h"
@@ -68,10 +69,10 @@ public:
     KURL url() const
     {
         // Don't use m_url.copy() because it isn't a threadsafe method.
-        return KURL(ParsedURLString, m_url.string().threadsafeCopy());
+        return KURL(ParsedURLString, m_url.string().isolatedCopy());
     }
 
-    String name() const { return m_name.threadsafeCopy(); }
+    String name() const { return m_name.isolatedCopy(); }
     bool matches(const String& name, PassRefPtr<SecurityOrigin> origin, const KURL& urlToMatch) const;
 
     // WorkerLoaderProxy
@@ -113,7 +114,7 @@ private:
 
 SharedWorkerProxy::SharedWorkerProxy(const String& name, const KURL& url, PassRefPtr<SecurityOrigin> origin)
     : m_closing(false)
-    , m_name(name.crossThreadString())
+    , m_name(name.isolatedCopy())
     , m_url(url.copy())
     , m_origin(origin)
 {
@@ -259,7 +260,7 @@ private:
         // Since close() stops the thread event loop, this should not ever get called while closing.
         ASSERT(!workerContext->isClosing());
         ASSERT(workerContext->isSharedWorkerContext());
-        workerContext->toSharedWorkerContext()->dispatchEvent(createConnectEvent(port));
+        workerContext->dispatchEvent(createConnectEvent(port));
     }
 
     OwnPtr<MessagePortChannel> m_channel;
@@ -338,7 +339,7 @@ void DefaultSharedWorkerRepository::workerScriptLoaded(SharedWorkerProxy& proxy,
 
     // Another loader may have already started up a thread for this proxy - if so, just send a connect to the pre-existing thread.
     if (!proxy.thread()) {
-        RefPtr<SharedWorkerThread> thread = SharedWorkerThread::create(proxy.name(), proxy.url(), userAgent, workerScript, proxy, proxy);
+        RefPtr<SharedWorkerThread> thread = SharedWorkerThread::create(proxy.name(), proxy.url(), userAgent, workerScript, proxy, proxy, DontPauseWorkerContextOnStart);
         proxy.setThread(thread);
         thread->start();
     }
@@ -421,7 +422,7 @@ PassRefPtr<SharedWorkerProxy> DefaultSharedWorkerRepository::getProxy(const Stri
     // Look for an existing worker, and create one if it doesn't exist.
     // Items in the cache are freed on another thread, so do a threadsafe copy of the URL before creating the origin,
     // to make sure no references to external strings linger.
-    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(KURL(ParsedURLString, url.string().threadsafeCopy()));
+    RefPtr<SecurityOrigin> origin = SecurityOrigin::create(KURL(ParsedURLString, url.string().isolatedCopy()));
     for (unsigned i = 0; i < m_proxies.size(); i++) {
         if (!m_proxies[i]->isClosing() && m_proxies[i]->matches(name, origin, url))
             return m_proxies[i];

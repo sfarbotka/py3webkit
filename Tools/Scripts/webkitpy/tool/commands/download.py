@@ -118,12 +118,16 @@ class LandCowboy(AbstractSequencedCommand):
     steps = [
         steps.PrepareChangeLog,
         steps.EditChangeLog,
+        steps.CheckStyle,
         steps.ConfirmDiff,
         steps.Build,
         steps.RunTests,
         steps.Commit,
         steps.CloseBugForLandDiff,
     ]
+
+    def _prepare_state(self, options, args, tool):
+        options.check_style_filter = "-changelog"
 
 
 class AbstractPatchProcessingCommand(AbstractDeclarativeCommand):
@@ -299,6 +303,18 @@ class LandFromBug(AbstractPatchLandingCommand, ProcessBugsMixin):
     help_text = "Land all patches on the given bugs, optionally building and testing them first"
     argument_names = "BUGID [BUGIDS]"
     show_in_main_help = True
+
+
+class ValidateChangelog(AbstractSequencedCommand):
+    name = "validate-changelog"
+    help_text = "Validate that the ChangeLogs and reviewers look reasonable"
+    long_help = """Examines the current diff to see whether the ChangeLogs
+and the reviewers listed in the ChangeLogs look reasonable.
+"""
+    steps = [
+        steps.ValidateChangeLogs,
+        steps.ValidateReviewer,
+    ]
 
 
 class AbstractRolloutPrepCommand(AbstractSequencedCommand):

@@ -41,7 +41,7 @@ void ScopeChainNode::print()
     for (ScopeChainIterator scopeIter = begin(); scopeIter != scopeEnd; ++scopeIter) {
         JSObject* o = scopeIter->get();
         PropertyNameArray propertyNames(globalObject->globalExec());
-        o->getPropertyNames(globalObject->globalExec(), propertyNames);
+        o->methodTable()->getPropertyNames(o, globalObject->globalExec(), propertyNames, ExcludeDontEnumProperties);
         PropertyNameArray::const_iterator propEnd = propertyNames.end();
 
         fprintf(stderr, "----- [scope %p] -----\n", o);
@@ -73,7 +73,7 @@ int ScopeChainNode::localDepth()
 
 void ScopeChainNode::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    ScopeChainNode* thisObject = static_cast<ScopeChainNode*>(cell);
+    ScopeChainNode* thisObject = jsCast<ScopeChainNode*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());

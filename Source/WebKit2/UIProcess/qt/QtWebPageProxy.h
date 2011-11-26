@@ -21,21 +21,15 @@
 #ifndef QtWebPageProxy_h
 #define QtWebPageProxy_h
 
-#include "config.h"
-
+#include "DrawingAreaProxy.h"
 #include "LayerTreeContext.h"
 #include "PageClient.h"
-#include "PolicyInterface.h"
-#include "qwebkittypes.h"
+#include "QtWebContext.h"
 #include "ShareableBitmap.h"
 #include "ViewportArguments.h"
-#include "ViewInterface.h"
-#include "WebContext.h"
 #include "WebPageProxy.h"
 #include <wtf/RefPtr.h>
-#include <QBasicTimer>
 #include <QGraphicsView>
-#include <QKeyEvent>
 #include <QMenu>
 #include <QSharedPointer>
 
@@ -43,13 +37,19 @@ QT_BEGIN_NAMESPACE
 class QUndoStack;
 QT_END_NAMESPACE
 
-class QWebError;
+class QQuickWebPage;
+class QQuickWebView;
+class QtWebError;
+class QtWebPageEventHandler;
+class QWebDownloadItem;
+class QWebPreferences;
 class QWKHistory;
-class QWKPreferences;
+
+namespace WebKit {
+class QtWebContext;
+}
 
 using namespace WebKit;
-
-WebCore::DragOperation dropActionToDragOperation(Qt::DropActions actions);
 
 // FIXME: needs focus in/out, window activation, support through viewStateDidChange().
 class QtWebPageProxy : public QObject, WebKit::PageClient {
@@ -70,10 +70,10 @@ public:
         WebActionCount
     };
 
-    QtWebPageProxy(WebKit::ViewInterface*, WebKit::PolicyInterface* = 0, WKContextRef = 0, WKPageGroupRef = 0);
+    QtWebPageProxy(QQuickWebPage*, QQuickWebView*, WKContextRef = 0, WKPageGroupRef = 0);
     ~QtWebPageProxy();
 
-    virtual bool handleEvent(QEvent*);
+    virtual PassOwnPtr<DrawingAreaProxy> createDrawingAreaProxy();
 
     // PageClient
     virtual void setViewNeedsDisplay(const WebCore::IntRect&);
@@ -94,10 +94,11 @@ public:
     virtual void processDidCrash();
     virtual void pageClosed() { }
     virtual void didRelaunchProcess();
+
     virtual void didChangeContentsSize(const WebCore::IntSize&);
+    virtual void didChangeViewportProperties(const WebCore::ViewportArguments&);
 
     virtual void startDrag(const WebCore::DragData&, PassRefPtr<ShareableBitmap> dragImage);
-    virtual void setViewportArguments(const WebCore::ViewportArguments&);
     virtual void setCursor(const WebCore::Cursor&);
     virtual void setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves);
     virtual void toolTipChanged(const WTF::String&, const WTF::String&);
@@ -115,7 +116,7 @@ public:
     virtual PassRefPtr<WebKit::WebPopupMenuProxy> createPopupMenuProxy(WebKit::WebPageProxy*);
     virtual PassRefPtr<WebKit::WebContextMenuProxy> createContextMenuProxy(WebKit::WebPageProxy*);
 
-    virtual void setFindIndicator(PassRefPtr<WebKit::FindIndicator>, bool fadeOut);
+    virtual void setFindIndicator(PassRefPtr<WebKit::FindIndicator>, bool fadeOut, bool animate);
 
     virtual void didCommitLoadForMainFrame(bool useCustomRepresentation);
     virtual void didFinishLoadingDataForCustomRepresentation(const String& suggestedFilename, const CoreIPC::DataReference&);
@@ -128,41 +129,39 @@ public:
     virtual void countStringMatchesInCustomRepresentation(const String&, FindOptions, unsigned maxMatchCount) { }
 
     virtual void didFindZoomableArea(const WebCore::IntPoint&, const WebCore::IntRect&);
+    virtual void didReceiveMessageFromNavigatorQtObject(const String&);
 
-    void didChangeUrl(const QUrl&);
-    void didChangeTitle(const QString&);
+    bool canGoBack() const;
+    void goBack();
+    bool canGoForward() const;
+    void goForward();
+    bool canStop() const;
+    void stop();
+    bool canReload() const;
+    void reload();
 
-    void loadDidBegin();
-    void loadDidCommit();
-    void loadDidSucceed();
-    void loadDidFail(const QWebError&);
-    void didChangeLoadProgress(int);
-    int loadProgress() const { return m_loadProgress; }
-
-    void paint(QPainter*, const QRect&);
-
-    void updateAction(QtWebPageProxy::WebAction action);
-    void updateNavigationActions();
+    void updateNavigationState();
     void updateEditorActions();
 
     WKPageRef pageRef() const;
 
     void load(const QUrl& url);
+    void loadHTMLString(const QString& html, const QUrl& baseUrl);
     QUrl url() const;
 
     void setDrawingAreaSize(const QSize&);
 
-    QWKPreferences* preferences() const;
+    QWebPreferences* preferences() const;
 
     QString title() const;
 
-    QAction* navigationAction(QtWebKit::NavigationAction) const;
-
-    QAction* action(WebAction action) const;
-    void triggerAction(WebAction action, bool checked = false);
-
     void setCustomUserAgent(const QString&);
     QString customUserAgent() const;
+
+    void setNavigatorQtObjectEnabled(bool);
+    bool navigatorQtObjectEnabled() const { return m_navigatorQtObjectEnabled; }
+
+    void postMessageToNavigatorQtObject(const QString&);
 
     qreal textZoomFactor() const;
     qreal pageZoomFactor() const;
@@ -170,43 +169,53 @@ public:
     void setPageZoomFactor(qreal zoomFactor);
     void setPageAndTextZoomFactors(qreal pageZoomFactor, qreal textZoomFactor);
 
+    void setVisibleContentRectAndScale(const QRectF&, float);
+    void setVisibleContentRectTrajectoryVector(const QPointF&);
+    void renderToCurrentGLContext(const WebCore::TransformationMatrix&, float);
+
     QWKHistory* history() const;
 
-    void setPageIsVisible(bool);
+    void contextMenuItemSelected(const WebContextMenuItemData& data)
+    {
+        m_webPageProxy->contextMenuItemSelected(data);
+    }
+
+    void handleDownloadRequest(DownloadProxy*);
+    void init(QtWebPageEventHandler*);
+
+    void showContextMenu(QSharedPointer<QMenu>);
+    void hideContextMenu();
+
+    QtWebPageEventHandler* eventHandler() { return m_eventHandler; }
 
 public Q_SLOTS:
-    void webActionTriggered(bool checked);
+    void didReceiveDownloadResponse(QWebDownloadItem* downloadItem);
 
 public:
-    Q_SIGNAL void scrollRequested(int dx, int dy);
     Q_SIGNAL void zoomableAreaFound(const QRect&);
+    Q_SIGNAL void receivedMessageFromNavigatorQtObject(const QVariantMap&);
 
 protected:
-    void init();
-
-    virtual void paintContent(QPainter* painter, const QRect& area) = 0;
+    QQuickWebPage* m_qmlWebPage;
+    QQuickWebView* m_qmlWebView;
     RefPtr<WebKit::WebPageProxy> m_webPageProxy;
-    WebKit::ViewInterface* const m_viewInterface;
-    WebKit::PolicyInterface* const m_policyInterface;
 
 private:
-    bool handleKeyPressEvent(QKeyEvent*);
-    bool handleKeyReleaseEvent(QKeyEvent*);
-    bool handleFocusInEvent(QFocusEvent*);
-    bool handleFocusOutEvent(QFocusEvent*);
+#if ENABLE(TOUCH_EVENTS)
+    virtual void doneWithTouchEvent(const NativeWebTouchEvent&, bool wasEventHandled);
+#endif
 
-    static PassRefPtr<WebContext> defaultWKContext();
-    static RefPtr<WebContext> s_defaultContext;
-    static unsigned s_defaultPageProxyCount;
-
-    RefPtr<WebContext> m_context;
+    RefPtr<QtWebContext> m_context;
     QWKHistory* m_history;
 
-    mutable QAction* m_actions[QtWebPageProxy::WebActionCount];
-    mutable QWKPreferences* m_preferences;
+    mutable OwnPtr<QWebPreferences> m_preferences;
 
     OwnPtr<QUndoStack> m_undoStack;
-    int m_loadProgress;
+
+    bool m_navigatorQtObjectEnabled;
+
+    QSharedPointer<QMenu> activeMenu;
+    QtWebPageEventHandler* m_eventHandler;
 };
 
 #endif /* QtWebPageProxy_h */

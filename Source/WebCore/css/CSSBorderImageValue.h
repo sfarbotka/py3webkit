@@ -36,13 +36,12 @@ public:
     {
         return adoptRef(new CSSBorderImageValue(image, imageSlice, borderSlice, outset, repeat));
     }
-    virtual ~CSSBorderImageValue();
 
-    virtual String cssText() const;
+    String customCssText() const;
 
     CSSValue* imageValue() const { return m_image.get(); }
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
+    void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
 
     // The border image.
     RefPtr<CSSValue> m_image;
@@ -64,7 +63,6 @@ public:
 private:
     CSSBorderImageValue(PassRefPtr<CSSValue> image, PassRefPtr<CSSBorderImageSliceValue>, PassRefPtr<CSSValue> borderSlice,
         PassRefPtr<CSSValue> outset, PassRefPtr<CSSValue> repeat);
-    virtual bool isBorderImageValue() const { return true; }
 };
 
 } // namespace WebCore

@@ -126,7 +126,7 @@ bool PopupListBox::handleMouseMoveEvent(const PlatformMouseEvent& event)
 bool PopupListBox::handleMouseReleaseEvent(const PlatformMouseEvent& event)
 {
     if (m_capturingScrollbar) {
-        m_capturingScrollbar->mouseUp();
+        m_capturingScrollbar->mouseUp(event);
         m_capturingScrollbar = 0;
         return true;
     }
@@ -857,7 +857,7 @@ void PopupListBox::layout()
     // Set our widget and scrollable contents sizes.
     int scrollbarWidth = 0;
     if (m_visibleRows < numItems()) {
-        scrollbarWidth = ScrollbarTheme::nativeTheme()->scrollbarThickness();
+        scrollbarWidth = ScrollbarTheme::theme()->scrollbarThickness();
 
         // Use kMinEndOfLinePadding when there is a scrollbar so that we use
         // as much as (lineEndPaddingWidth - kMinEndOfLinePadding) padding

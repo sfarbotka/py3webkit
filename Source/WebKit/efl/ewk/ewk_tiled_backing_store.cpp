@@ -38,80 +38,74 @@ typedef struct _Ewk_Tiled_Backing_Store_Data Ewk_Tiled_Backing_Store_Data;
 typedef struct _Ewk_Tiled_Backing_Store_Item Ewk_Tiled_Backing_Store_Item;
 typedef struct _Ewk_Tiled_Backing_Store_Pre_Render_Request Ewk_Tiled_Backing_Store_Pre_Render_Request;
 
-enum _Ewk_Tiled_Backing_Store_Pre_Render_Priority {
-    PRE_RENDER_PRIORITY_LOW = 0, /**< Append the request to the list */
-    PRE_RENDER_PRIORITY_HIGH     /**< Prepend the request to the list */
-};
-typedef enum _Ewk_Tiled_Backing_Store_Pre_Render_Priority Ewk_Tiled_Backing_Store_Pre_Render_Priority;
-
 struct _Ewk_Tiled_Backing_Store_Item {
     EINA_INLIST;
-    Ewk_Tile *tile;
+    Ewk_Tile* tile;
     struct {
-        Evas_Coord x, y, w, h;
+        Evas_Coord x, y, width, height;
     } geometry;
-    Eina_Bool smooth_scale;
+    bool smooth_scale;
 };
 
 struct _Ewk_Tiled_Backing_Store_Pre_Render_Request {
     EINA_INLIST;
-    unsigned long col, row;
+    unsigned long column, row;
     float zoom;
 };
 
 struct _Ewk_Tiled_Backing_Store_Data {
     Evas_Object_Smart_Clipped_Data base;
-    Evas_Object *self;
-    Evas_Object *contents_clipper;
+    Evas_Object* self;
+    Evas_Object* contentsClipper;
     struct {
-        Eina_Inlist **items;
-        Evas_Coord x, y, w, h;
+        Eina_Inlist** items;
+        Evas_Coord x, y, width, height;
         long cols, rows;
         struct {
-            Evas_Coord w, h;
+            Evas_Coord width, height;
             float zoom;
-            Eina_Bool zoom_weak_smooth_scale:1;
+            bool zoomWeakSmoothScale : 1;
         } tile;
         struct {
             struct {
                 Evas_Coord x, y;
-            } cur, old, base, zoom_center;
+            } cur, old, base, zoomCenter;
         } offset;
     } view;
-    Evas_Colorspace cspace;
+    Evas_Colorspace colorSpace;
     struct {
-        Ewk_Tile_Matrix *matrix;
+        Ewk_Tile_Matrix* matrix;
         struct {
-            unsigned long col, row;
+            unsigned long column, row;
         } base;
         struct {
-            unsigned long cols, rows;
-        } cur, old;
+            unsigned long columns, rows;
+        } current, old;
         Evas_Coord width, height;
     } model;
     struct {
-        Eina_Bool (*cb)(void *data, Ewk_Tile *t, const Eina_Rectangle *area);
-        void *data;
-        Eina_Inlist *pre_render_requests;
-        Ecore_Idler *idler;
-        Eina_Bool disabled;
-        Eina_Bool suspend:1;
+        Eina_Bool (*callback)(void* data, Ewk_Tile* tile, const Eina_Rectangle* area);
+        void* data;
+        Eina_Inlist* preRenderRequests;
+        Ecore_Idler* idler;
+        bool disabled;
+        bool suspend : 1;
     } render;
     struct {
-        void *(*pre_cb)(void *data, Evas_Object *o);
-        void *pre_data;
-        void *(*post_cb)(void *data, void *pre_data, Evas_Object *o);
-        void *post_data;
+        void* (*preCallback)(void* data, Evas_Object* ewkBackingStore);
+        void* preData;
+        void* (*postCallback)(void* data, void* preData, Evas_Object* ewkBackingStore);
+        void* postData;
     } process;
     struct {
-        Eina_Bool any:1;
-        Eina_Bool pos:1;
-        Eina_Bool size:1;
-        Eina_Bool model:1;
-        Eina_Bool offset:1;
+        bool any : 1;
+        bool position : 1;
+        bool size : 1;
+        bool model : 1;
+        bool offset : 1;
     } changed;
 #ifdef DEBUG_MEM_LEAKS
-    Ecore_Event_Handler *sig_usr;
+    Ecore_Event_Handler* sig_usr;
 #endif
 };
 
@@ -125,13 +119,13 @@ int _ewk_tiled_log_dom = -1;
         return __VA_ARGS__;                                          \
     }
 
-static void _ewk_tiled_backing_store_fill_renderers(Ewk_Tiled_Backing_Store_Data *priv);
-static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Store_Data *priv);
-static inline void _ewk_tiled_backing_store_changed(Ewk_Tiled_Backing_Store_Data *priv);
+static void _ewk_tiled_backing_store_fill_renderers(Ewk_Tiled_Backing_Store_Data* priv);
+static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Store_Data* priv);
+static inline void _ewk_tiled_backing_store_changed(Ewk_Tiled_Backing_Store_Data* priv);
 
-static inline void _ewk_tiled_backing_store_updates_process(Ewk_Tiled_Backing_Store_Data *priv)
+static inline void _ewk_tiled_backing_store_updates_process(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    void *data = 0;
+    void* data = 0;
 
     /* Do not process updates. Note that we still want to get updates requests
      * in the queue in order to not miss any updates after the render is
@@ -140,245 +134,241 @@ static inline void _ewk_tiled_backing_store_updates_process(Ewk_Tiled_Backing_St
     if (priv->render.suspend || !evas_object_visible_get(priv->self))
         return;
 
-    if (priv->process.pre_cb)
-        data = priv->process.pre_cb(priv->process.pre_data, priv->self);
+    if (priv->process.preCallback)
+        data = priv->process.preCallback(priv->process.preData, priv->self);
 
     ewk_tile_matrix_updates_process(priv->model.matrix);
 
-    if (priv->process.post_cb)
-        priv->process.post_cb(priv->process.post_data, data, priv->self);
+    if (priv->process.postCallback)
+        priv->process.postCallback(priv->process.postData, data, priv->self);
 }
 
-static int _ewk_tiled_backing_store_flush(void *data)
+static int _ewk_tiled_backing_store_flush(void* data)
 {
     Ewk_Tiled_Backing_Store_Data* priv = static_cast<Ewk_Tiled_Backing_Store_Data*>(data);
-    Ewk_Tile_Unused_Cache *tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    Ewk_Tile_Unused_Cache* tiledUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
 
-    if (tuc) {
+    if (tiledUnusedCache) {
         DBG("flush unused tile cache.");
-        ewk_tile_unused_cache_auto_flush(tuc);
+        ewk_tile_unused_cache_auto_flush(tiledUnusedCache);
     } else
         ERR("no cache?!");
 
     return 0;
 }
 
-static Ewk_Tile *_ewk_tiled_backing_store_tile_new(Ewk_Tiled_Backing_Store_Data *priv, unsigned long col, unsigned long row, float zoom)
+static Ewk_Tile* _ewk_tiled_backing_store_tile_new(Ewk_Tiled_Backing_Store_Data* priv, unsigned long column, unsigned long row, float zoom)
 {
-    Ewk_Tile *t;
-    Evas *evas = evas_object_evas_get(priv->self);
+    Ewk_Tile* tile;
+    Evas* evas = evas_object_evas_get(priv->self);
     if (!evas) {
         CRITICAL("evas_object_evas_get failed!");
         return 0;
     }
 
-    t = ewk_tile_matrix_tile_new
-        (priv->model.matrix, evas, col, row, zoom);
+    tile = ewk_tile_matrix_tile_new
+               (priv->model.matrix, evas, column, row, zoom);
 
-    if (!t) {
+    if (!tile) {
         CRITICAL("ewk_tile_matrix_tile_new failed!");
         return 0;
     }
 
-    return t;
+    return tile;
 }
 
-static void _ewk_tiled_backing_store_item_move(Ewk_Tiled_Backing_Store_Item *it, Evas_Coord x, Evas_Coord y)
+static void _ewk_tiled_backing_store_item_move(Ewk_Tiled_Backing_Store_Item* item, Evas_Coord x, Evas_Coord y)
 {
-    it->geometry.x = x;
-    it->geometry.y = y;
+    item->geometry.x = x;
+    item->geometry.y = y;
 
-    if (it->tile)
-        evas_object_move(it->tile->image, x, y);
+    if (item->tile)
+        evas_object_move(item->tile->image, x, y);
 }
 
-static void _ewk_tiled_backing_store_item_resize(Ewk_Tiled_Backing_Store_Item *it, Evas_Coord w, Evas_Coord h)
+static void _ewk_tiled_backing_store_item_resize(Ewk_Tiled_Backing_Store_Item* item, Evas_Coord width, Evas_Coord height)
 {
-    it->geometry.w = w;
-    it->geometry.h = h;
+    item->geometry.width = width;
+    item->geometry.height = height;
 
-    if (it->tile) {
-        evas_object_resize(it->tile->image, w, h);
-        evas_object_image_fill_set(it->tile->image, 0, 0, w, h);
+    if (item->tile) {
+        evas_object_resize(item->tile->image, width, height);
+        evas_object_image_fill_set(item->tile->image, 0, 0, width, height);
     }
 }
 
-static void _ewk_tiled_backing_store_tile_associate(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tile *t, Ewk_Tiled_Backing_Store_Item *it)
+static void _ewk_tiled_backing_store_tile_associate(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tile* tile, Ewk_Tiled_Backing_Store_Item* item)
 {
-    if (it->tile)
-        CRITICAL("it->tile=%p, but it should be 0!", it->tile);
-    it->tile = t;
-    evas_object_move(it->tile->image, it->geometry.x, it->geometry.y);
-    evas_object_resize(it->tile->image, it->geometry.w, it->geometry.h);
+    if (item->tile)
+        CRITICAL("it->tile=%p, but it should be 0!", item->tile);
+    item->tile = tile;
+    evas_object_move(item->tile->image, item->geometry.x, item->geometry.y);
+    evas_object_resize(item->tile->image, item->geometry.width, item->geometry.height);
     evas_object_image_fill_set
-        (it->tile->image, 0, 0, it->geometry.w, it->geometry.h);
-    evas_object_image_smooth_scale_set(it->tile->image, it->smooth_scale);
+        (item->tile->image, 0, 0, item->geometry.width, item->geometry.height);
+    evas_object_image_smooth_scale_set(item->tile->image, item->smooth_scale);
 
-    if (!ewk_tile_visible_get(t))
-        evas_object_smart_member_add(t->image, priv->self);
+    if (!ewk_tile_visible_get(tile))
+        evas_object_smart_member_add(tile->image, priv->self);
 
-    ewk_tile_show(t);
+    ewk_tile_show(tile);
 }
 
-static void _ewk_tiled_backing_store_tile_dissociate(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tiled_Backing_Store_Item *it, double last_used)
+static void _ewk_tiled_backing_store_tile_dissociate(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tiled_Backing_Store_Item* item, double lastUsed)
 {
-    Ewk_Tile_Unused_Cache *tuc;
-    ewk_tile_hide(it->tile);
-    if (!ewk_tile_visible_get(it->tile))
-        evas_object_smart_member_del(it->tile->image);
-    ewk_tile_matrix_tile_put(priv->model.matrix, it->tile, last_used);
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_auto_flush(tuc);
+    Ewk_Tile_Unused_Cache* tiledUnusedCache;
+    ewk_tile_hide(item->tile);
+    if (!ewk_tile_visible_get(item->tile))
+        evas_object_smart_member_del(item->tile->image);
+    ewk_tile_matrix_tile_put(priv->model.matrix, item->tile, lastUsed);
+    tiledUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_auto_flush(tiledUnusedCache);
 
-    it->tile = 0;
+    item->tile = 0;
 }
 
-static void _ewk_tiled_backing_store_tile_dissociate_all(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_tile_dissociate_all(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist *it;
-    Ewk_Tiled_Backing_Store_Item *item;
+    Eina_Inlist* list;
+    Ewk_Tiled_Backing_Store_Item* item;
     int i;
     double last_used = ecore_loop_time_get();
 
     for (i = 0; i < priv->view.rows; i++) {
-        it = priv->view.items[i];
-        EINA_INLIST_FOREACH(it, item)
+        list = priv->view.items[i];
+        EINA_INLIST_FOREACH(list, item)
             if (item->tile)
                 _ewk_tiled_backing_store_tile_dissociate(priv, item, last_used);
     }
 }
 
-static inline Eina_Bool _ewk_tiled_backing_store_pre_render_request_add(Ewk_Tiled_Backing_Store_Data *priv, unsigned long col, unsigned long row, float zoom, Ewk_Tiled_Backing_Store_Pre_Render_Priority priority)
+static inline Eina_Bool _ewk_tiled_backing_store_pre_render_request_add(Ewk_Tiled_Backing_Store_Data* priv, unsigned long column, unsigned long row, float zoom)
 {
-    Ewk_Tiled_Backing_Store_Pre_Render_Request *r;
+    Ewk_Tiled_Backing_Store_Pre_Render_Request* request;
 
-    r = static_cast<Ewk_Tiled_Backing_Store_Pre_Render_Request*>(malloc(sizeof(*r)));
-    if (!r)
-        return EINA_FALSE;
+    request = static_cast<Ewk_Tiled_Backing_Store_Pre_Render_Request*>(malloc(sizeof(*request)));
+    if (!request)
+        return false;
 
-    if (priority == PRE_RENDER_PRIORITY_HIGH)
-        priv->render.pre_render_requests = eina_inlist_prepend
-            (priv->render.pre_render_requests, EINA_INLIST_GET(r));
-    else
-        priv->render.pre_render_requests = eina_inlist_append
-            (priv->render.pre_render_requests, EINA_INLIST_GET(r));
+    priv->render.preRenderRequests = eina_inlist_append
+                                           (priv->render.preRenderRequests, EINA_INLIST_GET(request));
 
-    r->col = col;
-    r->row = row;
-    r->zoom = zoom;
+    request->column = column;
+    request->row = row;
+    request->zoom = zoom;
 
-    return EINA_TRUE;
+    return true;
 }
 
-static inline void _ewk_tiled_backing_store_pre_render_request_del(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tiled_Backing_Store_Pre_Render_Request *r)
+static inline void _ewk_tiled_backing_store_pre_render_request_del(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tiled_Backing_Store_Pre_Render_Request* request)
 {
-    priv->render.pre_render_requests = eina_inlist_remove
-        (priv->render.pre_render_requests, EINA_INLIST_GET(r));
-    free(r);
+    priv->render.preRenderRequests = eina_inlist_remove
+                                           (priv->render.preRenderRequests, EINA_INLIST_GET(request));
+    free(request);
 }
 
-static inline Ewk_Tiled_Backing_Store_Pre_Render_Request *_ewk_tiled_backing_store_pre_render_request_first(const Ewk_Tiled_Backing_Store_Data *priv)
+static inline Ewk_Tiled_Backing_Store_Pre_Render_Request* _ewk_tiled_backing_store_pre_render_request_first(const Ewk_Tiled_Backing_Store_Data* priv)
 {
     return EINA_INLIST_CONTAINER_GET(
-        priv->render.pre_render_requests,
-        Ewk_Tiled_Backing_Store_Pre_Render_Request);
+               priv->render.preRenderRequests,
+               Ewk_Tiled_Backing_Store_Pre_Render_Request);
 }
 
-static void _ewk_tiled_backing_store_pre_render_request_flush(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_pre_render_request_flush(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist **pl = &priv->render.pre_render_requests;
-    while (*pl) {
-        Ewk_Tiled_Backing_Store_Pre_Render_Request *r;
-        r = _ewk_tiled_backing_store_pre_render_request_first(priv);
-        *pl = eina_inlist_remove(*pl, *pl);
-        free(r);
+    Eina_Inlist** preRenderList = &priv->render.preRenderRequests;
+    while (*preRenderList) {
+        Ewk_Tiled_Backing_Store_Pre_Render_Request* request;
+        request = _ewk_tiled_backing_store_pre_render_request_first(priv);
+        *preRenderList = eina_inlist_remove(*preRenderList, *preRenderList);
+        free(request);
     }
 }
 
-static void _ewk_tiled_backing_store_pre_render_request_clear(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_pre_render_request_clear(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist **pl = &priv->render.pre_render_requests;
-    Eina_Inlist *iter = *pl, *tmp;
+    Eina_Inlist** preRenderList = &priv->render.preRenderRequests;
+    Eina_Inlist* iter = *preRenderList, *tmp;
     while (iter) {
-        Ewk_Tiled_Backing_Store_Pre_Render_Request *r =
+        Ewk_Tiled_Backing_Store_Pre_Render_Request* request =
             EINA_INLIST_CONTAINER_GET(
                 iter, Ewk_Tiled_Backing_Store_Pre_Render_Request);
         tmp = iter->next;
-        *pl = eina_inlist_remove(*pl, iter);
+        *preRenderList = eina_inlist_remove(*preRenderList, iter);
         iter = tmp;
-        free(r);
+        free(request);
     }
 }
 
 /* assumes priv->process.pre_cb was called if required! */
-static void _ewk_tiled_backing_store_pre_render_request_process_single(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_pre_render_request_process_single(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Ewk_Tiled_Backing_Store_Pre_Render_Request *req;
+    Ewk_Tiled_Backing_Store_Pre_Render_Request* request;
     Eina_Rectangle area;
-    Ewk_Tile_Matrix *tm = priv->model.matrix;
-    Ewk_Tile *t;
-    Ewk_Tile_Unused_Cache *tuc;
-    unsigned long col, row;
+    Ewk_Tile_Matrix* tileMatrix = priv->model.matrix;
+    Ewk_Tile* tile;
+    Ewk_Tile_Unused_Cache* tiledUnusedCache;
+    unsigned long column, row;
     float zoom;
     double last_used = ecore_loop_time_get();
 
-    req = _ewk_tiled_backing_store_pre_render_request_first(priv);
-    if (!req)
+    request = _ewk_tiled_backing_store_pre_render_request_first(priv);
+    if (!request)
         return;
 
-    col = req->col;
-    row = req->row;
-    zoom = req->zoom;
+    column = request->column;
+    row = request->row;
+    zoom = request->zoom;
 
-    if (ewk_tile_matrix_tile_exact_exists(tm, col, row, zoom)) {
-        DBG("no pre-render required for tile %lu,%lu @ %f.", col, row, zoom);
+    if (ewk_tile_matrix_tile_exact_exists(tileMatrix, column, row, zoom)) {
+        DBG("no pre-render required for tile %lu,%lu @ %f.", column, row, zoom);
         goto end;
     }
 
-    t = _ewk_tiled_backing_store_tile_new(priv, col, row, zoom);
-    if (!t)
+    tile = _ewk_tiled_backing_store_tile_new(priv, column, row, zoom);
+    if (!tile)
         goto end;
 
     area.x = 0;
     area.y = 0;
-    area.w = priv->view.tile.w;
-    area.h = priv->view.tile.h;
+    area.w = priv->view.tile.width;
+    area.h = priv->view.tile.height;
 
-    priv->render.cb(priv->render.data, t, &area);
+    priv->render.callback(priv->render.data, tile, &area);
     evas_object_image_data_update_add(
-        t->image,
+        tile->image,
         area.x, area.y, area.w, area.h);
-    ewk_tile_matrix_tile_updates_clear(tm, t);
+    ewk_tile_matrix_tile_updates_clear(tileMatrix, tile);
 
-    ewk_tile_matrix_tile_put(tm, t, last_used);
+    ewk_tile_matrix_tile_put(tileMatrix, tile, last_used);
 
 end:
-    _ewk_tiled_backing_store_pre_render_request_del(priv, req);
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_auto_flush(tuc);
+    _ewk_tiled_backing_store_pre_render_request_del(priv, request);
+    tiledUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_auto_flush(tiledUnusedCache);
 }
 
-static Eina_Bool _ewk_tiled_backing_store_item_process_idler_cb(void *data)
+static Eina_Bool _ewk_tiled_backing_store_item_process_idler_cb(void* data)
 {
     Ewk_Tiled_Backing_Store_Data* priv = static_cast<Ewk_Tiled_Backing_Store_Data*>(data);
 
-    if (priv->process.pre_cb)
-        data = priv->process.pre_cb(priv->process.pre_data, priv->self);
+    if (priv->process.preCallback)
+        data = priv->process.preCallback(priv->process.preData, priv->self);
 
     _ewk_tiled_backing_store_pre_render_request_process_single(priv);
 
-    if (priv->process.post_cb)
-        priv->process.post_cb(priv->process.post_data, data, priv->self);
+    if (priv->process.postCallback)
+        priv->process.postCallback(priv->process.postData, data, priv->self);
 
-    if (!priv->render.pre_render_requests) {
+    if (!priv->render.preRenderRequests) {
         priv->render.idler = 0;
-        return EINA_FALSE;
+        return false;
     }
 
-    return EINA_TRUE;
+    return true;
 }
 
-static inline void _ewk_tiled_backing_store_item_process_idler_stop(Ewk_Tiled_Backing_Store_Data *priv)
+static inline void _ewk_tiled_backing_store_item_process_idler_stop(Ewk_Tiled_Backing_Store_Data* priv)
 {
     if (!priv->render.idler)
         return;
@@ -387,195 +377,198 @@ static inline void _ewk_tiled_backing_store_item_process_idler_stop(Ewk_Tiled_Ba
     priv->render.idler = 0;
 }
 
-static inline void _ewk_tiled_backing_store_item_process_idler_start(Ewk_Tiled_Backing_Store_Data *priv)
+static inline void _ewk_tiled_backing_store_item_process_idler_start(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    if (priv->render.idler)
+    if (priv->render.idler || !evas_object_visible_get(priv->self))
         return;
     priv->render.idler = ecore_idler_add(
         _ewk_tiled_backing_store_item_process_idler_cb, priv);
 }
 
-static Eina_Bool _ewk_tiled_backing_store_disable_render(Ewk_Tiled_Backing_Store_Data *priv)
+static Eina_Bool _ewk_tiled_backing_store_disable_render(Ewk_Tiled_Backing_Store_Data* priv)
 {
     if (priv->render.suspend)
-        return EINA_TRUE;
+        return true;
 
-    priv->render.suspend = EINA_TRUE;
+    priv->render.suspend = true;
     _ewk_tiled_backing_store_item_process_idler_stop(priv);
-    return EINA_TRUE;
+    return true;
 }
 
-static Eina_Bool _ewk_tiled_backing_store_enable_render(Ewk_Tiled_Backing_Store_Data *priv)
+static Eina_Bool _ewk_tiled_backing_store_enable_render(Ewk_Tiled_Backing_Store_Data* priv)
 {
     if (!priv->render.suspend)
-        return EINA_TRUE;
+        return true;
 
-    priv->render.suspend = EINA_FALSE;
+    priv->render.suspend = false;
 
     _ewk_tiled_backing_store_fill_renderers(priv);
     _ewk_tiled_backing_store_item_process_idler_start(priv);
 
-    return EINA_TRUE;
+    return true;
 }
 
-static inline Eina_Bool _ewk_tiled_backing_store_item_fill(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tiled_Backing_Store_Item *it, unsigned long col, unsigned long row)
+static inline Eina_Bool _ewk_tiled_backing_store_item_fill(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tiled_Backing_Store_Item* item, unsigned long column, unsigned long row)
 {
-    unsigned long m_col = priv->model.base.col + col;
-    unsigned long m_row = priv->model.base.row + row;
-    double last_used = ecore_loop_time_get();
+    if (!evas_object_visible_get(priv->self))
+        return false;
 
-    if (m_col >= priv->model.cur.cols || m_row >= priv->model.cur.rows) {
-        if (it->tile)
-            _ewk_tiled_backing_store_tile_dissociate(priv, it, last_used);
+    unsigned long currentColumn = priv->model.base.column + column;
+    unsigned long currentRow = priv->model.base.row + row;
+    double lastUsed = ecore_loop_time_get();
+
+    if (currentColumn >= priv->model.current.columns || currentRow >= priv->model.current.rows) {
+        if (item->tile)
+            _ewk_tiled_backing_store_tile_dissociate(priv, item, lastUsed);
     } else {
-        Ewk_Tile *t;
+        Ewk_Tile* tile;
         const float zoom = priv->view.tile.zoom;
 
-        if (it->tile) {
-            Ewk_Tile *old = it->tile;
-            if (old->row != m_row || old->col != m_col || old->zoom != zoom)
-                _ewk_tiled_backing_store_tile_dissociate(priv, it, last_used);
-            else if (old->row == m_row && old->col == m_col && old->zoom == zoom)
+        if (item->tile) {
+            Ewk_Tile* old = item->tile;
+            if (old->row != currentRow || old->col != currentColumn || old->zoom != zoom)
+                _ewk_tiled_backing_store_tile_dissociate(priv, item, lastUsed);
+            else if (old->row == currentRow && old->col == currentColumn && old->zoom == zoom)
                 goto end;
         }
 
-        t = ewk_tile_matrix_tile_exact_get(priv->model.matrix, m_col, m_row, zoom);
+        tile = ewk_tile_matrix_tile_exact_get(priv->model.matrix, currentColumn, currentRow, zoom);
 
-        if (!t) {
+        if (!tile) {
             /* NOTE: it never returns 0 if it->tile was set! */
-            if (it->tile) {
-                CRITICAL("it->tile=%p, but it should be 0!", it->tile);
-                _ewk_tiled_backing_store_tile_dissociate(priv, it,
-                                                         last_used);
+            if (item->tile) {
+                CRITICAL("it->tile=%p, but it should be 0!", item->tile);
+                _ewk_tiled_backing_store_tile_dissociate(priv, item,
+                                                         lastUsed);
             }
 
             /* Do not add new requests to the render queue */
             if (!priv->render.suspend) {
-                t = _ewk_tiled_backing_store_tile_new(priv, m_col, m_row, zoom);
-                if (!t)
-                    return EINA_FALSE;
-                _ewk_tiled_backing_store_tile_associate(priv, t, it);
+                tile = _ewk_tiled_backing_store_tile_new(priv, currentColumn, currentRow, zoom);
+                if (!tile)
+                    return false;
+                _ewk_tiled_backing_store_tile_associate(priv, tile, item);
             }
-        } else if (t != it->tile) {
-            if (it->tile)
+        } else if (tile != item->tile) {
+            if (item->tile)
                 _ewk_tiled_backing_store_tile_dissociate(priv,
-                                                             it, last_used);
-            _ewk_tiled_backing_store_tile_associate(priv, t, it);
+                                                         item, lastUsed);
+            _ewk_tiled_backing_store_tile_associate(priv, tile, item);
         }
 
-      end:
+end:
 
-        return EINA_TRUE;
+        return true;
     }
 
-    return EINA_TRUE;
+    return true;
 }
 
-static Ewk_Tiled_Backing_Store_Item *_ewk_tiled_backing_store_item_add(Ewk_Tiled_Backing_Store_Data *priv, unsigned long col, unsigned long row)
+static Ewk_Tiled_Backing_Store_Item* _ewk_tiled_backing_store_item_add(Ewk_Tiled_Backing_Store_Data* priv, unsigned long column, unsigned long row)
 {
-    Ewk_Tiled_Backing_Store_Item *it;
-    Evas_Coord x, y, tw, th;
+    Ewk_Tiled_Backing_Store_Item* item;
+    Evas_Coord x, y, tileWidth, tileHeight;
 
-    DBG("o=%p", priv->self);
+    DBG("ewkBackingStore%p", priv->self);
 
-    it = static_cast<Ewk_Tiled_Backing_Store_Item*>(malloc(sizeof(*it)));
-    if (!it)
+    item = static_cast<Ewk_Tiled_Backing_Store_Item*>(malloc(sizeof(*item)));
+    if (!item)
         return 0;
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
-    x = priv->view.offset.base.x + priv->view.x + tw  *col;
-    y = priv->view.offset.base.y + priv->view.y + th  *row;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
+    x = priv->view.offset.base.x + priv->view.x + tileWidth  *column;
+    y = priv->view.offset.base.y + priv->view.y + tileHeight  *row;
 
-    it->tile = 0;
+    item->tile = 0;
 
-    it->smooth_scale = priv->view.tile.zoom_weak_smooth_scale;
-    _ewk_tiled_backing_store_item_move(it, x, y);
-    _ewk_tiled_backing_store_item_resize(it, tw, th);
-    if (!_ewk_tiled_backing_store_item_fill(priv, it, col, row)) {
-        free(it);
+    item->smooth_scale = priv->view.tile.zoomWeakSmoothScale;
+    _ewk_tiled_backing_store_item_move(item, x, y);
+    _ewk_tiled_backing_store_item_resize(item, tileWidth, tileHeight);
+    if (!_ewk_tiled_backing_store_item_fill(priv, item, column, row)) {
+        free(item);
         return 0;
     }
 
-    return it;
+    return item;
 }
 
-static void _ewk_tiled_backing_store_item_del(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tiled_Backing_Store_Item *it)
+static void _ewk_tiled_backing_store_item_del(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tiled_Backing_Store_Item* item)
 {
-    if (it->tile) {
+    if (item->tile) {
         double last_used = ecore_loop_time_get();
-        _ewk_tiled_backing_store_tile_dissociate(priv, it, last_used);
+        _ewk_tiled_backing_store_tile_dissociate(priv, item, last_used);
     }
 
-    free(it);
+    free(item);
 }
 
-static void _ewk_tiled_backing_store_item_smooth_scale_set(Ewk_Tiled_Backing_Store_Item *it, Eina_Bool smooth_scale)
+static void _ewk_tiled_backing_store_item_smooth_scale_set(Ewk_Tiled_Backing_Store_Item* item, Eina_Bool smoothScale)
 {
-    if (it->smooth_scale == smooth_scale)
+    if (item->smooth_scale == smoothScale)
         return;
 
-    if (it->tile)
-        evas_object_image_smooth_scale_set(it->tile->image, smooth_scale);
+    if (item->tile)
+        evas_object_image_smooth_scale_set(item->tile->image, smoothScale);
 }
 
-static inline void _ewk_tiled_backing_store_changed(Ewk_Tiled_Backing_Store_Data *priv)
+static inline void _ewk_tiled_backing_store_changed(Ewk_Tiled_Backing_Store_Data* priv)
 {
     if (priv->changed.any)
         return;
     evas_object_smart_changed(priv->self);
-    priv->changed.any = EINA_TRUE;
+    priv->changed.any = true;
 }
 
-static void _ewk_tiled_backing_store_view_cols_end_del(Ewk_Tiled_Backing_Store_Data *priv, Eina_Inlist **p_row, unsigned int count)
+static void _ewk_tiled_backing_store_view_cols_end_del(Ewk_Tiled_Backing_Store_Data* priv, Eina_Inlist** rowList, unsigned int count)
 {
-    Eina_Inlist *n;
+    Eina_Inlist* nextItem;
     unsigned int i;
 
     if (!count)
         return;
 
-    n = (*p_row)->last;
+    nextItem = (*rowList)->last;
 
     for (i = 0; i < count; i++) {
-        Ewk_Tiled_Backing_Store_Item *it;
-        it = EINA_INLIST_CONTAINER_GET(n, Ewk_Tiled_Backing_Store_Item);
-        n = n->prev;
-        *p_row = eina_inlist_remove(*p_row, EINA_INLIST_GET(it));
-        _ewk_tiled_backing_store_item_del(priv, it);
+        Ewk_Tiled_Backing_Store_Item* item;
+        item = EINA_INLIST_CONTAINER_GET(nextItem, Ewk_Tiled_Backing_Store_Item);
+        nextItem = nextItem->prev;
+        *rowList = eina_inlist_remove(*rowList, EINA_INLIST_GET(item));
+        _ewk_tiled_backing_store_item_del(priv, item);
     }
 }
 
-static Eina_Bool _ewk_tiled_backing_store_view_cols_end_add(Ewk_Tiled_Backing_Store_Data *priv, Eina_Inlist **p_row, unsigned int base_col, unsigned int count)
+static Eina_Bool _ewk_tiled_backing_store_view_cols_end_add(Ewk_Tiled_Backing_Store_Data* priv, Eina_Inlist** rowList, unsigned int baseColumn, unsigned int count)
 {
-    unsigned int i, r = p_row - priv->view.items;
+    unsigned int i, row = rowList - priv->view.items;
 
-    for (i = 0; i < count; i++, base_col++) {
-        Ewk_Tiled_Backing_Store_Item *it;
+    for (i = 0; i < count; i++, baseColumn++) {
+        Ewk_Tiled_Backing_Store_Item* it;
 
-        it = _ewk_tiled_backing_store_item_add(priv, base_col, r);
+        it = _ewk_tiled_backing_store_item_add(priv, baseColumn, row);
         if (!it) {
-            CRITICAL("failed to add column %u of %u in row %u.", i, count, r);
-            _ewk_tiled_backing_store_view_cols_end_del(priv, p_row, i);
-            return EINA_FALSE;
+            CRITICAL("failed to add column %u of %u in row %u.", i, count, row);
+            _ewk_tiled_backing_store_view_cols_end_del(priv, rowList, i);
+            return false;
         }
 
-        *p_row = eina_inlist_append(*p_row, EINA_INLIST_GET(it));
+        *rowList = eina_inlist_append(*rowList, EINA_INLIST_GET(it));
     }
-    return EINA_TRUE;
+    return true;
 }
 
-static void _ewk_tiled_backing_store_view_row_del(Ewk_Tiled_Backing_Store_Data *priv, Eina_Inlist *row)
+static void _ewk_tiled_backing_store_view_row_del(Ewk_Tiled_Backing_Store_Data* priv, Eina_Inlist* row)
 {
     while (row) {
-        Ewk_Tiled_Backing_Store_Item *it;
-        it = EINA_INLIST_CONTAINER_GET(row, Ewk_Tiled_Backing_Store_Item);
+        Ewk_Tiled_Backing_Store_Item* item;
+        item = EINA_INLIST_CONTAINER_GET(row, Ewk_Tiled_Backing_Store_Item);
         row = row->next;
-        _ewk_tiled_backing_store_item_del(priv, it);
+        _ewk_tiled_backing_store_item_del(priv, item);
     }
 }
 
-static void _ewk_tiled_backing_store_view_rows_range_del(Ewk_Tiled_Backing_Store_Data *priv, Eina_Inlist **start, Eina_Inlist **end)
+static void _ewk_tiled_backing_store_view_rows_range_del(Ewk_Tiled_Backing_Store_Data* priv, Eina_Inlist** start, Eina_Inlist** end)
 {
     for (; start < end; start++) {
         _ewk_tiled_backing_store_view_row_del(priv, *start);
@@ -583,10 +576,10 @@ static void _ewk_tiled_backing_store_view_rows_range_del(Ewk_Tiled_Backing_Store
     }
 }
 
-static void _ewk_tiled_backing_store_view_rows_all_del(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_view_rows_all_del(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist **start;
-    Eina_Inlist **end;
+    Eina_Inlist** start;
+    Eina_Inlist** end;
 
     start = priv->view.items;
     end = priv->view.items + priv->view.rows;
@@ -598,62 +591,62 @@ static void _ewk_tiled_backing_store_view_rows_all_del(Ewk_Tiled_Backing_Store_D
     priv->view.rows = 0;
 }
 
-static void _ewk_tiled_backing_store_render(void *data, Ewk_Tile *t, const Eina_Rectangle *area)
+static void _ewk_tiled_backing_store_render(void* data, Ewk_Tile* tile, const Eina_Rectangle* area)
 {
     Ewk_Tiled_Backing_Store_Data* priv = static_cast<Ewk_Tiled_Backing_Store_Data*>(data);
 
     INF("TODO %p (visible? %d) [%lu,%lu] %d,%d + %dx%d",
-        t, t->visible, t->col, t->row, area->x, area->y, area->w, area->h);
+        tile, tile->visible, tile->col, tile->row, area->x, area->y, area->w, area->h);
 
-    if (!t->visible)
+    if (!tile->visible)
         return;
 
-    if (priv->view.tile.w != t->w || priv->view.tile.h != t->h)
+    if (priv->view.tile.width != tile->width || priv->view.tile.height != tile->height)
         return; // todo: remove me later, don't even flag as dirty!
 
-    EINA_SAFETY_ON_NULL_RETURN(priv->render.cb);
-    if (!priv->render.cb(priv->render.data, t, area))
+    EINA_SAFETY_ON_NULL_RETURN(priv->render.callback);
+    if (!priv->render.callback(priv->render.data, tile, area))
         return;
 
-    evas_object_image_data_update_add(t->image, area->x, area->y, area->w, area->h);
+    evas_object_image_data_update_add(tile->image, area->x, area->y, area->w, area->h);
 }
 
-static inline void _ewk_tiled_backing_store_model_matrix_create(Ewk_Tiled_Backing_Store_Data *priv, Ewk_Tile_Unused_Cache *tuc)
+static inline void _ewk_tiled_backing_store_model_matrix_create(Ewk_Tiled_Backing_Store_Data* priv, Ewk_Tile_Unused_Cache* tileUnusedCache)
 {
     if (priv->model.matrix) {
         _ewk_tiled_backing_store_view_rows_all_del(priv);
 
-        priv->changed.offset = EINA_FALSE;
-        priv->changed.size = EINA_TRUE;
+        priv->changed.offset = false;
+        priv->changed.size = true;
 
         ewk_tile_matrix_free(priv->model.matrix);
     }
 
-    priv->model.matrix = ewk_tile_matrix_new(tuc, priv->model.cur.cols, priv->model.cur.rows, priv->cspace, _ewk_tiled_backing_store_render, priv);
+    priv->model.matrix = ewk_tile_matrix_new(tileUnusedCache, priv->model.current.columns, priv->model.current.rows, priv->view.tile.zoom, priv->colorSpace, _ewk_tiled_backing_store_render, priv);
 }
 
-static void _ewk_tiled_backing_store_smart_member_del(Evas_Object *o, Evas_Object *member)
+static void _ewk_tiled_backing_store_smart_member_del(Evas_Object* ewkBackingStore, Evas_Object* member)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    if (!priv->contents_clipper)
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    if (!priv->contentsClipper)
         return;
     evas_object_clip_unset(member);
-    if (!evas_object_clipees_get(priv->contents_clipper))
-        evas_object_hide(priv->contents_clipper);
+    if (!evas_object_clipees_get(priv->contentsClipper))
+        evas_object_hide(priv->contentsClipper);
 }
 
-static void _ewk_tiled_backing_store_smart_member_add(Evas_Object *o, Evas_Object *member)
+static void _ewk_tiled_backing_store_smart_member_add(Evas_Object* ewkBackingStore, Evas_Object* member)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    if (!priv->contents_clipper)
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    if (!priv->contentsClipper)
         return;
-    evas_object_clip_set(member, priv->contents_clipper);
-    if (evas_object_visible_get(o))
-        evas_object_show(priv->contents_clipper);
+    evas_object_clip_set(member, priv->contentsClipper);
+    if (evas_object_visible_get(ewkBackingStore))
+        evas_object_show(priv->contentsClipper);
 }
 
 #ifdef DEBUG_MEM_LEAKS
-static void _ewk_tiled_backing_store_mem_dbg(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_mem_dbg(Ewk_Tiled_Backing_Store_Data* priv)
 {
     static int run = 0;
 
@@ -670,37 +663,37 @@ static void _ewk_tiled_backing_store_mem_dbg(Ewk_Tiled_Backing_Store_Data *priv)
     printf("--- END DEBUG TILED BACKING STORE MEMORY [%d] --\n\n", run);
 }
 
-static Eina_Bool _ewk_tiled_backing_store_sig_usr(void *data, int type, void *event)
+static Eina_Bool _ewk_tiled_backing_store_sig_usr(void* data, int type, void* event)
 {
-    Ecore_Event_Signal_User *sig = (Ecore_Event_Signal_User*)event;
-    Ewk_Tiled_Backing_Store_Data *priv = (Ewk_Tiled_Backing_Store_Data*)data;
+    Ecore_Event_Signal_User* sig = (Ecore_Event_Signal_User*)event;
+    Ewk_Tiled_Backing_Store_Data* priv = (Ewk_Tiled_Backing_Store_Data*)data;
 
     if (sig->number == 2) {
-        Ewk_Tile_Unused_Cache *tuc;
-        tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-        ewk_tile_unused_cache_auto_flush(tuc);
+        Ewk_Tile_Unused_Cache* tilieUnusedCache;
+        tilieUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+        ewk_tile_unused_cache_auto_flush(tilieUnusedCache);
     }
 
     _ewk_tiled_backing_store_view_dbg(priv);
     _ewk_tiled_backing_store_mem_dbg(priv);
-    return EINA_TRUE;
+    return true;
 }
 #endif
 
-static void _ewk_tiled_backing_store_smart_add(Evas_Object *o)
+static void _ewk_tiled_backing_store_smart_add(Evas_Object* ewkBackingStore)
 {
-    Ewk_Tiled_Backing_Store_Data *priv;
+    Ewk_Tiled_Backing_Store_Data* priv;
 
-    DBG("o=%p", o);
+    DBG("ewkBackingStore=%p", ewkBackingStore);
 
     priv = static_cast<Ewk_Tiled_Backing_Store_Data*>(calloc(1, sizeof(*priv)));
     if (!priv)
         return;
 
-    priv->self = o;
+    priv->self = ewkBackingStore;
     priv->view.tile.zoom = 1.0;
-    priv->view.tile.w = DEFAULT_TILE_W;
-    priv->view.tile.h = DEFAULT_TILE_H;
+    priv->view.tile.width = DEFAULT_TILE_W;
+    priv->view.tile.height = DEFAULT_TILE_H;
     priv->view.offset.cur.x = 0;
     priv->view.offset.cur.y = 0;
     priv->view.offset.old.x = 0;
@@ -708,48 +701,48 @@ static void _ewk_tiled_backing_store_smart_add(Evas_Object *o)
     priv->view.offset.base.x = 0;
     priv->view.offset.base.y = 0;
 
-    priv->model.base.col = 0;
+    priv->model.base.column = 0;
     priv->model.base.row = 0;
-    priv->model.cur.cols = 1;
-    priv->model.cur.rows = 1;
-    priv->model.old.cols = 0;
+    priv->model.current.columns = 1;
+    priv->model.current.rows = 1;
+    priv->model.old.columns = 0;
     priv->model.old.rows = 0;
     priv->model.width = 0;
     priv->model.height = 0;
-    priv->render.suspend = EINA_FALSE;
-    priv->cspace = EVAS_COLORSPACE_ARGB8888; // TODO: detect it.
+    priv->render.suspend = false;
+    priv->colorSpace = EVAS_COLORSPACE_ARGB8888; // TODO: detect it.
 
-    evas_object_smart_data_set(o, priv);
-    _parent_sc.add(o);
+    evas_object_smart_data_set(ewkBackingStore, priv);
+    _parent_sc.add(ewkBackingStore);
 
-    priv->contents_clipper = evas_object_rectangle_add(
-        evas_object_evas_get(o));
-    evas_object_move(priv->contents_clipper, 0, 0);
-    evas_object_resize(priv->contents_clipper,
+    priv->contentsClipper = evas_object_rectangle_add(
+        evas_object_evas_get(ewkBackingStore));
+    evas_object_move(priv->contentsClipper, 0, 0);
+    evas_object_resize(priv->contentsClipper,
                        priv->model.width, priv->model.height);
-    evas_object_color_set(priv->contents_clipper, 255, 255, 255, 255);
-    evas_object_show(priv->contents_clipper);
-    evas_object_smart_member_add(priv->contents_clipper, o);
+    evas_object_color_set(priv->contentsClipper, 255, 255, 255, 255);
+    evas_object_show(priv->contentsClipper);
+    evas_object_smart_member_add(priv->contentsClipper, ewkBackingStore);
 
     _ewk_tiled_backing_store_model_matrix_create(priv, 0);
     evas_object_move(priv->base.clipper, 0, 0);
     evas_object_resize(priv->base.clipper, 0, 0);
-    evas_object_clip_set(priv->contents_clipper, priv->base.clipper);
+    evas_object_clip_set(priv->contentsClipper, priv->base.clipper);
 
 #ifdef DEBUG_MEM_LEAKS
     priv->sig_usr = ecore_event_handler_add
-        (ECORE_EVENT_SIGNAL_USER, _ewk_tiled_backing_store_sig_usr, priv);
+                        (ECORE_EVENT_SIGNAL_USER, _ewk_tiled_backing_store_sig_usr, priv);
 #endif
 }
 
-static void _ewk_tiled_backing_store_smart_del(Evas_Object *o)
+static void _ewk_tiled_backing_store_smart_del(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    DBG("o=%p", o);
-    Ewk_Tile_Unused_Cache *tuc;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    DBG("ewkBackingStore%p", ewkBackingStore);
+    Ewk_Tile_Unused_Cache* tileUnusedCache;
 
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_unlock_area(tuc);
+    tileUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_unlock_area(tileUnusedCache);
 
     _ewk_tiled_backing_store_flush(priv);
 
@@ -760,14 +753,14 @@ static void _ewk_tiled_backing_store_smart_del(Evas_Object *o)
 #ifdef DEBUG_MEM_LEAKS
     _ewk_tiled_backing_store_mem_dbg(priv);
     if (priv->sig_usr)
-        priv->sig_usr = ecore_event_handler_del(priv->sig_usr);
+        ecore_event_handler_del(priv->sig_usr);
 #endif
 
     ewk_tile_matrix_free(priv->model.matrix);
-    evas_object_smart_member_del(priv->contents_clipper);
-    evas_object_del(priv->contents_clipper);
+    evas_object_smart_member_del(priv->contentsClipper);
+    evas_object_del(priv->contentsClipper);
 
-    _parent_sc.del(o);
+    _parent_sc.del(ewkBackingStore);
 
 #ifdef DEBUG_MEM_LEAKS
     printf("\nIMPORTANT: TILED BACKING STORE DELETED (may be real leaks)\n");
@@ -775,59 +768,71 @@ static void _ewk_tiled_backing_store_smart_del(Evas_Object *o)
 #endif
 }
 
-static void _ewk_tiled_backing_store_smart_move(Evas_Object *o, Evas_Coord x, Evas_Coord y)
+static void _ewk_tiled_backing_store_smart_move(Evas_Object* ewkBackingStore, Evas_Coord x, Evas_Coord y)
 {
-    DBG("o=%p, new pos: %dx%d", o, x, y);
+    DBG("ewkBackingStore%p, new pos: %dx%d", ewkBackingStore, x, y);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
-    if (priv->changed.pos)
+    if (priv->changed.position)
         return;
 
     if (priv->view.x == x && priv->view.y == y)
         return;
 
-    priv->changed.pos = EINA_TRUE;
+    priv->changed.position = true;
     _ewk_tiled_backing_store_changed(priv);
 }
 
-static void _ewk_tiled_backing_store_smart_resize(Evas_Object *o, Evas_Coord w, Evas_Coord h)
+static void _ewk_tiled_backing_store_smart_resize(Evas_Object* ewkBackingStore, Evas_Coord width, Evas_Coord height)
 {
-    DBG("o=%p, new size: %dx%d", o, w, h);
+    DBG("ewkBackingStore%p, new size: %dx%d", ewkBackingStore, width, height);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
     if (priv->changed.size)
         return;
 
-    if (priv->view.w == w && priv->view.h == h)
+    if (priv->view.width == width && priv->view.height == height)
         return;
 
-    priv->changed.size = EINA_TRUE;
+    priv->changed.size = true;
     _ewk_tiled_backing_store_changed(priv);
 }
 
-static void _ewk_tiled_backing_store_recalc_renderers(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord w, Evas_Coord h, Evas_Coord tw, Evas_Coord th)
+static void _ewk_tiled_backing_store_smart_show(Evas_Object* ewkBackingStore)
 {
-    long cols, rows, old_rows, old_cols;
-    INF("o=%p, new size: %dx%d", priv->self, w, h);
+    ewk_tiled_backing_store_enable_render(ewkBackingStore);
+    _parent_sc.show(ewkBackingStore);
+}
 
-    cols = 1 + (int)ceil((float)w / (float)tw);
-    rows = 1 + (int)ceil((float)h / (float)th);
+static void _ewk_tiled_backing_store_smart_hide(Evas_Object* ewkBackingStore)
+{
+    ewk_tiled_backing_store_disable_render(ewkBackingStore);
+    _parent_sc.hide(ewkBackingStore);
+}
 
-    INF("o=%p new grid size cols: %ld, rows: %ld, was %ld, %ld",
-        priv->self, cols, rows, priv->view.cols, priv->view.rows);
+static void _ewk_tiled_backing_store_recalc_renderers(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord width, Evas_Coord height, Evas_Coord tileWidth, Evas_Coord tileHeight)
+{
+    long columns, rows, oldRows, oldCols;
+    INF("ewkBackingStore%p, new size: %dx%d", priv->self, width, height);
 
-    if (priv->view.cols == cols && priv->view.rows == rows)
+    columns = 1 + static_cast<int>(ceil(width / static_cast<float>(tileWidth)));
+    rows = 1 + static_cast<int>(ceil(height / static_cast<float>(tileHeight)));
+
+    INF("ewkBackingStore%p new grid size cols: %ld, rows: %ld, was %ld, %ld",
+        priv->self, columns, rows, priv->view.cols, priv->view.rows);
+
+    if (priv->view.cols == columns && priv->view.rows == rows)
         return;
 
-    old_cols = priv->view.cols;
-    old_rows = priv->view.rows;
+    oldCols = priv->view.cols;
+    oldRows = priv->view.rows;
 
-    if (rows < old_rows) {
-        Eina_Inlist **start, **end;
+    if (rows < oldRows) {
+        Eina_Inlist** start, **end;
         start = priv->view.items + rows;
-        end = priv->view.items + old_rows;
+        end = priv->view.items + oldRows;
         _ewk_tiled_backing_store_view_rows_range_del(priv, start, end);
     }
 
@@ -837,43 +842,36 @@ static void _ewk_tiled_backing_store_recalc_renderers(Ewk_Tiled_Backing_Store_Da
 
     priv->view.items = static_cast<Eina_Inlist**>(newItems);
     priv->view.rows = rows;
-    priv->view.cols = cols;
-    if (rows > old_rows) {
-        Eina_Inlist **start, **end;
-        start = priv->view.items + old_rows;
-        end = priv->view.items + rows;
+    priv->view.cols = columns;
+    if (rows > oldRows) {
+        Eina_Inlist** start = priv->view.items + oldRows;
+        Eina_Inlist** end = priv->view.items + rows;
         for (; start < end; start++) {
-            Eina_Bool r;
             *start = 0;
-            r = _ewk_tiled_backing_store_view_cols_end_add
-                (priv, start, 0, cols);
+            Eina_Bool r = _ewk_tiled_backing_store_view_cols_end_add(priv, start, 0, columns);
             if (!r) {
-                CRITICAL("failed to allocate %ld columns", cols);
-                _ewk_tiled_backing_store_view_rows_range_del
-                    (priv, priv->view.items + old_rows, start);
-                priv->view.rows = old_rows;
+                CRITICAL("failed to allocate %ld columns", columns);
+                _ewk_tiled_backing_store_view_rows_range_del(priv, priv->view.items + oldRows, start);
+                priv->view.rows = oldRows;
                 return;
             }
         }
     }
 
-    if (cols != old_cols) {
-        Eina_Inlist **start, **end;
-        int todo = cols - old_cols;
-        start = priv->view.items;
-        end = start + std::min(old_rows, rows);
+    if (columns != oldCols) {
+        int todo = columns - oldCols;
+        Eina_Inlist** start = priv->view.items;
+        Eina_Inlist** end = start + std::min(oldRows, rows);
         if (todo > 0) {
             for (; start < end; start++) {
-                Eina_Bool r;
-                r = _ewk_tiled_backing_store_view_cols_end_add
-                    (priv, start, old_cols, todo);
-                if (!r) {
+                Eina_Bool result = _ewk_tiled_backing_store_view_cols_end_add(priv, start, oldCols, todo);
+                if (!result) {
                     CRITICAL("failed to allocate %d columns!", todo);
 
                     for (start--; start >= priv->view.items; start--)
                         _ewk_tiled_backing_store_view_cols_end_del(priv, start, todo);
-                    if (rows > old_rows) {
-                        start = priv->view.items + old_rows;
+                    if (rows > oldRows) {
+                        start = priv->view.items + oldRows;
                         end = priv->view.items + rows;
                         for (; start < end; start++)
                             _ewk_tiled_backing_store_view_cols_end_del(priv, start, todo);
@@ -891,26 +889,26 @@ static void _ewk_tiled_backing_store_recalc_renderers(Ewk_Tiled_Backing_Store_Da
     _ewk_tiled_backing_store_fill_renderers(priv);
 }
 
-static void _ewk_tiled_backing_store_smart_calculate_size(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord w, Evas_Coord h)
+static void _ewk_tiled_backing_store_smart_calculate_size(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord width, Evas_Coord height)
 {
-    evas_object_resize(priv->base.clipper, w, h);
+    evas_object_resize(priv->base.clipper, width, height);
 
-    priv->view.w = w;
-    priv->view.h = h;
+    priv->view.width = width;
+    priv->view.height = height;
 
     _ewk_tiled_backing_store_recalc_renderers(
-        priv, w, h, priv->view.tile.w, priv->view.tile.h);
+        priv, width, height, priv->view.tile.width, priv->view.tile.height);
 }
 
 // TODO: remove me later.
-static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Store_Data *priv)
+static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist **start, **end;
+    Eina_Inlist** start, **end;
     printf("tiles=%2ld,%2ld  model=%2ld,%2ld [%dx%d] base=%+3ld,%+4ld offset=%+4d,%+4d old=%+4d,%+4d base=%+3d,%+3d\n",
            priv->view.cols, priv->view.rows,
-           priv->model.cur.cols, priv->model.cur.rows,
+           priv->model.current.columns, priv->model.current.rows,
            priv->model.width, priv->model.height,
-           priv->model.base.col, priv->model.base.row,
+           priv->model.base.column, priv->model.base.row,
            priv->view.offset.cur.x, priv->view.offset.cur.y,
            priv->view.offset.old.x, priv->view.offset.old.y,
            priv->view.offset.base.x, priv->view.offset.base.y);
@@ -918,15 +916,15 @@ static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Sto
     start = priv->view.items;
     end = priv->view.items + priv->view.rows;
     for (; start < end; start++) {
-        const Ewk_Tiled_Backing_Store_Item *it;
+        const Ewk_Tiled_Backing_Store_Item* item;
 
-        EINA_INLIST_FOREACH(*start, it) {
-            printf(" %+4d,%+4d ", it->geometry.x, it->geometry.y);
+        EINA_INLIST_FOREACH(*start, item) {
+            printf(" %+4d,%+4d ", item->geometry.x, item->geometry.y);
 
-            if (!it->tile)
+            if (!item->tile)
                 printf("            ;");
             else
-                printf("%8p %lu,%lu;", it->tile, it->tile->col, it->tile->row);
+                printf("%8p %lu,%lu;", item->tile, item->tile->col, item->tile->row);
         }
         printf("\n");
     }
@@ -946,39 +944,40 @@ static inline void _ewk_tiled_backing_store_view_dbg(const Ewk_Tiled_Backing_Sto
  *
  * @param count the number of times to repeat the process.
  */
-static void _ewk_tiled_backing_store_view_wrap_up(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y, unsigned int count)
+static void _ewk_tiled_backing_store_view_wrap_up(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y, unsigned int count)
 {
-    unsigned int last_row = priv->view.rows - 1;
-    Evas_Coord tw = priv->view.tile.w;
-    Evas_Coord th = priv->view.tile.h;
-    Evas_Coord off_y = priv->view.offset.base.y + count * th;
-    Evas_Coord oy = y + (last_row - count + 1) * th + off_y;
-    Eina_Inlist **itr_start, **itr_end;
+    unsigned int lastRow = priv->view.rows - 1;
+    Evas_Coord tileWidth = priv->view.tile.width;
+    Evas_Coord tileHeight = priv->view.tile.height;
+    Evas_Coord offsetY = priv->view.offset.base.y + count * tileHeight;
+    Evas_Coord tilePositionY = y + (lastRow - count + 1) * tileHeight + offsetY;
+    Eina_Inlist** iteratorStart, **iteratorEnd;
+    Evas_Coord originX = x + priv->view.offset.base.x;
 
-    itr_start = priv->view.items;
-    itr_end = itr_start + last_row;
+    iteratorStart = priv->view.items;
+    iteratorEnd = iteratorStart + lastRow;
 
     for (; count > 0; count--) {
-        Eina_Inlist **itr;
-        Eina_Inlist *tmp = *itr_start;
-        Ewk_Tiled_Backing_Store_Item *it;
-        Evas_Coord ox = x + priv->view.offset.base.x;
-        int c = 0;
+        Eina_Inlist** iteratorList;
+        Eina_Inlist* temp = *iteratorStart;
+        Ewk_Tiled_Backing_Store_Item* item;
+        Evas_Coord tilePositionX = originX;
+        int count1 = 0;
 
-        for (itr = itr_start; itr < itr_end; itr++)
-            *itr = *(itr + 1);
-        *itr = tmp;
+        for (iteratorList = iteratorStart; iteratorList < iteratorEnd; iteratorList++)
+            *iteratorList = *(iteratorList + 1);
+        *iteratorList = temp;
 
         priv->model.base.row++;
-        EINA_INLIST_FOREACH(tmp, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            ox += tw;
-            _ewk_tiled_backing_store_item_fill(priv, it, c, last_row);
-            c++;
+        EINA_INLIST_FOREACH(temp, item) {
+            _ewk_tiled_backing_store_item_move(item, tilePositionX, tilePositionY);
+            tilePositionX += tileWidth;
+            _ewk_tiled_backing_store_item_fill(priv, item, count1, lastRow);
+            count1++;
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
-    priv->view.offset.base.y = off_y;
+    priv->view.offset.base.y = offsetY;
 }
 
 /**
@@ -994,38 +993,39 @@ static void _ewk_tiled_backing_store_view_wrap_up(Ewk_Tiled_Backing_Store_Data *
  *
  * @param count the number of times to repeat the process.
  */
-static void _ewk_tiled_backing_store_view_wrap_down(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y, unsigned int count)
+static void _ewk_tiled_backing_store_view_wrap_down(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y, unsigned int count)
 {
-    Evas_Coord tw = priv->view.tile.w;
-    Evas_Coord th = priv->view.tile.h;
-    Evas_Coord off_y = priv->view.offset.base.y - count * th;
-    Evas_Coord oy = y + off_y + (count - 1) * th;
-    Eina_Inlist **itr_start, **itr_end;
+    Evas_Coord tileWidth = priv->view.tile.width;
+    Evas_Coord tileHeight = priv->view.tile.height;
+    Evas_Coord offsetY = priv->view.offset.base.y - count * tileHeight;
+    Evas_Coord tilePositionY = y + offsetY + (count - 1) * tileHeight;
+    Eina_Inlist** iteratorStart, **iteratorEnd;
+    Evas_Coord originX = x + priv->view.offset.base.x;
 
-    itr_start = priv->view.items + priv->view.rows - 1;
-    itr_end = priv->view.items;
+    iteratorStart = priv->view.items + priv->view.rows - 1;
+    iteratorEnd = priv->view.items;
 
     for (; count > 0; count--) {
-        Eina_Inlist **itr;
-        Eina_Inlist *tmp = *itr_start;
-        Ewk_Tiled_Backing_Store_Item *it;
-        Evas_Coord ox = x + priv->view.offset.base.x;
-        int c = 0;
+        Eina_Inlist** iteratorList;
+        Eina_Inlist* temp = *iteratorStart;
+        Ewk_Tiled_Backing_Store_Item* item;
+        Evas_Coord tilePositionX = originX;
+        int count1 = 0;
 
-        for (itr = itr_start; itr > itr_end; itr--)
-            *itr = *(itr - 1);
-        *itr = tmp;
+        for (iteratorList = iteratorStart; iteratorList > iteratorEnd; iteratorList--)
+            *iteratorList = *(iteratorList - 1);
+        *iteratorList = temp;
 
         priv->model.base.row--;
-        EINA_INLIST_FOREACH(tmp, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            ox += tw;
-            _ewk_tiled_backing_store_item_fill(priv, it, c, 0);
-            c++;
+        EINA_INLIST_FOREACH(temp, item) {
+            _ewk_tiled_backing_store_item_move(item, tilePositionX, tilePositionY);
+            tilePositionX += tileWidth;
+            _ewk_tiled_backing_store_item_fill(priv, item, count1, 0);
+            count1++;
         }
-        oy -= th;
+        tilePositionY -= tileHeight;
     }
-    priv->view.offset.base.y = off_y;
+    priv->view.offset.base.y = offsetY;
 }
 
 /**
@@ -1041,38 +1041,40 @@ static void _ewk_tiled_backing_store_view_wrap_down(Ewk_Tiled_Backing_Store_Data
  *
  * @param count the number of times to repeat the process.
  */
-static void _ewk_tiled_backing_store_view_wrap_left(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y, unsigned int count)
+static void _ewk_tiled_backing_store_view_wrap_left(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y, unsigned int count)
 {
-    unsigned int r, last_col = priv->view.cols - 1;
-    Evas_Coord tw = priv->view.tile.w;
-    Evas_Coord th = priv->view.tile.h;
-    Evas_Coord off_x = priv->view.offset.base.x + count * tw;
+    unsigned int row, lastColumn = priv->view.cols - 1;
+    Evas_Coord tileWidth = priv->view.tile.width;
+    Evas_Coord tileHeight = priv->view.tile.height;
+    Evas_Coord offsetX = priv->view.offset.base.x + count * tileWidth;
     Evas_Coord oy = y + priv->view.offset.base.y;
-    Eina_Inlist **itr;
-    Eina_Inlist **itr_end;
+    Eina_Inlist** iterator;
+    Eina_Inlist** iteratorEnd;
+    unsigned int baseColumn = lastColumn - count + 1;
+    Evas_Coord originX = x + baseColumn * tileWidth + offsetX;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
-    r = 0;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
+    row = 0;
 
-    priv->model.base.col += count;
+    priv->model.base.column += count;
 
-    for (; itr < itr_end; itr++, r++) {
-        Evas_Coord ox = x + (last_col - count + 1) * tw + off_x;
-        unsigned int i, c = last_col - count + 1;
+    for (; iterator < iteratorEnd; iterator++, row++) {
+        Evas_Coord tilePositionX = originX;
+        unsigned int column = baseColumn;
 
-        for (i = 0; i < count; i++, c++, ox += tw) {
-            Ewk_Tiled_Backing_Store_Item *it;
-            it = EINA_INLIST_CONTAINER_GET(*itr, Ewk_Tiled_Backing_Store_Item);
-            *itr = eina_inlist_demote(*itr, *itr);
+        for (unsigned int i = 0; i < count; i++, column++, tilePositionX += tileWidth) {
+            Ewk_Tiled_Backing_Store_Item* it;
+            it = EINA_INLIST_CONTAINER_GET(*iterator, Ewk_Tiled_Backing_Store_Item);
+            *iterator = eina_inlist_demote(*iterator, *iterator);
 
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            _ewk_tiled_backing_store_item_fill(priv, it, c, r);
+            _ewk_tiled_backing_store_item_move(it, tilePositionX, oy);
+            _ewk_tiled_backing_store_item_fill(priv, it, column, row);
         }
-        oy += th;
+        oy += tileHeight;
     }
 
-    priv->view.offset.base.x = off_x;
+    priv->view.offset.base.x = offsetX;
 }
 
 /**
@@ -1088,277 +1090,277 @@ static void _ewk_tiled_backing_store_view_wrap_left(Ewk_Tiled_Backing_Store_Data
  *
  * @param count the number of times to repeat the process.
  */
-static void _ewk_tiled_backing_store_view_wrap_right(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y, unsigned int count)
+static void _ewk_tiled_backing_store_view_wrap_right(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y, unsigned int count)
 {
-    unsigned int r;
-    Evas_Coord tw = priv->view.tile.w;
-    Evas_Coord th = priv->view.tile.h;
-    Evas_Coord off_x = priv->view.offset.base.x - count * tw;
-    Evas_Coord oy = y + priv->view.offset.base.y;
-    Eina_Inlist **itr, **itr_end;
+    unsigned int row;
+    Evas_Coord tileWidth = priv->view.tile.width;
+    Evas_Coord tileHeight = priv->view.tile.height;
+    Evas_Coord offsetX = priv->view.offset.base.x - count * tileWidth;
+    Evas_Coord tilePositionY = y + priv->view.offset.base.y;
+    Eina_Inlist** iterator, ** iteratorEnd;
+    unsigned int baseColumn = count - 1;
+    Evas_Coord originX = x + baseColumn * tileWidth + offsetX;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
-    r = 0;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
+    row = 0;
 
-    priv->model.base.col -= count;
+    priv->model.base.column -= count;
 
-    for (; itr < itr_end; itr++, r++) {
-        Evas_Coord ox = x + (count - 1) * tw + off_x;
-        unsigned int i, c = count - 1;
+    for (; iterator < iteratorEnd; iterator++, row++) {
+        Evas_Coord tilePositionX = originX;
+        unsigned int column = baseColumn;
 
-        for (i = 0; i < count; i++, c--, ox -= tw) {
-            Ewk_Tiled_Backing_Store_Item *it;
-            it = EINA_INLIST_CONTAINER_GET((*itr)->last, Ewk_Tiled_Backing_Store_Item);
-            *itr = eina_inlist_promote(*itr, (*itr)->last);
+        for (unsigned int i = 0; i < count; i++, column--, tilePositionX -= tileWidth) {
+            Ewk_Tiled_Backing_Store_Item* item;
+            item = EINA_INLIST_CONTAINER_GET((*iterator)->last, Ewk_Tiled_Backing_Store_Item);
+            *iterator = eina_inlist_promote(*iterator, (*iterator)->last);
 
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            _ewk_tiled_backing_store_item_fill(priv, it, c, r);
+            _ewk_tiled_backing_store_item_move(item, tilePositionX, tilePositionY);
+            _ewk_tiled_backing_store_item_fill(priv, item, column, row);
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
 
-    priv->view.offset.base.x = off_x;
+    priv->view.offset.base.x = offsetX;
 }
 
-static void _ewk_tiled_backing_store_view_refill(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y, int step_x, int step_y)
+static void _ewk_tiled_backing_store_view_refill(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y, int stepX, int stepY)
 {
-    Eina_Inlist **itr, **itr_end;
-    Evas_Coord base_ox, oy, tw, th;
+    Eina_Inlist** iterator, **iteratorEnd;
+    Evas_Coord baseTilePositionX, tilePositionY, tileWidth, tileHeight;
     unsigned int r;
 
     evas_object_move(priv->base.clipper, x, y);
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
 
-    base_ox = x + priv->view.offset.base.x;
-    oy = y + priv->view.offset.base.y;
+    baseTilePositionX = x + priv->view.offset.base.x;
+    tilePositionY = y + priv->view.offset.base.y;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
     r = 0;
 
-    priv->model.base.col -= step_x;
-    priv->model.base.row -= step_y;
+    priv->model.base.column -= stepX;
+    priv->model.base.row -= stepY;
 
-    for (; itr < itr_end; itr++, r++) {
-        Ewk_Tiled_Backing_Store_Item *it;
-        Evas_Coord ox = base_ox;
-        unsigned int c = 0;
-        EINA_INLIST_FOREACH(*itr, it) {
-            _ewk_tiled_backing_store_item_fill(priv, it, c, r);
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            c++;
-            ox += tw;
+    for (; iterator < iteratorEnd; iterator++, r++) {
+        Ewk_Tiled_Backing_Store_Item* item;
+        Evas_Coord newTilePositionX = baseTilePositionX;
+        unsigned int count = 0;
+        EINA_INLIST_FOREACH(*iterator, item) {
+            _ewk_tiled_backing_store_item_fill(priv, item, count, r);
+            _ewk_tiled_backing_store_item_move(item, newTilePositionX, tilePositionY);
+            count++;
+            newTilePositionX += tileWidth;
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
 }
 
-static void _ewk_tiled_backing_store_view_pos_apply(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y)
+static void _ewk_tiled_backing_store_view_pos_apply(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y)
 {
-    Eina_Inlist **itr, **itr_end;
-    Evas_Coord base_ox, oy, tw, th;
+    Eina_Inlist** iterator, **iteratorEnd;
+    Evas_Coord baseTilePositionX, baseTilePositionY, tileWidth, tileHeight;
 
     evas_object_move(priv->base.clipper, x, y);
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
 
-    base_ox = x + priv->view.offset.base.x;
-    oy = y + priv->view.offset.base.y;
+    baseTilePositionX = x + priv->view.offset.base.x;
+    baseTilePositionY = y + priv->view.offset.base.y;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
-    for (; itr < itr_end; itr++) {
-        Ewk_Tiled_Backing_Store_Item *it;
-        Evas_Coord ox = base_ox;
-        EINA_INLIST_FOREACH(*itr, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            ox += tw;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
+    for (; iterator < iteratorEnd; iterator++) {
+        Ewk_Tiled_Backing_Store_Item* it;
+        Evas_Coord ox = baseTilePositionX;
+        EINA_INLIST_FOREACH(*iterator, it) {
+            _ewk_tiled_backing_store_item_move(it, ox, baseTilePositionY);
+            ox += tileWidth;
         }
-        oy += th;
+        baseTilePositionY += tileHeight;
     }
 }
 
-static void _ewk_tiled_backing_store_smart_calculate_offset_force(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_smart_calculate_offset_force(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Evas_Coord dx = priv->view.offset.cur.x - priv->view.offset.old.x;
-    Evas_Coord dy = priv->view.offset.cur.y - priv->view.offset.old.y;
-    Evas_Coord tw, th;
-    int step_y, step_x;
+    Evas_Coord deltaX = priv->view.offset.cur.x - priv->view.offset.old.x;
+    Evas_Coord deltaY = priv->view.offset.cur.y - priv->view.offset.old.y;
+    Evas_Coord tileWidth, tileHeight;
+    int stepY, stepX;
 
-    INF("o=%p, offset: %+4d, %+4d (%+4d, %+4d)",
-        priv->self, dx, dy, priv->view.offset.cur.x, priv->view.offset.cur.y);
+    INF("ewkBackingStore%p, offset: %+4d, %+4d (%+4d, %+4d)",
+        priv->self, deltaX, deltaY, priv->view.offset.cur.x, priv->view.offset.cur.y);
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
 
-    long new_col = -priv->view.offset.cur.x / tw;
-    step_x = priv->model.base.col - new_col;
-    long new_row = -priv->view.offset.cur.y / th;
-    step_y = priv->model.base.row - new_row;
+    long newColumn = -priv->view.offset.cur.x / tileWidth;
+    stepX = priv->model.base.column - newColumn;
+    long newRow = -priv->view.offset.cur.y / tileHeight;
+    stepY = priv->model.base.row - newRow;
 
     priv->view.offset.old.x = priv->view.offset.cur.x;
     priv->view.offset.old.y = priv->view.offset.cur.y;
     evas_object_move(
-        priv->contents_clipper,
+        priv->contentsClipper,
         priv->view.offset.cur.x + priv->view.x,
         priv->view.offset.cur.y + priv->view.y);
 
-    priv->view.offset.base.x += dx - step_x * tw;
-    priv->view.offset.base.y += dy - step_y * th;
+    priv->view.offset.base.x += deltaX - stepX * tileWidth;
+    priv->view.offset.base.y += deltaY - stepY * tileHeight;
 
     _ewk_tiled_backing_store_view_refill
-        (priv, priv->view.x, priv->view.y, step_x, step_y);
+        (priv, priv->view.x, priv->view.y, stepX, stepY);
 }
 
-static void _ewk_tiled_backing_store_smart_calculate_offset(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y)
+static void _ewk_tiled_backing_store_smart_calculate_offset(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y)
 {
-    Evas_Coord dx = priv->view.offset.cur.x - priv->view.offset.old.x;
-    Evas_Coord dy = priv->view.offset.cur.y - priv->view.offset.old.y;
-    Evas_Coord tw, th;
-    int step_y, step_x;
+    Evas_Coord deltaX = priv->view.offset.cur.x - priv->view.offset.old.x;
+    Evas_Coord deltaY = priv->view.offset.cur.y - priv->view.offset.old.y;
+    Evas_Coord tileWidth, tileHeight;
+    int stepY, stepX;
 
-    INF("o=%p, offset: %+4d, %+4d (%+4d, %+4d)",
-        priv->self, dx, dy, priv->view.offset.cur.x, priv->view.offset.cur.y);
+    INF("ewkBackingStore%p, offset: %+4d, %+4d (%+4d, %+4d)",
+        priv->self, deltaX, deltaY, priv->view.offset.cur.x, priv->view.offset.cur.y);
 
-    if (!dx && !dy)
+    if (!deltaX && !deltaY)
         return;
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
 
-    long new_col = -priv->view.offset.cur.x / tw;
-    step_x = priv->model.base.col - new_col;
-    long new_row = -priv->view.offset.cur.y / th;
-    step_y = priv->model.base.row - new_row;
+    long newCol = -priv->view.offset.cur.x / tileWidth;
+    stepX = priv->model.base.column - newCol;
+    long newRow = -priv->view.offset.cur.y / tileHeight;
+    stepY = priv->model.base.row - newRow;
 
     priv->view.offset.old.x = priv->view.offset.cur.x;
     priv->view.offset.old.y = priv->view.offset.cur.y;
     evas_object_move(
-        priv->contents_clipper,
+        priv->contentsClipper,
         priv->view.offset.cur.x + priv->view.x,
         priv->view.offset.cur.y + priv->view.y);
 
-    if ((step_x < 0 && step_x <= -priv->view.cols)
-        || (step_x > 0 && step_x >= priv->view.cols)
-        || (step_y < 0 && step_y <= -priv->view.rows)
-        || (step_y > 0 && step_y >= priv->view.rows)) {
+    if ((stepX < 0 && stepX <= -priv->view.cols)
+        || (stepX > 0 && stepX >= priv->view.cols)
+        || (stepY < 0 && stepY <= -priv->view.rows)
+        || (stepY > 0 && stepY >= priv->view.rows)) {
 
-        priv->view.offset.base.x += dx - step_x * tw;
-        priv->view.offset.base.y += dy - step_y * th;
+        priv->view.offset.base.x += deltaX - stepX * tileWidth;
+        priv->view.offset.base.y += deltaY - stepY * tileHeight;
 
         _ewk_tiled_backing_store_view_refill
-            (priv, priv->view.x, priv->view.y, step_x, step_y);
+            (priv, priv->view.x, priv->view.y, stepX, stepY);
         return;
     }
 
-    priv->view.offset.base.x += dx;
-    priv->view.offset.base.y += dy;
+    priv->view.offset.base.x += deltaX;
+    priv->view.offset.base.y += deltaY;
 
-    if (step_y < 0)
-        _ewk_tiled_backing_store_view_wrap_up(priv, x, y, -step_y);
-    else if (step_y > 0)
-        _ewk_tiled_backing_store_view_wrap_down(priv, x, y, step_y);
+    if (stepY < 0)
+        _ewk_tiled_backing_store_view_wrap_up(priv, x, y, -stepY);
+    else if (stepY > 0)
+        _ewk_tiled_backing_store_view_wrap_down(priv, x, y, stepY);
 
-    if (step_x < 0)
-        _ewk_tiled_backing_store_view_wrap_left(priv, x, y, -step_x);
-    else if (step_x > 0)
-        _ewk_tiled_backing_store_view_wrap_right(priv, x, y, step_x);
+    if (stepX < 0)
+        _ewk_tiled_backing_store_view_wrap_left(priv, x, y, -stepX);
+    else if (stepX > 0)
+        _ewk_tiled_backing_store_view_wrap_right(priv, x, y, stepX);
 
     _ewk_tiled_backing_store_view_pos_apply(priv, x, y);
 }
 
-static void _ewk_tiled_backing_store_smart_calculate_pos(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y)
+static void _ewk_tiled_backing_store_smart_calculate_pos(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y)
 {
     _ewk_tiled_backing_store_view_pos_apply(priv, x, y);
     priv->view.x = x;
     priv->view.y = y;
     evas_object_move(
-        priv->contents_clipper,
+        priv->contentsClipper,
         priv->view.offset.cur.x + priv->view.x,
         priv->view.offset.cur.y + priv->view.y);
 }
 
-static void _ewk_tiled_backing_store_fill_renderers(Ewk_Tiled_Backing_Store_Data *priv)
+static void _ewk_tiled_backing_store_fill_renderers(Ewk_Tiled_Backing_Store_Data* priv)
 {
-    Eina_Inlist *it;
-    Ewk_Tiled_Backing_Store_Item *item;
+    Eina_Inlist* list;
+    Ewk_Tiled_Backing_Store_Item* item;
     int i, j;
 
     for (i = 0; i < priv->view.rows; i++) {
-        it = priv->view.items[i];
+        list = priv->view.items[i];
         j = 0;
-        EINA_INLIST_FOREACH(it, item)
+        EINA_INLIST_FOREACH(list, item)
             _ewk_tiled_backing_store_item_fill(priv, item, j++, i);
     }
 }
 
-static void _ewk_tiled_backing_store_smart_calculate(Evas_Object *o)
+static void _ewk_tiled_backing_store_smart_calculate(Evas_Object* ewkBackingStore)
 {
-    Evas_Coord x, y, w, h;
+    Evas_Coord x, y, width, height;
 
-    evas_object_geometry_get(o, &x, &y, &w, &h);
-    DBG("o=%p at %d,%d + %dx%d", o, x, y, w, h);
+    evas_object_geometry_get(ewkBackingStore, &x, &y, &width, &height);
+    DBG("ewkBackingStore%p at %d,%d + %dx%d", ewkBackingStore, x, y, width, height);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
-    priv->changed.any = EINA_FALSE;
+    priv->changed.any = false;
 
     ewk_tile_matrix_freeze(priv->model.matrix);
 
+    if (priv->changed.model && !priv->changed.size)
+        ewk_tile_matrix_invalidate(priv->model.matrix);
+
     if (!priv->render.suspend && priv->changed.model) {
-        unsigned long cols, rows;
+        unsigned long columns, rows;
 
-        cols = priv->model.width / priv->view.tile.w + 1;
-        rows = priv->model.height / priv->view.tile.h + 1;
+        columns = priv->model.width / priv->view.tile.width + 1;
+        rows = priv->model.height / priv->view.tile.height + 1;
 
-        priv->model.old.cols = priv->model.cur.cols;
-        priv->model.old.rows = priv->model.cur.rows;
-        priv->model.cur.cols = cols;
-        priv->model.cur.rows = rows;
-        if (priv->model.old.cols > cols)
-            cols = priv->model.old.cols;
+        priv->model.old.columns = priv->model.current.columns;
+        priv->model.old.rows = priv->model.current.rows;
+        priv->model.current.columns = columns;
+        priv->model.current.rows = rows;
+        if (priv->model.old.columns > columns)
+            columns = priv->model.old.columns;
         if (priv->model.old.rows > rows)
             rows = priv->model.old.rows;
-        ewk_tile_matrix_resize(priv->model.matrix, cols, rows);
+        ewk_tile_matrix_resize(priv->model.matrix, columns, rows);
     }
 
-    if (priv->changed.pos && (priv->view.x != x || priv->view.y != y)) {
+    if (priv->changed.position && (priv->view.x != x || priv->view.y != y)) {
         _ewk_tiled_backing_store_smart_calculate_pos(priv, x, y);
-        priv->changed.pos = EINA_FALSE;
+        priv->changed.position = false;
     }
     if (priv->changed.offset) {
         _ewk_tiled_backing_store_smart_calculate_offset(priv, x, y);
-        priv->changed.offset = EINA_FALSE;
+        priv->changed.offset = false;
     }
 
     if (priv->changed.size) {
-        _ewk_tiled_backing_store_smart_calculate_size(priv, w, h);
-        priv->changed.size = EINA_FALSE;
+        _ewk_tiled_backing_store_smart_calculate_size(priv, width, height);
+        priv->changed.size = false;
     }
 
     if (!priv->render.suspend && priv->changed.model) {
-        Eina_Rectangle rect;
-        rect.x = 0;
-        rect.y = 0;
-        rect.w = priv->model.width;
-        rect.h = priv->model.height;
         _ewk_tiled_backing_store_fill_renderers(priv);
         ewk_tile_matrix_resize(priv->model.matrix,
-                           priv->model.cur.cols,
-                           priv->model.cur.rows);
-        priv->changed.model = EINA_FALSE;
-        evas_object_resize(priv->contents_clipper, priv->model.width, priv->model.height);
+                               priv->model.current.columns,
+                               priv->model.current.rows);
+        priv->changed.model = false;
+        evas_object_resize(priv->contentsClipper, priv->model.width, priv->model.height);
         _ewk_tiled_backing_store_smart_calculate_offset_force(priv);
 
         /* Make sure we do not miss any important repaint by
          * repainting the whole viewport */
-        const Eina_Rectangle r =
-            { 0, 0, priv->model.width, priv->model.height };
-        ewk_tile_matrix_update(priv->model.matrix, &r,
+        const Eina_Rectangle rect =
+        { 0, 0, priv->model.width, priv->model.height };
+        ewk_tile_matrix_update(priv->model.matrix, &rect,
                                priv->view.tile.zoom);
     }
 
@@ -1367,19 +1369,19 @@ static void _ewk_tiled_backing_store_smart_calculate(Evas_Object *o)
     _ewk_tiled_backing_store_updates_process(priv);
 
     if (priv->view.offset.base.x > 0
-        || priv->view.offset.base.x <= - priv->view.tile.w
+        || priv->view.offset.base.x <= - priv->view.tile.width
         || priv->view.offset.base.y > 0
-        || priv->view.offset.base.y <= - priv->view.tile.h)
+        || priv->view.offset.base.y <= - priv->view.tile.height)
         ERR("incorrect base offset %+4d,%+4d, tile=%dx%d, cur=%+4d,%+4d\n",
             priv->view.offset.base.x, priv->view.offset.base.y,
-            priv->view.tile.w, priv->view.tile.h,
+            priv->view.tile.width, priv->view.tile.height,
             priv->view.offset.cur.x, priv->view.offset.cur.y);
 
 }
 
-Evas_Object *ewk_tiled_backing_store_add(Evas *e)
+Evas_Object* ewk_tiled_backing_store_add(Evas* canvas)
 {
-    static Evas_Smart *smart = 0;
+    static Evas_Smart* smart = 0;
 
     if (_ewk_tiled_log_dom < 0)
         _ewk_tiled_log_dom = eina_log_domain_register("Ewk_Tiled_Backing_Store", 0);
@@ -1395,6 +1397,8 @@ Evas_Object *ewk_tiled_backing_store_add(Evas *e)
         sc.del = _ewk_tiled_backing_store_smart_del;
         sc.resize = _ewk_tiled_backing_store_smart_resize;
         sc.move = _ewk_tiled_backing_store_smart_move;
+        sc.show = _ewk_tiled_backing_store_smart_show;
+        sc.hide = _ewk_tiled_backing_store_smart_hide;
         sc.calculate = _ewk_tiled_backing_store_smart_calculate;
         sc.member_add = _ewk_tiled_backing_store_smart_member_add;
         sc.member_del = _ewk_tiled_backing_store_smart_member_del;
@@ -1402,398 +1406,399 @@ Evas_Object *ewk_tiled_backing_store_add(Evas *e)
         smart = evas_smart_class_new(&sc);
     }
 
-    return evas_object_smart_add(e, smart);
+    return evas_object_smart_add(canvas, smart);
 }
 
-void ewk_tiled_backing_store_render_cb_set(Evas_Object *o, Eina_Bool (*cb)(void *data, Ewk_Tile *t, const Eina_Rectangle *area), const void *data)
+void ewk_tiled_backing_store_render_cb_set(Evas_Object* ewkBackingStore, Eina_Bool (*callback)(void* data, Ewk_Tile* tile, const Eina_Rectangle* area), const void* data)
 {
-    EINA_SAFETY_ON_NULL_RETURN(cb);
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    priv->render.cb = cb;
+    EINA_SAFETY_ON_NULL_RETURN(callback);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    priv->render.callback = callback;
     priv->render.data = (void*)data;
 }
 
-Ewk_Tile_Unused_Cache *ewk_tiled_backing_store_tile_unused_cache_get(const Evas_Object *o)
+Ewk_Tile_Unused_Cache* ewk_tiled_backing_store_tile_unused_cache_get(const Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, 0);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, 0);
     return ewk_tile_matrix_unused_cache_get(priv->model.matrix);
 }
 
-void ewk_tiled_backing_store_tile_unused_cache_set(Evas_Object *o, Ewk_Tile_Unused_Cache *tuc)
+void ewk_tiled_backing_store_tile_unused_cache_set(Evas_Object* ewkBackingStore, Ewk_Tile_Unused_Cache* tileUnusedCache)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
-    if (ewk_tile_matrix_unused_cache_get(priv->model.matrix) == tuc)
+    if (ewk_tile_matrix_unused_cache_get(priv->model.matrix) == tileUnusedCache)
         return;
 
-    _ewk_tiled_backing_store_model_matrix_create(priv, tuc);
+    _ewk_tiled_backing_store_model_matrix_create(priv, tileUnusedCache);
 }
 
-static Eina_Bool _ewk_tiled_backing_store_scroll_full_offset_set_internal(Ewk_Tiled_Backing_Store_Data *priv, Evas_Coord x, Evas_Coord y)
+static Eina_Bool _ewk_tiled_backing_store_scroll_full_offset_set_internal(Ewk_Tiled_Backing_Store_Data* priv, Evas_Coord x, Evas_Coord y)
 {
     /* TODO: check offset go out of bounds, clamp */
     if (priv->render.disabled)
-        return EINA_FALSE;
+        return false;
 
     priv->view.offset.cur.x = x;
     priv->view.offset.cur.y = y;
 
-    priv->changed.offset = EINA_TRUE;
+    priv->changed.offset = true;
     _ewk_tiled_backing_store_changed(priv);
 
-    return EINA_TRUE;
+    return true;
 }
 
-Eina_Bool ewk_tiled_backing_store_scroll_full_offset_set(Evas_Object *o, Evas_Coord x, Evas_Coord y)
+Eina_Bool ewk_tiled_backing_store_scroll_full_offset_set(Evas_Object* ewkBackingStore, Evas_Coord x, Evas_Coord y)
 {
-    DBG("o=%p, x=%d, y=%d", o, x, y);
+    DBG("ewkBackingStore%p, x=%d, y=%d", ewkBackingStore, x, y);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
     if (x == priv->view.offset.cur.x && y == priv->view.offset.cur.y)
-        return EINA_TRUE;
+        return true;
 
     return _ewk_tiled_backing_store_scroll_full_offset_set_internal(priv, x, y);
 }
 
-Eina_Bool ewk_tiled_backing_store_scroll_full_offset_add(Evas_Object *o, Evas_Coord dx, Evas_Coord dy)
+Eina_Bool ewk_tiled_backing_store_scroll_full_offset_add(Evas_Object* ewkBackingStore, Evas_Coord deltaX, Evas_Coord deltaY)
 {
-    DBG("o=%p, dx=%d, dy=%d", o, dx, dy);
+    DBG("ewkBackingStore%p, deltaX=%d, deltaY=%d", ewkBackingStore, deltaX, deltaY);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
-    if (!dx && !dy)
-        return EINA_TRUE;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
+    if (!deltaX && !deltaY)
+        return true;
 
     return _ewk_tiled_backing_store_scroll_full_offset_set_internal
-        (priv, priv->view.offset.cur.x + dx, priv->view.offset.cur.y + dy);
+               (priv, priv->view.offset.cur.x + deltaX, priv->view.offset.cur.y + deltaY);
 }
 
-static Eina_Bool _ewk_tiled_backing_store_zoom_set_internal(Ewk_Tiled_Backing_Store_Data *priv, float *zoom, Evas_Coord cx, Evas_Coord cy, Evas_Coord *offx, Evas_Coord *offy)
+static Eina_Bool _ewk_tiled_backing_store_zoom_set_internal(Ewk_Tiled_Backing_Store_Data* priv, float* zoom, Evas_Coord currentX, Evas_Coord currentY, Evas_Coord* offsetX, Evas_Coord* offsetY)
 {
-    *offx = priv->view.offset.cur.x;
-    *offy = priv->view.offset.cur.y;
+    *offsetX = priv->view.offset.cur.x;
+    *offsetY = priv->view.offset.cur.y;
 
     if (fabsf(priv->view.tile.zoom - *zoom) < ZOOM_STEP_MIN) {
         DBG("ignored as zoom difference is < %f: %f",
             (double)ZOOM_STEP_MIN, fabsf(priv->view.tile.zoom - *zoom));
-        return EINA_TRUE;
+        return true;
     }
 
     _ewk_tiled_backing_store_pre_render_request_flush(priv);
-    Evas_Coord tw, th;
+    Evas_Coord tileWidth, tileHeight;
 
-    *zoom = ROUNDED_ZOOM(priv->view.tile.w, *zoom);
+    *zoom = ROUNDED_ZOOM(priv->view.tile.width, *zoom);
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
 
     float scale = *zoom / priv->view.tile.zoom;
 
     priv->view.tile.zoom = *zoom;
-    // todo: check cx [0, w]...
-    priv->view.offset.zoom_center.x = cx;
-    priv->view.offset.zoom_center.y = cy;
+    // todo: check currentX [0, w]...
+    priv->view.offset.zoomCenter.x = currentX;
+    priv->view.offset.zoomCenter.y = currentY;
 
+    ewk_tile_matrix_zoom_level_set(priv->model.matrix, *zoom);
 
-    if (!priv->view.w || !priv->view.h) {
+    if (!priv->view.width || !priv->view.height) {
         priv->view.offset.base.x = 0;
         priv->view.offset.base.y = 0;
-        return EINA_TRUE;
+        return true;
     }
-    Eina_Inlist **itr, **itr_end;
-    Ewk_Tiled_Backing_Store_Item *it;
+    Eina_Inlist** iterator, **iteratorEnd;
+    Ewk_Tiled_Backing_Store_Item* it;
 
-    Evas_Coord new_x = cx + (priv->view.offset.cur.x - cx) * scale;
-    Evas_Coord new_y = cy + (priv->view.offset.cur.y - cy) * scale;
+    Evas_Coord newX = currentX + (priv->view.offset.cur.x - currentX) * scale;
+    Evas_Coord newY = currentY + (priv->view.offset.cur.y - currentY) * scale;
 
-    Evas_Coord model_width = priv->model.width * scale;
-    Evas_Coord model_height = priv->model.height * scale;
+    Evas_Coord modelWidth = priv->model.width * scale;
+    Evas_Coord modelHeight = priv->model.height * scale;
 
-    if (model_width < priv->view.w || new_x >= 0)
-        new_x = 0;
-    else if (-new_x + priv->view.w >= model_width)
-        new_x = -model_width + priv->view.w;
+    if (modelWidth < priv->view.width || newX >= 0)
+        newX = 0;
+    else if (-newX + priv->view.width >= modelWidth)
+        newX = -modelWidth + priv->view.width;
 
-    if (model_height < priv->view.h || new_y >= 0)
-        new_y = 0;
-    else if (-new_y + priv->view.h >= model_height)
-        new_y = -model_height + priv->view.h;
+    if (modelHeight < priv->view.height || newY >= 0)
+        newY = 0;
+    else if (-newY + priv->view.height >= modelHeight)
+        newY = -modelHeight + priv->view.height;
 
-    Evas_Coord bx = new_x % tw;
-    Evas_Coord by = new_y % th;
-    priv->model.base.col = -new_x / tw;
-    priv->model.base.row = -new_y / th;
+    Evas_Coord baseX = newX % tileWidth;
+    Evas_Coord baseY = newY % tileHeight;
+    priv->model.base.column = -newX / tileWidth;
+    priv->model.base.row = -newY / tileHeight;
 
-    priv->changed.size = EINA_TRUE;
-    priv->changed.model = EINA_TRUE;
+    priv->changed.size = true;
+    priv->changed.model = true;
     _ewk_tiled_backing_store_changed(priv);
 
-    priv->view.offset.cur.x = new_x;
-    priv->view.offset.cur.y = new_y;
-    priv->view.offset.base.x = bx;
-    priv->view.offset.base.y = by;
+    priv->view.offset.cur.x = newX;
+    priv->view.offset.cur.y = newY;
+    priv->view.offset.base.x = baseX;
+    priv->view.offset.base.y = baseY;
 
     priv->view.offset.old.x = priv->view.offset.cur.x;
     priv->view.offset.old.y = priv->view.offset.cur.y;
-    *offx = priv->view.offset.cur.x;
-    *offy = priv->view.offset.cur.y;
+    *offsetX = priv->view.offset.cur.x;
+    *offsetY = priv->view.offset.cur.y;
 
     evas_object_move(
-        priv->contents_clipper,
-        new_x + priv->view.x,
-        new_y + priv->view.y);
+        priv->contentsClipper,
+        newX + priv->view.x,
+        newY + priv->view.y);
 
     _ewk_tiled_backing_store_fill_renderers(priv);
 
-    Evas_Coord oy = priv->view.offset.base.y + priv->view.y;
-    Evas_Coord base_ox = priv->view.x + priv->view.offset.base.x;
+    Evas_Coord tilePositionY = priv->view.offset.base.y + priv->view.y;
+    Evas_Coord baseTilePositionX = priv->view.x + priv->view.offset.base.x;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
 
-    for (; itr < itr_end; itr++) {
-        Evas_Coord ox = base_ox;
-        Eina_Inlist *lst = *itr;
+    for (; iterator < iteratorEnd; iterator++) {
+        Evas_Coord tilePositionX = baseTilePositionX;
+        Eina_Inlist* lst = *iterator;
 
         EINA_INLIST_FOREACH(lst, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            _ewk_tiled_backing_store_item_resize(it, tw, th);
-            ox += tw;
+            _ewk_tiled_backing_store_item_move(it, tilePositionX, tilePositionY);
+            _ewk_tiled_backing_store_item_resize(it, tileWidth, tileHeight);
+            tilePositionX += tileWidth;
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
 
-    return EINA_TRUE;
+    return true;
 }
 
-Eina_Bool ewk_tiled_backing_store_zoom_set(Evas_Object *o, float *zoom, Evas_Coord cx, Evas_Coord cy, Evas_Coord *offx, Evas_Coord *offy)
+Eina_Bool ewk_tiled_backing_store_zoom_set(Evas_Object* ewkBackingStore, float* zoom, Evas_Coord currentX, Evas_Coord currentY, Evas_Coord* offsetX, Evas_Coord* offsetY)
 {
-    DBG("o=%p, zoom=%f", o, (double)*zoom);
+    DBG("ewkBackingStore%p, zoom=%f", ewkBackingStore, *zoom);
 
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
 
-    return _ewk_tiled_backing_store_zoom_set_internal(priv, zoom, cx, cy, offx, offy);
+    return _ewk_tiled_backing_store_zoom_set_internal(priv, zoom, currentX, currentY, offsetX, offsetY);
 }
 
-Eina_Bool ewk_tiled_backing_store_zoom_weak_set(Evas_Object *o, float zoom, Evas_Coord cx, Evas_Coord cy)
+Eina_Bool ewk_tiled_backing_store_zoom_weak_set(Evas_Object* ewkBackingStore, float zoom, Evas_Coord currentX, Evas_Coord currentY)
 {
-    DBG("o=%p, zoom=%f", o, (double)zoom);
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
-    if (!priv->view.w || !priv->view.h)
-        return EINA_FALSE;
-    Eina_Inlist **itr, **itr_end;
-    Ewk_Tiled_Backing_Store_Item *it;
-    Evas_Coord tw, th;
-    Eina_Bool recalc = EINA_FALSE;
+    DBG("ewkBackingStore%p, zoom=%f", ewkBackingStore, zoom);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
+    if (!priv->view.width || !priv->view.height)
+        return false;
+    Eina_Inlist** iterator, ** iteratorEnd;
+    Ewk_Tiled_Backing_Store_Item* item;
+    Evas_Coord tileWidth, tileHeight;
+    Eina_Bool reCalculate = false;
 
     float scale = zoom / priv->view.tile.zoom;
 
-    tw = TILE_SIZE_AT_ZOOM(priv->view.tile.w, scale);
-    scale = TILE_ZOOM_AT_SIZE(tw, priv->view.tile.w);
-    th = TILE_SIZE_AT_ZOOM(priv->view.tile.h, scale);
+    tileWidth = TILE_SIZE_AT_ZOOM(priv->view.tile.width, scale);
+    scale = TILE_ZOOM_AT_SIZE(tileWidth, priv->view.tile.width);
+    tileHeight = TILE_SIZE_AT_ZOOM(priv->view.tile.height, scale);
     zoom = scale * priv->view.tile.zoom;
 
-    Evas_Coord model_width = priv->model.width * scale;
-    Evas_Coord model_height = priv->model.height * scale;
+    Evas_Coord modelWidth = priv->model.width * scale;
+    Evas_Coord modelHeight = priv->model.height * scale;
 
-    evas_object_resize(priv->contents_clipper, model_width, model_height);
+    evas_object_resize(priv->contentsClipper, modelWidth, modelHeight);
 
-    int vrows = ceil((float)priv->view.h / (float)th) + 1;
-    int vcols = ceil((float)priv->view.w / (float)tw) + 1;
-    Evas_Coord new_x = cx + (priv->view.offset.cur.x - cx) * scale;
-    Evas_Coord new_y = cy + (priv->view.offset.cur.y - cy) * scale;
-    Evas_Coord bx = new_x % tw;
-    Evas_Coord by = new_y % th;
-    unsigned long base_row = -new_y / th;
-    unsigned long base_col = -new_x / tw;
+    int vrows = static_cast<int>(ceil(priv->view.height /static_cast<float>(tileHeight)) + 1);
+    int vcols = static_cast<int>(ceil(priv->view.width / static_cast<float>(tileWidth)) + 1);
+    Evas_Coord newX = currentX + (priv->view.offset.cur.x - currentX) * scale;
+    Evas_Coord newY = currentY + (priv->view.offset.cur.y - currentY) * scale;
+    Evas_Coord baseX = newX % tileWidth;
+    Evas_Coord baseY = newY % tileHeight;
+    unsigned long baseRow = -newY / tileHeight;
+    unsigned long baseColumn = -newX / tileWidth;
 
-    if (base_row != priv->model.base.row || base_col != priv->model.base.col) {
-        priv->model.base.row = base_row;
-        priv->model.base.col = base_col;
-        recalc = EINA_TRUE;
+    if (baseRow != priv->model.base.row || baseColumn != priv->model.base.column) {
+        priv->model.base.row = baseRow;
+        priv->model.base.column = baseColumn;
+        reCalculate = true;
     }
 
     if (vrows > priv->view.rows || vcols > priv->view.cols)
-        recalc = EINA_TRUE;
+        reCalculate = true;
 
-    if (recalc) {
-        Evas_Coord w, h;
-        evas_object_geometry_get(o, 0, 0, &w, &h);
-        _ewk_tiled_backing_store_recalc_renderers(priv, w, h, tw, th);
+    if (reCalculate) {
+        Evas_Coord width, height;
+        evas_object_geometry_get(ewkBackingStore, 0, 0, &width, &height);
+        _ewk_tiled_backing_store_recalc_renderers(priv, width, height, tileWidth, tileHeight);
         _ewk_tiled_backing_store_fill_renderers(priv);
         _ewk_tiled_backing_store_updates_process(priv);
     }
 
-    Evas_Coord base_ox = bx + priv->view.x;
-    Evas_Coord oy = by + priv->view.y;
+    Evas_Coord baseTilePositionX = baseX + priv->view.x;
+    Evas_Coord tilePositionY = baseY + priv->view.y;
 
-    evas_object_move(priv->contents_clipper,
-                     new_x + priv->view.x,
-                     new_y + priv->view.y);
+    evas_object_move(priv->contentsClipper,
+                     newX + priv->view.x,
+                     newY + priv->view.y);
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
 
-    for (; itr < itr_end; itr++) {
-        Evas_Coord ox = base_ox;
-        Eina_Inlist *lst = *itr;
+    for (; iterator < iteratorEnd; iterator++) {
+        Evas_Coord tilePositionX = baseTilePositionX;
+        Eina_Inlist* list = *iterator;
 
-        EINA_INLIST_FOREACH(lst, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            _ewk_tiled_backing_store_item_resize(it, tw, th);
-            ox += tw;
+        EINA_INLIST_FOREACH(list, item) {
+            _ewk_tiled_backing_store_item_move(item, tilePositionX, tilePositionY);
+            _ewk_tiled_backing_store_item_resize(item, tileWidth, tileHeight);
+            tilePositionX += tileWidth;
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
 
-    return EINA_TRUE;
+    return true;
 }
 
-void ewk_tiled_backing_store_fix_offsets(Evas_Object *o, Evas_Coord w, Evas_Coord h)
+void ewk_tiled_backing_store_fix_offsets(Evas_Object* ewkBackingStore, Evas_Coord width, Evas_Coord height)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    Eina_Inlist **itr, **itr_end;
-    Ewk_Tiled_Backing_Store_Item *it;
-    Evas_Coord new_x = priv->view.offset.cur.x;
-    Evas_Coord new_y = priv->view.offset.cur.y;
-    Evas_Coord bx = priv->view.offset.base.x;
-    Evas_Coord by = priv->view.offset.base.y;
-    Evas_Coord tw = priv->view.tile.w;
-    Evas_Coord th = priv->view.tile.h;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    Eina_Inlist** iterator, **iteratorEnd;
+    Ewk_Tiled_Backing_Store_Item* item;
+    Evas_Coord newX = priv->view.offset.cur.x;
+    Evas_Coord newY = priv->view.offset.cur.y;
+    Evas_Coord baseX = priv->view.offset.base.x;
+    Evas_Coord baseY = priv->view.offset.base.y;
+    Evas_Coord tileWidth = priv->view.tile.width;
+    Evas_Coord tileHeight = priv->view.tile.height;
 
-    if (-new_x > w) {
-        new_x = -w;
-        bx = new_x % tw;
-        priv->model.base.col = -new_x / tw;
+    if (-newX > width) {
+        newX = -width;
+        baseX = newX % tileWidth;
+        priv->model.base.column = -newX / tileWidth;
     }
 
-    if (-new_y > h) {
-        new_y = -h;
-        by = new_y % th;
-        priv->model.base.row = -new_y / th;
+    if (-newY > height) {
+        newY = -height;
+        baseY = newY % tileHeight;
+        priv->model.base.row = -newY / tileHeight;
     }
 
-    if (bx >= 0 || bx <= -2 * priv->view.tile.w) {
-        bx = new_x % tw;
-        priv->model.base.col = -new_x / tw;
+    if (baseX >= 0 || baseX <= -2 * priv->view.tile.width) {
+        baseX = newX % tileWidth;
+        priv->model.base.column = -newX / tileWidth;
     }
 
-    if (by >= 0 || by <= -2 * priv->view.tile.h) {
-        by = new_y % th;
-        priv->model.base.row = -new_y / th;
+    if (baseY >= 0 || baseY <= -2 * priv->view.tile.height) {
+        baseY = newY % tileHeight;
+        priv->model.base.row = -newY / tileHeight;
     }
 
-    priv->view.offset.cur.x = new_x;
-    priv->view.offset.cur.y = new_y;
-    priv->view.offset.old.x = new_x;
-    priv->view.offset.old.y = new_y;
-    priv->view.offset.base.x = bx;
-    priv->view.offset.base.y = by;
-    evas_object_move(priv->contents_clipper,
-                     new_x + priv->view.x,
-                     new_y + priv->view.y);
+    priv->view.offset.cur.x = newX;
+    priv->view.offset.cur.y = newY;
+    priv->view.offset.old.x = newX;
+    priv->view.offset.old.y = newY;
+    priv->view.offset.base.x = baseX;
+    priv->view.offset.base.y = baseY;
+    evas_object_move(priv->contentsClipper,
+                     newX + priv->view.x,
+                     newY + priv->view.y);
 
-    Evas_Coord oy = priv->view.offset.base.y + priv->view.y;
-    Evas_Coord base_ox = priv->view.x + priv->view.offset.base.x;
+    Evas_Coord tilePositionY = priv->view.offset.base.y + priv->view.y;
+    Evas_Coord baseTilePositionX = priv->view.x + priv->view.offset.base.x;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
 
-    for (; itr < itr_end; itr++) {
-        Evas_Coord ox = base_ox;
-        Eina_Inlist *lst = *itr;
+    for (; iterator < iteratorEnd; iterator++) {
+        Evas_Coord tilePositionX = baseTilePositionX;
+        Eina_Inlist* lst = *iterator;
 
-        EINA_INLIST_FOREACH(lst, it) {
-            _ewk_tiled_backing_store_item_move(it, ox, oy);
-            _ewk_tiled_backing_store_item_resize(it, tw, th);
-            ox += tw;
+        EINA_INLIST_FOREACH(lst, item) {
+            _ewk_tiled_backing_store_item_move(item, tilePositionX, tilePositionY);
+            _ewk_tiled_backing_store_item_resize(item, tileWidth, tileHeight);
+            tilePositionX += tileWidth;
         }
-        oy += th;
+        tilePositionY += tileHeight;
     }
 }
 
-void ewk_tiled_backing_store_zoom_weak_smooth_scale_set(Evas_Object *o, Eina_Bool smooth_scale)
+void ewk_tiled_backing_store_zoom_weak_smooth_scale_set(Evas_Object* ewkBackingStore, Eina_Bool smoothScale)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    Eina_Inlist **itr, **itr_end;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    Eina_Inlist** iterator, **iteratorEnd;
 
-    itr = priv->view.items;
-    itr_end = itr + priv->view.rows;
-    priv->view.tile.zoom_weak_smooth_scale = smooth_scale;
+    iterator = priv->view.items;
+    iteratorEnd = iterator + priv->view.rows;
+    priv->view.tile.zoomWeakSmoothScale = smoothScale;
 
-    for (; itr< itr_end; itr++) {
-        Ewk_Tiled_Backing_Store_Item *it;
-        EINA_INLIST_FOREACH(*itr, it)
-            if (it->tile)
+    for (; iterator< iteratorEnd; iterator++) {
+        Ewk_Tiled_Backing_Store_Item* item;
+        EINA_INLIST_FOREACH(*iterator, item)
+            if (item->tile)
                 _ewk_tiled_backing_store_item_smooth_scale_set
-                    (it, smooth_scale);
+                    (item, smoothScale);
     }
 }
 
-Eina_Bool ewk_tiled_backing_store_update(Evas_Object *o, const Eina_Rectangle *update)
+Eina_Bool ewk_tiled_backing_store_update(Evas_Object* ewkBackingStore, const Eina_Rectangle* update)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
 
     if (priv->render.disabled)
-        return EINA_FALSE;
+        return false;
 
     return ewk_tile_matrix_update(priv->model.matrix, update,
                                   priv->view.tile.zoom);
 }
 
-void ewk_tiled_backing_store_updates_process_pre_set(Evas_Object *o, void *(*cb)(void *data, Evas_Object *o), const void *data)
+void ewk_tiled_backing_store_updates_process_pre_set(Evas_Object* ewkBackingStore, void* (*callback)(void* data, Evas_Object *ewkBackingStore), const void* data)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    priv->process.pre_cb = cb;
-    priv->process.pre_data = (void*)data;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    priv->process.preCallback = callback;
+    priv->process.preData = (void*)data;
 }
 
-void ewk_tiled_backing_store_updates_process_post_set(Evas_Object *o, void *(*cb)(void *data, void *pre_data, Evas_Object *o), const void *data)
+void ewk_tiled_backing_store_updates_process_post_set(Evas_Object* ewkBackingStore, void* (*callback)(void* data, void* preData, Evas_Object *ewkBackingStore), const void* data)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    priv->process.post_cb = cb;
-    priv->process.post_data = (void*)data;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    priv->process.postCallback = callback;
+    priv->process.postData = (void*)data;
 }
 
-void ewk_tiled_backing_store_updates_process(Evas_Object *o)
+void ewk_tiled_backing_store_updates_process(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
     _ewk_tiled_backing_store_updates_process(priv);
 }
 
-void ewk_tiled_backing_store_updates_clear(Evas_Object *o)
+void ewk_tiled_backing_store_updates_clear(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
     ewk_tile_matrix_updates_clear(priv->model.matrix);
 }
 
-void ewk_tiled_backing_store_contents_resize(Evas_Object *o, Evas_Coord width, Evas_Coord height)
+void ewk_tiled_backing_store_contents_resize(Evas_Object* ewkBackingStore, Evas_Coord width, Evas_Coord height)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
     if (width == priv->model.width && height == priv->model.height)
         return;
 
     priv->model.width = width;
     priv->model.height = height;
-    priv->changed.model = EINA_TRUE;
+    priv->changed.model = true;
 
-    DBG("width,height=%d, %d", width, height);
+    DBG("w,h=%d, %d", width, height);
     _ewk_tiled_backing_store_changed(priv);
 }
 
-void ewk_tiled_backing_store_disabled_update_set(Evas_Object *o, Eina_Bool value)
+void ewk_tiled_backing_store_disabled_update_set(Evas_Object* ewkBackingStore, Eina_Bool value)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
 
     if (value != priv->render.disabled)
         priv->render.disabled = value;
 }
 
-void ewk_tiled_backing_store_flush(Evas_Object *o)
+void ewk_tiled_backing_store_flush(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    Ewk_Tile_Unused_Cache *tuc = 0;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    Ewk_Tile_Unused_Cache* tileUnusedCache = 0;
 
     priv->view.offset.cur.x = 0;
     priv->view.offset.cur.y = 0;
@@ -1801,13 +1806,13 @@ void ewk_tiled_backing_store_flush(Evas_Object *o)
     priv->view.offset.old.y = 0;
     priv->view.offset.base.x = 0;
     priv->view.offset.base.y = 0;
-    priv->model.base.col = 0;
+    priv->model.base.column = 0;
     priv->model.base.row = 0;
-    priv->model.cur.cols = 1;
-    priv->model.cur.rows = 1;
-    priv->model.old.cols = 0;
+    priv->model.current.columns = 1;
+    priv->model.current.rows = 1;
+    priv->model.old.columns = 0;
     priv->model.old.rows = 0;
-    priv->changed.size = EINA_TRUE;
+    priv->changed.size = true;
 
 #ifdef DEBUG_MEM_LEAKS
     printf("\nFLUSHED BACKING STORE, STATUS BEFORE DELETING TILE MATRIX:\n");
@@ -1816,8 +1821,8 @@ void ewk_tiled_backing_store_flush(Evas_Object *o)
 
     _ewk_tiled_backing_store_pre_render_request_flush(priv);
     _ewk_tiled_backing_store_tile_dissociate_all(priv);
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_clear(tuc);
+    tileUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_clear(tileUnusedCache);
 
 #ifdef DEBUG_MEM_LEAKS
     printf("\nFLUSHED BACKING STORE, STATUS AFTER RECREATING TILE MATRIX:\n");
@@ -1825,96 +1830,96 @@ void ewk_tiled_backing_store_flush(Evas_Object *o)
 #endif
 }
 
-Eina_Bool ewk_tiled_backing_store_pre_render_region(Evas_Object *o, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, float zoom)
+Eina_Bool ewk_tiled_backing_store_pre_render_region(Evas_Object* ewkBackingStore, Evas_Coord x, Evas_Coord y, Evas_Coord width, Evas_Coord height, float zoom)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
     Eina_Tile_Grid_Slicer slicer;
-    const Eina_Tile_Grid_Info *info;
-    Evas_Coord tw, th;
-    Ewk_Tile_Unused_Cache *tuc;
+    const Eina_Tile_Grid_Info* info;
+    Evas_Coord tileWidth, tileHeight;
+    Ewk_Tile_Unused_Cache* tileUnusedCache;
 
-    tw = priv->view.tile.w;
-    th = priv->view.tile.h;
-    zoom = ROUNDED_ZOOM(priv->view.tile.w, zoom);
+    tileWidth = priv->view.tile.width;
+    tileHeight = priv->view.tile.height;
+    zoom = ROUNDED_ZOOM(priv->view.tile.width, zoom);
 
-    if (!eina_tile_grid_slicer_setup(&slicer, x, y, w, h, tw, th)) {
+    if (!eina_tile_grid_slicer_setup(&slicer, x, y, width, height, tileWidth, tileHeight)) {
         ERR("could not setup grid slicer for %d,%d+%dx%d tile=%dx%d",
-            x, y, w, h, tw, th);
-        return EINA_FALSE;
+            x, y, width, height, tileWidth, tileHeight);
+        return false;
     }
 
     while (eina_tile_grid_slicer_next(&slicer, &info)) {
         const unsigned long c = info->col;
         const unsigned long r = info->row;
-        if (!_ewk_tiled_backing_store_pre_render_request_add(priv, c, r, zoom, PRE_RENDER_PRIORITY_LOW))
+        if (!_ewk_tiled_backing_store_pre_render_request_add(priv, c, r, zoom))
             break;
     }
 
     _ewk_tiled_backing_store_item_process_idler_start(priv);
 
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_lock_area(tuc, x, y, w, h, zoom);
-    return EINA_TRUE;
+    tileUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_lock_area(tileUnusedCache, x, y, width, height, zoom);
+    return true;
 }
 
-Eina_Bool ewk_tiled_backing_store_pre_render_relative_radius(Evas_Object *o, unsigned int n, float zoom)
+Eina_Bool ewk_tiled_backing_store_pre_render_relative_radius(Evas_Object* ewkBackingStore, unsigned int n, float zoom)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
-    unsigned long start_row, end_row, start_col, end_col, i, j, w, h;
-    Ewk_Tile_Unused_Cache *tuc;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
+    unsigned long startRow, endRow, startCol, endCol, i, j, width, height;
+    Ewk_Tile_Unused_Cache* tileUnusedCache;
 
     INF("priv->model.base.row =%ld, n=%u priv->view.rows=%lu",
-            priv->model.base.row, n, priv->view.rows);
-    start_row = (long)priv->model.base.row - n;
-    start_col = (long)priv->model.base.col - n;
-    end_row = std::min(priv->model.cur.rows - 1,
-                  priv->model.base.row + priv->view.rows + n - 1);
-    end_col = std::min(priv->model.cur.cols - 1,
-                  priv->model.base.col + priv->view.cols + n - 1);
+        priv->model.base.row, n, priv->view.rows);
+    startRow = (long)priv->model.base.row - n;
+    startCol = (long)priv->model.base.column - n;
+    endRow = std::min(priv->model.current.rows - 1,
+                       priv->model.base.row + priv->view.rows + n - 1);
+    endCol = std::min(priv->model.current.columns - 1,
+                       priv->model.base.column + priv->view.cols + n - 1);
 
-    INF("start_row=%lu, end_row=%lu, start_col=%lu, end_col=%lu",
-         start_row, end_row, start_col, end_col);
+    INF("startRow=%lu, endRow=%lu, startCol=%lu, endCol=%lu",
+        startRow, endRow, startCol, endCol);
 
-    zoom = ROUNDED_ZOOM(priv->view.tile.w, zoom);
+    zoom = ROUNDED_ZOOM(priv->view.tile.width, zoom);
 
-    for (i = start_row; i <= end_row; i++)
-        for (j = start_col; j <= end_col; j++)
-            if (!_ewk_tiled_backing_store_pre_render_request_add(priv, j, i, zoom, PRE_RENDER_PRIORITY_LOW))
+    for (i = startRow; i <= endRow; i++)
+        for (j = startCol; j <= endCol; j++)
+            if (!_ewk_tiled_backing_store_pre_render_request_add(priv, j, i, zoom))
                 goto start_processing;
 
 start_processing:
     _ewk_tiled_backing_store_item_process_idler_start(priv);
 
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    h = (end_row - start_row + 1) * TILE_SIZE_AT_ZOOM(priv->view.tile.h, zoom);
-    w = (end_col - start_col + 1) * TILE_SIZE_AT_ZOOM(priv->view.tile.w, zoom);
-    ewk_tile_unused_cache_lock_area(tuc,
-            start_col * TILE_SIZE_AT_ZOOM(priv->view.tile.w, zoom),
-            start_row * TILE_SIZE_AT_ZOOM(priv->view.tile.h, zoom), w, h, zoom);
+    tileUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    height = (endRow - startRow + 1) * TILE_SIZE_AT_ZOOM(priv->view.tile.height, zoom);
+    width = (endCol - startCol + 1) * TILE_SIZE_AT_ZOOM(priv->view.tile.width, zoom);
+    ewk_tile_unused_cache_lock_area(tileUnusedCache,
+                                    startCol * TILE_SIZE_AT_ZOOM(priv->view.tile.width, zoom),
+                                    startRow * TILE_SIZE_AT_ZOOM(priv->view.tile.height, zoom), width, height, zoom);
 
-    return EINA_TRUE;
+    return true;
 }
 
-void ewk_tiled_backing_store_pre_render_cancel(Evas_Object *o)
+void ewk_tiled_backing_store_pre_render_cancel(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv);
-    Ewk_Tile_Unused_Cache *tuc;
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv);
+    Ewk_Tile_Unused_Cache* tileUnusedCache;
 
     _ewk_tiled_backing_store_pre_render_request_clear(priv);
 
-    tuc = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
-    ewk_tile_unused_cache_unlock_area(tuc);
+    tileUnusedCache = ewk_tile_matrix_unused_cache_get(priv->model.matrix);
+    ewk_tile_unused_cache_unlock_area(tileUnusedCache);
 }
 
-Eina_Bool ewk_tiled_backing_store_disable_render(Evas_Object *o)
+Eina_Bool ewk_tiled_backing_store_disable_render(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
     return _ewk_tiled_backing_store_disable_render(priv);
 }
 
-Eina_Bool ewk_tiled_backing_store_enable_render(Evas_Object *o)
+Eina_Bool ewk_tiled_backing_store_enable_render(Evas_Object* ewkBackingStore)
 {
-    PRIV_DATA_GET_OR_RETURN(o, priv, EINA_FALSE);
+    PRIV_DATA_GET_OR_RETURN(ewkBackingStore, priv, false);
     _ewk_tiled_backing_store_changed(priv);
     return _ewk_tiled_backing_store_enable_render(priv);
 }

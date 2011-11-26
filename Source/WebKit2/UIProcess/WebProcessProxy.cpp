@@ -209,9 +209,13 @@ void WebProcessProxy::assumeReadAccessToBaseURL(const String& urlString)
     if (!url.isLocalFile())
         return;
 
+    // There's a chance that urlString does not point to a directory.
+    // Get url's base URL to add to m_localPathsWithAssumedReadAccess.
+    KURL baseURL(KURL(), url.baseAsString());
+    
     // Client loads an alternate string. This doesn't grant universal file read, but the web process is assumed
     // to have read access to this directory already.
-    m_localPathsWithAssumedReadAccess.add(url.fileSystemPath());
+    m_localPathsWithAssumedReadAccess.add(baseURL.fileSystemPath());
 }
 
 bool WebProcessProxy::checkURLReceivedFromWebProcess(const String& urlString)
@@ -242,6 +246,13 @@ bool WebProcessProxy::checkURLReceivedFromWebProcess(const KURL& url)
     // A Web process that was never asked to load a file URL should not ever ask us to do anything with a file URL.
     return false;
 }
+
+#if !PLATFORM(MAC)
+bool WebProcessProxy::fullKeyboardAccessEnabled()
+{
+    return false;
+}
+#endif
 
 void WebProcessProxy::addBackForwardItem(uint64_t itemID, const String& originalURL, const String& url, const String& title, const CoreIPC::DataReference& backForwardData)
 {
@@ -397,7 +408,7 @@ void WebProcessProxy::didFinishLaunching(CoreIPC::Connection::Identifier connect
     ASSERT(!m_connection);
     
     m_connection = CoreIPC::Connection::createServerConnection(connectionIdentifier, this, RunLoop::main());
-#if PLATFORM(MAC)
+#if OS(DARWIN)
     m_connection->setShouldCloseConnectionOnMachExceptions();
 #elif PLATFORM(QT)
     m_connection->setShouldCloseConnectionOnProcessTermination(processIdentifier());

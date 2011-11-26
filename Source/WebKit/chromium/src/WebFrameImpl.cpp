@@ -86,6 +86,7 @@
 #include "Editor.h"
 #include "EventHandler.h"
 #include "FocusController.h"
+#include "FontCache.h"
 #include "FormState.h"
 #include "FrameLoadRequest.h"
 #include "FrameLoader.h"
@@ -128,6 +129,7 @@
 #include "ScriptValue.h"
 #include "ScrollTypes.h"
 #include "ScrollbarTheme.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 #include "SkiaUtils.h"
 #include "SubstituteData.h"
@@ -361,6 +363,56 @@ public:
         return scale;
     }
 
+    void spoolAllPagesWithBoundaries(GraphicsContext& graphicsContext, const FloatSize& pageSizeInPixels)
+    {
+        if (!m_frame->document() || !m_frame->view() || !m_frame->document()->renderer())
+            return;
+
+        m_frame->document()->updateLayout();
+
+        float pageHeight;
+        computePageRects(FloatRect(FloatPoint(0, 0), pageSizeInPixels), 0, 0, 1, pageHeight);
+
+        const float pageWidth = pageSizeInPixels.width();
+        size_t numPages = pageRects().size();
+        int totalHeight = numPages * (pageSizeInPixels.height() + 1) - 1;
+
+        // Fill the whole background by white.
+        graphicsContext.setFillColor(Color(255, 255, 255), ColorSpaceDeviceRGB);
+        graphicsContext.fillRect(FloatRect(0, 0, pageWidth, totalHeight));
+
+        graphicsContext.save();
+
+        int currentHeight = 0;
+        for (size_t pageIndex = 0; pageIndex < numPages; pageIndex++) {
+            // Draw a line for a page boundary if this isn't the first page.
+            if (pageIndex > 0) {
+                graphicsContext.save();
+                graphicsContext.setStrokeColor(Color(0, 0, 255), ColorSpaceDeviceRGB);
+                graphicsContext.setFillColor(Color(0, 0, 255), ColorSpaceDeviceRGB);
+                graphicsContext.drawLine(IntPoint(0, currentHeight),
+                                         IntPoint(pageWidth, currentHeight));
+                graphicsContext.restore();
+            }
+
+            graphicsContext.save();
+
+            graphicsContext.translate(0, currentHeight);
+#if !OS(UNIX) || OS(DARWIN)
+            // Account for the disabling of scaling in spoolPage. In the context
+            // of spoolAllPagesWithBoundaries the scale HAS NOT been pre-applied.
+            float scale = getPageShrink(pageIndex);
+            graphicsContext.scale(WebCore::FloatSize(scale, scale));
+#endif
+            spoolPage(graphicsContext, pageIndex);
+            graphicsContext.restore();
+
+            currentHeight += pageSizeInPixels.height() + 1;
+        }
+
+        graphicsContext.restore();
+    }
+
     virtual void computePageRects(const FloatRect& printRect, float headerHeight, float footerHeight, float userScaleFactor, float& outPageHeight)
     {
         return PrintContext::computePageRects(printRect, headerHeight, footerHeight, userScaleFactor, outPageHeight);
@@ -539,6 +591,11 @@ WebVector<WebIconURL> WebFrameImpl::iconURLs(int iconTypes) const
     return WebVector<WebIconURL>();
 }
 
+WebReferrerPolicy WebFrameImpl::referrerPolicy() const
+{
+    return static_cast<WebReferrerPolicy>(m_frame->document()->referrerPolicy());
+}
+
 WebSize WebFrameImpl::scrollOffset() const
 {
     FrameView* view = frameView();
@@ -579,8 +636,11 @@ WebSize WebFrameImpl::contentsSize() const
 
 int WebFrameImpl::contentsPreferredWidth() const
 {
-    if (m_frame->document() && m_frame->document()->renderView())
+    if (m_frame->document() && m_frame->document()->renderView()) {
+        FontCachePurgePreventer fontCachePurgePreventer;
+
         return m_frame->document()->renderView()->minPreferredLogicalWidth();
+    }
     return 0;
 }
 
@@ -690,7 +750,7 @@ WebFrame* WebFrameImpl::findChildByExpression(const WebString& xpath) const
         XPathResult::ORDERED_NODE_ITERATOR_TYPE,
         0, // XPathResult object
         ec);
-    if (!xpathResult.get())
+    if (!xpathResult)
         return 0;
 
     Node* node = xpathResult->iterateNext(ec);
@@ -803,7 +863,7 @@ void WebFrameImpl::collectGarbage()
 {
     if (!m_frame)
         return;
-    if (!m_frame->settings()->isJavaScriptEnabled())
+    if (!m_frame->settings()->isScriptEnabled())
         return;
     // FIXME: Move this to the ScriptController and make it JS neutral.
 #if USE(V8)
@@ -883,7 +943,7 @@ void WebFrameImpl::loadRequest(const WebURLRequest& request)
 void WebFrameImpl::loadHistoryItem(const WebHistoryItem& item)
 {
     RefPtr<HistoryItem> historyItem = PassRefPtr<HistoryItem>(item);
-    ASSERT(historyItem.get());
+    ASSERT(historyItem);
 
     m_frame->loader()->prepareForHistoryNavigation();
     RefPtr<HistoryItem> currentItem = m_frame->loader()->history()->currentItem();
@@ -1011,14 +1071,15 @@ bool WebFrameImpl::isViewSourceModeEnabled() const
     return false;
 }
 
-void WebFrameImpl::setReferrerForRequest(
-    WebURLRequest& request, const WebURL& referrerURL) {
+void WebFrameImpl::setReferrerForRequest(WebURLRequest& request, const WebURL& referrerURL)
+{
     String referrer;
     if (referrerURL.isEmpty())
         referrer = m_frame->loader()->outgoingReferrer();
     else
         referrer = referrerURL.spec().utf16();
-    if (SecurityOrigin::shouldHideReferrer(request.url(), referrer))
+    referrer = SecurityPolicy::generateReferrerHeader(m_frame->document()->referrerPolicy(), request.url(), referrer);
+    if (referrer.isEmpty())
         return;
     request.setHTTPHeaderField(WebString::fromUTF8("Referer"), referrer);
 }
@@ -1097,14 +1158,20 @@ WebRange WebFrameImpl::markedRange() const
     return frame()->editor()->compositionRange();
 }
 
+void WebFrameImpl::setSelectionToRange(const WebRange& range)
+{
+    if (frame()->selection()->isContentEditable()) {
+        RefPtr<Range> replacementRange = PassRefPtr<Range>(range);
+        frame()->selection()->setSelection(VisibleSelection(replacementRange.get(), SEL_DEFAULT_AFFINITY));
+    }
+}
+
 bool WebFrameImpl::firstRectForCharacterRange(unsigned location, unsigned length, WebRect& rect) const
 {
     if ((location + length < location) && (location + length))
         length = 0;
 
-    Element* selectionRoot = frame()->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : frame()->document()->documentElement();
-    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(scope, location, length);
+    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(frame()->selection()->rootEditableElementOrDocumentElement(), location, length);
     if (!range)
         return false;
     IntRect intRect = frame()->editor()->firstRectForRange(range.get());
@@ -1122,11 +1189,11 @@ size_t WebFrameImpl::characterIndexForPoint(const WebPoint& webPoint) const
     IntPoint point = frame()->view()->windowToContents(webPoint);
     HitTestResult result = frame()->eventHandler()->hitTestResultAtPoint(point, false);
     RefPtr<Range> range = frame()->rangeForPoint(result.point());
-    if (!range.get())
+    if (!range)
         return notFound;
 
     size_t location, length;
-    TextIterator::locationAndLengthFromRange(range.get(), location, length);
+    TextIterator::getLocationAndLengthFromRange(frame()->selection()->rootEditableElementOrDocumentElement(), range.get(), location, length);
     return location;
 }
 
@@ -1248,7 +1315,7 @@ WebString WebFrameImpl::selectionAsText() const
         return pluginContainer->plugin()->selectionAsText();
 
     RefPtr<Range> range = frame()->selection()->toNormalizedRange();
-    if (!range.get())
+    if (!range)
         return WebString();
 
     String text = range->text();
@@ -1266,7 +1333,7 @@ WebString WebFrameImpl::selectionAsMarkup() const
         return pluginContainer->plugin()->selectionAsMarkup();
 
     RefPtr<Range> range = frame()->selection()->toNormalizedRange();
-    if (!range.get())
+    if (!range)
         return WebString();
 
     return createMarkup(range.get(), 0);
@@ -1362,7 +1429,7 @@ int WebFrameImpl::printBegin(const WebSize& pageSize,
 float WebFrameImpl::getPrintPageShrink(int page)
 {
     // Ensure correct state.
-    if (!m_printContext.get() || page < 0) {
+    if (!m_printContext || page < 0) {
         ASSERT_NOT_REACHED();
         return 0;
     }
@@ -1373,7 +1440,7 @@ float WebFrameImpl::getPrintPageShrink(int page)
 float WebFrameImpl::printPage(int page, WebCanvas* canvas)
 {
     // Ensure correct state.
-    if (!m_printContext.get() || page < 0 || !frame() || !frame()->document()) {
+    if (!m_printContext || page < 0 || !frame() || !frame()->document()) {
         ASSERT_NOT_REACHED();
         return 0;
     }
@@ -1389,10 +1456,24 @@ float WebFrameImpl::printPage(int page, WebCanvas* canvas)
 
 void WebFrameImpl::printEnd()
 {
-    ASSERT(m_printContext.get());
-    if (m_printContext.get())
+    ASSERT(m_printContext);
+    if (m_printContext)
         m_printContext->end();
     m_printContext.clear();
+}
+
+bool WebFrameImpl::isPrintScalingDisabledForPlugin(const WebNode& node)
+{
+    WebPluginContainerImpl* pluginContainer = 0;
+    if (node.isNull())
+        pluginContainer = pluginContainerFromFrame(frame());
+    else
+        pluginContainer = pluginContainerFromNode(node);
+
+    if (!pluginContainer || !pluginContainer->supportsPaginatedPrint())
+        return false;
+
+    return pluginContainer->isPrintScalingDisabled();
 }
 
 bool WebFrameImpl::isPageBoxVisible(int pageIndex)
@@ -1415,6 +1496,12 @@ void WebFrameImpl::pageSizeAndMarginsInPixels(int pageIndex,
                                                     marginBottom,
                                                     marginLeft);
     pageSize = size;
+}
+
+WebString WebFrameImpl::pageProperty(const WebString& propertyName, int pageIndex)
+{
+    ASSERT(m_printContext);
+    return m_printContext->pageProperty(m_frame, propertyName.utf8().data(), pageIndex);
 }
 
 bool WebFrameImpl::find(int identifier,
@@ -1569,7 +1656,7 @@ void WebFrameImpl::scopeStringMatches(int identifier,
     int originalEndOffset = searchRange->endOffset();
 
     ExceptionCode ec = 0, ec2 = 0;
-    if (m_resumeScopingFromRange.get()) {
+    if (m_resumeScopingFromRange) {
         // This is a continuation of a scoping operation that timed out and didn't
         // complete last time around, so we should start from where we left off.
         searchRange->setStart(m_resumeScopingFromRange->startContainer(),
@@ -1739,6 +1826,14 @@ void WebFrameImpl::resetMatchCount()
     m_framesScopingCount = 0;
 }
 
+void WebFrameImpl::handleIntentResult(int intentIdentifier, const WebString& reply)
+{
+}
+
+void WebFrameImpl::handleIntentFailure(int intentIdentifier, const WebString& reply)
+{
+}
+
 WebString WebFrameImpl::contentAsText(size_t maxChars) const
 {
     if (!m_frame)
@@ -1754,16 +1849,19 @@ WebString WebFrameImpl::contentAsMarkup() const
     return createFullMarkup(m_frame->document());
 }
 
-WebString WebFrameImpl::renderTreeAsText(bool showDebugInfo) const
+WebString WebFrameImpl::renderTreeAsText(RenderAsTextControls toShow) const
 {
     RenderAsTextBehavior behavior = RenderAsTextBehaviorNormal;
 
-    if (showDebugInfo) {
+    if (toShow & RenderAsTextDebug) {
         behavior |= RenderAsTextShowCompositedLayers
             | RenderAsTextShowAddresses
             | RenderAsTextShowIDAndClass
             | RenderAsTextShowLayerNesting;
     }
+
+    if (toShow & RenderAsTextPrinting)
+        behavior |= RenderAsTextPrintingMode;
 
     return externalRepresentation(m_frame, behavior);
 }
@@ -1798,6 +1896,20 @@ int WebFrameImpl::pageNumberForElementById(const WebString& id,
 
     FloatSize pageSize(pageWidthInPixels, pageHeightInPixels);
     return PrintContext::pageNumberForElement(element, pageSize);
+}
+
+void WebFrameImpl::printPagesWithBoundaries(WebCanvas* canvas, const WebSize& pageSizeInPixels)
+{
+    ASSERT(m_printContext.get());
+
+    GraphicsContextBuilder builder(canvas);
+    GraphicsContext& graphicsContext = builder.context();
+#if WEBKIT_USING_SKIA
+    graphicsContext.platformContext()->setPrinting(true);
+#endif
+
+    m_printContext->spoolAllPagesWithBoundaries(graphicsContext,
+        FloatSize(pageSizeInPixels.width, pageSizeInPixels.height));
 }
 
 WebRect WebFrameImpl::selectionBoundsRect() const
@@ -1969,54 +2081,12 @@ void WebFrameImpl::createFrameView()
 {
     ASSERT(m_frame); // If m_frame doesn't exist, we probably didn't init properly.
 
-    Page* page = m_frame->page();
-    ASSERT(page);
-    ASSERT(page->mainFrame());
-
-    bool isMainFrame = m_frame == page->mainFrame();
-    bool useFixedLayout = false;
-    IntSize fixedLayoutSize;
-    if (isMainFrame && m_frame->view()) {
-        m_frame->view()->setParentVisible(false);
-        // Save the fixed layout information before destroying the
-        // existing FrameView of this frame.
-        useFixedLayout = m_frame->view()->useFixedLayout();
-        fixedLayoutSize = m_frame->view()->fixedLayoutSize();
-    }
-
-    m_frame->setView(0);
-
     WebViewImpl* webView = viewImpl();
-
-    RefPtr<FrameView> view;
-    if (isMainFrame)
-        view = FrameView::create(m_frame, webView->size());
-    else
-        view = FrameView::create(m_frame);
-
-    m_frame->setView(view);
-
-    if (webView->isTransparent())
-        view->setTransparent(true);
-
-    // FIXME: The Mac code has a comment about this possibly being unnecessary.
-    // See installInFrame in WebCoreFrameBridge.mm
-    if (m_frame->ownerRenderer())
-        m_frame->ownerRenderer()->setWidget(view.get());
-
-    if (HTMLFrameOwnerElement* owner = m_frame->ownerElement())
-        view->setCanHaveScrollbars(owner->scrollingMode() != ScrollbarAlwaysOff);
-
-    if (isMainFrame)
-        view->setParentVisible(true);
+    m_frame->createView(webView->size(), Color::white, webView->isTransparent(),  webView->fixedLayoutSize(), webView->isFixedLayoutModeEnabled());
 
 #if ENABLE(GESTURE_RECOGNIZER)
     webView->resetGestureRecognizer();
 #endif
-
-    // Restore the saved fixed layout information.
-    view->setUseFixedLayout(useFixedLayout);
-    view->setFixedLayoutSize(fixedLayoutSize);
 }
 
 WebFrameImpl* WebFrameImpl::fromFrame(Frame* frame)
@@ -2255,6 +2325,8 @@ void WebFrameImpl::loadJavaScriptURL(const KURL& url)
     if (!m_frame->document() || !m_frame->page())
         return;
 
+    RefPtr<Document> ownerDocument(m_frame->document());
+
     // Protect privileged pages against bookmarklets and other javascript manipulations.
     if (SchemeRegistry::shouldTreatURLSchemeAsNotAllowingJavascriptURLs(m_frame->document()->url().protocol()))
         return;
@@ -2267,7 +2339,7 @@ void WebFrameImpl::loadJavaScriptURL(const KURL& url)
         return;
 
     if (!m_frame->navigationScheduler()->locationChangePending())
-        m_frame->document()->loader()->writer()->replaceDocument(scriptResult);
+        m_frame->document()->loader()->writer()->replaceDocument(scriptResult, ownerDocument.get());
 }
 
 } // namespace WebKit

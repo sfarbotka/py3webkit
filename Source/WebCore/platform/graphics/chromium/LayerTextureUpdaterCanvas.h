@@ -54,7 +54,7 @@ class LayerTextureUpdaterCanvas : public LayerTextureUpdater {
 protected:
     explicit LayerTextureUpdaterCanvas(PassOwnPtr<LayerPainterChromium>);
 
-    void paintContents(GraphicsContext&, const IntRect& contentRect);
+    void paintContents(GraphicsContext&, const IntRect& contentRect, float contentsScale);
     const IntRect& contentRect() const { return m_contentRect; }
 
 private:
@@ -70,7 +70,7 @@ public:
 
     virtual Orientation orientation() { return LayerTextureUpdater::BottomUpOrientation; }
     virtual SampledTexelFormat sampledTexelFormat(GC3Denum textureFormat);
-    virtual void prepareToUpdate(const IntRect& contentRect, const IntSize& tileSize, int borderTexels);
+    virtual void prepareToUpdate(const IntRect& contentRect, const IntSize& tileSize, int borderTexels, float contentsScale);
     virtual void updateTextureRect(GraphicsContext3D*, TextureAllocator*, ManagedTexture*, const IntRect& sourceRect, const IntRect& destRect);
 
 private:
@@ -79,7 +79,7 @@ private:
     LayerTextureSubImage m_texSubImage;
 };
 
-#if USE(SKIA) && USE(ACCELERATED_DRAWING)
+#if USE(SKIA)
 class LayerTextureUpdaterSkPicture : public LayerTextureUpdaterCanvas {
 public:
     static PassRefPtr<LayerTextureUpdaterSkPicture> create(PassOwnPtr<LayerPainterChromium>);
@@ -87,25 +87,15 @@ public:
 
     virtual Orientation orientation() { return LayerTextureUpdater::TopDownOrientation; }
     virtual SampledTexelFormat sampledTexelFormat(GC3Denum textureFormat);
-    virtual void prepareToUpdate(const IntRect& contentRect, const IntSize& tileSize, int borderTexels);
+    virtual void prepareToUpdate(const IntRect& contentRect, const IntSize& tileSize, int borderTexels, float contentsScale);
     virtual void updateTextureRect(GraphicsContext3D*, TextureAllocator*, ManagedTexture*, const IntRect& sourceRect, const IntRect& destRect);
 
 private:
     explicit LayerTextureUpdaterSkPicture(PassOwnPtr<LayerPainterChromium>);
-    void deleteFrameBuffer();
-    bool createFrameBuffer();
-    GraphicsContext3D* context() { return m_context; }
-
-    GraphicsContext3D* m_context;
-
-    bool m_createFrameBuffer; // Need to create FBO if true.
+  
     SkPicture m_picture; // Recording canvas.
-    IntSize m_bufferSize; // Frame buffer size.
-    Platform3DObject m_fbo; // Frame buffer id.
-    Platform3DObject m_depthStencilBuffer;
-    OwnPtr<SkCanvas> m_canvas; // GPU accelerated canvas.
 };
-#endif // USE(SKIA) && USE(ACCELERATED_DRAWING)
+#endif // USE(SKIA)
 
 } // namespace WebCore
 #endif // USE(ACCELERATED_COMPOSITING)

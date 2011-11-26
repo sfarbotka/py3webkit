@@ -161,7 +161,6 @@ public:
         , viewResizesToContents(false)
 #if USE(ACCELERATED_COMPOSITING)
         , syncTimer(this, &PageClientQGraphicsWidget::syncLayersTimeout)
-        , shouldSync(false)
 #endif
         , overlay(0)
     {
@@ -201,7 +200,7 @@ public:
 
     void createOrDeleteOverlay();
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     void updateTiledBackingStoreScale();
     virtual QRectF graphicsItemVisibleRect() const;
 #endif
@@ -230,10 +229,6 @@ public:
 #endif
     // we have to flush quite often, so we use a meta-method instead of QTimer::singleShot for putting the event in the queue
     Timer<PageClientQGraphicsWidget> syncTimer;
-
-    // we need to sync the layers if we get a special call from the WebCore
-    // compositor telling us to do so. We'll get that call from ChromeClientQt
-    bool shouldSync;
 #endif
     // the overlay gets instantiated when the root layer is attached, and get deleted when it's detached
     QGraphicsItemOverlay* overlay;

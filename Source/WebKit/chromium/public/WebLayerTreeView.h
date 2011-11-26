@@ -26,8 +26,8 @@
 #ifndef WebLayerTreeView_h
 #define WebLayerTreeView_h
 
-#include "WebCommon.h"
-#include "WebPrivatePtr.h"
+#include "platform/WebCommon.h"
+#include "platform/WebPrivatePtr.h"
 
 namespace WebCore {
 class CCLayerTreeHost;
@@ -37,6 +37,7 @@ struct CCSettings;
 namespace WebKit {
 class WebLayer;
 class WebLayerTreeViewClient;
+struct WebRect;
 struct WebSize;
 
 class WebLayerTreeView {
@@ -45,17 +46,21 @@ public:
         Settings()
             : acceleratePainting(false)
             , compositeOffscreen(false)
-            , enableCompositorThread(false) { }
+            , enableCompositorThread(false)
+            , showFPSCounter(false)
+            , showPlatformLayerTree(false) { }
 
         bool acceleratePainting;
         bool compositeOffscreen;
         bool enableCompositorThread;
+        bool showFPSCounter;
+        bool showPlatformLayerTree;
 #if WEBKIT_IMPLEMENTATION
         operator WebCore::CCSettings() const;
 #endif
     };
 
-    static WebLayerTreeView create(WebLayerTreeViewClient*, const WebLayer& root, const Settings&);
+    WEBKIT_EXPORT static WebLayerTreeView create(WebLayerTreeViewClient*, const WebLayer& root, const Settings&);
 
     WebLayerTreeView() { }
     WebLayerTreeView(const WebLayerTreeView& layer) { assign(layer); }
@@ -80,6 +85,14 @@ public:
 
     WEBKIT_EXPORT void setViewportSize(const WebSize&);
     WEBKIT_EXPORT WebSize viewportSize() const;
+
+    // Composites and attempts to read back the result into the provided
+    // buffer. If it wasn't possible, e.g. due to context lost, will return
+    // false. Pixel format is 32bit (RGBA), and the provided buffer must be
+    // large enough contain viewportSize().width() * viewportSize().height()
+    // pixels. The WebLayerTreeView does not assume ownership of the buffer.
+    // The buffer is not modified if the false is returned.
+    WEBKIT_EXPORT bool compositeAndReadback(void *pixels, const WebRect&);
 
 #if WEBKIT_IMPLEMENTATION
     WebLayerTreeView(const WTF::PassRefPtr<WebCore::CCLayerTreeHost>&);

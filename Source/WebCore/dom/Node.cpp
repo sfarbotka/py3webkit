@@ -28,6 +28,7 @@
 #include "AXObjectCache.h"
 #include "Attr.h"
 #include "Attribute.h"
+#include "ChildListMutationScope.h"
 #include "Chrome.h"
 #include "ChromeClient.h"
 #include "CSSParser.h"
@@ -42,6 +43,7 @@
 #include "ClassNodeList.h"
 #include "ContextMenuController.h"
 #include "DOMImplementation.h"
+#include "DOMSettableTokenList.h"
 #include "Document.h"
 #include "DocumentType.h"
 #include "DynamicNodeList.h"
@@ -84,6 +86,7 @@
 #include "SelectorQuery.h"
 #include "ShadowRoot.h"
 #include "StaticNodeList.h"
+#include "StorageEvent.h"
 #include "TagNodeList.h"
 #include "Text.h"
 #include "TextEvent.h"
@@ -99,24 +102,21 @@
 #include <wtf/PassOwnPtr.h>
 #include <wtf/RefCountedLeakCounter.h>
 #include <wtf/UnusedParam.h>
+#include <wtf/Vector.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
-
-#if ENABLE(DOM_STORAGE)
-#include "StorageEvent.h"
-#endif
 
 #if ENABLE(SVG)
 #include "SVGElementInstance.h"
 #include "SVGUseElement.h"
 #endif
 
-#if ENABLE(XHTMLMP)
-#include "HTMLNoScriptElement.h"
-#endif
-
 #if USE(JSC)
 #include <runtime/JSGlobalData.h>
+#endif
+
+#if ENABLE(MICRODATA)
+#include "HTMLPropertiesCollection.h"
 #endif
 
 #define DUMP_NODE_STATISTICS 0
@@ -307,9 +307,6 @@ void Node::stopIgnoringLeaks()
 
 Node::StyleChange Node::diff(const RenderStyle* s1, const RenderStyle* s2)
 {
-    // FIXME: The behavior of this function is just totally wrong.  It doesn't handle
-    // explicit inheritance of non-inherited properties and so you end up not re-resolving
-    // style in cases where you need to.
     StyleChange ch = NoInherit;
     EDisplay display1 = s1 ? s1->display() : NONE;
     bool fl1 = s1 && s1->hasPseudoStyle(FIRST_LETTER);
@@ -329,7 +326,9 @@ Node::StyleChange Node::diff(const RenderStyle* s1, const RenderStyle* s2)
         ch = NoChange;
     else if (s1->inheritedNotEqual(s2))
         ch = Inherit;
-    
+    else if (s1->hasExplicitlyInheritedProperties() || s2->hasExplicitlyInheritedProperties())
+        ch = Inherit;
+
     // For nth-child and other positional rules, treat styles as different if they have
     // changed positionally in the DOM. This way subsequent sibling resolutions won't be confused
     // by the wrong child index and evaluate to incorrect results.
@@ -364,7 +363,7 @@ Node::StyleChange Node::diff(const RenderStyle* s1, const RenderStyle* s2)
 
     // When either the region thread or the region index has changed,
     // we need to prepare a separate render region object.
-    if ((s1 && s2) && ((s1->regionThread() != s2->regionThread() || (s1->regionIndex() != s2->regionIndex()))))
+    if ((s1 && s2) && (s1->regionThread() != s2->regionThread()))
         ch = Detach;
 
     return ch;
@@ -553,6 +552,10 @@ void Node::clearRareData()
     if (treeScope() && rareData()->nodeLists())
         treeScope()->removeNodeListCache();
 
+#if ENABLE(MUTATION_OBSERVERS)
+    ASSERT(!transientMutationObserverRegistry() || transientMutationObserverRegistry()->isEmpty());
+#endif
+
     NodeRareData::NodeRareDataMap& dataMap = NodeRareData::rareDataMap();
     NodeRareData::NodeRareDataMap::iterator it = dataMap.find(this);
     ASSERT(it != dataMap.end());
@@ -570,6 +573,11 @@ void Node::setShadowHost(Element* host)
 {
     ASSERT(!parentNode() && isShadowRoot());
     setParent(host);
+}
+
+Node* Node::toNode()
+{
+    return this;
 }
 
 HTMLInputElement* Node::toInputElement()
@@ -771,6 +779,12 @@ bool Node::isContentEditable()
 {
     document()->updateLayoutIgnorePendingStylesheets();
     return rendererIsEditable(Editable);
+}
+
+bool Node::isContentRichlyEditable()
+{
+    document()->updateLayoutIgnorePendingStylesheets();
+    return rendererIsEditable(RichlyEditable);
 }
 
 bool Node::rendererIsEditable(EditableLevel editableLevel) const
@@ -1583,10 +1597,7 @@ ContainerNode* Node::nonShadowBoundaryParentNode() const
 
 bool Node::isInShadowTree()
 {
-    for (Node* n = this; n; n = n->parentNode())
-        if (n->isShadowRoot())
-            return true;
-    return false;
+    return treeScope() != document();
 }
 
 Element* Node::parentOrHostElement() const
@@ -2122,6 +2133,9 @@ void Node::setTextContent(const String& text, ExceptionCode& ec)
         case DOCUMENT_FRAGMENT_NODE:
         case SHADOW_ROOT_NODE: {
             ContainerNode* container = toContainerNode(this);
+#if ENABLE(MUTATION_OBSERVERS)
+            ChildListMutationScope mutation(this);
+#endif
             container->removeChildren();
             if (!text.isEmpty())
                 container->appendChild(document()->createTextNode(text), ec);
@@ -2279,6 +2293,23 @@ FloatPoint Node::convertFromPage(const FloatPoint& p) const
     return p;
 }
 
+#if ENABLE(MICRODATA)
+void Node::itemTypeAttributeChanged()
+{
+    Node * rootNode = document();
+
+    if (!rootNode->hasRareData())
+        return;
+
+    NodeRareData* data = rootNode->rareData();
+
+    if (!data->nodeLists())
+        return;
+
+    data->nodeLists()->invalidateMicrodataItemListCaches();
+}
+#endif
+
 #ifndef NDEBUG
 
 static void appendAttributeDesc(const Node* node, String& string, const QualifiedName& name, const char* attrDesc)
@@ -2428,7 +2459,20 @@ void NodeListsNodeData::invalidateCachesThatDependOnAttributes()
         it->second->invalidateCache();
     if (m_labelsNodeListCache)
         m_labelsNodeListCache->invalidateCache();
+
+#if ENABLE(MICRODATA)
+    invalidateMicrodataItemListCaches();
+#endif
 }
+
+#if ENABLE(MICRODATA)
+void NodeListsNodeData::invalidateMicrodataItemListCaches()
+{
+    MicroDataItemListCache::iterator itemListCacheEnd = m_microDataItemListCache.end();
+    for (MicroDataItemListCache::iterator it = m_microDataItemListCache.begin(); it != itemListCacheEnd; ++it)
+        it->second->invalidateCache();
+}
+#endif
 
 bool NodeListsNodeData::isEmpty() const
 {
@@ -2446,6 +2490,10 @@ bool NodeListsNodeData::isEmpty() const
         return false;
     if (!m_nameNodeListCache.isEmpty())
         return false;
+#if ENABLE(MICRODATA)
+    if (!m_microDataItemListCache.isEmpty())
+        return false;
+#endif
 
     if (m_labelsNodeListCache)
         return false;
@@ -2471,7 +2519,10 @@ Node* Node::enclosingLinkEventParentOrSelf()
     return 0;
 }
 
-// --------
+const AtomicString& Node::interfaceName() const
+{
+    return eventNames().interfaceForNode;
+}
 
 ScriptExecutionContext* Node::scriptExecutionContext() const
 {
@@ -2498,6 +2549,24 @@ void Node::didMoveToNewOwnerDocument()
 {
     ASSERT(!didMoveToNewOwnerDocumentWasCalled);
     setDidMoveToNewOwnerDocumentWasCalled(true);
+
+    // FIXME: Event listener types for this node should be set on the new owner document here.
+
+#if ENABLE(MUTATION_OBSERVERS)
+    if (Vector<OwnPtr<MutationObserverRegistration> >* registry = mutationObserverRegistry()) {
+        for (size_t i = 0; i < registry->size(); ++i) {
+            if (registry->at(i)->isSubtree())
+                document()->addSubtreeMutationObserverTypes(registry->at(i)->mutationTypes());
+        }
+    }
+
+    if (HashSet<MutationObserverRegistration*>* transientRegistry = transientMutationObserverRegistry()) {
+        for (HashSet<MutationObserverRegistration*>::iterator iter = transientRegistry->begin(); iter != transientRegistry->end(); ++iter) {
+            if ((*iter)->isSubtree())
+                document()->addSubtreeMutationObserverTypes((*iter)->mutationTypes());
+        }
+    }
+#endif
 }
 
 #if ENABLE(SVG)
@@ -2646,6 +2715,123 @@ EventTargetData* Node::ensureEventTargetData()
     return ensureRareData()->ensureEventTargetData();
 }
 
+#if ENABLE(MUTATION_OBSERVERS)
+Vector<OwnPtr<MutationObserverRegistration> >* Node::mutationObserverRegistry()
+{
+    return hasRareData() ? rareData()->mutationObserverRegistry() : 0;
+}
+
+HashSet<MutationObserverRegistration*>* Node::transientMutationObserverRegistry()
+{
+    return hasRareData() ? rareData()->transientMutationObserverRegistry() : 0;
+}
+
+void Node::collectMatchingObserversForMutation(HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>& observers, Node* fromNode, WebKitMutationObserver::MutationType type, const AtomicString& attributeName)
+{
+    if (Vector<OwnPtr<MutationObserverRegistration> >* registry = fromNode->mutationObserverRegistry()) {
+        const size_t size = registry->size();
+        for (size_t i = 0; i < size; ++i) {
+            MutationObserverRegistration* registration = registry->at(i).get();
+            if (registration->shouldReceiveMutationFrom(this, type, attributeName)) {
+                MutationRecordDeliveryOptions deliveryOptions = registration->deliveryOptions();
+                pair<HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>::iterator, bool> result = observers.add(registration->observer(), deliveryOptions);
+                if (!result.second)
+                    result.first->second |= deliveryOptions;
+
+            }
+        }
+    }
+
+    if (HashSet<MutationObserverRegistration*>* transientRegistry = fromNode->transientMutationObserverRegistry()) {
+        for (HashSet<MutationObserverRegistration*>::iterator iter = transientRegistry->begin(); iter != transientRegistry->end(); ++iter) {
+            MutationObserverRegistration* registration = *iter;
+            if (registration->shouldReceiveMutationFrom(this, type, attributeName)) {
+                MutationRecordDeliveryOptions deliveryOptions = registration->deliveryOptions();
+                pair<HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>::iterator, bool> result = observers.add(registration->observer(), deliveryOptions);
+                if (!result.second)
+                    result.first->second |= deliveryOptions;
+            }
+        }
+    }
+}
+
+void Node::getRegisteredMutationObserversOfType(HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>& observers, WebKitMutationObserver::MutationType type, const AtomicString& attributeName)
+{
+    collectMatchingObserversForMutation(observers, this, type, attributeName);
+
+    if (!document()->hasSubtreeMutationObserverOfType(type))
+        return;
+
+    for (Node* node = parentNode(); node; node = node->parentNode())
+        collectMatchingObserversForMutation(observers, node, type, attributeName);
+}
+
+MutationObserverRegistration* Node::registerMutationObserver(PassRefPtr<WebKitMutationObserver> observer)
+{
+    Vector<OwnPtr<MutationObserverRegistration> >* registry = ensureRareData()->ensureMutationObserverRegistry();
+    for (size_t i = 0; i < registry->size(); ++i) {
+        if (registry->at(i)->observer() == observer)
+            return registry->at(i).get();
+    }
+
+    OwnPtr<MutationObserverRegistration> registration = MutationObserverRegistration::create(observer, this);
+    MutationObserverRegistration* registrationPtr = registration.get();
+    registry->append(registration.release());
+    return registrationPtr;
+}
+
+void Node::unregisterMutationObserver(MutationObserverRegistration* registration)
+{
+    Vector<OwnPtr<MutationObserverRegistration> >* registry = mutationObserverRegistry();
+    ASSERT(registry);
+    if (!registry)
+        return;
+
+    size_t index = registry->find(registration);
+    ASSERT(index != notFound);
+    if (index == notFound)
+        return;
+
+    registry->remove(index);
+}
+
+void Node::registerTransientMutationObserver(MutationObserverRegistration* registration)
+{
+    ensureRareData()->ensureTransientMutationObserverRegistry()->add(registration);
+}
+
+void Node::unregisterTransientMutationObserver(MutationObserverRegistration* registration)
+{
+    HashSet<MutationObserverRegistration*>* transientRegistry = transientMutationObserverRegistry();
+    ASSERT(transientRegistry);
+    if (!transientRegistry)
+        return;
+
+    ASSERT(transientRegistry->contains(registration));
+    transientRegistry->remove(registration);
+}
+
+void Node::notifyMutationObserversNodeWillDetach()
+{
+    if (!document()->hasSubtreeMutationObserver())
+        return;
+
+    for (Node* node = parentNode(); node; node = node->parentNode()) {
+        if (Vector<OwnPtr<MutationObserverRegistration> >* registry = node->mutationObserverRegistry()) {
+            const size_t size = registry->size();
+            for (size_t i = 0; i < size; ++i)
+                registry->at(i)->observedSubtreeNodeWillDetach(this);
+        }
+
+        if (HashSet<MutationObserverRegistration*>* transientRegistry = node->transientMutationObserverRegistry()) {
+            for (HashSet<MutationObserverRegistration*>::iterator iter = transientRegistry->begin(); iter != transientRegistry->end(); ++iter)
+                (*iter)->observedSubtreeNodeWillDetach(this);
+        }
+    }
+}
+#endif // ENABLE(MUTATION_OBSERVERS)
+
+
 void Node::handleLocalEvents(Event* event)
 {
     if (!hasRareData() || !rareData()->eventTargetData())
@@ -2779,7 +2965,7 @@ void Node::defaultEventHandler(Event* event)
                 page->contextMenuController()->handleContextMenuEvent(event);
 #endif
     } else if (eventType == eventNames().textInputEvent) {
-        if (event->isTextEvent())
+        if (event->hasInterface(eventNames().interfaceForTextEvent))
             if (Frame* frame = document()->frame())
                 frame->eventHandler()->defaultTextInputEventHandler(static_cast<TextEvent*>(event));
 #if ENABLE(PAN_SCROLLING)
@@ -2799,7 +2985,7 @@ void Node::defaultEventHandler(Event* event)
             }
         }
 #endif
-    } else if (eventType == eventNames().mousewheelEvent && event->isWheelEvent()) {
+    } else if (eventType == eventNames().mousewheelEvent && event->hasInterface(eventNames().interfaceForWheelEvent)) {
         WheelEvent* wheelEvent = static_cast<WheelEvent*>(event);
         
         // If we don't have a renderer, send the wheel event to the first node we find with a renderer.
@@ -2815,6 +3001,43 @@ void Node::defaultEventHandler(Event* event)
         dispatchInputEvent();
     }
 }
+
+#if ENABLE(MICRODATA)
+DOMSettableTokenList* Node::itemProp()
+{
+    return ensureRareData()->itemProp();
+}
+
+void Node::setItemProp(const String& value)
+{
+    ensureRareData()->setItemProp(value);
+}
+
+DOMSettableTokenList* Node::itemRef()
+{
+    return ensureRareData()->itemRef();
+}
+
+void Node::setItemRef(const String& value)
+{
+    ensureRareData()->setItemRef(value);
+}
+
+DOMSettableTokenList* Node::itemType()
+{
+    return ensureRareData()->itemType();
+}
+
+void Node::setItemType(const String& value)
+{
+    ensureRareData()->setItemType(value);
+}
+
+HTMLPropertiesCollection* Node::properties()
+{
+    return ensureRareData()->properties(this);
+}
+#endif
 
 } // namespace WebCore
 

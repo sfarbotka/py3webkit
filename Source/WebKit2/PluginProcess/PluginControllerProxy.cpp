@@ -71,6 +71,7 @@ PluginControllerProxy::PluginControllerProxy(WebProcessConnection* connection, c
 #if PLATFORM(MAC)
     , m_isComplexTextInputEnabled(false)
 #endif
+    , m_contentsScaleFactor(creationParameters.contentsScaleFactor)
     , m_windowNPObject(0)
     , m_pluginElementNPObject(0)
 {
@@ -162,7 +163,11 @@ void PluginControllerProxy::paint()
     // Create a graphics context.
     OwnPtr<GraphicsContext> graphicsContext = m_backingStore->createGraphicsContext();
 
-    graphicsContext->translate(-m_frameRect.x(), -m_frameRect.y());
+#if PLATFORM(MAC)
+    // FIXME: We should really call applyDeviceScaleFactor instead of scale, but that ends up calling into WKSI
+    // which we currently don't have initiated in the plug-in process.
+    graphicsContext->scale(FloatSize(m_contentsScaleFactor, m_contentsScaleFactor));
+#endif
 
     if (m_plugin->isTransparent())
         graphicsContext->clearRect(dirtyRect);
@@ -202,13 +207,10 @@ bool PluginControllerProxy::isPluginVisible()
 
 void PluginControllerProxy::invalidate(const IntRect& rect)
 {
-    // Convert the dirty rect to window coordinates.
     IntRect dirtyRect = rect;
-    dirtyRect.move(m_frameRect.x(), m_frameRect.y());
 
     // Make sure that the dirty rect is not greater than the plug-in itself.
-    dirtyRect.intersect(m_frameRect);
-
+    dirtyRect.intersect(IntRect(IntPoint(), m_pluginSize));
     m_dirtyRect.unite(dirtyRect);
 
     startPaintTimer();
@@ -361,6 +363,11 @@ void PluginControllerProxy::willSendEventToPlugin()
     ASSERT_NOT_REACHED();
 }
 
+float PluginControllerProxy::contentsScaleFactor()
+{
+    return m_contentsScaleFactor;
+}
+
 String PluginControllerProxy::proxiesForURL(const String& urlString)
 {
     String proxyString;
@@ -422,12 +429,16 @@ void PluginControllerProxy::frameDidFail(uint64_t requestID, bool wasCancelled)
     m_plugin->frameDidFail(requestID, wasCancelled);
 }
 
-void PluginControllerProxy::geometryDidChange(const IntRect& frameRect, const IntRect& clipRect, const ShareableBitmap::Handle& backingStoreHandle)
+void PluginControllerProxy::geometryDidChange(const IntSize& pluginSize, const IntRect& clipRect, const AffineTransform& pluginToRootViewTransform, float contentsScaleFactor, const ShareableBitmap::Handle& backingStoreHandle)
 {
-    m_frameRect = frameRect;
-    m_clipRect = clipRect;
-
     ASSERT(m_plugin);
+
+    m_pluginSize = pluginSize;
+
+    if (contentsScaleFactor != m_contentsScaleFactor) {
+        m_contentsScaleFactor = contentsScaleFactor;
+        m_plugin->contentsScaleFactorChanged(m_contentsScaleFactor);
+    }
 
     platformGeometryDidChange();
 
@@ -436,7 +447,7 @@ void PluginControllerProxy::geometryDidChange(const IntRect& frameRect, const In
         m_backingStore = ShareableBitmap::create(backingStoreHandle);
     }
 
-    m_plugin->geometryDidChange(frameRect, clipRect);
+    m_plugin->geometryDidChange(pluginSize, clipRect, pluginToRootViewTransform);
 }
 
 void PluginControllerProxy::didEvaluateJavaScript(uint64_t requestID, const String& result)
@@ -446,7 +457,7 @@ void PluginControllerProxy::didEvaluateJavaScript(uint64_t requestID, const Stri
 
 void PluginControllerProxy::streamDidReceiveResponse(uint64_t streamID, const String& responseURLString, uint32_t streamLength, uint32_t lastModifiedTime, const String& mimeType, const String& headers)
 {
-    m_plugin->streamDidReceiveResponse(streamID, KURL(ParsedURLString, responseURLString), streamLength, lastModifiedTime, mimeType, headers);
+    m_plugin->streamDidReceiveResponse(streamID, KURL(ParsedURLString, responseURLString), streamLength, lastModifiedTime, mimeType, headers, String());
 }
 
 void PluginControllerProxy::streamDidReceiveData(uint64_t streamID, const CoreIPC::DataReference& data)
@@ -469,7 +480,7 @@ void PluginControllerProxy::manualStreamDidReceiveResponse(const String& respons
     if (m_pluginCanceledManualStreamLoad)
         return;
 
-    m_plugin->manualStreamDidReceiveResponse(KURL(ParsedURLString, responseURLString), streamLength, lastModifiedTime, mimeType, headers);
+    m_plugin->manualStreamDidReceiveResponse(KURL(ParsedURLString, responseURLString), streamLength, lastModifiedTime, mimeType, headers, String());
 }
 
 void PluginControllerProxy::manualStreamDidReceiveData(const CoreIPC::DataReference& data)
@@ -531,10 +542,10 @@ void PluginControllerProxy::handleKeyboardEvent(const WebKeyboardEvent& keyboard
 
 void PluginControllerProxy::paintEntirePlugin()
 {
-    if (m_frameRect.isEmpty())
+    if (m_pluginSize.isEmpty())
         return;
 
-    m_dirtyRect = m_frameRect;
+    m_dirtyRect = IntRect(IntPoint(), m_pluginSize);
     paint();
 }
 

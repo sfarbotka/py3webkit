@@ -226,8 +226,6 @@ class GlobalVariablesTest(unittest.TestCase):
                       "readability/naming")
 
         # Test if Qt exceptions are indeed working
-        assertCheck("Source/JavaScriptCore/qt/api/qscriptengine.cpp",
-                    "readability/braces")
         assertCheck("Source/WebKit/qt/Api/qwebpage.cpp",
                     "readability/braces")
         assertCheck("Source/WebKit/qt/tests/qwebelement/tst_qwebelement.cpp",
@@ -236,13 +234,6 @@ class GlobalVariablesTest(unittest.TestCase):
                     "readability/braces")
         assertCheck("Source/WebKit/qt/examples/platformplugin/WebPlugin.cpp",
                     "readability/braces")
-        assertCheck("Source/WebKit/qt/symbian/platformplugin/WebPlugin.cpp",
-                    "readability/braces")
-        assertNoCheck("Source/JavaScriptCore/qt/api/qscriptengine.cpp",
-                      "readability/naming")
-        assertNoCheck("Source/JavaScriptCore/qt/benchmarks"
-                      "/qscriptengine/tst_qscriptengine.cpp",
-                      "readability/naming")
         assertNoCheck("Source/WebKit/qt/Api/qwebpage.cpp",
                       "readability/naming")
         assertNoCheck("Source/WebKit/qt/tests/qwebelement/tst_qwebelement.cpp",
@@ -251,8 +242,6 @@ class GlobalVariablesTest(unittest.TestCase):
                       "readability/naming")
         assertNoCheck("Source/WebKit/qt/examples/platformplugin/WebPlugin.cpp",
                       "readability/naming")
-        assertNoCheck("Source/WebKit/qt/symbian/platformplugin/WebPlugin.cpp",
-                      "build/header_guard")
 
         assertNoCheck("Tools/MiniBrowser/qt/UrlLoader.cpp",
                     "build/include")

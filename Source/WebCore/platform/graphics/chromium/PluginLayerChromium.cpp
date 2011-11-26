@@ -44,6 +44,11 @@ PassRefPtr<PluginLayerChromium> PluginLayerChromium::create(CCLayerDelegate* del
 PluginLayerChromium::PluginLayerChromium(CCLayerDelegate* delegate)
     : LayerChromium(delegate)
     , m_textureId(0)
+    , m_flipped(true)
+    , m_uvRect(0, 0, 1, 1)
+    , m_ioSurfaceWidth(0)
+    , m_ioSurfaceHeight(0)
+    , m_ioSurfaceId(0)
 {
 }
 
@@ -55,6 +60,32 @@ PassRefPtr<CCLayerImpl> PluginLayerChromium::createCCLayerImpl()
 void PluginLayerChromium::setTextureId(unsigned id)
 {
     m_textureId = id;
+    setNeedsCommit();
+}
+
+void PluginLayerChromium::setFlipped(bool flipped)
+{
+    m_flipped = flipped;
+    setNeedsCommit();
+}
+
+void PluginLayerChromium::setUVRect(const FloatRect& rect)
+{
+    m_uvRect = rect;
+    setNeedsCommit();
+}
+
+void PluginLayerChromium::setIOSurfaceProperties(int width, int height, uint32_t ioSurfaceId)
+{
+    m_ioSurfaceWidth = width;
+    m_ioSurfaceHeight = height;
+    m_ioSurfaceId = ioSurfaceId;
+    setNeedsCommit();
+}
+
+uint32_t PluginLayerChromium::getIOSurfaceId() const
+{
+    return m_ioSurfaceId;
 }
 
 void PluginLayerChromium::pushPropertiesTo(CCLayerImpl* layer)
@@ -63,6 +94,9 @@ void PluginLayerChromium::pushPropertiesTo(CCLayerImpl* layer)
 
     CCPluginLayerImpl* pluginLayer = static_cast<CCPluginLayerImpl*>(layer);
     pluginLayer->setTextureId(m_textureId);
+    pluginLayer->setFlipped(m_flipped);
+    pluginLayer->setUVRect(m_uvRect);
+    pluginLayer->setIOSurfaceProperties(m_ioSurfaceWidth, m_ioSurfaceHeight, m_ioSurfaceId);
 }
 
 }

@@ -139,7 +139,9 @@ long long LayoutTestController::applicationCacheDiskUsageForOrigin(JSStringRef u
 {
     RetainPtr<CFStringRef> urlCF(AdoptCF, JSStringCopyCFString(kCFAllocatorDefault, url));
     WebSecurityOrigin *origin = [[WebSecurityOrigin alloc] initWithURL:[NSURL URLWithString:(NSString *)urlCF.get()]];
-    return [WebApplicationCache diskUsageForOrigin:origin];
+    long long usage = [WebApplicationCache diskUsageForOrigin:origin];
+    [origin release];
+    return usage;
 }
 
 void LayoutTestController::syncLocalStorage()
@@ -151,7 +153,9 @@ long long LayoutTestController::localStorageDiskUsageForOrigin(JSStringRef url)
 {
     RetainPtr<CFStringRef> urlCF(AdoptCF, JSStringCopyCFString(kCFAllocatorDefault, url));
     WebSecurityOrigin *origin = [[WebSecurityOrigin alloc] initWithURL:[NSURL URLWithString:(NSString *)urlCF.get()]];
-    return [[WebStorageManager sharedWebStorageManager] diskUsageForOrigin:origin];
+    long long usage = [[WebStorageManager sharedWebStorageManager] diskUsageForOrigin:origin];
+    [origin release];
+    return usage;
 }
 
 void LayoutTestController::observeStorageTrackerNotifications(unsigned number)
@@ -1226,4 +1230,9 @@ void LayoutTestController::removeChromeInputField()
 void LayoutTestController::focusWebView()
 {
     [[[mainFrame webView] window] makeFirstResponder:[mainFrame webView]];
+}
+
+void LayoutTestController::setBackingScaleFactor(double backingScaleFactor)
+{
+    [[mainFrame webView] _setCustomBackingScaleFactor:backingScaleFactor];
 }

@@ -21,7 +21,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -381,16 +381,6 @@ void CSSFontSelector::fontLoaded()
 void CSSFontSelector::fontCacheInvalidated()
 {
     dispatchInvalidationCallbacks();
-}
-
-void CSSFontSelector::retireCustomFont(FontData* fontData)
-{
-    if (m_document)
-        m_document->retireCustomFont(fontData);
-    else {
-        GlyphPageTreeNode::pruneTreeCustomFontData(fontData);
-        delete fontData;
-    }
 }
 
 static FontData* fontDataForGenericFamily(Document* document, const FontDescription& fontDescription, const AtomicString& familyName)

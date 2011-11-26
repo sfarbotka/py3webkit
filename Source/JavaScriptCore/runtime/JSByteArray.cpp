@@ -54,45 +54,43 @@ Structure* JSByteArray::createStructure(JSGlobalData& globalData, JSGlobalObject
     return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), classInfo);
 }
 
-bool JSByteArray::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
+bool JSByteArray::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
+    JSByteArray* thisObject = jsCast<JSByteArray*>(cell);
     bool ok;
     unsigned index = propertyName.toUInt32(ok);
-    if (ok && canAccessIndex(index)) {
-        slot.setValue(getIndex(exec, index));
+    if (ok && thisObject->canAccessIndex(index)) {
+        slot.setValue(thisObject->getIndex(exec, index));
         return true;
     }
-    return JSObject::getOwnPropertySlot(exec, propertyName, slot);
+    return JSObject::getOwnPropertySlot(thisObject, exec, propertyName, slot);
 }
 
-bool JSByteArray::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool JSByteArray::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
+    JSByteArray* thisObject = jsCast<JSByteArray*>(object);
     bool ok;
     unsigned index = propertyName.toUInt32(ok);
-    if (ok && canAccessIndex(index)) {
-        descriptor.setDescriptor(getIndex(exec, index), DontDelete);
+    if (ok && thisObject->canAccessIndex(index)) {
+        descriptor.setDescriptor(thisObject->getIndex(exec, index), DontDelete);
         return true;
     }
-    return JSObject::getOwnPropertyDescriptor(exec, propertyName, descriptor);
+    return JSObject::getOwnPropertyDescriptor(thisObject, exec, propertyName, descriptor);
 }
 
-bool JSByteArray::getOwnPropertySlot(ExecState* exec, unsigned propertyName, PropertySlot& slot)
+bool JSByteArray::getOwnPropertySlotByIndex(JSCell* cell, ExecState* exec, unsigned propertyName, PropertySlot& slot)
 {
-    if (canAccessIndex(propertyName)) {
-        slot.setValue(getIndex(exec, propertyName));
+    JSByteArray* thisObject = jsCast<JSByteArray*>(cell);
+    if (thisObject->canAccessIndex(propertyName)) {
+        slot.setValue(thisObject->getIndex(exec, propertyName));
         return true;
     }
-    return JSObject::getOwnPropertySlot(exec, Identifier::from(exec, propertyName), slot);
-}
-
-void JSByteArray::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
-{
-    put(this, exec, propertyName, value, slot);
+    return JSObject::getOwnPropertySlot(thisObject, exec, Identifier::from(exec, propertyName), slot);
 }
 
 void JSByteArray::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    JSByteArray* thisObject = static_cast<JSByteArray*>(cell);
+    JSByteArray* thisObject = jsCast<JSByteArray*>(cell);
     bool ok;
     unsigned index = propertyName.toUInt32(ok);
     if (ok) {
@@ -102,22 +100,18 @@ void JSByteArray::put(JSCell* cell, ExecState* exec, const Identifier& propertyN
     JSObject::put(thisObject, exec, propertyName, value, slot);
 }
 
-void JSByteArray::put(ExecState* exec, unsigned propertyName, JSValue value)
+void JSByteArray::putByIndex(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue value)
 {
-    put(this, exec, propertyName, value);
+    jsCast<JSByteArray*>(cell)->setIndex(exec, propertyName, value);
 }
 
-void JSByteArray::put(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue value)
+void JSByteArray::getOwnPropertyNames(JSObject* object, ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
 {
-    static_cast<JSByteArray*>(cell)->setIndex(exec, propertyName, value);
-}
-
-void JSByteArray::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
-{
-    unsigned length = m_storage->length();
+    JSByteArray* thisObject = jsCast<JSByteArray*>(object);
+    unsigned length = thisObject->m_storage->length();
     for (unsigned i = 0; i < length; ++i)
         propertyNames.add(Identifier::from(exec, i));
-    JSObject::getOwnPropertyNames(exec, propertyNames, mode);
+    JSObject::getOwnPropertyNames(thisObject, exec, propertyNames, mode);
 }
 
 }

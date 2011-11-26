@@ -37,11 +37,10 @@ public:
 
     const String& familyName() const { return m_familyName; }
 
-    virtual String cssText() const;
+    String customCssText() const;
 
 private:
     FontFamilyValue(const String& familyName);
-    virtual bool isFontFamilyValue() const { return true; }
 
     String m_familyName;
 };

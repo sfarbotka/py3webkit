@@ -22,6 +22,14 @@
 #include <QtDeclarative/qdeclarative.h>
 #include <QtDeclarative/qdeclarativeextensionplugin.h>
 
+#if defined(HAVE_WEBKIT2)
+#include "qquickwebpage_p.h"
+#include "qquickwebview_p.h"
+#include "qwebpreferences_p.h"
+
+#include <QtNetwork/qnetworkreply.h>
+#endif
+
 QT_BEGIN_NAMESPACE
 
 class WebKitQmlPlugin : public QDeclarativeExtensionPlugin {
@@ -36,6 +44,13 @@ public:
         qmlRegisterType<QDeclarativeWebView>(uri, 1, 1, "WebView");
         qmlRegisterRevision<QDeclarativeWebView, 0>("QtWebKit", 1, 0);
         qmlRegisterRevision<QDeclarativeWebView, 1>("QtWebKit", 1, 1);
+#endif
+
+#if defined(HAVE_WEBKIT2)
+        qmlRegisterType<QQuickWebView>(uri, 3, 0, "WebView");
+        qmlRegisterUncreatableType<QWebPreferences>(uri, 3, 0, "WebPreferences", QObject::tr("Cannot create separate instance of WebPreferences"));
+        qmlRegisterUncreatableType<QQuickWebPage>(uri, 3, 0, "WebPage", QObject::tr("Cannot create separate instance of WebPage, use WebView"));
+        qmlRegisterUncreatableType<QNetworkReply>(uri, 3, 0, "NetworkReply", QObject::tr("Cannot create separate instance of NetworkReply"));
 #endif
     }
 };

@@ -48,11 +48,10 @@
 #include "JSHTMLCollection.h"
 #include "JSNode.h"
 #include "JSNodeList.h"
-#include "ScriptValue.h"
-#if ENABLE(DOM_STORAGE)
-#include "Storage.h"
 #include "JSStorage.h"
-#endif
+#include "ScriptValue.h"
+#include "Storage.h"
+#include <parser/SourceCode.h>
 #include <runtime/DateInstance.h>
 #include <runtime/Error.h>
 #include <runtime/JSArray.h>
@@ -85,7 +84,7 @@ JSValue JSInjectedScriptHost::evaluate(ExecState* exec)
     JSGlobalObject* globalObject = exec->lexicalGlobalObject();
     JSFunction* evalFunction = globalObject->evalFunction();
     CallData callData;
-    CallType callType = evalFunction->getCallDataVirtual(callData);
+    CallType callType = evalFunction->methodTable()->getCallData(evalFunction, callData);
     if (callType == CallTypeNone)
         return jsUndefined();
     MarkedArgumentBuffer args;
@@ -117,7 +116,8 @@ JSValue JSInjectedScriptHost::internalConstructorName(ExecState* exec)
     if (exec->argumentCount() < 1)
         return jsUndefined();
 
-    UString result = exec->argument(0).toThisObject(exec)->className();
+    JSObject* thisObject = exec->argument(0).toThisObject(exec);
+    UString result = thisObject->methodTable()->className(thisObject);
     return jsString(exec, result);
 }
 
@@ -157,6 +157,29 @@ JSValue JSInjectedScriptHost::type(ExecState* exec)
     return jsUndefined();
 }
 
+JSValue JSInjectedScriptHost::functionLocation(ExecState* exec)
+{
+    if (exec->argumentCount() < 1)
+        return jsUndefined();
+    JSValue value = exec->argument(0);
+    if (!value.asCell()->inherits(&JSFunction::s_info))
+        return jsUndefined();
+    JSFunction* function = asFunction(value);
+
+    const SourceCode* sourceCode = function->sourceCode();
+    if (!sourceCode)
+        return jsUndefined();
+    int lineNumber = sourceCode->firstLine();
+    if (lineNumber)
+        lineNumber -= 1; // In the inspector protocol all positions are 0-based while in SourceCode they are 1-based
+    UString scriptId = UString::number(sourceCode->provider()->asID());
+
+    JSObject* result = constructEmptyObject(exec);
+    result->putDirect(exec->globalData(), Identifier(exec, "lineNumber"), jsNumber(lineNumber));
+    result->putDirect(exec->globalData(), Identifier(exec, "scriptId"), jsString(exec, scriptId));
+    return result;
+}
+
 JSValue JSInjectedScriptHost::inspect(ExecState* exec)
 {
     if (exec->argumentCount() >= 2) {
@@ -183,11 +206,9 @@ JSValue JSInjectedScriptHost::storageId(ExecState* exec)
 {
     if (exec->argumentCount() < 1)
         return jsUndefined();
-#if ENABLE(DOM_STORAGE)
     Storage* storage = toStorage(exec->argument(0));
     if (storage)
         return jsNumber(impl()->storageIdImpl(storage));
-#endif
     return jsUndefined();
 }
 

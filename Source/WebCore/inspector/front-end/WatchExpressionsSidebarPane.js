@@ -84,6 +84,12 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
         this._refreshExpressionsIfNeeded();
     },
 
+    addExpression: function(expression)
+    {
+        this.section.addExpression(expression);
+        this.expanded = true;
+    },
+
     _refreshExpressionsIfNeeded: function()
     {
         if (this._requiresUpdate && this._visible) {
@@ -97,7 +103,7 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
     {
         event.stopPropagation();
         this.expanded = true;
-        this.section.addExpression();
+        this.section.addNewExpressionAndEdit();
     },
 
     _refreshButtonClicked: function(event)
@@ -199,7 +205,7 @@ WebInspector.WatchExpressionsSection.prototype = {
             if (!expression)
                 continue;
 
-            WebInspector.consoleView.evalInInspectedWindow(expression, this._watchObjectGroupId, false, true, undefined, appendResult.bind(this, expression, i));
+            WebInspector.consoleView.evalInInspectedWindow(expression, this._watchObjectGroupId, false, true, false, appendResult.bind(this, expression, i));
         }
 
         if (!propertyCount) {
@@ -216,7 +222,14 @@ WebInspector.WatchExpressionsSection.prototype = {
         this.expanded = (propertyCount != 0);
     },
 
-    addExpression: function()
+    addExpression: function(expression)
+    {
+        this.watchExpressions.push(expression);
+        this.saveExpressions();
+        this.update();
+    },
+
+    addNewExpressionAndEdit: function()
     {
         this._newExpressionAdded = true;
         this.watchExpressions.push(WebInspector.WatchExpressionsSection.NewWatchExpression);

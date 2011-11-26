@@ -105,6 +105,7 @@ public:
     // Attributes - platform-independent implementations
     JSStringRef stringAttributeValue(JSStringRef attribute);
     double numberAttributeValue(JSStringRef attribute);
+    AccessibilityUIElement uiElementAttributeValue(JSStringRef attribute) const;    
     bool boolAttributeValue(JSStringRef attribute);
     bool isAttributeSupported(JSStringRef attribute);
     bool isAttributeSettable(JSStringRef attribute);
@@ -137,6 +138,7 @@ public:
     bool isSelected() const;
     bool isSelectable() const;
     bool isMultiSelectable() const;
+    bool isSelectedOptionActive() const;
     void setSelectedChild(AccessibilityUIElement*) const;
     unsigned selectedChildrenCount() const;
     AccessibilityUIElement selectedChildAtIndex(unsigned) const;
@@ -197,6 +199,10 @@ public:
     
     // Table-specific
     AccessibilityUIElement cellForColumnAndRow(unsigned column, unsigned row);
+
+    // Scrollarea-specific
+    AccessibilityUIElement horizontalScrollbar() const;
+    AccessibilityUIElement verticalScrollbar() const;
 
     // Text markers.
     AccessibilityTextMarkerRange textMarkerRangeForElement(AccessibilityUIElement*);    

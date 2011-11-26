@@ -86,9 +86,11 @@
 #endif
 
 #include "BitmapImage.h"
+#include "ClipboardChromium.h"
 #include "Cookie.h"
 #include "Document.h"
 #include "FrameView.h"
+#include "GamepadList.h"
 #include "GraphicsContext.h"
 #include "IDBFactoryBackendProxy.h"
 #include "KURL.h"
@@ -150,6 +152,12 @@ void PlatformSupport::cacheMetadata(const KURL& url, double responseTime, const 
 
 // Clipboard ------------------------------------------------------------------
 
+uint64_t PlatformSupport::clipboardSequenceNumber(PasteboardPrivate::ClipboardBuffer buffer)
+{
+    return webKitPlatformSupport()->clipboard()->sequenceNumber(
+        static_cast<WebClipboard::Buffer>(buffer));
+}
+
 bool PlatformSupport::clipboardIsFormatAvailable(
     PasteboardPrivate::ClipboardFormat format,
     PasteboardPrivate::ClipboardBuffer buffer)
@@ -157,6 +165,17 @@ bool PlatformSupport::clipboardIsFormatAvailable(
     return webKitPlatformSupport()->clipboard()->isFormatAvailable(
         static_cast<WebClipboard::Format>(format),
         static_cast<WebClipboard::Buffer>(buffer));
+}
+
+HashSet<String> PlatformSupport::clipboardReadAvailableTypes(
+    PasteboardPrivate::ClipboardBuffer buffer, bool* containsFilenames)
+{
+    WebVector<WebString> result = webKitPlatformSupport()->clipboard()->readAvailableTypes(
+        static_cast<WebClipboard::Buffer>(buffer), containsFilenames);
+    HashSet<String> types;
+    for (size_t i = 0; i < result.size(); ++i)
+        types.add(result[i]);
+    return types;
 }
 
 String PlatformSupport::clipboardReadPlainText(
@@ -168,11 +187,11 @@ String PlatformSupport::clipboardReadPlainText(
 
 void PlatformSupport::clipboardReadHTML(
     PasteboardPrivate::ClipboardBuffer buffer,
-    String* htmlText, KURL* sourceURL)
+    String* htmlText, KURL* sourceURL, unsigned* fragmentStart, unsigned* fragmentEnd)
 {
     WebURL url;
     *htmlText = webKitPlatformSupport()->clipboard()->readHTML(
-        static_cast<WebClipboard::Buffer>(buffer), &url);
+        static_cast<WebClipboard::Buffer>(buffer), &url, fragmentStart, fragmentEnd);
     *sourceURL = url;
 }
 
@@ -180,11 +199,6 @@ PassRefPtr<SharedBuffer> PlatformSupport::clipboardReadImage(
     PasteboardPrivate::ClipboardBuffer buffer)
 {
     return webKitPlatformSupport()->clipboard()->readImage(static_cast<WebClipboard::Buffer>(buffer));
-}
-
-uint64_t PlatformSupport::clipboardGetSequenceNumber()
-{
-    return webKitPlatformSupport()->clipboard()->getSequenceNumber();
 }
 
 void PlatformSupport::clipboardWriteSelection(const String& htmlText,
@@ -218,46 +232,10 @@ void PlatformSupport::clipboardWriteImage(NativeImagePtr image,
     webKitPlatformSupport()->clipboard()->writeImage(webImage, sourceURL, title);
 }
 
-void PlatformSupport::clipboardWriteData(const String& type,
-                                        const String& data,
-                                        const String& metadata)
+void PlatformSupport::clipboardWriteDataObject(Clipboard* clipboard)
 {
-    webKitPlatformSupport()->clipboard()->writeData(type, data, metadata);
-}
-
-HashSet<String> PlatformSupport::clipboardReadAvailableTypes(
-    PasteboardPrivate::ClipboardBuffer buffer, bool* containsFilenames)
-{
-    WebVector<WebString> result = webKitPlatformSupport()->clipboard()->readAvailableTypes(
-        static_cast<WebClipboard::Buffer>(buffer), containsFilenames);
-    HashSet<String> types;
-    for (size_t i = 0; i < result.size(); ++i)
-        types.add(result[i]);
-    return types;
-}
-
-bool PlatformSupport::clipboardReadData(PasteboardPrivate::ClipboardBuffer buffer,
-                                       const String& type, String& data, String& metadata)
-{
-    WebString resultData;
-    WebString resultMetadata;
-    bool succeeded = webKitPlatformSupport()->clipboard()->readData(
-        static_cast<WebClipboard::Buffer>(buffer), type, &resultData, &resultMetadata);
-    if (succeeded) {
-        data = resultData;
-        metadata = resultMetadata;
-    }
-    return succeeded;
-}
-
-Vector<String> PlatformSupport::clipboardReadFilenames(PasteboardPrivate::ClipboardBuffer buffer)
-{
-    WebVector<WebString> result = webKitPlatformSupport()->clipboard()->readFilenames(
-        static_cast<WebClipboard::Buffer>(buffer));
-    Vector<String> convertedResult;
-    for (size_t i = 0; i < result.size(); ++i)
-        convertedResult.append(result[i]);
-    return convertedResult;
+    WebDragData data = static_cast<ClipboardChromium*>(clipboard)->dataObject();
+    webKitPlatformSupport()->clipboard()->writeDataObject(data);
 }
 
 // Cookies --------------------------------------------------------------------
@@ -461,21 +439,23 @@ bool PlatformSupport::loadFont(NSFont* srcFont, CGFontRef* out, uint32_t* fontID
     return false;
 }
 #elif OS(UNIX)
-String PlatformSupport::getFontFamilyForCharacters(const UChar* characters, size_t numCharacters, const char* preferredLocale)
+void PlatformSupport::getFontFamilyForCharacters(const UChar* characters, size_t numCharacters, const char* preferredLocale, FontFamily* family)
 {
 #if OS(ANDROID)
     // FIXME: We do not use fontconfig on Android, so use simple logic for now.
     // https://bugs.webkit.org/show_bug.cgi?id=67587
-    return WebString("Arial");
+    family->name = "Arial";
+    family->isBold = false;
+    family->isItalic = false;
 #else
+    WebFontFamily webFamily;
     if (webKitPlatformSupport()->sandboxSupport())
-        return webKitPlatformSupport()->sandboxSupport()->getFontFamilyForCharacters(characters, numCharacters, preferredLocale);
-
-    WebCString family = WebFontInfo::familyForChars(characters, numCharacters, preferredLocale);
-    if (family.data())
-        return WebString::fromUTF8(family.data());
-
-    return WebString();
+        webKitPlatformSupport()->sandboxSupport()->getFontFamilyForCharacters(characters, numCharacters, preferredLocale, &webFamily);
+    else
+        WebFontInfo::familyForChars(characters, numCharacters, preferredLocale, &webFamily);
+    family->name = String::fromUTF8(webFamily.name.data(), webFamily.name.length());
+    family->isBold = webFamily.isBold;
+    family->isItalic = webFamily.isItalic;
 #endif
 }
 
@@ -545,6 +525,31 @@ void PlatformSupport::createIDBKeysFromSerializedValuesAndKeyPath(const Vector<R
 PassRefPtr<SerializedScriptValue> PlatformSupport::injectIDBKeyIntoSerializedValue(PassRefPtr<IDBKey> key, PassRefPtr<SerializedScriptValue> value, const String& keyPath)
 {
     return webKitPlatformSupport()->injectIDBKeyIntoSerializedValue(key, value, keyPath);
+}
+
+// Gamepad --------------------------------------------------------------------
+
+void PlatformSupport::sampleGamepads(GamepadList* into)
+{
+    WebGamepads gamepads;
+
+    webKitPlatformSupport()->sampleGamepads(gamepads);
+
+    for (unsigned i = 0; i < WebKit::WebGamepads::itemsLengthCap; ++i) {
+        WebGamepad& webGamepad = gamepads.items[i];
+        if (i < gamepads.length && webGamepad.connected) {
+            RefPtr<Gamepad> gamepad = into->item(i);
+            if (!gamepad)
+                gamepad = Gamepad::create();
+            gamepad->id(webGamepad.id);
+            gamepad->index(i);
+            gamepad->timestamp(webGamepad.timestamp);
+            gamepad->axes(webGamepad.axesLength, webGamepad.axes);
+            gamepad->buttons(webGamepad.buttonsLength, webGamepad.buttons);
+            into->set(i, gamepad);
+        } else
+            into->set(i, 0);
+    }
 }
 
 // Keygen ---------------------------------------------------------------------
@@ -935,6 +940,11 @@ void PlatformSupport::paintThemePart(
 
 // Trace Event ----------------------------------------------------------------
 
+bool PlatformSupport::isTraceEventEnabled()
+{
+    return webKitPlatformSupport()->isTraceEventEnabled();
+}
+
 void PlatformSupport::traceEventBegin(const char* name, void* id, const char* extra)
 {
     webKitPlatformSupport()->traceEventBegin(name, id, extra);
@@ -1073,6 +1083,14 @@ IntRect PlatformSupport::screenAvailableRect(Widget* widget)
     if (!client)
         return IntRect();
     return client->screenInfo().availableRect;
+}
+
+double PlatformSupport::screenRefreshRate(Widget* widget)
+{
+    WebWidgetClient* client = toWebWidgetClient(widget);
+    if (!client)
+        return 0;
+    return client->screenInfo().refreshRate;
 }
 
 bool PlatformSupport::popupsAllowed(NPP npp)

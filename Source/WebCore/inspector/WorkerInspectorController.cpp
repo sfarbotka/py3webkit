@@ -38,42 +38,23 @@
 #include "InjectedScriptManager.h"
 #include "InspectorBackendDispatcher.h"
 #include "InspectorClient.h"
+#include "InspectorConsoleAgent.h"
 #include "InspectorFrontend.h"
 #include "InspectorFrontendChannel.h"
-#include "InspectorRuntimeAgent.h"
 #include "InspectorState.h"
 #include "InspectorStateClient.h"
 #include "InstrumentingAgents.h"
+#include "WorkerConsoleAgent.h"
 #include "WorkerContext.h"
 #include "WorkerDebuggerAgent.h"
 #include "WorkerReportingProxy.h"
+#include "WorkerRuntimeAgent.h"
 #include "WorkerThread.h"
 #include <wtf/PassOwnPtr.h>
 
 namespace WebCore {
 
 namespace {
-
-class WorkerRuntimeAgent : public InspectorRuntimeAgent {
-public:
-    WorkerRuntimeAgent(InjectedScriptManager* injectedScriptManager, WorkerContext* workerContext)
-        : InspectorRuntimeAgent(injectedScriptManager)
-        , m_workerContext(workerContext) { }
-    virtual ~WorkerRuntimeAgent() { }
-
-private:
-    virtual ScriptState* scriptStateForFrameId(const String&)
-    {
-        return 0;
-    }
-
-    virtual ScriptState* getDefaultInspectedState()
-    {
-        return scriptStateFromWorkerContext(m_workerContext);
-    }
-
-    WorkerContext* m_workerContext;
-};
 
 class PageInspectorProxy : public InspectorFrontendChannel {
 public:
@@ -113,16 +94,15 @@ WorkerInspectorController::WorkerInspectorController(WorkerContext* workerContex
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     , m_debuggerAgent(WorkerDebuggerAgent::create(m_instrumentingAgents.get(), m_state.get(), workerContext, m_injectedScriptManager.get()))
 #endif
-    , m_runtimeAgent(adoptPtr(new WorkerRuntimeAgent(m_injectedScriptManager.get(), workerContext)))
+    , m_runtimeAgent(adoptPtr(new WorkerRuntimeAgent(m_instrumentingAgents.get(), m_injectedScriptManager.get(), workerContext)))
+    , m_consoleAgent(adoptPtr(new WorkerConsoleAgent(m_instrumentingAgents.get(), m_state.get(), m_injectedScriptManager.get())))
 {
     m_injectedScriptManager->injectedScriptHost()->init(0
         , 0
 #if ENABLE(SQL_DATABASE)
         , 0
 #endif
-#if ENABLE(DOM_STORAGE)
         , 0
-#endif
     );
 
 #if ENABLE(JAVASCRIPT_DEBUGGER)
@@ -144,15 +124,13 @@ void WorkerInspectorController::connectFrontend()
     m_backendDispatcher = adoptRef(new InspectorBackendDispatcher(
         m_frontendChannel.get(),
         0, // InspectorApplicationCacheAgent
+        0, // InspectorCSSAgent
+        m_consoleAgent.get(),
+        0, // InspectorDOMAgent
 #if ENABLE(JAVASCRIPT_DEBUGGER)
         0, // InspectorDOMDebuggerAgent
 #endif
-        0, // InspectorCSSAgent
-        0, // InspectorConsoleAgent
-        0, // InspectorDOMAgent
-#if ENABLE(DOM_STORAGE)
         0, // InspectorDOMStorageAgent
-#endif
 #if ENABLE(SQL_DATABASE)
         0, // InspectorDatabaseAgent
 #endif
@@ -173,6 +151,7 @@ void WorkerInspectorController::connectFrontend()
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     m_debuggerAgent->setFrontend(m_frontend.get());
 #endif
+    m_consoleAgent->setFrontend(m_frontend.get());
 }
 
 void WorkerInspectorController::disconnectFrontend()
@@ -187,6 +166,7 @@ void WorkerInspectorController::disconnectFrontend()
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     m_debuggerAgent->clearFrontend();
 #endif
+    m_consoleAgent->clearFrontend();
     m_injectedScriptManager->injectedScriptHost()->clearFrontend();
 
     m_frontend.clear();
@@ -202,6 +182,7 @@ void WorkerInspectorController::restoreInspectorStateFromCookie(const String& in
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     m_debuggerAgent->restore();
 #endif
+    m_consoleAgent->restore();
 }
 
 void WorkerInspectorController::dispatchMessageFromFrontend(const String& message)
@@ -209,6 +190,14 @@ void WorkerInspectorController::dispatchMessageFromFrontend(const String& messag
     if (m_backendDispatcher)
         m_backendDispatcher->dispatch(message);
 }
+
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+void WorkerInspectorController::resume()
+{
+    ErrorString unused;
+    m_runtimeAgent->run(&unused);
+}
+#endif
 
 }
 

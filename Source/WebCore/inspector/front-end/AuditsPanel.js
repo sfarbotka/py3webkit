@@ -35,8 +35,9 @@
 WebInspector.AuditsPanel = function()
 {
     WebInspector.Panel.call(this, "audits");
+    this.registerRequiredCSS("auditsPanel.css");
 
-    this.createSidebar();
+    this.createSplitViewWithSidebarTree();
     this.auditsTreeElement = new WebInspector.SidebarSectionTreeElement("", {}, true);
     this.sidebarTree.appendChild(this.auditsTreeElement);
     this.auditsTreeElement.listItemElement.addStyleClass("hidden");
@@ -50,11 +51,9 @@ WebInspector.AuditsPanel = function()
     this.auditResultsTreeElement.expand();
 
     this.clearResultsButton = new WebInspector.StatusBarButton(WebInspector.UIString("Clear audit results."), "clear-status-bar-item");
-    this.clearResultsButton.addEventListener("click", this._clearButtonClicked.bind(this), false);
+    this.clearResultsButton.addEventListener("click", this._clearButtonClicked, this);
 
-    this.viewsContainerElement = document.createElement("div");
-    this.viewsContainerElement.id = "audit-views";
-    this.element.appendChild(this.viewsContainerElement);
+    this.viewsContainerElement = this.splitView.mainElement;
 
     this._constructCategories();
 
@@ -133,7 +132,7 @@ WebInspector.AuditsPanel.prototype = {
             rulesRemaining += categories[i].ruleCount;
 
         var results = [];
-        var mainResourceURL = WebInspector.mainResource.url;
+        var mainResourceURL = WebInspector.inspectedPageURL;
 
         function ruleResultReadyCallback(categoryResult, ruleResult)
         {
@@ -236,7 +235,7 @@ WebInspector.AuditsPanel.prototype = {
             return;
 
         if (this._visibleView)
-            this._visibleView.hide();
+            this._visibleView.detach();
 
         this._visibleView = x;
 
@@ -244,16 +243,11 @@ WebInspector.AuditsPanel.prototype = {
             x.show(this.viewsContainerElement);
     },
 
-    attach: function()
+    wasShown: function()
     {
-        WebInspector.Panel.prototype.attach.call(this);
-
-        this.auditsItemTreeElement.select();
-    },
-
-    updateMainViewWidth: function(width)
-    {
-        this.viewsContainerElement.style.left = width + "px";
+        WebInspector.Panel.prototype.wasShown.call(this);
+        if (!this._visibleView)
+            this.auditsItemTreeElement.select();
     },
 
     _clearButtonClicked: function()

@@ -50,6 +50,13 @@
 #include <limits>
 #endif
 
+#if OS(QNX)
+// FIXME: Look into a way to have cmath import its functions into both the standard and global
+// namespace. For now, we include math.h since the QNX cmath header only imports its functions
+// into the standard namespace.
+#include <math.h>
+#endif
+
 #ifndef M_PI
 const double piDouble = 3.14159265358979323846;
 const float piFloat = 3.14159265358979323846f;
@@ -131,6 +138,11 @@ inline long lround(double num) { return static_cast<long>(round(num)); }
 inline long lroundf(float num) { return static_cast<long>(roundf(num)); }
 inline double trunc(double num) { return num > 0 ? floor(num) : ceil(num); }
 
+#endif
+
+#if COMPILER(GCC) && OS(QNX)
+// The stdlib on QNX doesn't contain long abs(long). See PR #104666.
+inline long long abs(long num) { return labs(num); }
 #endif
 
 #if COMPILER(MSVC)
@@ -265,7 +277,7 @@ inline bool isWithinIntRange(float x)
     return x > static_cast<float>(std::numeric_limits<int>::min()) && x < static_cast<float>(std::numeric_limits<int>::max());
 }
 
-#if !COMPILER(MSVC) && !COMPILER(RVCT) && !OS(SOLARIS) && !OS(SYMBIAN)
+#if !COMPILER(MSVC) && !COMPILER(RVCT) && !OS(SOLARIS)
 using std::isfinite;
 using std::isinf;
 using std::isnan;
@@ -291,6 +303,29 @@ inline void decomposeDouble(double number, bool& sign, int32_t& exponent, uint64
         exponent = mantissa ? -0x3fe : 0;
     else
         mantissa |= 0x10000000000000ull;
+}
+
+// Calculate d % 2^{64}.
+inline void doubleToInteger(double d, unsigned long long& value)
+{
+    if (isnan(d) || isinf(d))
+        value = 0;
+    else {
+        // -2^{64} < fmodValue < 2^{64}.
+        double fmodValue = fmod(trunc(d), std::numeric_limits<unsigned long long>::max() + 1.0);
+        if (fmodValue >= 0) {
+            // 0 <= fmodValue < 2^{64}.
+            // 0 <= value < 2^{64}. This cast causes no loss.
+            value = static_cast<unsigned long long>(fmodValue);
+        } else {
+            // -2^{64} < fmodValue < 0.
+            // 0 < fmodValueInUnsignedLongLong < 2^{64}. This cast causes no loss.
+            unsigned long long fmodValueInUnsignedLongLong = static_cast<unsigned long long>(-fmodValue);
+            // -1 < (std::numeric_limits<unsigned long long>::max() - fmodValueInUnsignedLongLong) < 2^{64} - 1.
+            // 0 < value < 2^{64}.
+            value = std::numeric_limits<unsigned long long>::max() - fmodValueInUnsignedLongLong + 1;
+        }
+    }
 }
 
 #endif // #ifndef WTF_MathExtras_h

@@ -90,6 +90,7 @@ default
 defer
 dir
 direction
+dirname
 disabled
 download
 draggable
@@ -121,6 +122,11 @@ id
 incremental
 indeterminate
 ismap
+itemid
+itemprop
+itemref
+itemscope
+itemtype
 keytype
 kind
 label
@@ -143,6 +149,7 @@ max
 maxlength
 mayscript
 media
+mediagroup
 method
 min
 multiple

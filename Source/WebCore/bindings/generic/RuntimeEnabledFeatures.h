@@ -80,12 +80,21 @@ public:
     static bool webkitCancelFullScreenEnabled() { return isFullScreenAPIEnabled; }
 #endif
 
+#if ENABLE(POINTER_LOCK)
+    static bool webkitPointerLockEnabled() { return isPointerLockEnabled; }
+    static void setWebkitPointerLockEnabled(bool isEnabled) { isPointerLockEnabled = isEnabled; }
+    static bool webkitPointerEnabled() { return isPointerLockEnabled; }
+    static bool webkitMovementXEnabled() { return isPointerLockEnabled; }
+    static bool webkitMovementYEnabled() { return isPointerLockEnabled; }
+#endif
+
 #if ENABLE(VIDEO)
     static bool audioEnabled();
     static bool htmlMediaElementEnabled();
     static bool htmlAudioElementEnabled();
     static bool htmlVideoElementEnabled();
     static bool htmlSourceElementEnabled();
+    static bool mediaControllerEnabled();
     static bool mediaErrorEnabled();
     static bool timeRangesEnabled();
 #endif
@@ -162,6 +171,11 @@ public:
     static bool webkitPeerConnectionEnabled() { return isMediaStreamEnabled; }
 #endif
 
+#if ENABLE(GAMEPAD)
+    static void setWebkitGamepadsEnabled(bool isEnabled) { isGamepadEnabled = isEnabled; }
+    static bool webkitGamepadsEnabled() { return isGamepadEnabled; }
+#endif
+
 #if ENABLE(QUOTA)
     static bool quotaEnabled() { return isQuotaEnabled; }
     static void setQuotaEnabled(bool isEnabled) { isQuotaEnabled = isEnabled; }
@@ -210,12 +224,20 @@ private:
     static bool isMediaStreamEnabled;
 #endif
 
+#if ENABLE(GAMEPAD)
+    static bool isGamepadEnabled;
+#endif
+
 #if ENABLE(QUOTA)
     static bool isQuotaEnabled;
 #endif
 
 #if ENABLE(FULLSCREEN_API)
     static bool isFullScreenAPIEnabled;
+#endif
+
+#if ENABLE(POINTER_LOCK)
+    static bool isPointerLockEnabled;
 #endif
 
 #if ENABLE(MEDIA_SOURCE)

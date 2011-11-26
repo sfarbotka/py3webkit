@@ -31,6 +31,7 @@
 #include "config.h"
 #include "V8DOMWindow.h"
 
+#include "ArrayBuffer.h"
 #include "Chrome.h"
 #include "ContentSecurityPolicy.h"
 #include "DOMTimer.h"
@@ -42,6 +43,7 @@
 #include "HTMLCollection.h"
 #include "HTMLDocument.h"
 #include "MediaPlayer.h"
+#include "MessagePort.h"
 #include "Page.h"
 #include "PlatformScreen.h"
 #include "ScheduledAction.h"
@@ -56,17 +58,10 @@
 #include "V8EventListener.h"
 #include "V8GCForContextDispose.h"
 #include "V8HiddenPropertyName.h"
-#include "V8HTMLAudioElementConstructor.h"
 #include "V8HTMLCollection.h"
-#include "V8HTMLImageElementConstructor.h"
-#include "V8HTMLOptionElementConstructor.h"
-#include "V8MessagePortCustom.h"
 #include "V8Node.h"
 #include "V8Proxy.h"
 #include "V8Utilities.h"
-#if ENABLE(WEB_SOCKETS)
-#include "WebSocket.h"
-#endif
 #include "WindowFeatures.h"
 
 namespace WebCore {
@@ -227,28 +222,6 @@ void V8DOMWindow::openerAccessorSetter(v8::Local<v8::String> name, v8::Local<v8:
     info.This()->Set(name, value);
 }
 
-#if ENABLE(VIDEO)
-
-v8::Handle<v8::Value> V8DOMWindow::AudioAccessorGetter(v8::Local<v8::String> name, const v8::AccessorInfo& info)
-{
-    DOMWindow* window = V8DOMWindow::toNative(info.Holder());
-    return V8DOMWrapper::getConstructor(&V8HTMLAudioElementConstructor::info, window);
-}
-
-#endif
-
-v8::Handle<v8::Value> V8DOMWindow::ImageAccessorGetter(v8::Local<v8::String> name, const v8::AccessorInfo& info)
-{
-    DOMWindow* window = V8DOMWindow::toNative(info.Holder());
-    return V8DOMWrapper::getConstructor(&V8HTMLImageElementConstructor::info, window);
-}
-
-v8::Handle<v8::Value> V8DOMWindow::OptionAccessorGetter(v8::Local<v8::String> name, const v8::AccessorInfo& info)
-{
-    DOMWindow* window = V8DOMWindow::toNative(info.Holder());
-    return V8DOMWrapper::getConstructor(&V8HTMLOptionElementConstructor::info, window);
-}
-
 v8::Handle<v8::Value> V8DOMWindow::addEventListenerCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.DOMWindow.addEventListener()");
@@ -313,35 +286,41 @@ v8::Handle<v8::Value> V8DOMWindow::removeEventListenerCallback(const v8::Argumen
     return v8::Undefined();
 }
 
-static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args)
+static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args, bool doTransfer)
 {
     DOMWindow* window = V8DOMWindow::toNative(args.Holder());
 
     DOMWindow* source = V8Proxy::retrieveFrameForCallingContext()->domWindow();
     ASSERT(source->frame());
 
-    bool didThrow = false;
-    RefPtr<SerializedScriptValue> message = SerializedScriptValue::create(args[0], didThrow);
-    if (didThrow)
-        return v8::Undefined();
-
-    MessagePortArray portArray;
-    String targetOrigin;
-
     // This function has variable arguments and can either be:
     //   postMessage(message, port, targetOrigin);
     // or
     //   postMessage(message, targetOrigin);
-    v8::TryCatch tryCatch;
-    if (args.Length() > 2) {
-        if (!getMessagePortArray(args[1], portArray))
+    MessagePortArray portArray;
+    ArrayBufferArray arrayBufferArray;
+    String targetOrigin;
+    {
+        v8::TryCatch tryCatch;
+        if (args.Length() > 2) {
+            if (!extractTransferables(args[1], portArray, arrayBufferArray))
+                return v8::Undefined();
+            targetOrigin = toWebCoreStringWithNullOrUndefinedCheck(args[2]);
+        } else
+            targetOrigin = toWebCoreStringWithNullOrUndefinedCheck(args[1]);
+
+        if (tryCatch.HasCaught())
             return v8::Undefined();
-        targetOrigin = toWebCoreStringWithNullOrUndefinedCheck(args[2]);
-    } else {
-        targetOrigin = toWebCoreStringWithNullOrUndefinedCheck(args[1]);
     }
 
-    if (tryCatch.HasCaught())
+
+    bool didThrow = false;
+    RefPtr<SerializedScriptValue> message =
+        SerializedScriptValue::create(args[0],
+                                      doTransfer ? &portArray : 0,
+                                      doTransfer ? &arrayBufferArray : 0,
+                                      didThrow);
+    if (didThrow)
         return v8::Undefined();
 
     ExceptionCode ec = 0;
@@ -352,13 +331,13 @@ static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args
 v8::Handle<v8::Value> V8DOMWindow::postMessageCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.DOMWindow.postMessage()");
-    return handlePostMessageCallback(args);
+    return handlePostMessageCallback(args, false);
 }
 
 v8::Handle<v8::Value> V8DOMWindow::webkitPostMessageCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.DOMWindow.webkitPostMessage()");
-    return handlePostMessageCallback(args);
+    return handlePostMessageCallback(args, true);
 }
 
 // FIXME(fqian): returning string is cheating, and we should

@@ -200,10 +200,8 @@ bool RenderReplaced::shouldPaint(PaintInfo& paintInfo, const LayoutPoint& paintO
 
 int RenderReplaced::computeIntrinsicLogicalWidth(RenderBox* contentRenderer, bool includeMaxWidth) const
 {
-    if (m_hasIntrinsicSize) {
-        ASSERT(!contentRenderer);
+    if (m_hasIntrinsicSize)
         return computeReplacedLogicalWidthRespectingMinMaxWidth(calcAspectRatioLogicalWidth(), includeMaxWidth);
-    }
     ASSERT(contentRenderer);
     ASSERT(contentRenderer->style());
     return contentRenderer->computeReplacedLogicalWidthRespectingMinMaxWidth(contentRenderer->computeReplacedLogicalWidthUsing(contentRenderer->style()->logicalWidth()), includeMaxWidth);
@@ -211,10 +209,8 @@ int RenderReplaced::computeIntrinsicLogicalWidth(RenderBox* contentRenderer, boo
 
 int RenderReplaced::computeIntrinsicLogicalHeight(RenderBox* contentRenderer) const
 {
-    if (m_hasIntrinsicSize) {
-        ASSERT(!contentRenderer);
+    if (m_hasIntrinsicSize)
         return computeReplacedLogicalHeightRespectingMinMaxHeight(calcAspectRatioLogicalHeight());
-    }
     ASSERT(contentRenderer);
     ASSERT(contentRenderer->style());
     return contentRenderer->computeReplacedLogicalHeightRespectingMinMaxHeight(contentRenderer->computeReplacedLogicalHeightUsing(contentRenderer->style()->logicalHeight()));
@@ -235,7 +231,8 @@ LayoutUnit RenderReplaced::computeReplacedLogicalWidth(bool includeMaxWidth) con
         contentRenderer->computeIntrinsicRatioInformation(intrinsicRatio, isPercentageIntrinsicSize);
         contentRenderStyle = contentRenderer->style();
         ASSERT(contentRenderStyle);
-    }
+    } else
+        computeIntrinsicRatioInformation(intrinsicRatio, isPercentageIntrinsicSize);
 
     if (style()->logicalWidth().isAuto()) {
         bool heightIsAuto = style()->logicalHeight().isAuto();
@@ -513,14 +510,14 @@ void RenderReplaced::setIntrinsicSize(const IntSize& size)
     m_intrinsicSize = size;
 }
 
-IntRect RenderReplaced::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderReplaced::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     if (style()->visibility() != VISIBLE && !enclosingLayer()->hasVisibleContent())
-        return IntRect();
+        return LayoutRect();
 
     // The selectionRect can project outside of the overflowRect, so take their union
     // for repainting to avoid selection painting glitches.
-    IntRect r = unionRect(localSelectionRect(false), visualOverflowRect());
+    LayoutRect r = unionRect(localSelectionRect(false), visualOverflowRect());
 
     RenderView* v = view();
     if (v) {

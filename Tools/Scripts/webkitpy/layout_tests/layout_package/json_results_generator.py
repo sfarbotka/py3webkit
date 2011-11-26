@@ -34,7 +34,7 @@ import time
 import urllib2
 import xml.dom.minidom
 
-from webkitpy.layout_tests.layout_package import test_results_uploader
+from webkitpy.common.net.file_uploader import FileUploader
 
 try:
     import json
@@ -56,7 +56,10 @@ def has_json_wrapper(string):
 
 
 def strip_json_wrapper(json_content):
-    return json_content[len(_JSON_PREFIX):len(json_content) - len(_JSON_SUFFIX)]
+    # FIXME: Kill this code once the server returns json instead of jsonp.
+    if has_json_wrapper(json_content):
+        return json_content[len(_JSON_PREFIX):len(json_content) - len(_JSON_SUFFIX)]
+    return json_content
 
 
 def load_json(filesystem, file_path):
@@ -65,10 +68,11 @@ def load_json(filesystem, file_path):
     return json.loads(content)
 
 
-def write_json(filesystem, json_object, file_path):
+def write_json(filesystem, json_object, file_path, callback=None):
     # Specify separators in order to get compact encoding.
-    json_data = json.dumps(json_object, separators=(',', ':'))
-    json_string = _JSON_PREFIX + json_data + _JSON_SUFFIX
+    json_string = json.dumps(json_object, separators=(',', ':'))
+    if callback:
+        json_string = callback + "(" + json_string + ");"
     filesystem.write_text_file(file_path, json_string)
 
 
@@ -187,8 +191,7 @@ class JSONResultsGeneratorBase(object):
     TIMES_MS_FILENAME = "times_ms.json"
     INCREMENTAL_RESULTS_FILENAME = "incremental_results.json"
 
-    URL_FOR_TEST_LIST_JSON = \
-        "http://%s/testfile?builder=%s&name=%s&testlistjson=1&testtype=%s"
+    URL_FOR_TEST_LIST_JSON = "http://%s/testfile?builder=%s&name=%s&testlistjson=1&testtype=%s&master=%s"
 
     # FIXME: Remove generate_incremental_results once the reference to it in
     # http://src.chromium.org/viewvc/chrome/trunk/tools/build/scripts/slave/gtest_slave_utils.py
@@ -317,8 +320,8 @@ class JSONResultsGeneratorBase(object):
         files = [(file, self._fs.join(self._results_directory, file))
             for file in json_files]
 
-        uploader = test_results_uploader.TestResultsUploader(
-            self._test_results_server)
+        url = "http://%s/testfile/upload" % self._test_results_server
+        uploader = FileUploader(url)
         try:
             # Set uploading timeout in case appengine server is having problem.
             # 120 seconds are more than enough to upload test results.
@@ -415,9 +418,11 @@ class JSONResultsGeneratorBase(object):
             (urllib2.quote(self._test_results_server),
              urllib2.quote(self._builder_name),
              self.RESULTS_FILENAME,
-             urllib2.quote(self._test_type)))
+             urllib2.quote(self._test_type),
+             urllib2.quote(self._master_name)))
 
         try:
+            # FIXME: We should talk to the network via a Host object.
             results_file = urllib2.urlopen(results_file_url)
             info = results_file.info()
             old_results = results_file.read()

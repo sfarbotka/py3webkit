@@ -37,20 +37,18 @@ namespace WebCore {
 using namespace HTMLNames;
 
 HTMLCollection::HTMLCollection(PassRefPtr<Node> base, CollectionType type)
-    : m_idsDone(false)
-    , m_base(base)
+    : m_ownsInfo(false)
     , m_type(type)
+    , m_base(base)
     , m_info(m_base->isDocumentNode() ? static_cast<Document*>(m_base.get())->collectionInfo(type) : 0)
-    , m_ownsInfo(false)
 {
 }
 
 HTMLCollection::HTMLCollection(PassRefPtr<Node> base, CollectionType type, CollectionCache* info)
-    : m_idsDone(false)
-    , m_base(base)
+    : m_ownsInfo(false)
     , m_type(type)
+    , m_base(base)
     , m_info(info)
-    , m_ownsInfo(false)
 {
 }
 
@@ -107,6 +105,9 @@ Element* HTMLCollection::itemAfter(Element* previous) const
         case SelectOptions:
         case DataListOptions:
         case WindowNamedItems:
+#if ENABLE(MICRODATA)
+        case ItemProperties:
+#endif
             break;
         case NodeChildren:
         case TRCells:
@@ -191,6 +192,12 @@ Element* HTMLCollection::itemAfter(Element* previous) const
             case DocAll:
             case NodeChildren:
                 return e;
+#if ENABLE(MICRODATA)
+            case ItemProperties:
+                if (e->isHTMLElement() && e->hasAttribute(itempropAttr))
+                    return e;
+                break;
+#endif
             case DocumentNamedItems:
             case OtherCollection:
             case WindowNamedItems:
@@ -288,19 +295,16 @@ Node* HTMLCollection::namedItem(const AtomicString& name) const
     // object with a matching name attribute, but only on those elements
     // that are allowed a name attribute.
     resetCollectionInfo();
-    m_idsDone = false;
 
     for (Element* e = itemAfter(0); e; e = itemAfter(e)) {
-        if (checkForNameMatch(e, m_idsDone, name)) {
+        if (checkForNameMatch(e, /* checkName */ false, name)) {
             m_info->current = e;
             return e;
         }
     }
-        
-    m_idsDone = true;
 
     for (Element* e = itemAfter(0); e; e = itemAfter(e)) {
-        if (checkForNameMatch(e, m_idsDone, name)) {
+        if (checkForNameMatch(e, /* checkName */ true, name)) {
             m_info->current = e;
             return e;
         }
@@ -368,35 +372,6 @@ void HTMLCollection::namedItems(const AtomicString& name, Vector<RefPtr<Node> >&
 
     for (unsigned i = 0; nameResults && i < nameResults->size(); ++i)
         result.append(nameResults->at(i));
-}
-
-
-Node* HTMLCollection::nextNamedItem(const AtomicString& name) const
-{
-    resetCollectionInfo();
-    m_info->checkConsistency();
-
-    for (Element* e = itemAfter(m_info->current); e; e = itemAfter(e)) {
-        if (checkForNameMatch(e, m_idsDone, name)) {
-            m_info->current = e;
-            return e;
-        }
-    }
-    
-    if (m_idsDone) {
-        m_info->current = 0; 
-        return 0;
-    }
-    m_idsDone = true;
-
-    for (Element* e = itemAfter(m_info->current); e; e = itemAfter(e)) {
-        if (checkForNameMatch(e, m_idsDone, name)) {
-            m_info->current = e;
-            return e;
-        }
-    }
-
-    return 0;
 }
 
 PassRefPtr<NodeList> HTMLCollection::tags(const String& name)

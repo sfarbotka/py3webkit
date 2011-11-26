@@ -48,6 +48,8 @@ void webkitWebViewBaseSetTooltipText(WebKitWebViewBase*, const char*);
 
 void webkitWebViewBaseForwardNextKeyEvent(WebKitWebViewBase*);
 
+void webkitWebViewBaseStartDrag(WebKitWebViewBase*, const WebCore::DragData&, PassRefPtr<ShareableBitmap> dragImage);
+
 G_END_DECLS
 
 #endif // WebKitWebViewBasePrivate_h

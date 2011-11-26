@@ -69,6 +69,7 @@ namespace JSC {
 
         JSValue jsValue() { return JSValue::decode(asEncodedJSValue); }
         JSObject* jsObject() { return static_cast<JSObject*>(asPointer); }
+        Register* reg() { return static_cast<Register*>(asPointer); }
         Identifier& identifier() { return *static_cast<Identifier*>(asPointer); }
         int32_t int32() { return asInt32; }
         CodeBlock* codeBlock() { return static_cast<CodeBlock*>(asPointer); }
@@ -150,9 +151,6 @@ namespace JSC {
     struct JITStackFrame {
         JITStubArg reserved; // Unused
         JITStubArg args[6];
-#if USE(JSVALUE64)
-        void* padding; // Maintain 16-byte stack alignment.
-#endif
 
         ReturnAddressPtr thunkReturnAddress;
 
@@ -160,11 +158,15 @@ namespace JSC {
         void* preservedR4;
         void* preservedR5;
         void* preservedR6;
+        void* preservedR7;
+        void* preservedR8;
+        void* preservedR9;
+        void* preservedR10;
+        void* preservedR11;
 
         // These arguments passed in r1..r3 (r0 contained the entry code pointed, which is not preserved)
         RegisterFile* registerFile;
         CallFrame* callFrame;
-        void* unused1;
 
         // These arguments passed on the stack.
         Profiler** enabledProfilerReference;
@@ -401,7 +403,7 @@ extern "C" {
     int JIT_STUB cti_op_jgreater(STUB_ARGS_DECLARATION);
     int JIT_STUB cti_op_jgreatereq(STUB_ARGS_DECLARATION);
     int JIT_STUB cti_op_jtrue(STUB_ARGS_DECLARATION);
-    int JIT_STUB cti_op_load_varargs(STUB_ARGS_DECLARATION);
+    void* JIT_STUB cti_op_load_varargs(STUB_ARGS_DECLARATION);
     int JIT_STUB cti_timeout_check(STUB_ARGS_DECLARATION);
     int JIT_STUB cti_has_property(STUB_ARGS_DECLARATION);
     void JIT_STUB cti_op_check_has_instance(STUB_ARGS_DECLARATION);
@@ -425,8 +427,10 @@ extern "C" {
     void JIT_STUB cti_op_tear_off_activation(STUB_ARGS_DECLARATION);
     void JIT_STUB cti_op_tear_off_arguments(STUB_ARGS_DECLARATION);
     void JIT_STUB cti_op_throw_reference_error(STUB_ARGS_DECLARATION);
+#if ENABLE(DFG_JIT)
     void JIT_STUB cti_optimize_from_loop(STUB_ARGS_DECLARATION);
     void JIT_STUB cti_optimize_from_ret(STUB_ARGS_DECLARATION);
+#endif
     void* JIT_STUB cti_op_call_arityCheck(STUB_ARGS_DECLARATION);
     void* JIT_STUB cti_op_construct_arityCheck(STUB_ARGS_DECLARATION);
     void* JIT_STUB cti_op_call_jitCompile(STUB_ARGS_DECLARATION);

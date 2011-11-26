@@ -54,7 +54,10 @@
 #include "WebResourceLoadClient.h"
 #include "WebUIClient.h"
 #include <WebCore/DragActions.h>
+#include <WebCore/DragSession.h>
 #include <WebCore/HitTestResult.h>
+#include <WebCore/Page.h>
+#include <WebCore/PlatformScreen.h>
 #include <WebCore/ScrollTypes.h>
 #include <WebCore/TextChecking.h>
 #include <wtf/HashMap.h>
@@ -82,6 +85,7 @@ namespace WebCore {
     class FloatRect;
     class IntSize;
     class ProtectionSpace;
+    struct FileChooserSettings;
     struct TextCheckingResult;
     struct ViewportArguments;
     struct WindowFeatures;
@@ -249,6 +253,10 @@ public:
     void didChangeBackForwardList(WebBackForwardListItem* addedItem, Vector<RefPtr<APIObject> >* removedItems);
     void shouldGoToBackForwardListItem(uint64_t itemID, bool& shouldGoToBackForwardListItem);
 
+    String activeURL() const;
+    String provisionalURL() const;
+    String committedURL() const;
+
     bool willHandleHorizontalScrollEvents() const;
 
     bool canShowMIMEType(const String& mimeType) const;
@@ -338,8 +346,9 @@ public:
 #if PLATFORM(EFL)
     Evas_Object* viewObject();
 #endif
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     void setFixedVisibleContentRect(const WebCore::IntRect&);
+    void setViewportSize(const WebCore::IntSize&);
 #endif
 
     void handleMouseEvent(const NativeWebMouseEvent&);
@@ -391,7 +400,8 @@ public:
     float deviceScaleFactor() const;
     void setIntrinsicDeviceScaleFactor(float);
     void setCustomDeviceScaleFactor(float);
-
+    void windowScreenDidChange(PlatformDisplayID);
+    
     void setUseFixedLayout(bool);
     void setFixedLayoutSize(const WebCore::IntSize&);
     bool useFixedLayout() const { return m_useFixedLayout; };
@@ -402,6 +412,12 @@ public:
 
     bool isPinnedToLeftSide() const { return m_mainFrameIsPinnedToLeftSide; }
     bool isPinnedToRightSide() const { return m_mainFrameIsPinnedToRightSide; }
+
+    void setPaginationMode(WebCore::Page::Pagination::Mode);
+    WebCore::Page::Pagination::Mode paginationMode() const { return m_paginationMode; }
+    void setGapBetweenPages(double);
+    double gapBetweenPages() const { return m_gapBetweenPages; }
+    unsigned pageCount() const { return m_pageCount; }
 
 #if PLATFORM(MAC)
     // Called by the web process through a message.
@@ -422,7 +438,7 @@ public:
     void hideFindUI();
     void countStringMatches(const String&, FindOptions, unsigned maxMatchCount);
     void didCountStringMatches(const String&, uint32_t matchCount);
-    void setFindIndicator(const WebCore::FloatRect& selectionRectInWindowCoordinates, const Vector<WebCore::FloatRect>& textRectsInSelectionRectCoordinates, float contentImageScaleFactor, const ShareableBitmap::Handle& contentImageHandle, bool fadeOut);
+    void setFindIndicator(const WebCore::FloatRect& selectionRectInWindowCoordinates, const Vector<WebCore::FloatRect>& textRectsInSelectionRectCoordinates, float contentImageScaleFactor, const ShareableBitmap::Handle& contentImageHandle, bool fadeOut, bool animate);
     void didFindString(const String&, uint32_t matchCount);
     void didFailToFindString(const String&);
 #if PLATFORM(WIN)
@@ -459,7 +475,7 @@ public:
     void dragExited(WebCore::DragData*, const String& dragStorageName = String());
     void performDrag(WebCore::DragData*, const String& dragStorageName, const SandboxExtension::Handle&);
 
-    void didPerformDragControllerAction(uint64_t resultOperation);
+    void didPerformDragControllerAction(WebCore::DragSession);
     void dragEnded(const WebCore::IntPoint& clientPosition, const WebCore::IntPoint& globalPosition, uint64_t operation);
 #if PLATFORM(MAC)
     void setDragImage(const WebCore::IntPoint& clientPosition, const ShareableBitmap::Handle& dragImageHandle, bool isLinkDrag);
@@ -467,7 +483,7 @@ public:
 #if PLATFORM(WIN)
     void startDragDrop(const WebCore::IntPoint& imagePoint, const WebCore::IntPoint& dragPoint, uint64_t okEffect, const HashMap<UINT, Vector<String> >& dataMap, uint64_t fileSize, const String& pathname, const SharedMemory::Handle& fileContentHandle, const WebCore::IntSize& dragImageSize, const SharedMemory::Handle& dragImageHandle, bool isLinkDrag);
 #endif
-#if PLATFORM(QT)
+#if PLATFORM(QT) || PLATFORM(GTK)
     void startDrag(const WebCore::DragData&, const ShareableBitmap::Handle& dragImage);
 #endif
     void didReceiveMessage(CoreIPC::Connection*, CoreIPC::MessageID, CoreIPC::ArgumentDecoder*);
@@ -496,15 +512,14 @@ public:
     WebPageGroup* pageGroup() const { return m_pageGroup.get(); }
 
     bool isValid();
-    
-    WebCore::DragOperation dragOperation() { return m_currentDragOperation; }
-    void resetDragOperation() { m_currentDragOperation = WebCore::DragOperationNone; }
+
+    const String& urlAtProcessExit() const { return m_urlAtProcessExit; }
+    WebFrameProxy::LoadState loadStateAtProcessExit() const { return m_loadStateAtProcessExit; }
+
+    WebCore::DragSession dragSession() const { return m_currentDragSession; }
+    void resetDragOperation() { m_currentDragSession = WebCore::DragSession(); }
 
     void preferencesDidChange();
-
-#if ENABLE(TILED_BACKING_STORE)
-    void setResizesToContentsUsingLayoutSize(const WebCore::IntSize&);
-#endif
 
     // Called by the WebContextMenuProxy.
     void contextMenuItemSelected(const WebContextMenuItemData&);
@@ -517,6 +532,8 @@ public:
 
 #if PLATFORM(QT)
     void findZoomableAreaForPoint(const WebCore::IntPoint&);
+    void didReceiveMessageFromNavigatorQtObject(const String&);
+    void handleDownloadRequest(DownloadProxy*);
 #endif
 
     void advanceToNextMisspelling(bool startBeforeSelection) const;
@@ -565,6 +582,8 @@ public:
 
     void setShouldSendEventsSynchronously(bool sync) { m_shouldSendEventsSynchronously = sync; };
 
+    void printMainFrame();
+
 private:
     WebPageProxy(PageClient*, PassRefPtr<WebProcessProxy>, WebPageGroup*, uint64_t pageID);
 
@@ -598,6 +617,7 @@ private:
     void didRemoveFrameFromHierarchy(uint64_t frameID, CoreIPC::ArgumentDecoder*);
     void didDisplayInsecureContentForFrame(uint64_t frameID, CoreIPC::ArgumentDecoder*);
     void didRunInsecureContentForFrame(uint64_t frameID, CoreIPC::ArgumentDecoder*);
+    void didDetectXSSForFrame(uint64_t frameID, CoreIPC::ArgumentDecoder*);
     void frameDidBecomeFrameSet(uint64_t frameID, bool);
     void didStartProgress();
     void didChangeProgress(double);
@@ -642,9 +662,9 @@ private:
     void screenToWindow(const WebCore::IntPoint& screenPoint, WebCore::IntPoint& windowPoint);
     void windowToScreen(const WebCore::IntRect& viewRect, WebCore::IntRect& result);
     void runBeforeUnloadConfirmPanel(const String& message, uint64_t frameID, bool& shouldClose);
-    void didChangeViewportData(const WebCore::ViewportArguments&);
+    void didChangeViewportProperties(const WebCore::ViewportArguments&);
     void pageDidScroll();
-    void runOpenPanel(uint64_t frameID, const WebOpenPanelParameters::Data&);
+    void runOpenPanel(uint64_t frameID, const WebCore::FileChooserSettings&);
     void printFrame(uint64_t frameID);
     void exceededDatabaseQuota(uint64_t frameID, const String& originIdentifier, const String& databaseName, const String& displayName, uint64_t currentQuota, uint64_t currentOriginUsage, uint64_t currentDatabaseUsage, uint64_t expectedUsage, uint64_t& newQuota);
     void requestGeolocationPermissionForFrame(uint64_t geolocationID, uint64_t frameID, String originIdentifier);
@@ -652,13 +672,14 @@ private:
     void notifyScrollerThumbIsVisibleInRect(const WebCore::IntRect&);
     void didChangeScrollbarsForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar);
     void didChangeScrollOffsetPinningForMainFrame(bool pinnedToLeftSide, bool pinnedToRightSide);
+    void didChangePageCount(unsigned);
     void didFailToInitializePlugin(const String& mimeType);
     void numWheelEventHandlersChanged(unsigned count) { m_wheelEventHandlerCount = count; }
 
     void reattachToWebProcess();
     void reattachToWebProcessWithItem(WebBackForwardListItem*);
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     void pageDidRequestScroll(const WebCore::IntPoint&);
 #endif
 
@@ -858,6 +879,9 @@ private:
 
     String m_toolTip;
 
+    String m_urlAtProcessExit;
+    WebFrameProxy::LoadState m_loadStateAtProcessExit;
+
     EditorState m_editorState;
 
     double m_textZoomFactor;
@@ -874,6 +898,9 @@ private:
     bool m_useFixedLayout;
     WebCore::IntSize m_fixedLayoutSize;
 
+    WebCore::Page::Pagination::Mode m_paginationMode;
+    double m_gapBetweenPages;
+
     // If the process backing the web page is alive and kicking.
     bool m_isValid;
 
@@ -883,7 +910,7 @@ private:
     bool m_isInPrintingMode;
     bool m_isPerformingDOMPrintOperation;
 
-    bool m_inDecidePolicyForMIMEType;
+    bool m_inDecidePolicyForResponse;
     bool m_syncMimeTypePolicyActionIsValid;
     WebCore::PolicyAction m_syncMimeTypePolicyAction;
     uint64_t m_syncMimeTypePolicyDownloadID;
@@ -917,7 +944,7 @@ private:
     unsigned m_pendingLearnOrIgnoreWordMessageCount;
 
     bool m_mainFrameHasCustomRepresentation;
-    WebCore::DragOperation m_currentDragOperation;
+    WebCore::DragSession m_currentDragSession;
 
     String m_pendingAPIRequestURL;
 
@@ -927,6 +954,8 @@ private:
 
     bool m_mainFrameIsPinnedToLeftSide;
     bool m_mainFrameIsPinnedToRightSide;
+
+    unsigned m_pageCount;
 
     WebCore::IntRect m_visibleScrollerThumbRect;
 

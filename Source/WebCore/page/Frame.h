@@ -44,7 +44,7 @@
 #include "FrameWin.h"
 #endif
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 #include "TiledBackingStoreClient.h"
 #endif
 
@@ -65,12 +65,11 @@ namespace WebCore {
     class Document;
     class FrameView;
     class HTMLTableCellElement;
-    class MediaStreamFrameController;
     class RegularExpression;
     class RenderPart;
     class TiledBackingStore;
 
-#if !ENABLE(TILED_BACKING_STORE)
+#if !USE(TILED_BACKING_STORE)
     class TiledBackingStoreClient { };
 #endif
 
@@ -187,7 +186,7 @@ namespace WebCore {
         DragImageRef dragImageForSelection();
 
         VisiblePosition visiblePositionForPoint(const LayoutPoint& framePoint);
-        Document* documentAtPoint(const LayoutPoint& windowPoint);
+        Document* documentAtPoint(const IntPoint& windowPoint);
         PassRefPtr<Range> rangeForPoint(const LayoutPoint& framePoint);
 
         String searchForLabelsAboveCell(RegularExpression*, HTMLTableCellElement*, size_t* resultDistanceFromStartOfCell);
@@ -196,14 +195,11 @@ namespace WebCore {
         
 #if PLATFORM(MAC)
         NSImage* selectionImage(bool forceBlackText = false) const;
+        NSImage* rangeImage(Range*, bool forceBlackText = false) const;
         NSImage* snapshotDragImage(Node*, NSRect* imageRect, NSRect* elementRect) const;
         NSImage* imageFromRect(NSRect) const;
 #endif
 
-#if ENABLE(MEDIA_STREAM)
-        MediaStreamFrameController* mediaStreamFrameController() const { return m_mediaStreamFrameController.get(); }
-#endif
-        
         // Should only be called on the main frame of a page.
         void notifyChromeClientWheelEventHandlerCountChanged() const;
 
@@ -246,7 +242,7 @@ namespace WebCore {
         bool m_isDisconnected;
         bool m_excludeFromTextSearch;
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     // FIXME: The tiled backing store belongs in FrameView, not Frame.
 
     public:
@@ -265,9 +261,6 @@ namespace WebCore {
         OwnPtr<TiledBackingStore> m_tiledBackingStore;
 #endif
 
-#if ENABLE(MEDIA_STREAM)
-        OwnPtr<MediaStreamFrameController> m_mediaStreamFrameController;
-#endif
     };
 
     inline void Frame::init()

@@ -135,6 +135,7 @@ public:
 
     RenderLayer* rootRenderLayer() const;
     GraphicsLayer* rootGraphicsLayer() const;
+    GraphicsLayer* scrollLayer() const;
 
     enum RootLayerAttachment {
         RootLayerUnattached,
@@ -150,6 +151,13 @@ public:
     void willMoveOffscreen();
 
     void clearBackingForAllLayers();
+    
+    void layerBecameComposited(const RenderLayer*) { ++m_compositedLayerCount; }
+    void layerBecameNonComposited(const RenderLayer*)
+    {
+        ASSERT(m_compositedLayerCount > 0);
+        --m_compositedLayerCount;
+    }
     
     void didStartAcceleratedAnimation(CSSPropertyID);
     
@@ -248,6 +256,8 @@ private:
 
     bool layerHas3DContent(const RenderLayer*) const;
     bool hasNonIdentity3DTransform(RenderObject*) const;
+    
+    bool hasAnyAdditionalCompositedLayers(const RenderLayer* rootLayer) const;
 
     void ensureRootLayer();
     void destroyRootLayer();
@@ -273,6 +283,7 @@ private:
     bool requiresCompositingWhenDescendantsAreCompositing(RenderObject*) const;
     bool requiresCompositingForFullScreen(RenderObject*) const;
     bool requiresCompositingForScrollableFrame() const;
+    bool requiresCompositingForPosition(RenderObject*, const RenderLayer*) const;
 
     bool requiresScrollLayer(RootLayerAttachment) const;
     bool requiresHorizontalScrollbarLayer() const;
@@ -290,6 +301,7 @@ private:
     bool m_hasAcceleratedCompositing;
     ChromeClient::CompositingTriggerFlags m_compositingTriggers;
 
+    int m_compositedLayerCount;
     bool m_showDebugBorders;
     bool m_showRepaintCounter;
     bool m_compositingConsultsOverlap;
@@ -299,10 +311,13 @@ private:
     // FIXME: once set, this is never cleared.
     mutable bool m_compositingDependsOnGeometry;
 
+    mutable bool m_compositingNeedsUpdate;
+
     bool m_compositing;
     bool m_compositingLayersNeedRebuild;
     bool m_flushingLayers;
     bool m_forceCompositingMode;
+    bool m_compositeForFixedPosition;
 
     RootLayerAttachment m_rootLayerAttachment;
 

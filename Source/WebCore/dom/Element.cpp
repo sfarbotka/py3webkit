@@ -48,6 +48,7 @@
 #include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
 #include "InspectorInstrumentation.h"
+#include "MutationRecord.h"
 #include "NodeList.h"
 #include "NodeRenderStyle.h"
 #include "NodeRenderingContext.h"
@@ -59,6 +60,7 @@
 #include "ShadowRoot.h"
 #include "Text.h"
 #include "TextIterator.h"
+#include "WebKitMutationObserver.h"
 #include "WebKitAnimationList.h"
 #include "XMLNames.h"
 #include "htmlediting.h"
@@ -224,7 +226,11 @@ const AtomicString& Element::getAttribute(const QualifiedName& name) const
         updateAnimatedSVGAttribute(name);
 #endif
 
-    return fastGetAttribute(name);
+    if (m_attributeMap) {
+        if (Attribute* attribute = m_attributeMap->getAttributeItem(name))
+            return attribute->value();
+    }
+    return nullAtom;
 }
 
 void Element::scrollIntoView(bool alignToTop) 
@@ -464,7 +470,7 @@ int Element::scrollHeight()
     return 0;
 }
 
-LayoutRect Element::boundsInWindowSpace()
+LayoutRect Element::boundsInRootViewSpace()
 {
     document()->updateLayoutIgnorePendingStylesheets();
 
@@ -495,7 +501,7 @@ LayoutRect Element::boundsInWindowSpace()
     for (size_t i = 1; i < quads.size(); ++i)
         result.unite(quads[i].enclosingBoundingBox());
 
-    result = view->contentsToWindow(result);
+    result = view->contentsToRootView(result);
     return result;
 }
 
@@ -610,6 +616,14 @@ const AtomicString& Element::getAttributeNS(const String& namespaceURI, const St
     return getAttribute(QualifiedName(nullAtom, localName, namespaceURI));
 }
 
+#if ENABLE(MUTATION_OBSERVERS)
+static void enqueueAttributesMutationRecord(Element* target, const QualifiedName& attributeName, const AtomicString& oldValue)
+{
+    OwnPtr<MutationObserverInterestGroup> mutationRecipients = MutationObserverInterestGroup::createForAttributesMutation(target, attributeName);
+    mutationRecipients->enqueueMutationRecord(MutationRecord::createAttributes(target, attributeName, oldValue));
+}
+#endif
+
 void Element::setAttribute(const AtomicString& name, const AtomicString& value, ExceptionCode& ec)
 {
     if (!Document::isValidName(name)) {
@@ -629,6 +643,12 @@ void Element::setAttribute(const AtomicString& name, const AtomicString& value, 
     Attribute* old = attributes(false)->getAttributeItem(localName, false);
 
     document()->incDOMTreeVersion();
+
+#if ENABLE(MUTATION_OBSERVERS)
+    // The call to attributeChanged below may dispatch DOMSubtreeModified, so it's important to enqueue a MutationRecord now.
+    if (!isSynchronizingStyleAttribute())
+        enqueueAttributesMutationRecord(this, attributeName, old ? old->value() : nullAtom);
+#endif
 
     if (isIdAttributeName(old ? old->name() : attributeName))
         updateId(old ? old->value() : nullAtom, value);
@@ -662,6 +682,12 @@ void Element::setAttribute(const QualifiedName& name, const AtomicString& value,
 
     // Allocate attribute map if necessary.
     Attribute* old = attributes(false)->getAttributeItem(name);
+
+#if ENABLE(MUTATION_OBSERVERS)
+    // The call to attributeChanged below may dispatch DOMSubtreeModified, so it's important to enqueue a MutationRecord now.
+    if (!isSynchronizingStyleAttribute())
+        enqueueAttributesMutationRecord(this, name, old ? old->value() : nullAtom);
+#endif
 
     if (isIdAttributeName(name))
         updateId(old ? old->value() : nullAtom, value);
@@ -1017,11 +1043,7 @@ bool Element::pseudoStyleCacheIsInvalid(const RenderStyle* currentStyle, RenderS
     for (size_t i = 0; i < cacheSize; ++i) {
         RefPtr<RenderStyle> newPseudoStyle;
         PseudoId pseudoId = pseudoStyleCache->at(i)->styleType();
-        if (pseudoId == VISITED_LINK) {
-            newPseudoStyle =  newStyle->getCachedPseudoStyle(VISITED_LINK); // This pseudo-style was aggressively computed already when we first called styleForElement on the new style.
-            if (!newPseudoStyle || *newPseudoStyle != *pseudoStyleCache->at(i))
-                return true;
-        } else if (pseudoId == FIRST_LINE || pseudoId == FIRST_LINE_INHERITED)
+        if (pseudoId == FIRST_LINE || pseudoId == FIRST_LINE_INHERITED)
             newPseudoStyle = renderer()->uncachedFirstLineStyle(newStyle);
         else
             newPseudoStyle = renderer()->getUncachedPseudoStyle(pseudoId, newStyle, newStyle);
@@ -1066,6 +1088,7 @@ void Element::recalcStyle(StyleChange change)
     // Ref currentStyle in case it would otherwise be deleted when setRenderStyle() is called.
     RefPtr<RenderStyle> currentStyle(renderStyle());
     bool hasParentStyle = parentNodeForRenderingAndStyle() ? static_cast<bool>(parentNodeForRenderingAndStyle()->renderStyle()) : false;
+    bool hasDirectAdjacentRules = currentStyle && currentStyle->childrenAffectedByDirectAdjacentRules();
     bool hasIndirectAdjacentRules = currentStyle && currentStyle->childrenAffectedByForwardPositionalRules();
 
     if ((change > NoChange || needsStyleRecalc())) {
@@ -1107,8 +1130,8 @@ void Element::recalcStyle(StyleChange change)
                 newStyle->setChildrenAffectedByFirstChildRules();
             if (currentStyle->childrenAffectedByLastChildRules())
                 newStyle->setChildrenAffectedByLastChildRules();
-            if (currentStyle->affectedByDirectAdjacentRules())
-                newStyle->setAffectedByDirectAdjacentRules();
+            if (currentStyle->childrenAffectedByDirectAdjacentRules())
+                newStyle->setChildrenAffectedByDirectAdjacentRules();
         }
 
         if (ch != NoChange || pseudoStyleCacheIsInvalid(currentStyle.get(), newStyle.get()) || (change == Force && renderer() && renderer()->requiresForcedStyleRecalcPropagation())) {
@@ -1138,7 +1161,7 @@ void Element::recalcStyle(StyleChange change)
     // FIXME: This check is good enough for :hover + foo, but it is not good enough for :hover + foo + bar.
     // For now we will just worry about the common case, since it's a lot trickier to get the second case right
     // without doing way too much re-resolution.
-    bool previousSiblingHadDirectAdjacentRules = false;
+    bool forceCheckOfNextElementSibling = false;
     bool forceCheckOfAnyElementSibling = false;
     for (Node *n = firstChild(); n; n = n->nextSibling()) {
         if (n->isTextNode()) {
@@ -1150,14 +1173,13 @@ void Element::recalcStyle(StyleChange change)
             continue;
         Element* element = static_cast<Element*>(n);
         bool childRulesChanged = element->needsStyleRecalc() && element->styleChangeType() == FullStyleChange;
-        bool childAffectedByDirectAdjacentRules = element->renderStyle() ? element->renderStyle()->affectedByDirectAdjacentRules() : previousSiblingHadDirectAdjacentRules;
-        if (childAffectedByDirectAdjacentRules || forceCheckOfAnyElementSibling)
+        if ((forceCheckOfNextElementSibling || forceCheckOfAnyElementSibling))
             element->setNeedsStyleRecalc();
         if (change >= Inherit || element->childNeedsStyleRecalc() || element->needsStyleRecalc()) {
             parentPusher.push();
             element->recalcStyle(change);
         }
-        previousSiblingHadDirectAdjacentRules = childAffectedByDirectAdjacentRules;
+        forceCheckOfNextElementSibling = childRulesChanged && hasDirectAdjacentRules;
         forceCheckOfAnyElementSibling = forceCheckOfAnyElementSibling || (childRulesChanged && hasIndirectAdjacentRules);
     }
     // FIXME: This does not care about sibling combinators. Will be necessary in XBL2 world.
@@ -1342,6 +1364,17 @@ static void checkForSiblingStyleChanges(Element* e, RenderStyle* style, bool fin
         // to match now.
         if ((childCountDelta < 0 || finishedParsingCallback) && newLastChild == lastElementBeforeInsertion && newLastChild && newLastChild->renderStyle() && !newLastChild->renderStyle()->lastChildState())
             newLastChild->setNeedsStyleRecalc();
+    }
+
+    // The + selector.  We need to invalidate the first element following the insertion point.  It is the only possible element
+    // that could be affected by this DOM change.
+    if (style->childrenAffectedByDirectAdjacentRules() && afterChange) {
+        Node* firstElementAfterInsertion = 0;
+        for (firstElementAfterInsertion = afterChange;
+             firstElementAfterInsertion && !firstElementAfterInsertion->isElementNode();
+             firstElementAfterInsertion = firstElementAfterInsertion->nextSibling()) {};
+        if (firstElementAfterInsertion && firstElementAfterInsertion->attached())
+            firstElementAfterInsertion->setNeedsStyleRecalc();
     }
 
     // Forward positional selectors include the ~ selector, nth-child, nth-of-type, first-of-type and only-of-type.
@@ -1996,5 +2029,20 @@ PassRefPtr<WebKitAnimationList> Element::webkitGetAnimations() const
     
     return animController->animationsForRenderer(renderer());
 }
+
+#ifndef NDEBUG
+bool Element::fastAttributeLookupAllowed(const QualifiedName& name) const
+{
+    if (name == HTMLNames::styleAttr)
+        return false;
+
+#if ENABLE(SVG)
+    if (isSVGElement())
+        return !SVGElement::isAnimatableAttribute(name);
+#endif
+
+    return true;
+}
+#endif
 
 } // namespace WebCore

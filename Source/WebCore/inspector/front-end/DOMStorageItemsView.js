@@ -38,10 +38,10 @@ WebInspector.DOMStorageItemsView = function(domStorage)
 
     this.deleteButton = new WebInspector.StatusBarButton(WebInspector.UIString("Delete"), "delete-storage-status-bar-item");
     this.deleteButton.visible = false;
-    this.deleteButton.addEventListener("click", this._deleteButtonClicked.bind(this), false);
+    this.deleteButton.addEventListener("click", this._deleteButtonClicked, this);
 
     this.refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-storage-status-bar-item");
-    this.refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this), false);
+    this.refreshButton.addEventListener("click", this._refreshButtonClicked, this);
 }
 
 WebInspector.DOMStorageItemsView.prototype = {
@@ -50,21 +50,19 @@ WebInspector.DOMStorageItemsView.prototype = {
         return [this.refreshButton.element, this.deleteButton.element];
     },
 
-    show: function(parentElement)
+    wasShown: function()
     {
-        WebInspector.View.prototype.show.call(this, parentElement);
         this.update();
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.View.prototype.hide.call(this);
         this.deleteButton.visible = false;
     },
 
     update: function()
     {
-        this.element.removeChildren();
+        this.detachChildViews();
         this.domStorage.getEntries(this._showDOMStorageEntries.bind(this));
     },
 
@@ -74,15 +72,9 @@ WebInspector.DOMStorageItemsView.prototype = {
             return;
 
         this._dataGrid = this._dataGridForDOMStorageEntries(entries);
-        this.element.appendChild(this._dataGrid.element);
+        this._dataGrid.show(this.element);
         this._dataGrid.autoSizeColumns(10);
         this.deleteButton.visible = true;
-    },
-
-    onResize: function()
-    {
-        if (this._dataGrid)
-            this._dataGrid.updateWidths();
     },
 
     _dataGridForDOMStorageEntries: function(entries)

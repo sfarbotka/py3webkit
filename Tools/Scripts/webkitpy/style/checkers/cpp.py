@@ -1602,9 +1602,9 @@ def check_function_definition(filename, file_extension, clean_lines, line_number
 
     modifiers_and_return_type = function_state.modifiers_and_return_type()
     if filename.find('/chromium/') != -1 and search(r'\bWEBKIT_EXPORT\b', modifiers_and_return_type):
-        if filename.find('/chromium/public/') == -1:
+        if filename.find('/chromium/public/') == -1 and filename.find('/chromium/tests/') == -1:
             error(function_state.function_name_start_position.row, 'readability/webkit_export', 5,
-                  'WEBKIT_EXPORT should only appear in the chromium public directory.')
+                  'WEBKIT_EXPORT should only appear in the chromium public (or tests) directory.')
         elif not file_extension == "h":
             error(function_state.function_name_start_position.row, 'readability/webkit_export', 5,
                   'WEBKIT_EXPORT should only be used in header files.')
@@ -2143,12 +2143,12 @@ def check_braces(clean_lines, line_number, error):
         # ')', or ') const' and doesn't begin with 'if|for|while|switch|else'.
         # We also allow '#' for #endif and '=' for array initialization.
         previous_line = get_previous_non_blank_line(clean_lines, line_number)[0]
-        if ((not search(r'[;:}{)=]\s*$|\)\s*const\s*$', previous_line)
+        if ((not search(r'[;:}{)=]\s*$|\)\s*((const|OVERRIDE)\s*)*\s*$', previous_line)
              or search(r'\b(if|for|foreach|while|switch|else)\b', previous_line))
             and previous_line.find('#') < 0):
             error(line_number, 'whitespace/braces', 4,
                   'This { should be at the end of the previous line')
-    elif (search(r'\)\s*(const\s*)?{\s*$', line)
+    elif (search(r'\)\s*(((const|OVERRIDE)\s*)*\s*)?{\s*$', line)
           and line.count('(') == line.count(')')
           and not search(r'\b(if|for|foreach|while|switch)\b', line)
           and not match(r'\s+[A-Z_][A-Z_0-9]+\b', line)):
@@ -2377,24 +2377,8 @@ def check_for_null(clean_lines, line_number, file_state, error):
     if search(r'\bg(_[a-z]+)+\b', line):
         return
 
-    # Don't warn about NULL usage in gst_*_many(). See Bug 39740
-    if search(r'\bgst_\w+_many\b', line):
-        return
-
-    # Don't warn about NULL usage in some gst_structure_*(). See Bug 67194.
-    if search(r'\bgst_structure_[sg]et\b', line):
-        return
-    if search(r'\bgst_structure_remove_fields\b', line):
-        return
-    if search(r'\bgst_structure_new\b', line):
-        return
-    if search(r'\bgst_structure_id_new\b', line):
-        return
-    if search(r'\bgst_structure_id_[sg]et\b', line):
-        return
-
-    # Don't warn about NULL usage in g_str{join,concat}(). See Bug 34834
-    if search(r'\bg_str(join|concat)\b', line):
+    # Don't warn about NULL usage in gst_*(). See Bug 70498.
+    if search(r'\bgst(_[a-z]+)+\b', line):
         return
 
     # Don't warn about NULL usage in gdk_pixbuf_save_to_*{join,concat}(). See Bug 43090.
@@ -2621,8 +2605,13 @@ def _classify_include(filename, include, is_system, include_state):
     include_base = FileInfo(include).base_name()
 
     # If we haven't encountered a primary header, then be lenient in checking.
-    if not include_state.visited_primary_section() and target_base.find(include_base) != -1:
-        return _PRIMARY_HEADER
+    if not include_state.visited_primary_section():
+        if target_base.find(include_base) != -1:
+            return _PRIMARY_HEADER
+        # Qt private APIs use _p.h suffix.
+        if include_base.find(target_base) != -1 and include_base.endswith('_p'):
+            return _PRIMARY_HEADER
+
     # If we already encountered a primary header, perform a strict comparison.
     # In case the two filename bases are the same then the above lenient check
     # probably was a false positive.
@@ -3063,11 +3052,14 @@ def check_identifier_name_in_declaration(filename, line_number, line, file_state
                 and not modified_identifier.startswith('NPP_')
                 and not modified_identifier.startswith('NP_')
                 and not modified_identifier.startswith('qt_')
+                and not modified_identifier.startswith('_q_')
                 and not modified_identifier.startswith('cairo_')
                 and not modified_identifier.startswith('Ecore_')
                 and not modified_identifier.startswith('Eina_')
                 and not modified_identifier.startswith('Evas_')
+                and not modified_identifier.startswith('Ewk_')
                 and not modified_identifier.find('::qt_') >= 0
+                and not modified_identifier.find('::_q_') >= 0
                 and not modified_identifier == "const_iterator"
                 and not modified_identifier == "vm_throw"):
                 error(line_number, 'readability/naming', 4, identifier + " is incorrectly named. Don't use underscores in your identifier names.")

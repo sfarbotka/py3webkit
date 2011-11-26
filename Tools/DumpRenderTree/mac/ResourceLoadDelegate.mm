@@ -82,8 +82,11 @@ using namespace std;
         dataSource = [mainFrame provisionalDataSource];
 
     NSString *basePath = [[[[dataSource request] URL] path] stringByDeletingLastPathComponent];
+    basePath = [basePath stringByAppendingString:@"/"];
 
-    return [[self path] substringFromIndex:[basePath length] + 1];
+    if ([[self path] hasPrefix:basePath])
+        return [[self path] substringFromIndex:[basePath length]];
+    return [self absoluteString];
 }
 
 @end

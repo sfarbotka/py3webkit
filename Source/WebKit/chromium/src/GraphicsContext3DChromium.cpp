@@ -35,10 +35,10 @@
 #include "GraphicsContext3D.h"
 
 #include "CachedImage.h"
-#include "WebGLLayerChromium.h"
 #include "CanvasRenderingContext.h"
 #include "Chrome.h"
 #include "ChromeClientImpl.h"
+#include "DrawingBuffer.h"
 #include "Extensions3DChromium.h"
 #include "GraphicsContext3DPrivate.h"
 #include "HTMLCanvasElement.h"
@@ -163,6 +163,20 @@ PassRefPtr<GraphicsContext3D> createGraphicsContext(GraphicsContext3D::Attribute
     return GraphicsContext3DPrivate::createGraphicsContextFromWebContext(webContext.release(), attrs, hostWindow, renderStyle, threadUsage);
 }
 
+void getDrawingParameters(DrawingBuffer* drawingBuffer, WebKit::WebGraphicsContext3D* graphicsContext3D,
+                          Platform3DObject* frameBufferId, int* width, int* height)
+{
+    if (drawingBuffer) {
+        *frameBufferId = drawingBuffer->framebuffer();
+        *width = drawingBuffer->size().width();
+        *height = drawingBuffer->size().height();
+    } else {
+        *frameBufferId = 0;
+        *width = graphicsContext3D->width();
+        *height = graphicsContext3D->height();
+    }
+}
+
 } // anonymous namespace
 
 PassRefPtr<GraphicsContext3D> GraphicsContext3DPrivate::createGraphicsContextForAnotherThread(GraphicsContext3D::Attributes attrs, HostWindow* hostWindow, GraphicsContext3D::RenderStyle renderStyle)
@@ -212,22 +226,8 @@ void GraphicsContext3DPrivate::prepareTexture()
     m_impl->prepareTexture();
 }
 
-#if USE(ACCELERATED_COMPOSITING)
-WebGLLayerChromium* GraphicsContext3DPrivate::platformLayer()
-{
-#if USE(ACCELERATED_COMPOSITING)
-    if (!m_compositingLayer)
-        m_compositingLayer = WebGLLayerChromium::create(0);
-#endif
-    return m_compositingLayer.get();
-}
-#endif
-
 void GraphicsContext3DPrivate::markContextChanged()
 {
-#if USE(ACCELERATED_COMPOSITING)
-    platformLayer()->setTextureUpdated();
-#endif
     m_layerComposited = false;
 }
 
@@ -308,31 +308,34 @@ void GraphicsContext3DPrivate::paintFramebufferToCanvas(int framebuffer, int wid
 #endif
 }
 
-void GraphicsContext3DPrivate::paintRenderingResultsToCanvas(CanvasRenderingContext* context)
+void GraphicsContext3DPrivate::paintRenderingResultsToCanvas(CanvasRenderingContext* context, DrawingBuffer* drawingBuffer)
 {
     ImageBuffer* imageBuffer = context->canvas()->buffer();
-    paintFramebufferToCanvas(0, m_impl->width(), m_impl->height(), !m_impl->getContextAttributes().premultipliedAlpha, imageBuffer);
+    Platform3DObject framebufferId;
+    int width, height;
+    getDrawingParameters(drawingBuffer, m_impl.get(), &framebufferId, &width, &height);
+    paintFramebufferToCanvas(framebufferId, width, height, !m_impl->getContextAttributes().premultipliedAlpha, imageBuffer);
 }
 
 bool GraphicsContext3DPrivate::paintCompositedResultsToCanvas(CanvasRenderingContext* context)
 {
-#if USE(ACCELERATED_COMPOSITING)
-    if (platformLayer())
-        return platformLayer()->paintRenderedResultsToCanvas(context->canvas()->buffer());
-#endif
     return false;
 }
 
-PassRefPtr<ImageData> GraphicsContext3DPrivate::paintRenderingResultsToImageData()
+PassRefPtr<ImageData> GraphicsContext3DPrivate::paintRenderingResultsToImageData(DrawingBuffer* drawingBuffer)
 {
     if (m_impl->getContextAttributes().premultipliedAlpha)
         return 0;
-    
-    RefPtr<ImageData> imageData = ImageData::create(IntSize(m_impl->width(), m_impl->height()));
-    unsigned char* pixels = imageData->data()->data()->data();
-    size_t bufferSize = 4 * m_impl->width() * m_impl->height();
 
-    m_impl->readBackFramebuffer(pixels, bufferSize, 0, m_impl->width(), m_impl->height());
+    Platform3DObject framebufferId;
+    int width, height;
+    getDrawingParameters(drawingBuffer, m_impl.get(), &framebufferId, &width, &height);
+
+    RefPtr<ImageData> imageData = ImageData::create(IntSize(width, height));
+    unsigned char* pixels = imageData->data()->data()->data();
+    size_t bufferSize = 4 * width * height;
+
+    m_impl->readBackFramebuffer(pixels, bufferSize, framebufferId, width, height);
 
     for (size_t i = 0; i < bufferSize; i += 4)
         std::swap(pixels[i], pixels[i + 2]);
@@ -829,17 +832,20 @@ String mapExtensionName(const String& name)
 
 void GraphicsContext3DPrivate::initializeExtensions()
 {
+    if (m_initializedAvailableExtensions)
+        return;
+
+    m_initializedAvailableExtensions = true;
     bool success = makeContextCurrent();
     ASSERT(success);
-    if (success && !m_initializedAvailableExtensions) {
-        String extensionsString = getString(GraphicsContext3D::EXTENSIONS);
-        splitStringHelper(extensionsString, m_enabledExtensions);
+    if (!success)
+        return;
 
-        String requestableExtensionsString = m_impl->getRequestableExtensionsCHROMIUM();
-        splitStringHelper(requestableExtensionsString, m_requestableExtensions);
+    String extensionsString = getString(GraphicsContext3D::EXTENSIONS);
+    splitStringHelper(extensionsString, m_enabledExtensions);
 
-        m_initializedAvailableExtensions = true;
-    }
+    String requestableExtensionsString = m_impl->getRequestableExtensionsCHROMIUM();
+    splitStringHelper(requestableExtensionsString, m_requestableExtensions);
 }
 
 
@@ -876,16 +882,23 @@ bool GraphicsContext3DPrivate::isExtensionEnabled(const String& name)
     return m_enabledExtensions.contains(mappedName);
 }
 
+DELEGATE_TO_IMPL_4(postSubBufferCHROMIUM, int, int, int, int)
+
 DELEGATE_TO_IMPL_4R(mapBufferSubDataCHROMIUM, GC3Denum, GC3Dsizeiptr, GC3Dsizei, GC3Denum, void*)
 DELEGATE_TO_IMPL_1(unmapBufferSubDataCHROMIUM, const void*)
 DELEGATE_TO_IMPL_9R(mapTexSubImage2DCHROMIUM, GC3Denum, GC3Dint, GC3Dint, GC3Dint, GC3Dsizei, GC3Dsizei, GC3Denum, GC3Denum, GC3Denum, void*)
 DELEGATE_TO_IMPL_1(unmapTexSubImage2DCHROMIUM, const void*)
+
+DELEGATE_TO_IMPL_1(setVisibilityCHROMIUM, bool);
 
 DELEGATE_TO_IMPL_10(blitFramebufferCHROMIUM, GC3Dint, GC3Dint, GC3Dint, GC3Dint, GC3Dint, GC3Dint, GC3Dint, GC3Dint, GC3Dbitfield, GC3Denum)
 DELEGATE_TO_IMPL_5(renderbufferStorageMultisampleCHROMIUM, GC3Denum, GC3Dsizei, GC3Denum, GC3Dsizei, GC3Dsizei)
 
 DELEGATE_TO_IMPL(rateLimitOffscreenContextCHROMIUM)
 DELEGATE_TO_IMPL_R(getGraphicsResetStatusARB, GC3Denum)
+
+DELEGATE_TO_IMPL_1R(getTranslatedShaderSourceANGLE, Platform3DObject, String)
+DELEGATE_TO_IMPL_5(texImageIOSurface2DCHROMIUM, GC3Denum, GC3Dint, GC3Dint, GC3Duint, GC3Duint)
 
 //----------------------------------------------------------------------
 // GraphicsContext3D
@@ -1008,9 +1021,6 @@ GraphicsContext3D::GraphicsContext3D(GraphicsContext3D::Attributes, HostWindow*,
 
 GraphicsContext3D::~GraphicsContext3D()
 {
-    WebGLLayerChromium* canvasLayer = m_private->platformLayer();
-    if (canvasLayer)
-        canvasLayer->setContext(0);
     m_private->setContextLostCallback(nullptr);
     m_private->setSwapBuffersCompleteCallbackCHROMIUM(nullptr);
 }
@@ -1055,13 +1065,11 @@ bool GraphicsContext3D::isResourceSafe()
 #if USE(ACCELERATED_COMPOSITING)
 PlatformLayer* GraphicsContext3D::platformLayer() const
 {
-    WebGLLayerChromium* canvasLayer = m_private->platformLayer();
-    canvasLayer->setContext(this);
-    return canvasLayer;
+    return 0;
 }
 #endif
 
-DELEGATE_TO_INTERNAL(makeContextCurrent)
+DELEGATE_TO_INTERNAL_R(makeContextCurrent, bool)
 DELEGATE_TO_INTERNAL_2(reshape, int, int)
 
 DELEGATE_TO_INTERNAL_1(activeTexture, GC3Denum)
@@ -1213,8 +1221,16 @@ bool GraphicsContext3D::layerComposited() const
     return m_private->layerComposited();
 }
 
-DELEGATE_TO_INTERNAL_1(paintRenderingResultsToCanvas, CanvasRenderingContext*)
-DELEGATE_TO_INTERNAL_R(paintRenderingResultsToImageData, PassRefPtr<ImageData>)
+void GraphicsContext3D::paintRenderingResultsToCanvas(CanvasRenderingContext* context, DrawingBuffer* drawingBuffer)
+{
+    return m_private->paintRenderingResultsToCanvas(context, drawingBuffer);
+}
+
+PassRefPtr<ImageData> GraphicsContext3D::paintRenderingResultsToImageData(DrawingBuffer* drawingBuffer)
+{
+    return m_private->paintRenderingResultsToImageData(drawingBuffer);
+}
+
 DELEGATE_TO_INTERNAL_1R(paintCompositedResultsToCanvas, CanvasRenderingContext*, bool)
 
 bool GraphicsContext3D::paintsIntoCanvasBuffer() const
@@ -1273,30 +1289,31 @@ bool GraphicsContext3D::isGLES2Compliant() const
     return m_private->isGLES2Compliant();
 }
 
-class SwapBuffersCompleteCallbackAdapter : public WebKit::WebGraphicsContext3D::WebGraphicsSwapBuffersCompleteCallbackCHROMIUM {
+class GraphicsContext3DSwapBuffersCompleteCallbackAdapter : public WebKit::WebGraphicsContext3D::WebGraphicsSwapBuffersCompleteCallbackCHROMIUM {
 public:
     virtual void onSwapBuffersComplete();
-    static PassOwnPtr<SwapBuffersCompleteCallbackAdapter> create(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM>);
-    virtual ~SwapBuffersCompleteCallbackAdapter() { }
+    static PassOwnPtr<GraphicsContext3DSwapBuffersCompleteCallbackAdapter> create(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM>);
+    virtual ~GraphicsContext3DSwapBuffersCompleteCallbackAdapter() { }
+
 private:
-    SwapBuffersCompleteCallbackAdapter(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> cb) : m_swapBuffersCompleteCallback(cb) { }
+    GraphicsContext3DSwapBuffersCompleteCallbackAdapter(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> cb) : m_swapBuffersCompleteCallback(cb) { }
     OwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> m_swapBuffersCompleteCallback;
 };
 
-void SwapBuffersCompleteCallbackAdapter::onSwapBuffersComplete()
+void GraphicsContext3DSwapBuffersCompleteCallbackAdapter::onSwapBuffersComplete()
 {
     if (m_swapBuffersCompleteCallback)
         m_swapBuffersCompleteCallback->onSwapBuffersComplete();
 }
 
-PassOwnPtr<SwapBuffersCompleteCallbackAdapter> SwapBuffersCompleteCallbackAdapter::create(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> cb)
+PassOwnPtr<GraphicsContext3DSwapBuffersCompleteCallbackAdapter> GraphicsContext3DSwapBuffersCompleteCallbackAdapter::create(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> cb)
 {
-    return adoptPtr(cb.get() ? new SwapBuffersCompleteCallbackAdapter(cb) : 0);
+    return adoptPtr(cb.get() ? new GraphicsContext3DSwapBuffersCompleteCallbackAdapter(cb) : 0);
 }
 
 void GraphicsContext3DPrivate::setSwapBuffersCompleteCallbackCHROMIUM(PassOwnPtr<Extensions3DChromium::SwapBuffersCompleteCallbackCHROMIUM> cb)
 {
-    m_swapBuffersCompleteCallbackAdapter = SwapBuffersCompleteCallbackAdapter::create(cb);
+    m_swapBuffersCompleteCallbackAdapter = GraphicsContext3DSwapBuffersCompleteCallbackAdapter::create(cb);
     m_impl->setSwapBuffersCompleteCallbackCHROMIUM(m_swapBuffersCompleteCallbackAdapter.get());
 }
 

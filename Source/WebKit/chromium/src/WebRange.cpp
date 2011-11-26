@@ -31,7 +31,11 @@
 #include "config.h"
 #include "WebRange.h"
 
+#include "Document.h"
+#include "Frame.h"
 #include "Range.h"
+#include "TextIterator.h"
+#include "WebFrameImpl.h"
 #include "WebNode.h"
 #include "WebString.h"
 #include <wtf/PassRefPtr.h>
@@ -86,14 +90,23 @@ WebString WebRange::toPlainText() const
     return m_private->text();
 }
 
+// static
+WebRange WebRange::fromDocumentRange(WebFrame* frame, int start, int length)
+{
+    WebCore::Frame* webFrame = static_cast<WebFrameImpl*>(frame)->frame();
+    Element* selectionRoot = webFrame->selection()->rootEditableElement();
+    Element* scope = selectionRoot ? selectionRoot : webFrame->document()->documentElement();
+    return TextIterator::rangeFromLocationAndLength(scope, start, length);
+}
+
 WebRange::WebRange(const WTF::PassRefPtr<WebCore::Range>& range)
-    : m_private(static_cast<WebRangePrivate*>(range.releaseRef()))
+    : m_private(static_cast<WebRangePrivate*>(range.leakRef()))
 {
 }
 
 WebRange& WebRange::operator=(const WTF::PassRefPtr<WebCore::Range>& range)
 {
-    assign(static_cast<WebRangePrivate*>(range.releaseRef()));
+    assign(static_cast<WebRangePrivate*>(range.leakRef()));
     return *this;
 }
 

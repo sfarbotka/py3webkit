@@ -300,15 +300,15 @@ static void writeStyle(TextStream& ts, const RenderObject& object)
             ts << " [stroke={" << s;
             writeSVGPaintingResource(ts, strokePaintingResource);
 
-            SVGElement* element = static_cast<SVGElement*>(path.node());
-            double dashOffset = svgStyle->strokeDashOffset().value(element);
-            double strokeWidth = svgStyle->strokeWidth().value(element);
+            SVGLengthContext lengthContext(static_cast<SVGElement*>(path.node()));
+            double dashOffset = svgStyle->strokeDashOffset().value(lengthContext);
+            double strokeWidth = svgStyle->strokeWidth().value(lengthContext);
             const Vector<SVGLength>& dashes = svgStyle->strokeDashArray();
 
             DashArray dashArray;
             const Vector<SVGLength>::const_iterator end = dashes.end();
             for (Vector<SVGLength>::const_iterator it = dashes.begin(); it != end; ++it)
-                dashArray.append((*it).value(element));
+                dashArray.append((*it).value(lengthContext));
 
             writeIfNotDefault(ts, "opacity", svgStyle->strokeOpacity(), 1.0f);
             writeIfNotDefault(ts, "stroke width", strokeWidth, 1.0);
@@ -352,30 +352,31 @@ static TextStream& operator<<(TextStream& ts, const RenderSVGPath& path)
 
     ASSERT(path.node()->isSVGElement());
     SVGElement* svgElement = static_cast<SVGElement*>(path.node());
+    SVGLengthContext lengthContext(svgElement);
 
     if (svgElement->hasTagName(SVGNames::rectTag)) {
         SVGRectElement* element = static_cast<SVGRectElement*>(svgElement);
-        writeNameValuePair(ts, "x", element->x().value(element));
-        writeNameValuePair(ts, "y", element->y().value(element));
-        writeNameValuePair(ts, "width", element->width().value(element));
-        writeNameValuePair(ts, "height", element->height().value(element));
+        writeNameValuePair(ts, "x", element->x().value(lengthContext));
+        writeNameValuePair(ts, "y", element->y().value(lengthContext));
+        writeNameValuePair(ts, "width", element->width().value(lengthContext));
+        writeNameValuePair(ts, "height", element->height().value(lengthContext));
     } else if (svgElement->hasTagName(SVGNames::lineTag)) {
         SVGLineElement* element = static_cast<SVGLineElement*>(svgElement);
-        writeNameValuePair(ts, "x1", element->x1().value(element));
-        writeNameValuePair(ts, "y1", element->y1().value(element));
-        writeNameValuePair(ts, "x2", element->x2().value(element));
-        writeNameValuePair(ts, "y2", element->y2().value(element));
+        writeNameValuePair(ts, "x1", element->x1().value(lengthContext));
+        writeNameValuePair(ts, "y1", element->y1().value(lengthContext));
+        writeNameValuePair(ts, "x2", element->x2().value(lengthContext));
+        writeNameValuePair(ts, "y2", element->y2().value(lengthContext));
     } else if (svgElement->hasTagName(SVGNames::ellipseTag)) {
         SVGEllipseElement* element = static_cast<SVGEllipseElement*>(svgElement);
-        writeNameValuePair(ts, "cx", element->cx().value(element));
-        writeNameValuePair(ts, "cy", element->cy().value(element));
-        writeNameValuePair(ts, "rx", element->rx().value(element));
-        writeNameValuePair(ts, "ry", element->ry().value(element));
+        writeNameValuePair(ts, "cx", element->cx().value(lengthContext));
+        writeNameValuePair(ts, "cy", element->cy().value(lengthContext));
+        writeNameValuePair(ts, "rx", element->rx().value(lengthContext));
+        writeNameValuePair(ts, "ry", element->ry().value(lengthContext));
     } else if (svgElement->hasTagName(SVGNames::circleTag)) {
         SVGCircleElement* element = static_cast<SVGCircleElement*>(svgElement);
-        writeNameValuePair(ts, "cx", element->cx().value(element));
-        writeNameValuePair(ts, "cy", element->cy().value(element));
-        writeNameValuePair(ts, "r", element->r().value(element));
+        writeNameValuePair(ts, "cx", element->cx().value(lengthContext));
+        writeNameValuePair(ts, "cy", element->cy().value(lengthContext));
+        writeNameValuePair(ts, "r", element->r().value(lengthContext));
     } else if (svgElement->hasTagName(SVGNames::polygonTag) || svgElement->hasTagName(SVGNames::polylineTag)) {
         SVGPolyElement* element = static_cast<SVGPolyElement*>(svgElement);
         writeNameAndQuotedValue(ts, "points", element->pointList().valueAsString());
@@ -495,14 +496,9 @@ static void writeChildren(TextStream& ts, const RenderObject& object, int indent
         write(ts, *child, indent + 1);
 }
 
-static inline String boundingBoxModeString(bool boundingBoxMode)
+static inline void writeCommonGradientProperties(TextStream& ts, SVGSpreadMethodType spreadMethod, const AffineTransform& gradientTransform, SVGUnitTypes::SVGUnitType gradientUnits)
 {
-    return boundingBoxMode ? "objectBoundingBox" : "userSpaceOnUse";
-}
-
-static inline void writeCommonGradientProperties(TextStream& ts, SVGSpreadMethodType spreadMethod, const AffineTransform& gradientTransform, bool boundingBoxMode)
-{
-    writeNameValuePair(ts, "gradientUnits", boundingBoxModeString(boundingBoxMode));
+    writeNameValuePair(ts, "gradientUnits", gradientUnits);
 
     if (spreadMethod != SVGSpreadMethodPad)
         ts << " [spreadMethod=" << spreadMethod << "]";
@@ -562,8 +558,8 @@ void writeSVGResourceContainer(TextStream& ts, const RenderObject& object, int i
         PatternAttributes attributes;
         static_cast<SVGPatternElement*>(pattern->node())->collectPatternAttributes(attributes);
 
-        writeNameValuePair(ts, "patternUnits", boundingBoxModeString(attributes.boundingBoxMode()));
-        writeNameValuePair(ts, "patternContentUnits", boundingBoxModeString(attributes.boundingBoxModeContent()));
+        writeNameValuePair(ts, "patternUnits", attributes.patternUnits());
+        writeNameValuePair(ts, "patternContentUnits", attributes.patternContentUnits());
 
         AffineTransform transform = attributes.patternTransform();
         if (!transform.isIdentity())
@@ -578,13 +574,9 @@ void writeSVGResourceContainer(TextStream& ts, const RenderObject& object, int i
 
         LinearGradientAttributes attributes;
         linearGradientElement->collectGradientAttributes(attributes);
-        writeCommonGradientProperties(ts, attributes.spreadMethod(), attributes.gradientTransform(), attributes.boundingBoxMode());
+        writeCommonGradientProperties(ts, attributes.spreadMethod(), attributes.gradientTransform(), attributes.gradientUnits());
 
-        FloatPoint startPoint;
-        FloatPoint endPoint;
-        linearGradientElement->calculateStartEndPoints(attributes, startPoint, endPoint);
-
-        ts << " [start=" << startPoint << "] [end=" << endPoint << "]\n";
+        ts << " [start=" << gradient->startPoint(attributes) << "] [end=" << gradient->endPoint(attributes) << "]\n";
     }  else if (resource->resourceType() == RadialGradientResourceType) {
         RenderSVGResourceRadialGradient* gradient = static_cast<RenderSVGResourceRadialGradient*>(resource);
 
@@ -594,12 +586,12 @@ void writeSVGResourceContainer(TextStream& ts, const RenderObject& object, int i
 
         RadialGradientAttributes attributes;
         radialGradientElement->collectGradientAttributes(attributes);
-        writeCommonGradientProperties(ts, attributes.spreadMethod(), attributes.gradientTransform(), attributes.boundingBoxMode());
+        writeCommonGradientProperties(ts, attributes.spreadMethod(), attributes.gradientTransform(), attributes.gradientUnits());
 
-        FloatPoint focalPoint;
-        FloatPoint centerPoint;
-        float radius;
-        radialGradientElement->calculateFocalCenterPointsAndRadius(attributes, focalPoint, centerPoint, radius);
+        FloatPoint focalPoint = gradient->focalPoint(attributes);
+        FloatPoint centerPoint = gradient->centerPoint(attributes);
+        float radius = gradient->radius(attributes);
+        gradient->adjustFocalPointIfNeeded(radius, centerPoint, focalPoint);
 
         ts << " [center=" << centerPoint << "] [focal=" << focalPoint << "] [radius=" << radius << "]\n";
     } else

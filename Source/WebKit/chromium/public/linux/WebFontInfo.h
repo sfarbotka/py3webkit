@@ -31,8 +31,9 @@
 #ifndef WebFontInfo_h
 #define WebFontInfo_h
 
-#include "../WebCString.h"
+#include "../linux/WebFontFamily.h"
 #include "../linux/WebFontRenderStyle.h"
+#include "../platform/WebCString.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -50,7 +51,8 @@ public:
     //
     // Returns: the font family or an empty string if the request could not be
     // satisfied.
-    WEBKIT_EXPORT static WebCString familyForChars(const WebUChar* characters, size_t numCharacters, const char* preferredLocale);
+    // Returns: the font family instance. The instance has an empty font name if the request could not be satisfied.
+    WEBKIT_EXPORT static void familyForChars(const WebUChar* characters, size_t numCharacters, const char* preferredLocale, WebFontFamily*);
 
     // Fill out the given WebFontRenderStyle with the user's preferences for
     // rendering the given font at the given size.

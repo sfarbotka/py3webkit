@@ -27,10 +27,13 @@
 
 #include "GraphicsTypes3D.h"
 #include "IntRect.h"
+#include "LayerChromium.h"
+#include "RateLimiter.h"
 #include "TransformationMatrix.h"
 #include "cc/CCLayerTreeHostCommon.h"
 #include "cc/CCProxy.h"
 
+#include <wtf/HashMap.h>
 #include <wtf/PassOwnPtr.h>
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefCounted.h>
@@ -42,8 +45,8 @@ class GrContext;
 namespace WebCore {
 
 class CCLayerTreeHostImpl;
+class CCTextureUpdater;
 class GraphicsContext3D;
-class LayerChromium;
 class LayerPainterChromium;
 class TextureAllocator;
 class TextureManager;
@@ -51,12 +54,15 @@ class TextureManager;
 class CCLayerTreeHostClient {
 public:
     virtual void animateAndLayout(double frameBeginTime) = 0;
-    virtual void applyScrollDelta(const IntSize&) = 0;
+    virtual void applyScrollAndScale(const IntSize& scrollDelta, float pageScale) = 0;
     virtual PassRefPtr<GraphicsContext3D> createLayerTreeHostContext3D() = 0;
     virtual void didRecreateGraphicsContext(bool success) = 0;
-#if !USE(THREADED_COMPOSITING)
+    virtual void didCommitAndDrawFrame() = 0;
+    virtual void didCompleteSwapBuffers() = 0;
+
+    // Used only in the single-threaded path.
     virtual void scheduleComposite() = 0;
-#endif
+
 protected:
     virtual ~CCLayerTreeHostClient() { }
 };
@@ -65,44 +71,60 @@ struct CCSettings {
     CCSettings()
             : acceleratePainting(false)
             , compositeOffscreen(false)
+            , discardAllTextures(false)
             , enableCompositorThread(false)
             , showFPSCounter(false)
-            , showPlatformLayerTree(false) { }
+            , showPlatformLayerTree(false)
+            , refreshRate(0) { }
 
     bool acceleratePainting;
     bool compositeOffscreen;
+    bool discardAllTextures;
     bool enableCompositorThread;
     bool showFPSCounter;
     bool showPlatformLayerTree;
+    double refreshRate;
 };
 
 // Provides information on an Impl's rendering capabilities back to the CCLayerTreeHost
 struct LayerRendererCapabilities {
     LayerRendererCapabilities()
         : bestTextureFormat(0)
+        , usingFrontBufferCached(false)
+        , usingPostSubBuffer(false)
         , usingMapSub(false)
         , usingAcceleratedPainting(false)
+        , usingSetVisibility(false)
+        , usingSwapCompleteCallback(false)
         , maxTextureSize(0) { }
 
     GC3Denum bestTextureFormat;
+    bool usingFrontBufferCached;
+    bool usingPostSubBuffer;
     bool usingMapSub;
     bool usingAcceleratedPainting;
+    bool usingSetVisibility;
+    bool usingSwapCompleteCallback;
     int maxTextureSize;
 };
 
 class CCLayerTreeHost : public RefCounted<CCLayerTreeHost> {
 public:
-    static PassRefPtr<CCLayerTreeHost> create(CCLayerTreeHostClient*, PassRefPtr<LayerChromium> rootLayer, const CCSettings&);
+    static PassRefPtr<CCLayerTreeHost> create(CCLayerTreeHostClient*, const CCSettings&);
     virtual ~CCLayerTreeHost();
 
     // CCLayerTreeHost interface to CCProxy.
     void animateAndLayout(double frameBeginTime);
+    void beginCommitOnImplThread(CCLayerTreeHostImpl*);
+    void finishCommitOnImplThread(CCLayerTreeHostImpl*);
     void commitComplete();
-    void commitToOnCCThread(CCLayerTreeHostImpl*);
     PassRefPtr<GraphicsContext3D> createLayerTreeHostContext3D();
-    virtual PassOwnPtr<CCLayerTreeHostImpl> createLayerTreeHostImpl();
+    virtual PassOwnPtr<CCLayerTreeHostImpl> createLayerTreeHostImpl(CCLayerTreeHostImplClient*);
+    void didBecomeInvisibleOnImplThread(CCLayerTreeHostImpl*);
     void didRecreateGraphicsContext(bool success);
-    void deleteContentsTexturesOnCCThread(TextureAllocator*);
+    void didCommitAndDrawFrame() { m_client->didCommitAndDrawFrame(); }
+    void didCompleteSwapBuffers() { m_client->didCompleteSwapBuffers(); }
+    void deleteContentsTexturesOnImplThread(TextureAllocator*);
 
     // CCLayerTreeHost interface to WebView.
     bool animating() const { return m_animating; }
@@ -133,35 +155,50 @@ public:
     // Test-only hook
     void loseCompositorContext(int numTimes);
 
-    void setNeedsCommitThenRedraw();
+    void setNeedsAnimate();
+    void setNeedsCommit();
     void setNeedsRedraw();
 
     LayerChromium* rootLayer() { return m_rootLayer.get(); }
     const LayerChromium* rootLayer() const { return m_rootLayer.get(); }
+    void setRootLayer(PassRefPtr<LayerChromium> rootLayer) { m_rootLayer = rootLayer; }
 
     const CCSettings& settings() const { return m_settings; }
 
     void setViewport(const IntSize& viewportSize);
 
     const IntSize& viewportSize() const { return m_viewportSize; }
+
+    void setPageScale(float);
+    float pageScale() const { return m_pageScale; }
+
+    void setPageScaleFactorLimits(float minScale, float maxScale);
+
     TextureManager* contentsTextureManager() const;
 
+    bool visible() const { return m_visible; }
     void setVisible(bool);
+
+    void setHaveWheelEventHandlers(bool);
 
     void updateLayers();
 
-    void applyScrollDeltas(const CCScrollUpdateSet&);
+    void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&);
+    void applyScrollAndScale(const CCScrollAndScaleSet&);
+    void startRateLimiter(GraphicsContext3D*);
+    void stopRateLimiter(GraphicsContext3D*);
+
 protected:
-    CCLayerTreeHost(CCLayerTreeHostClient*, PassRefPtr<LayerChromium> rootLayer, const CCSettings&);
+    CCLayerTreeHost(CCLayerTreeHostClient*, const CCSettings&);
     bool initialize();
 
 private:
     typedef Vector<RefPtr<LayerChromium> > LayerList;
 
     void paintLayerContents(const LayerList&);
+    void paintMaskAndReplicaForRenderSurface(LayerChromium*);
+
     void updateLayers(LayerChromium*);
-    void updateCompositorResources(const LayerList&, GraphicsContext3D*, TextureAllocator*);
-    void updateCompositorResources(LayerChromium*, GraphicsContext3D*, TextureAllocator*);
     void clearPendingUpdate();
 
     int m_compositorIdentifier;
@@ -184,6 +221,12 @@ private:
     IntSize m_viewportSize;
     TransformationMatrix m_zoomAnimatorTransform;
     bool m_visible;
+    bool m_haveWheelEventHandlers;
+    typedef HashMap<GraphicsContext3D*, RefPtr<RateLimiter> > RateLimiterMap;
+    RateLimiterMap m_rateLimiters;
+
+    float m_pageScale;
+    float m_minPageScale, m_maxPageScale;
 };
 
 }

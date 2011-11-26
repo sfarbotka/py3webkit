@@ -33,8 +33,6 @@ module window {
         CustomDeleteProperty,
         CustomGetOwnPropertySlot,
         CustomGetPropertyNames,
-        CustomLookupGetter,
-        CustomLookupSetter,
         CustomMarkFunction,
         CustomNativeConverter,
         CustomPutFunction,
@@ -108,13 +106,13 @@ module window {
         readonly attribute long pageXOffset;
         readonly attribute long pageYOffset;
 
-        [RequiresAllArguments] void scrollBy(in long x, in long y);
-        [RequiresAllArguments] void scrollTo(in long x, in long y);
-        [RequiresAllArguments] void scroll(in long x, in long y);
-        [RequiresAllArguments] void moveBy(in float x, in float y); // FIXME: this should take longs not floats.
-        [RequiresAllArguments] void moveTo(in float x, in float y); // FIXME: this should take longs not floats.
-        [RequiresAllArguments] void resizeBy(in float x, in float y); // FIXME: this should take longs not floats.
-        [RequiresAllArguments] void resizeTo(in float width, in float height); // FIXME: this should take longs not floats.
+        void scrollBy(in [Optional=CallWithDefaultValue] long x, in [Optional=CallWithDefaultValue] long y);
+        void scrollTo(in [Optional=CallWithDefaultValue] long x, in [Optional=CallWithDefaultValue] long y);
+        void scroll(in [Optional=CallWithDefaultValue] long x, in [Optional=CallWithDefaultValue] long y);
+        void moveBy(in [Optional=CallWithDefaultValue] float x, in [Optional=CallWithDefaultValue] float y); // FIXME: this should take longs not floats.
+        void moveTo(in [Optional=CallWithDefaultValue] float x, in [Optional=CallWithDefaultValue] float y); // FIXME: this should take longs not floats.
+        void resizeBy(in [Optional=CallWithDefaultValue] float x, in [Optional=CallWithDefaultValue] float y); // FIXME: this should take longs not floats.
+        void resizeTo(in [Optional=CallWithDefaultValue] float width, in [Optional=CallWithDefaultValue] float height); // FIXME: this should take longs not floats.
 
         readonly attribute [DoNotCheckDomainSecurity] boolean closed;
 
@@ -169,12 +167,12 @@ module window {
         [EnabledAtRuntime] Database openDatabase(in DOMString name, in DOMString version, in DOMString displayName, in unsigned long estimatedSize, in [Callback, Optional] DatabaseCallback creationCallback)
             raises(DOMException);
 #endif
-#if defined(ENABLE_DOM_STORAGE) && ENABLE_DOM_STORAGE
+
         readonly attribute [EnabledAtRuntime] Storage sessionStorage
             getter raises(DOMException);
         readonly attribute [EnabledAtRuntime] Storage localStorage
             getter raises(DOMException);
-#endif
+
 #if defined(ENABLE_NOTIFICATIONS) && ENABLE_NOTIFICATIONS
         readonly attribute [EnabledAtRuntime] NotificationCenter webkitNotifications;
 #endif
@@ -212,9 +210,14 @@ module window {
 
         // cross-document messaging
 #if defined(LANGUAGE_JAVASCRIPT) && LANGUAGE_JAVASCRIPT
-        [DoNotCheckDomainSecurity, Custom] void postMessage(in SerializedScriptValue message, in [Optional] Array messagePorts, in DOMString targetOrigin)
+        [DoNotCheckDomainSecurity, Custom] void postMessage(in SerializedScriptValue message, in DOMString targetOrigin)
             raises(DOMException);
-        [DoNotCheckDomainSecurity, Custom] void webkitPostMessage(in SerializedScriptValue message, in [Optional] Array transferList, in DOMString targetOrigin)
+        [DoNotCheckDomainSecurity, Custom] void postMessage(in SerializedScriptValue message, in Array messagePorts, in DOMString targetOrigin)
+            raises(DOMException);
+
+        [DoNotCheckDomainSecurity, Custom] void webkitPostMessage(in SerializedScriptValue message, in DOMString targetOrigin)
+            raises(DOMException);
+        [DoNotCheckDomainSecurity, Custom] void webkitPostMessage(in SerializedScriptValue message, in Array transferList, in DOMString targetOrigin)
             raises(DOMException);
 #else
         // There's no good way to expose an array via the ObjC bindings, so for now just allow passing in a single port.
@@ -485,10 +488,11 @@ module window {
 
         attribute HTMLCollectionConstructor HTMLCollection;
         attribute HTMLAllCollectionConstructor HTMLAllCollection;
+        attribute [Conditional=MICRODATA] HTMLPropertiesCollectionConstructor HTMLPropertiesCollection;
         attribute HTMLUnknownElementConstructor HTMLUnknownElement;
 
-        attribute [CustomGetter] HTMLImageElementConstructor Image; // Usable with new operator
-        attribute [CustomGetter] HTMLOptionElementConstructor Option; // Usable with new operator
+        attribute [JSCCustomGetter, CustomConstructor] HTMLImageElementConstructorConstructor Image; // Usable with new operator
+        attribute [JSCCustomGetter, JSCustomConstructor] HTMLOptionElementConstructorConstructor Option; // Usable with new operator
 
         attribute CanvasPatternConstructor CanvasPattern;
         attribute CanvasGradientConstructor CanvasGradient;
@@ -547,7 +551,7 @@ module window {
         attribute [Conditional=DEVICE_ORIENTATION, EnabledAtRuntime] DeviceOrientationEventConstructor DeviceOrientationEvent;
         attribute [Conditional=TOUCH_EVENTS] TouchEventConstructor TouchEvent;
         attribute [Conditional=WEB_SOCKETS] CloseEventConstructor CloseEvent;
-        attribute [Conditional=DOM_STORAGE] StorageEventConstructor StorageEvent;
+        attribute StorageEventConstructor StorageEvent;
         attribute [Conditional=WEB_AUDIO] AudioProcessingEventConstructor AudioProcessingEvent;
         attribute [Conditional=WEB_AUDIO] OfflineAudioCompletionEventConstructor OfflineAudioCompletionEvent;
         attribute [Conditional=INPUT_SPEECH] SpeechInputEventConstructor SpeechInputEvent;
@@ -605,6 +609,15 @@ module window {
         attribute [JSCCustomGetter,EnabledAtRuntime] WebSocketConstructor WebSocket; // Usable with the new operator
 #endif
 
+#if defined(ENABLE_VIDEO_TRACK) && ENABLE_VIDEO_TRACK
+        attribute [EnabledAtRuntime=webkitVideoTrack] HTMLTrackElementConstructor HTMLTrackElement;
+        attribute [EnabledAtRuntime=webkitVideoTrack] TextTrackConstructor TextTrack;
+        attribute [EnabledAtRuntime=webkitVideoTrack] TextTrackCueConstructor TextTrackCue; // Usable with the new operator
+        attribute [EnabledAtRuntime=webkitVideoTrack] TextTrackCueListConstructor TextTrackCueList;
+        attribute [EnabledAtRuntime=webkitVideoTrack] TextTrackListConstructor TextTrackList;
+        attribute [EnabledAtRuntime=webkitVideoTrack] TrackEventConstructor TrackEvent;
+#endif
+
         attribute DOMPluginConstructor Plugin;
         attribute DOMPluginArrayConstructor PluginArray;
 
@@ -614,28 +627,25 @@ module window {
         attribute ClientRectConstructor ClientRect;
         attribute ClientRectListConstructor ClientRectList;
 
-#if defined(ENABLE_DOM_STORAGE) && ENABLE_DOM_STORAGE
         attribute StorageConstructor Storage;
-#endif
 
-        attribute [CustomGetter, Conditional=VIDEO, EnabledAtRuntime] HTMLAudioElementConstructor Audio; // Usable with the new operator
+        attribute [JSCCustomGetter, JSCustomConstructor, Conditional=VIDEO, EnabledAtRuntime] HTMLAudioElementConstructorConstructor Audio; // Usable with the new operator
         attribute [Conditional=VIDEO, EnabledAtRuntime] HTMLAudioElementConstructor HTMLAudioElement;
         attribute [Conditional=VIDEO, EnabledAtRuntime] HTMLMediaElementConstructor HTMLMediaElement;
         attribute [Conditional=VIDEO, EnabledAtRuntime] HTMLVideoElementConstructor HTMLVideoElement;
         attribute [Conditional=VIDEO, EnabledAtRuntime] MediaErrorConstructor MediaError;
         attribute [Conditional=VIDEO, EnabledAtRuntime] TimeRangesConstructor TimeRanges;
         attribute [Conditional=VIDEO, EnabledAtRuntime] HTMLSourceElementConstructor HTMLSourceElement;
+        attribute [Conditional=VIDEO, EnabledAtRuntime] MediaControllerConstructor MediaController;
 
 #if defined(ENABLE_ANIMATION_API) && ENABLE_ANIMATION_API
         attribute WebKitAnimationConstructor WebKitAnimation;
         attribute WebKitAnimationListConstructor WebKitAnimationList;
 #endif
 
-#if defined(ENABLE_XPATH) && ENABLE_XPATH
         attribute XPathEvaluatorConstructor XPathEvaluator;
         attribute XPathResultConstructor XPathResult;
         attribute XPathExceptionConstructor XPathException;
-#endif
 
 #if defined(ENABLE_SVG) && ENABLE_SVG
         // Expose all implemented SVG 1.1 interfaces, excluding the SVG MI interfaces:
@@ -808,6 +818,8 @@ module window {
 #if defined(ENABLE_QUOTA) && ENABLE_QUOTA
         readonly attribute [EnabledAtRuntime=Quota] StorageInfo webkitStorageInfo;
 #endif
+
+        attribute [Conditional=MUTATION_OBSERVERS] WebKitMutationObserverConstructor WebKitMutationObserver;
 
 #endif // defined(LANGUAGE_JAVASCRIPT)
 

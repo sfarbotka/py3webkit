@@ -54,13 +54,14 @@ class Position;
 class QualifiedName;
 class RenderStyle;
 class StyledElement;
+class VisibleSelection;
 
 enum TriState { FalseTriState, TrueTriState, MixedTriState };
 
 class EditingStyle : public RefCounted<EditingStyle> {
 public:
 
-    enum PropertiesToInclude { AllProperties, OnlyEditingInheritableProperties, EditingInheritablePropertiesAndBackgroundColorInEffect };
+    enum PropertiesToInclude { AllProperties, OnlyEditingInheritableProperties, EditingPropertiesInEffect };
     enum ShouldPreserveWritingDirection { PreserveWritingDirection, DoNotPreserveWritingDirection };
     enum ShouldExtractMatchingStyle { ExtractMatchingStyle, DoNotExtractMatchingStyle };
     static float NoFontDelta;
@@ -107,7 +108,8 @@ public:
     void removeNonEditingProperties();
     void collapseTextDecorationProperties();
     enum ShouldIgnoreTextOnlyProperties { IgnoreTextOnlyProperties, DoNotIgnoreTextOnlyProperties };
-    TriState triStateOfStyle(CSSStyleDeclaration*, ShouldIgnoreTextOnlyProperties = DoNotIgnoreTextOnlyProperties) const;
+    TriState triStateOfStyle(EditingStyle*) const;
+    TriState triStateOfStyle(const VisibleSelection&) const;
     bool conflictsWithInlineStyleOfElement(StyledElement* element) const { return conflictsWithInlineStyleOfElement(element, 0, 0); }
     bool conflictsWithInlineStyleOfElement(StyledElement* element, EditingStyle* extractedStyle, Vector<CSSPropertyID>& conflictingProperties) const
     {
@@ -125,17 +127,19 @@ public:
     void mergeTypingStyle(Document*);
     enum CSSPropertyOverrideMode { OverrideValues, DoNotOverrideValues };
     void mergeInlineStyleOfElement(StyledElement*, CSSPropertyOverrideMode, PropertiesToInclude = AllProperties);
-    void mergeInlineAndImplicitStyleOfElement(StyledElement*, CSSPropertyOverrideMode, PropertiesToInclude);
+    static PassRefPtr<EditingStyle> wrappingStyleForSerialization(Node* context, bool shouldAnnotate);
     void mergeStyleFromRules(StyledElement*);
     void mergeStyleFromRulesForSerialization(StyledElement*);
     void removeStyleFromRulesAndContext(StyledElement*, Node* context);
     void removePropertiesInElementDefaultStyle(Element*);
     void forceInline();
+    int legacyFontSize(Document*) const;
 
     float fontSizeDelta() const { return m_fontSizeDelta; }
     bool hasFontSizeDelta() const { return m_fontSizeDelta != NoFontDelta; }
     bool shouldUseFixedDefaultFontSize() const { return m_shouldUseFixedDefaultFontSize; }
 
+    static PassRefPtr<EditingStyle> styleAtSelectionStart(const VisibleSelection&, bool shouldUseBackgroundColorInEffect = false);
 private:
     EditingStyle();
     EditingStyle(Node*, PropertiesToInclude);
@@ -147,7 +151,9 @@ private:
     void setProperty(int propertyID, const String& value, bool important = false);
     void replaceFontSizeByKeywordIfPossible(RenderStyle*, CSSComputedStyleDeclaration*);
     void extractFontSizeDelta();
+    TriState triStateOfStyle(CSSStyleDeclaration* styleToCompare, ShouldIgnoreTextOnlyProperties) const;
     bool conflictsWithInlineStyleOfElement(StyledElement*, EditingStyle* extractedStyle, Vector<CSSPropertyID>* conflictingProperties) const;
+    void mergeInlineAndImplicitStyleOfElement(StyledElement*, CSSPropertyOverrideMode, PropertiesToInclude);
     void mergeStyle(CSSMutableStyleDeclaration*, CSSPropertyOverrideMode);
 
     RefPtr<CSSMutableStyleDeclaration> m_mutableStyle;
@@ -211,10 +217,6 @@ private:
 
 // FIXME: Remove these functions or make them non-global to discourage using CSSStyleDeclaration directly.
 int getIdentifierValue(CSSStyleDeclaration*, int propertyID);
-enum LegacyFontSizeMode { AlwaysUseLegacyFontSize, UseLegacyFontSizeOnlyIfPixelValuesMatch };
-int legacyFontSizeFromCSSValue(Document*, CSSPrimitiveValue*, bool shouldUseFixedFontDefaultSize, LegacyFontSizeMode);
-bool hasTransparentBackgroundColor(CSSStyleDeclaration*);
-PassRefPtr<CSSValue> backgroundColorInEffect(Node*);
 
 } // namespace WebCore
 

@@ -20,8 +20,8 @@ none
 hidden
 inset
 groove
-ridge
 outset
+ridge
 dotted
 dashed
 solid
@@ -324,9 +324,12 @@ table-cell
 table-caption
 -webkit-box
 -webkit-inline-box
--wap-marquee
 -webkit-flexbox
 -webkit-inline-flexbox
+#if defined(ENABLE_CSS_GRID_LAYOUT) && ENABLE_CSS_GRID_LAYOUT
+-webkit-grid
+-webkit-inline-grid
+#endif
 //none
 //
 // CSS_PROP_CURSOR:
@@ -757,6 +760,10 @@ optimizeSpeed
 optimizeLegibility
 geometricPrecision
 
+// -webkit-color-adjust
+economy
+exact
+
 // -webkit-color-correction
 //default
 sRGB
@@ -823,6 +830,11 @@ glyphs
 inline-box
 replaced
 
+// -webkit-line-grid-snap
+//none
+//baseline
+bounds
+
 // -webkit-font-feature-settings
 on
 off
@@ -843,3 +855,27 @@ evenodd
 // -webkit-region-overflow
 // auto
 break
+
+// -webkit-wrap-flow
+// auto
+// both
+// left
+// right
+maximum
+// clear
+
+// -webkit-wrap-through
+wrap
+// none
+
+#if defined(ENABLE_CSS_FILTERS) && ENABLE_CSS_FILTERS
+// -webkit-filter
+#if defined(ENABLE_CSS_SHADERS) && ENABLE_CSS_SHADERS
+// values for the custom() function
+// border-box
+// padding-box
+// content-box
+filter-box
+detached
+#endif // CSS_SHADERS
+#endif // CSS_FILTERS

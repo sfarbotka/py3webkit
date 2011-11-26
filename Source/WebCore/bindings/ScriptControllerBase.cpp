@@ -37,8 +37,7 @@ namespace WebCore {
 
 bool ScriptController::canExecuteScripts(ReasonForCallingCanExecuteScripts reason)
 {
-    // FIXME: We should get this information from the document instead of the frame.
-    if (m_frame->loader()->isSandboxed(SandboxScripts))
+    if (m_frame->document() && m_frame->document()->isSandboxed(SandboxScripts))
         return false;
 
     if (m_frame->document() && m_frame->document()->isViewSource()) {
@@ -47,7 +46,7 @@ bool ScriptController::canExecuteScripts(ReasonForCallingCanExecuteScripts reaso
     }
 
     Settings* settings = m_frame->settings();
-    const bool allowed = m_frame->loader()->client()->allowJavaScript(settings && settings->isJavaScriptEnabled());
+    const bool allowed = m_frame->loader()->client()->allowScript(settings && settings->isScriptEnabled());
     if (!allowed && reason == AboutToExecuteScript)
         m_frame->loader()->client()->didNotAllowScript();
     return allowed;
@@ -93,6 +92,7 @@ bool ScriptController::executeIfJavaScriptURL(const KURL& url, ShouldReplaceDocu
     // We need to hold onto the Frame here because executing script can
     // destroy the frame.
     RefPtr<Frame> protector(m_frame);
+    RefPtr<Document> ownerDocument(m_frame->document());
 
     const int javascriptSchemeLength = sizeof("javascript:") - 1;
 
@@ -125,7 +125,7 @@ bool ScriptController::executeIfJavaScriptURL(const KURL& url, ShouldReplaceDocu
         // DocumentWriter::replaceDocument can cause the DocumentLoader to get deref'ed and possible destroyed,
         // so protect it with a RefPtr.
         if (RefPtr<DocumentLoader> loader = m_frame->document()->loader())
-            loader->writer()->replaceDocument(scriptResult);
+            loader->writer()->replaceDocument(scriptResult, ownerDocument.get());
     }
     return true;
 }

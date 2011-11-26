@@ -1530,7 +1530,18 @@ class CppStyleTest(CppStyleTestBase):
             'int foo() const {',
             'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
         self.assert_multi_line_lint(
+            'int foo() const OVERRIDE {',
+            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
+            'int foo() OVERRIDE {',
+            'Place brace on its own line for function definitions.  [whitespace/braces] [4]')
+        self.assert_multi_line_lint(
             'int foo() const\n'
+            '{\n'
+            '}\n',
+            '')
+        self.assert_multi_line_lint(
+            'int foo() OVERRIDE\n'
             '{\n'
             '}\n',
             '')
@@ -2694,6 +2705,11 @@ class OrderOfIncludesTest(CppStyleTestBase):
         self.assertEqual(cpp_style._MOC_HEADER,
                          classify_include('foo.cpp',
                                           'moc_foo.cpp',
+                                          False, include_state))
+        # Qt private APIs use _p.h suffix.
+        self.assertEqual(cpp_style._PRIMARY_HEADER,
+                         classify_include('foo.cpp',
+                                          'foo_p.h',
                                           False, include_state))
         # Tricky example where both includes might be classified as primary.
         self.assert_language_rules_check('ScrollbarThemeWince.cpp',
@@ -4128,6 +4144,12 @@ class WebKitStyleTest(CppStyleTestBase):
             'gst_structure_id_get(FOO, VALUE, G_TYPE_INT, &value, NULL);',
             '')
         self.assert_lint(
+            'gst_caps_new_simple(mime, "value", G_TYPE_INT, &value, NULL);',
+            '')
+        self.assert_lint(
+            'gst_caps_new_full(structure1, structure2, NULL);',
+            '')
+        self.assert_lint(
             'gchar* result = g_strconcat("part1", "part2", "part3", NULL);',
             '')
         self.assert_lint(
@@ -4415,9 +4437,11 @@ class WebKitStyleTest(CppStyleTestBase):
         # There is an exception for some unit tests that begin with "tst_".
         self.assert_lint('void tst_QWebFrame::arrayObjectEnumerable(int var1, int var2)', '')
 
-        # The Qt API uses names that begin with "qt_".
+        # The Qt API uses names that begin with "qt_" or "_q_".
         self.assert_lint('void QTFrame::qt_drt_is_awesome(int var1, int var2)', '')
+        self.assert_lint('void QTFrame::_q_drt_is_awesome(int var1, int var2)', '')
         self.assert_lint('void qt_drt_is_awesome(int var1, int var2);', '')
+        self.assert_lint('void _q_drt_is_awesome(int var1, int var2);', '')
 
         # Cairo forward-declarations should not be a failure.
         self.assert_lint('typedef struct _cairo cairo_t;', '')
@@ -4429,6 +4453,7 @@ class WebKitStyleTest(CppStyleTestBase):
         self.assert_lint('typedef struct _Ecore_Pipe Ecore_Pipe;', '')
         self.assert_lint('typedef struct _Eina_Rectangle Eina_Rectangle;', '')
         self.assert_lint('typedef struct _Evas_Object Evas_Object;', '')
+        self.assert_lint('typedef struct _Ewk_History_Item Ewk_History_Item;', '')
 
         # NPAPI functions that start with NPN_, NPP_ or NP_ are allowed.
         self.assert_lint('void NPN_Status(NPP, const char*)', '')
@@ -4517,11 +4542,15 @@ class WebKitStyleTest(CppStyleTestBase):
                           self.perform_lint('WEBKIT_EXPORT int foo();\n',
                                             'WebKit/chromium/public/test.h',
                                             webkit_export_error_rules))
+        self.assertEquals('',
+                          self.perform_lint('WEBKIT_EXPORT int foo();\n',
+                                            'WebKit/chromium/tests/test.h',
+                                            webkit_export_error_rules))
         self.assertEquals('WEBKIT_EXPORT should only be used in header files.  [readability/webkit_export] [5]',
                           self.perform_lint('WEBKIT_EXPORT int foo();\n',
                                             'WebKit/chromium/public/test.cpp',
                                             webkit_export_error_rules))
-        self.assertEquals('WEBKIT_EXPORT should only appear in the chromium public directory.  [readability/webkit_export] [5]',
+        self.assertEquals('WEBKIT_EXPORT should only appear in the chromium public (or tests) directory.  [readability/webkit_export] [5]',
                           self.perform_lint('WEBKIT_EXPORT int foo();\n',
                                             'WebKit/chromium/src/test.h',
                                             webkit_export_error_rules))

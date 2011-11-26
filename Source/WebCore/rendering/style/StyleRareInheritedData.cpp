@@ -53,9 +53,11 @@ StyleRareInheritedData::StyleRareInheritedData()
     , textEmphasisPosition(TextEmphasisPositionOver)
     , m_lineBoxContain(RenderStyle::initialLineBoxContain())
     , m_imageRendering(RenderStyle::initialImageRendering())
+    , m_lineGridSnap(RenderStyle::initialLineGridSnap())
     , hyphenationLimitBefore(-1)
     , hyphenationLimitAfter(-1)
     , hyphenationLimitLines(-1)
+    , m_lineGrid(RenderStyle::initialLineGrid())
 #if ENABLE(TOUCH_EVENTS)
     , tapHighlightColor(RenderStyle::initialTapHighlightColor())
 #endif    
@@ -68,6 +70,9 @@ StyleRareInheritedData::StyleRareInheritedData(const StyleRareInheritedData& o)
     , textStrokeWidth(o.textStrokeWidth)
     , textFillColor(o.textFillColor)
     , textEmphasisColor(o.textEmphasisColor)
+    , visitedLinkTextStrokeColor(o.visitedLinkTextStrokeColor)
+    , visitedLinkTextFillColor(o.visitedLinkTextFillColor)
+    , visitedLinkTextEmphasisColor(o.visitedLinkTextEmphasisColor)
     , textShadow(o.textShadow ? adoptPtr(new ShadowData(*o.textShadow)) : nullptr)
     , highlight(o.highlight)
     , cursorData(o.cursorData)
@@ -92,12 +97,14 @@ StyleRareInheritedData::StyleRareInheritedData(const StyleRareInheritedData& o)
     , textEmphasisPosition(o.textEmphasisPosition)
     , m_lineBoxContain(o.m_lineBoxContain)
     , m_imageRendering(o.m_imageRendering)
+    , m_lineGridSnap(o.m_lineGridSnap)
     , hyphenationString(o.hyphenationString)
     , hyphenationLimitBefore(o.hyphenationLimitBefore)
     , hyphenationLimitAfter(o.hyphenationLimitAfter)
     , hyphenationLimitLines(o.hyphenationLimitLines)
     , locale(o.locale)
     , textEmphasisCustomMark(o.textEmphasisCustomMark)
+    , m_lineGrid(o.m_lineGrid)
 #if ENABLE(TOUCH_EVENTS)
     , tapHighlightColor(o.tapHighlightColor)
 #endif
@@ -123,6 +130,9 @@ bool StyleRareInheritedData::operator==(const StyleRareInheritedData& o) const
         && textStrokeWidth == o.textStrokeWidth
         && textFillColor == o.textFillColor
         && textEmphasisColor == o.textEmphasisColor
+        && visitedLinkTextStrokeColor == o.visitedLinkTextStrokeColor
+        && visitedLinkTextFillColor == o.visitedLinkTextFillColor
+        && visitedLinkTextEmphasisColor == o.visitedLinkTextEmphasisColor
 #if ENABLE(TOUCH_EVENTS)
         && tapHighlightColor == o.tapHighlightColor
 #endif
@@ -156,7 +166,9 @@ bool StyleRareInheritedData::operator==(const StyleRareInheritedData& o) const
         && locale == o.locale
         && textEmphasisCustomMark == o.textEmphasisCustomMark
         && QuotesData::equal(quotes.get(), o.quotes.get())
-        && m_imageRendering == o.m_imageRendering;
+        && m_lineGrid == o.m_lineGrid
+        && m_imageRendering == o.m_imageRendering
+        && m_lineGridSnap == o.m_lineGridSnap;
 }
 
 bool StyleRareInheritedData::shadowDataEquivalent(const StyleRareInheritedData& o) const

@@ -30,8 +30,10 @@
 #include "JSEventTarget.h"
 #include "JSMessagePortCustom.h"
 #include "JSNode.h"
+#include "JSTrackCustom.h"
 #include "SerializedScriptValue.h"
 #include "ScriptValue.h"
+#include <wtf/MathExtras.h>
 
 using namespace JSC;
 
@@ -78,10 +80,7 @@ void JSDictionary::convertValue(ExecState* exec, JSValue value, unsigned short& 
 void JSDictionary::convertValue(ExecState* exec, JSValue value, unsigned long long& result)
 {
     double d = value.toNumber(exec);
-    if (isnan(d) || isinf(d))
-        result = 0;
-    else
-        result = static_cast<unsigned long long>(fmod(trunc(d), std::numeric_limits<unsigned long long>::max() + 1.0));
+    doubleToInteger(d, result);
 }
 
 void JSDictionary::convertValue(ExecState* exec, JSValue value, double& result)
@@ -101,7 +100,7 @@ void JSDictionary::convertValue(ExecState* exec, JSValue value, ScriptValue& res
 
 void JSDictionary::convertValue(ExecState* exec, JSValue value, RefPtr<SerializedScriptValue>& result)
 {
-    result = SerializedScriptValue::create(exec, value);
+    result = SerializedScriptValue::create(exec, value, 0);
 }
 
 void JSDictionary::convertValue(ExecState*, JSValue value, RefPtr<DOMWindow>& result)
@@ -123,5 +122,12 @@ void JSDictionary::convertValue(ExecState* exec, JSValue value, MessagePortArray
 {
     fillMessagePortArray(exec, value, result);
 }
+
+#if ENABLE(VIDEO_TRACK)
+void JSDictionary::convertValue(ExecState*, JSValue value, RefPtr<TrackBase>& result)
+{
+    result = toTrack(value);
+}
+#endif
 
 } // namespace WebCore

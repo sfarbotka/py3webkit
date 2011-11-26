@@ -44,7 +44,7 @@ public:
     explicit RenderTable(Node*);
     virtual ~RenderTable();
 
-    int getColumnPos(int col) const { return m_columnPos[col]; }
+    LayoutUnit getColumnPos(unsigned col) const { return m_columnPos[col]; }
 
     int hBorderSpacing() const { return m_hSpacing; }
     int vBorderSpacing() const { return m_vSpacing; }
@@ -146,35 +146,35 @@ public:
     // This function returns 0 if the table has no non-empty sections.
     RenderTableSection* topNonEmptySection() const;
 
-    void splitColumn(int pos, int firstSpan);
-    void appendColumn(int span);
-    int numEffCols() const { return m_columns.size(); }
-    int spanOfEffCol(int effCol) const { return m_columns[effCol].span; }
+    void splitColumn(unsigned position, unsigned firstSpan);
+    void appendColumn(unsigned span);
+    unsigned numEffCols() const { return m_columns.size(); }
+    unsigned spanOfEffCol(unsigned effCol) const { return m_columns[effCol].span; }
     
-    int colToEffCol(unsigned col) const
+    unsigned colToEffCol(unsigned column) const
     {
-        unsigned effCol = 0;
-        unsigned numCols = numEffCols();
-        for (unsigned c = 0; effCol < numCols && c + m_columns[effCol].span - 1 < col; ++effCol)
-            c += m_columns[effCol].span;
-        return effCol;
+        unsigned effColumn = 0;
+        unsigned numColumns = numEffCols();
+        for (unsigned c = 0; effColumn < numColumns && c + m_columns[effColumn].span - 1 < column; ++effColumn)
+            c += m_columns[effColumn].span;
+        return effColumn;
     }
     
-    int effColToCol(int effCol) const
+    unsigned effColToCol(unsigned effCol) const
     {
-        int c = 0;
-        for (int i = 0; i < effCol; i++)
+        unsigned c = 0;
+        for (unsigned i = 0; i < effCol; i++)
             c += m_columns[i].span;
         return c;
     }
 
-    int bordersPaddingAndSpacingInRowDirection() const
+    LayoutUnit bordersPaddingAndSpacingInRowDirection() const
     {
         return borderStart() + borderEnd() +
                (collapseBorders() ? 0 : (paddingStart() + paddingEnd() + (numEffCols() + 1) * hBorderSpacing()));
     }
 
-    RenderTableCol* colElement(int col, bool* startEdge = 0, bool* endEdge = 0) const;
+    RenderTableCol* colElement(unsigned col, bool* startEdge = 0, bool* endEdge = 0) const;
     RenderTableCol* nextColElement(RenderTableCol* current) const;
 
     bool needsSectionRecalc() const { return m_needsSectionRecalc; }
@@ -246,14 +246,13 @@ private:
     void subtractCaptionRect(LayoutRect&) const;
 
     void recalcCollapsedBorders();
-    void recalcCaption(RenderBlock*) const;
     void recalcSections() const;
-    void adjustLogicalHeightForCaption();
+    void adjustLogicalHeightForCaption(RenderBlock*);
 
     mutable Vector<LayoutUnit> m_columnPos;
     mutable Vector<ColumnStruct> m_columns;
 
-    mutable RenderBlock* m_caption;
+    mutable Vector<RenderBlock*> m_captions;
     mutable RenderTableSection* m_head;
     mutable RenderTableSection* m_foot;
     mutable RenderTableSection* m_firstBody;

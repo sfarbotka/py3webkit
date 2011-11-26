@@ -1,7 +1,9 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/webkit/inspector">
     <file>inspector.html</file>
+    <file>AdvancedSearchController.js</file>
     <file>ApplicationCacheItemsView.js</file>
+    <file>ApplicationCacheModel.js</file>
     <file>AuditCategories.js</file>
     <file>AuditFormatters.js</file>
     <file>AuditLauncherView.js</file>
@@ -16,7 +18,6 @@
     <file>Checkbox.js</file>
     <file>Color.js</file>
     <file>CompilerSourceMapping.js</file>
-    <file>CompilerSourceMappingProvider.js</file>
     <file>ConsoleMessage.js</file>
     <file>ConsoleModel.js</file>
     <file>ConsolePanel.js</file>
@@ -62,11 +63,12 @@
     <file>HeapSnapshotWorker.js</file>
     <file>HeapSnapshotWorkerDispatcher.js</file>
     <file>HelpScreen.js</file>
-    <file>IFrameView.js</file>
     <file>ImageView.js</file>
     <file>InjectedFakeWorker.js</file>
     <file>inspector.js</file>
+    <file>InspectorFrontendAPI.js</file>
     <file>InspectorFrontendHostStub.js</file>
+    <file>InspectorView.js</file>
     <file>JavaScriptContextManager.js</file>
     <file>JavaScriptFormatter.js</file>
     <file>JavaScriptSourceFrame.js</file>
@@ -97,9 +99,11 @@
     <file>ResourceJSONView.js</file>
     <file>ResourceHTMLView.js</file>
     <file>ResourceHeadersView.js</file>
+    <file>ResourcePreviewView.js</file>
     <file>ResourceResponseView.js</file>
     <file>ResourceTimingView.js</file>
     <file>ResourceTreeModel.js</file>
+    <file>ResourceUtils.js</file>
     <file>ResourceView.js</file>
     <file>ResourcesPanel.js</file>
     <file>ScopeChainSidebarPane.js</file>
@@ -107,6 +111,7 @@
     <file>ScriptFormatter.js</file>
     <file>ScriptFormatterWorker.js</file>
     <file>ScriptsPanel.js</file>
+    <file>ScriptsSearchScope.js</file>
     <file>SearchController.js</file>
     <file>Section.js</file>
     <file>Settings.js</file>
@@ -121,6 +126,7 @@
     <file>SourceHTMLTokenizer.js</file>
     <file>SourceJavaScriptTokenizer.js</file>
     <file>SourceTokenizer.js</file>
+    <file>SplitView.js</file>
     <file>StatusBarButton.js</file>
     <file>StylesSidebarPane.js</file>
     <file>TabbedPane.js</file>
@@ -147,8 +153,9 @@
     <file>WorkerManager.js</file>
     <file>WorkersSidebarPane.js</file>
     <file>UglifyJS/parse-js.js</file>
-    <file>audits.css</file>
+    <file>auditsPanel.css</file>
     <file>dataGrid.css</file>
+    <file>elementsPanel.css</file>
     <file>goToLineDialog.css</file>
     <file>heapProfiler.css</file>
     <file>helpScreen.css</file>
@@ -157,8 +164,16 @@
     <file>inspectorSyntaxHighlight.css</file>
     <file>networkLogView.css</file>
     <file>networkPanel.css</file>
+    <file>panelEnablerView.css</file>
     <file>popover.css</file>
+    <file>profilesPanel.css</file>
+    <file>resourceView.css</file>
+    <file>resourcesPanel.css</file>
+    <file>scriptsPanel.css</file>
+    <file>splitView.css</file>
+    <file>textPrompt.css</file>
     <file>textViewer.css</file>
+    <file>timelinePanel.css</file>
     <file>Images/applicationCache.png</file>
     <file>Images/back.png</file>
     <file>Images/breakpointBorder.png</file>

@@ -46,9 +46,9 @@ public:
     static PassRefPtr<Canvas2DLayerChromium> create(GraphicsContext3D*);
     virtual ~Canvas2DLayerChromium();
     virtual bool drawsContent() const;
-    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*);
+    virtual void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&);
 
-    void setTextureChanged();
+    virtual void contentChanged();
 
 private:
     explicit Canvas2DLayerChromium(GraphicsContext3D*);

@@ -40,13 +40,18 @@ WebInspector.NetworkManager = function()
         NetworkAgent.setCacheDisabled(true);
     NetworkAgent.enable();
 
-    WebInspector.settings.cacheDisabled.addChangeListener(this._cacheDisabledSettingChanged.bind(this));
+    WebInspector.settings.cacheDisabled.addChangeListener(this._cacheDisabledSettingChanged, this);
+
+    if (WebInspector.settings.userAgent.get())
+        this._userAgentSettingChanged();
+    WebInspector.settings.userAgent.addChangeListener(this._userAgentSettingChanged, this);
 }
 
 WebInspector.NetworkManager.EventTypes = {
     ResourceStarted: "ResourceStarted",
     ResourceUpdated: "ResourceUpdated",
-    ResourceFinished: "ResourceFinished"
+    ResourceFinished: "ResourceFinished",
+    ResourceUpdateDropped: "ResourceUpdateDropped"
 }
 
 WebInspector.NetworkManager.prototype = {
@@ -75,6 +80,11 @@ WebInspector.NetworkManager.prototype = {
     _cacheDisabledSettingChanged: function(event)
     {
         NetworkAgent.setCacheDisabled(event.data);
+    },
+
+    _userAgentSettingChanged: function()
+    {
+        NetworkAgent.setUserAgentOverride(WebInspector.settings.userAgent.get());
     }
 }
 
@@ -128,12 +138,10 @@ WebInspector.NetworkDispatcher.prototype = {
 
         if (!this._mimeTypeIsConsistentWithType(resource)) {
             WebInspector.console.addMessage(WebInspector.ConsoleMessage.create(WebInspector.ConsoleMessage.MessageSource.Other,
-                WebInspector.ConsoleMessage.MessageType.Log,
                 WebInspector.ConsoleMessage.MessageLevel.Warning,
-                -1,
-                this.url,
-                1,
-                WebInspector.UIString("Resource interpreted as %s but transferred with MIME type %s.", WebInspector.Resource.Type.toUIString(this.type), this.mimeType)));
+                WebInspector.UIString("Resource interpreted as %s but transferred with MIME type %s.", WebInspector.Resource.Type.toUIString(this.type), this.mimeType),
+                WebInspector.ConsoleMessage.MessageType.Log,
+                this.url));
         }
     },
 
@@ -182,7 +190,7 @@ WebInspector.NetworkDispatcher.prototype = {
             // FIXME: move this check to the backend.
             if (!redirectResponse)
                 return;
-            this.responseReceived(requestId, time, "Other", redirectResponse);
+            this.responseReceived(requestId, frameId, loaderId, time, "Other", redirectResponse);
             resource = this._appendRedirect(requestId, time, request.url);
         } else
             resource = this._createResource(requestId, frameId, loaderId, request.url, documentURL, initiator, stackTrace);
@@ -200,18 +208,26 @@ WebInspector.NetworkDispatcher.prototype = {
             return;
 
         resource.cached = true;
-        this._updateResource(resource);
     },
 
-    responseReceived: function(requestId, time, resourceType, response)
+    responseReceived: function(requestId, frameId, loaderId, time, resourceType, response)
     {
         // FIXME: move this check to the backend.
         if (this._isNull(response))
             return;
 
         var resource = this._inflightResourcesById[requestId];
-        if (!resource)
+        if (!resource) {
+            // We missed the requestWillBeSent.
+            var eventData = {};
+            eventData.url = response.url;
+            eventData.frameId = frameId;
+            eventData.loaderId = loaderId;
+            eventData.resourceType = resourceType;
+            eventData.mimeType = response.mimeType;
+            this._manager.dispatchEventToListeners(WebInspector.NetworkManager.EventTypes.ResourceUpdateDropped, eventData);
             return;
+        }
 
         resource.responseReceivedTime = time;
         resource.type = WebInspector.Resource.Type[resourceType];
@@ -240,7 +256,6 @@ WebInspector.NetworkDispatcher.prototype = {
         var resource = this._inflightResourcesById[requestId];
         if (!resource)
             return;
-
         this._finishResource(resource, finishTime);
     },
 

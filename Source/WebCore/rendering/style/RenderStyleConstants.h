@@ -36,6 +36,11 @@ namespace WebCore {
  * in CSSValueKeywords.in, otherwise some optimizations in the parser will fail,
  * and produce invalid results.
  */
+static const size_t PrintColorAdjustBits = 1;
+enum PrintColorAdjust {
+    PrintColorAdjustEconomy,
+    PrintColorAdjustExact
+};
 
 // The difference between two styles.  The following values are used:
 // (1) StyleDifferenceEqual - The two styles are identical
@@ -75,7 +80,7 @@ enum PseudoId {
     NOPSEUDO, FIRST_LINE, FIRST_LETTER, BEFORE, AFTER, SELECTION, FIRST_LINE_INHERITED, SCROLLBAR,
     // Internal IDs follow:
     SCROLLBAR_THUMB, SCROLLBAR_BUTTON, SCROLLBAR_TRACK, SCROLLBAR_TRACK_PIECE, SCROLLBAR_CORNER, RESIZER,
-    INPUT_LIST_BUTTON, VISITED_LINK,
+    INPUT_LIST_BUTTON,
     AFTER_LAST_INTERNAL_PSEUDOID,
     FULL_SCREEN, FULL_SCREEN_DOCUMENT, FULL_SCREEN_ANCESTOR, ANIMATING_FULL_SCREEN_TRANSITION,
     FIRST_PUBLIC_PSEUDOID = FIRST_LINE,
@@ -83,11 +88,13 @@ enum PseudoId {
     PUBLIC_PSEUDOID_MASK = ((1 << FIRST_INTERNAL_PSEUDOID) - 1) & ~((1 << FIRST_PUBLIC_PSEUDOID) - 1)
 };
 
+enum ColumnSpan { ColumnSpanOne = 0, ColumnSpanAll};
+
 enum EBorderCollapse { BSEPARATE = 0, BCOLLAPSE = 1 };
 
 // These have been defined in the order of their precedence for border-collapsing. Do
 // not change this order!
-enum EBorderStyle { BNONE, BHIDDEN, INSET, GROOVE, RIDGE, OUTSET, DOTTED, DASHED, SOLID, DOUBLE };
+enum EBorderStyle { BNONE, BHIDDEN, INSET, GROOVE, OUTSET, RIDGE, DOTTED, DASHED, SOLID, DOUBLE };
 
 enum EBorderPrecedence { BOFF, BTABLE, BCOLGROUP, BCOL, BROWGROUP, BROW, BCELL };
 
@@ -334,9 +341,12 @@ enum ETextTransform {
     CAPITALIZE, UPPERCASE, LOWERCASE, TTNONE
 };
 
+static const size_t ETextDecorationBits = 4;
 enum ETextDecoration {
     TDNONE = 0x0 , UNDERLINE = 0x1, OVERLINE = 0x2, LINE_THROUGH= 0x4, BLINK = 0x8
 };
+inline ETextDecoration operator|(ETextDecoration a, ETextDecoration b) { return ETextDecoration(int(a) | int(b)); }
+inline ETextDecoration& operator|=(ETextDecoration& a, ETextDecoration b) { return a = a | b; }
 
 enum EPageBreak {
     PBAUTO, PBALWAYS, PBAVOID
@@ -402,8 +412,9 @@ enum EDisplay {
     TABLE_HEADER_GROUP, TABLE_FOOTER_GROUP, TABLE_ROW,
     TABLE_COLUMN_GROUP, TABLE_COLUMN, TABLE_CELL,
     TABLE_CAPTION, BOX, INLINE_BOX, 
-#if ENABLE(CSS3_FLEXBOX)
     FLEXBOX, INLINE_FLEXBOX,
+#if ENABLE(CSS_GRID_LAYOUT)
+    GRID, INLINE_GRID,
 #endif
     NONE
 };
@@ -444,6 +455,14 @@ enum EImageRendering { ImageRenderingAuto, ImageRenderingOptimizeSpeed, ImageRen
 enum Order { LogicalOrder = 0, VisualOrder };
 
 enum RegionOverflow { AutoRegionOverflow, BreakRegionOverflow };
+
+enum ColumnAxis { HorizontalColumnAxis, VerticalColumnAxis, AutoColumnAxis };
+
+enum LineGridSnap { LineGridSnapNone, LineGridSnapBaseline, LineGridSnapBounds };
+
+enum WrapFlow { WrapFlowAuto, WrapFlowBoth, WrapFlowLeft, WrapFlowRight, WrapFlowMaximum, WrapFlowClear };
+
+enum WrapThrough { WrapThroughWrap, WrapThroughNone };
 
 } // namespace WebCore
 

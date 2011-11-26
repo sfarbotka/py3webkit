@@ -26,7 +26,13 @@
 #include "config.h"
 #include "WebGLContextEvent.h"
 
+#include "EventNames.h"
+
 namespace WebCore {
+
+WebGLContextEventInit::WebGLContextEventInit()
+{
+}
 
 WebGLContextEvent::WebGLContextEvent()
 {
@@ -38,22 +44,19 @@ WebGLContextEvent::WebGLContextEvent(const AtomicString& type, bool canBubble, b
 {
 }
 
+WebGLContextEvent::WebGLContextEvent(const AtomicString& type, const WebGLContextEventInit& initializer)
+    : Event(type, initializer)
+    , m_statusMessage(initializer.statusMessage)
+{
+}
+
 WebGLContextEvent::~WebGLContextEvent()
 {
 }
 
-void WebGLContextEvent::initEvent(const AtomicString& type, bool canBubble, bool cancelable, const String& statusMessage)
+const AtomicString& WebGLContextEvent::interfaceName() const
 {
-    if (dispatched())
-        return;
-
-    Event::initEvent(type, canBubble, cancelable);
-    m_statusMessage = statusMessage;
-}
-
-bool WebGLContextEvent::isWebGLContextEvent() const
-{
-    return true;
+    return eventNames().interfaceForWebGLContextEvent;
 }
 
 } // namespace WebCore

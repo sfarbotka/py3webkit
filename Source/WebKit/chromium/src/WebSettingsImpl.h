@@ -87,6 +87,7 @@ public:
     virtual void setWebAudioEnabled(bool);
     virtual void setExperimentalWebGLEnabled(bool);
     virtual void setOpenGLMultisamplingEnabled(bool);
+    virtual void setPrivilegedWebGLExtensionsEnabled(bool);
     virtual void setShowDebugBorders(bool);
     virtual void setShowFPSCounter(bool);
     virtual bool showFPSCounter() const { return m_showFPSCounter; }
@@ -95,6 +96,7 @@ public:
     virtual void setEditingBehavior(EditingBehavior);
     virtual void setAcceleratedCompositingEnabled(bool);
     virtual void setForceCompositingMode(bool);
+    virtual void setMockScrollbarsEnabled(bool);
     virtual void setCompositeToTextureEnabled(bool);
     virtual bool compositeToTextureEnabled() const { return m_compositeToTextureEnabled; }
     virtual void setAcceleratedCompositingFor3DTransformsEnabled(bool);
@@ -103,6 +105,7 @@ public:
     virtual void setAcceleratedCompositingForCanvasEnabled(bool);
     virtual void setAcceleratedCompositingForAnimationEnabled(bool);
     virtual void setAccelerated2dCanvasEnabled(bool);
+    virtual void setAcceleratedCompositingForFixedPositionEnabled(bool);
     virtual void setLegacyAccelerated2dCanvasEnabled(bool);
     virtual void setMinimumAccelerated2dCanvasSize(int);
     virtual void setAcceleratedDrawingEnabled(bool);
@@ -111,6 +114,7 @@ public:
     virtual void setMemoryInfoEnabled(bool);
     virtual void setHyperlinkAuditingEnabled(bool);
     virtual void setAsynchronousSpellCheckingEnabled(bool);
+    virtual void setUnifiedTextCheckerEnabled(bool);
     virtual void setCaretBrowsingEnabled(bool);
     virtual void setInteractiveFormValidationEnabled(bool);
     virtual void setValidationMessageTimerMagnification(int);
@@ -121,6 +125,7 @@ public:
     virtual void setShouldPrintBackgrounds(bool);
     virtual void setEnableScrollAnimator(bool);
     virtual void setHixie76WebSocketProtocolEnabled(bool);
+    virtual void setVisualWordMovementEnabled(bool);
 
 private:
     WebCore::Settings* m_settings;

@@ -32,6 +32,7 @@
 #include "ProcessModel.h"
 #include "VisitedLinkProvider.h"
 #include "WebContextInjectedBundleClient.h"
+#include "WebContextConnectionClient.h"
 #include "WebDownloadClient.h"
 #include "WebHistoryClient.h"
 #include "WebProcessProxy.h"
@@ -74,6 +75,7 @@ public:
     static const Vector<WebContext*>& allContexts();
 
     void initializeInjectedBundleClient(const WKContextInjectedBundleClient*);
+    void initializeConnectionClient(const WKContextConnectionClient*);
     void initializeHistoryClient(const WKContextHistoryClient*);
     void initializeDownloadClient(const WKContextDownloadClient*);
 
@@ -169,6 +171,14 @@ public:
     void setIconDatabasePath(const String&);
     void setLocalStorageDirectory(const String& dir) { m_overrideLocalStorageDirectory = dir; }
 
+    String overrideWebInspectorBaseDirectory() const { return m_overrideWebInspectorBaseDirectory; }
+    void setOverrideWebInspectorBaseDirectory(const String& path) { m_overrideWebInspectorBaseDirectory = path; }
+
+    String overrideWebInspectorPagePath() const { return m_overrideWebInspectorPagePath; }
+    void setOverrideWebInspectorPagePath(const String& path) { m_overrideWebInspectorPagePath = path; }
+
+    void setOverrideWebInspectorLocalizedStringsPath(const String& path) { m_overrideWebInspectorLocalizedStringsPath = path; }
+
     void ensureWebProcess();
     void warmInitialProcess();
 
@@ -183,6 +193,12 @@ public:
     
     void getWebCoreStatistics(PassRefPtr<DictionaryCallback>);
     void garbageCollectJavaScriptObjects();
+
+#if PLATFORM(MAC)
+    static bool omitPDFSupport();
+#endif
+
+    void fullKeyboardAccessModeChanged(bool fullKeyboardAccessEnabled);
 
 private:
     WebContext(ProcessModel, const String& injectedBundlePath);
@@ -235,6 +251,8 @@ private:
     String m_injectedBundlePath;
     WebContextInjectedBundleClient m_injectedBundleClient;
 
+    WebContextConnectionClient m_connectionClient;
+    
     WebHistoryClient m_historyClient;
 
     PluginInfoStore m_pluginInfoStore;
@@ -275,10 +293,13 @@ private:
 #if PLATFORM(MAC)
     RetainPtr<CFTypeRef> m_enhancedAccessibilityObserver;
 #endif
-    
+
     String m_overrideDatabaseDirectory;
     String m_overrideIconDatabasePath;
     String m_overrideLocalStorageDirectory;
+    String m_overrideWebInspectorBaseDirectory;
+    String m_overrideWebInspectorPagePath;
+    String m_overrideWebInspectorLocalizedStringsPath;
 
     bool m_processTerminationEnabled;
     

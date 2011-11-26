@@ -50,7 +50,13 @@ class TextureManager;
 class CCProxy {
     WTF_MAKE_NONCOPYABLE(CCProxy);
 public:
-    virtual ~CCProxy() { }
+    static void setMainThread(CCThread*);
+    static CCThread* mainThread();
+
+    static void setImplThread(CCThread*);
+    static CCThread* implThread();
+
+    virtual ~CCProxy();
 
     virtual bool compositeAndReadback(void *pixels, const IntRect&) = 0;
 
@@ -64,9 +70,10 @@ public:
 
     virtual const LayerRendererCapabilities& layerRendererCapabilities() const = 0;
 
+    virtual void setNeedsAnimate() = 0;
     virtual void setNeedsCommit() = 0;
-    virtual void setNeedsCommitThenRedraw() = 0;
     virtual void setNeedsRedraw() = 0;
+    virtual void setVisible(bool) = 0;
 
     virtual void start() = 0; // Must be called before using the proxy.
     virtual void stop() = 0; // Must be called before deleting the proxy.
@@ -85,11 +92,10 @@ public:
 
 #ifndef NDEBUG
     static void setImplThread(bool);
-    static void setImplThread(WTF::ThreadIdentifier);
 #endif
 
 protected:
-    CCProxy() { }
+    CCProxy();
     friend class DebugScopedSetImplThread;
 };
 

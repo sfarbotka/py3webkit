@@ -30,17 +30,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.IFrameView}
+ * @extends {WebInspector.View}
  */
-WebInspector.NetworkLogView = function(parentElement)
+WebInspector.NetworkLogView = function()
 {
-    // FIXME: some of the styles should be loaded on demand by components that need them.
-    var styles = [
-        "inspectorCommon.css",
-        "dataGrid.css",
-        "networkLogView.css"
-    ];
-    WebInspector.IFrameView.call(this, parentElement, styles);
+    WebInspector.View.call(this);
+    this.registerRequiredCSS("networkLogView.css");
 
     this._allowResourceSelection = false;
     this._resources = [];
@@ -66,13 +61,15 @@ WebInspector.NetworkLogView = function(parentElement)
     WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.ResourceUpdated, this._onResourceUpdated, this);
     WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.ResourceFinished, this._onResourceUpdated, this);
 
-    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, this._frameNavigated, this);
+    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
     WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.OnLoad, this._onLoadEventFired, this);
     WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.DOMContentLoaded, this._domContentLoadedEventFired, this);
+
+    this._initializeView();
 }
 
 WebInspector.NetworkLogView.prototype = {
-    initializeView: function()
+    _initializeView: function()
     {
         this.element.id = "network-container";
 
@@ -129,7 +126,6 @@ WebInspector.NetworkLogView.prototype = {
 
     onResize: function()
     {
-        this._dataGrid.updateWidths();
         this._updateOffscreenRows();
     },
 
@@ -192,8 +188,7 @@ WebInspector.NetworkLogView.prototype = {
         this._dataGrid.resizeMethod = WebInspector.DataGrid.ResizeMethod.Last;
         this._dataGrid.element.addStyleClass("network-log-grid");
         this._dataGrid.element.addEventListener("contextmenu", this._contextMenu.bind(this), true);
-
-        this.element.appendChild(this._dataGrid.element);
+        this._dataGrid.show(this.element);
 
         // Event listeners need to be added _after_ we attach to the document, so that owner document is properly update.
         this._dataGrid.addEventListener("sorting changed", this._sortItems, this);
@@ -397,8 +392,10 @@ WebInspector.NetworkLogView.prototype = {
                 selectedRequestsNumber++;
                 selectedTransferSize += resourceTransferSize;
             }
-            if (resource === WebInspector.mainResource)
+            if (resource.url === WebInspector.inspectedPageURL) {
                 baseTime = resource.startTime;
+                WebInspector.mainResourceStartTime = resource.startTime;
+            }
             if (resource.endTime > maxTime)
                 maxTime = resource.endTime;
         }
@@ -510,7 +507,7 @@ WebInspector.NetworkLogView.prototype = {
 
         this._needsRefresh = true;
 
-        if (this.visible && !("_refreshTimeout" in this))
+        if (this.isShowing() && !this._refreshTimeout)
             this._refreshTimeout = setTimeout(this.refresh.bind(this), this._defaultRefreshDelay);
     },
 
@@ -528,7 +525,7 @@ WebInspector.NetworkLogView.prototype = {
         }
 
         var proceed = true;
-        if (!this.visible) {
+        if (!this.isShowing()) {
             this._scheduleRefresh();
             proceed = false;
         } else
@@ -624,14 +621,14 @@ WebInspector.NetworkLogView.prototype = {
     _createStatusbarButtons: function()
     {
         this._preserveLogToggle = new WebInspector.StatusBarButton(WebInspector.UIString("Preserve Log upon Navigation"), "record-profile-status-bar-item");
-        this._preserveLogToggle.addEventListener("click", this._onPreserveLogClicked.bind(this), false);
+        this._preserveLogToggle.addEventListener("click", this._onPreserveLogClicked, this);
 
         this._clearButton = new WebInspector.StatusBarButton(WebInspector.UIString("Clear"), "clear-status-bar-item");
-        this._clearButton.addEventListener("click", this._reset.bind(this), false);
+        this._clearButton.addEventListener("click", this._reset, this);
 
         this._largerResourcesButton = new WebInspector.StatusBarButton(WebInspector.UIString("Use small resource rows."), "network-larger-resources-status-bar-item");
         this._largerResourcesButton.toggled = WebInspector.settings.resourcesLargeRows.get();
-        this._largerResourcesButton.addEventListener("click", this._toggleLargerResources.bind(this), false);
+        this._largerResourcesButton.addEventListener("click", this._toggleLargerResources, this);
     },
 
     _onLoadEventFired: function(event)
@@ -650,20 +647,18 @@ WebInspector.NetworkLogView.prototype = {
 
     wasShown: function()
     {
-        WebInspector.IFrameView.prototype.wasShown.call(this);
         this._refreshIfNeeded();
     },
 
     willHide: function()
     {
-        WebInspector.IFrameView.prototype.willHide.call(this);
         this._popoverHelper.hidePopover();
     },
 
     refresh: function()
     {
         this._needsRefresh = false;
-        if ("_refreshTimeout" in this) {
+        if (this._refreshTimeout) {
             clearTimeout(this._refreshTimeout);
             delete this._refreshTimeout;
         }
@@ -801,15 +796,13 @@ WebInspector.NetworkLogView.prototype = {
         this._reset();
     },
 
-    _frameNavigated: function(event)
+    _mainFrameNavigated: function(event)
     {
-        if (!event.data.isMainFrame)
-            return;
-
-        var loaderId = event.data.loaderId;
-        // Main frame committed load.
         if (this._preserveLogToggle.toggled)
             return;
+
+        var frame = /** @type {WebInspector.ResourceTreeFrame} */ event.data;
+        var loaderId = frame.loaderId;
 
         // Preserve provisional load resources.
         var resourcesToPreserve = [];
@@ -990,7 +983,8 @@ WebInspector.NetworkLogView.prototype = {
         var harArchive = {
             log: (new WebInspector.HARLog(this._resources)).build()
         };
-        InspectorFrontendHost.saveAs(WebInspector.mainResource.domain + ".har", JSON.stringify(harArchive));
+        
+        InspectorFrontendHost.saveAs(WebInspector.inspectedPageDomain + ".har", JSON.stringify(harArchive));
     },
 
     _exportResource: function(resource)
@@ -1127,7 +1121,7 @@ WebInspector.NetworkLogView.prototype = {
                 node.reveal();
             this._currentMatchedResourceIndex = matchedResourceIndex;
         }
-        this.dispatchEventToListeners(WebInspector.NetworkLogView.EventTypes.SearchIndexUpdated, this._currentMatchedResourceIndex + 1);
+        this.dispatchEventToListeners(WebInspector.NetworkLogView.EventTypes.SearchIndexUpdated, this._currentMatchedResourceIndex);
     },
 
     performSearch: function(searchQuery, sortOrFilterApplied)
@@ -1138,7 +1132,7 @@ WebInspector.NetworkLogView.prototype = {
             currentMatchedRequestId = this._matchedResources[this._currentMatchedResourceIndex];
 
         if (!sortOrFilterApplied)
-            this._searchRegExp = createSearchRegex(searchQuery);
+            this._searchRegExp = createPlainTextSearchRegex(searchQuery, "i");
 
         this._clearSearchMatchedList();
 
@@ -1205,7 +1199,7 @@ WebInspector.NetworkLogView.prototype = {
     }
 };
 
-WebInspector.NetworkLogView.prototype.__proto__ = WebInspector.IFrameView.prototype;
+WebInspector.NetworkLogView.prototype.__proto__ = WebInspector.View.prototype;
 
 WebInspector.NetworkLogView.EventTypes = {
     ViewCleared: "ViewCleared",
@@ -1222,18 +1216,19 @@ WebInspector.NetworkLogView.EventTypes = {
 WebInspector.NetworkPanel = function()
 {
     WebInspector.Panel.call(this, "network");
+    this.registerRequiredCSS("networkPanel.css");
 
-    this.createSidebar();
-    this._networkLogView = new WebInspector.NetworkLogView(this.sidebarElement);
-    this.addChildView(this._networkLogView);
+    this.createSplitView();
+    this.splitView.hideMainElement();
 
-    this._viewsContainerElement = document.createElement("div");
+    this._networkLogView = new WebInspector.NetworkLogView();
+    this._networkLogView.show(this.sidebarElement);
+
+    this._viewsContainerElement = this.splitView.mainElement;
     this._viewsContainerElement.id = "network-views";
-    this._viewsContainerElement.className = "hidden";
+    this._viewsContainerElement.addStyleClass("hidden");
     if (!this._networkLogView.useLargeRows)
         this._viewsContainerElement.addStyleClass("small");
-
-    this.element.appendChild(this._viewsContainerElement);
 
     this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.ViewCleared, this._onViewCleared, this);
     this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.RowSizeChanged, this._onRowSizeChanged, this);
@@ -1275,22 +1270,6 @@ WebInspector.NetworkPanel.prototype = {
         this._networkLogView._reset();
     },
 
-    restoreSidebarWidth: function()
-    {
-        if (!this._viewingResourceMode)
-            return;
-
-        var preferredWidth = WebInspector.Panel.prototype.preferredSidebarWidth.call(this);
-        if (typeof(preferredWidth) === "undefined")
-            preferredWidth = 200;
-        WebInspector.Panel.prototype.updateSidebarWidth.call(this, preferredWidth);
-    },
-
-    updateMainViewWidth: function(width)
-    {
-        this._viewsContainerElement.style.left = width + "px";
-    },
-
     handleShortcut: function(event)
     {
         if (this._viewingResourceMode && event.keyCode === WebInspector.KeyboardShortcut.Keys.Esc.code) {
@@ -1302,10 +1281,9 @@ WebInspector.NetworkPanel.prototype = {
         WebInspector.Panel.prototype.handleShortcut.call(this, event);
     },
 
-    show: function()
+    wasShown: function()
     {
-        WebInspector.Panel.prototype.show.call(this);
-        this._networkLogView.show();
+        WebInspector.Panel.prototype.wasShown.call(this);
     },
 
     get resources()
@@ -1386,16 +1364,13 @@ WebInspector.NetworkPanel.prototype = {
         this._toggleViewingResourceMode();
 
         if (this.visibleView) {
-            this.removeChildView(this.visibleView);
+            this.visibleView.detach();
             delete this.visibleView;
         }
 
         var view = new WebInspector.NetworkItemView(resource);
-        this.addChildView(view);
         view.show(this._viewsContainerElement);
         this.visibleView = view;
-
-        this.restoreSidebarWidth();
     },
 
     _closeVisibleResource: function()
@@ -1403,11 +1378,9 @@ WebInspector.NetworkPanel.prototype = {
         this.element.removeStyleClass("viewing-resource");
 
         if (this.visibleView) {
-            this.removeChildView(this.visibleView);
+            this.visibleView.detach();
             delete this.visibleView;
         }
-
-        this.restoreSidebarWidth();
     },
 
     _toggleGridMode: function()
@@ -1415,9 +1388,7 @@ WebInspector.NetworkPanel.prototype = {
         if (this._viewingResourceMode) {
             this._viewingResourceMode = false;
             this.element.removeStyleClass("viewing-resource");
-            this._viewsContainerElement.addStyleClass("hidden");
-            this.sidebarElement.style.right = 0;
-            this.sidebarElement.style.removeProperty("width");
+            this.splitView.hideMainElement();
         }
 
         this._networkLogView.switchToDetailedView();
@@ -1432,8 +1403,7 @@ WebInspector.NetworkPanel.prototype = {
         this._viewingResourceMode = true;
 
         this.element.addStyleClass("viewing-resource");
-        this._viewsContainerElement.removeStyleClass("hidden");
-        this.restoreSidebarWidth();
+        this.splitView.showMainElement();
         this._networkLogView.allowPopover = false;
         this._networkLogView.allowResourceSelection = true;
         this._networkLogView.switchToBriefView();

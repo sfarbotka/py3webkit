@@ -33,7 +33,7 @@
 
 #define HAS_WEBAUDIO_RUNTIMEFEATURES 1
 
-#include "WebCommon.h"
+#include "platform/WebCommon.h"
 
 namespace WebKit {
 
@@ -109,11 +109,17 @@ public:
     WEBKIT_EXPORT static void enableFullScreenAPI(bool);
     WEBKIT_EXPORT static bool isFullScreenAPIEnabled();
 
+    WEBKIT_EXPORT static void enablePointerLock(bool);
+    WEBKIT_EXPORT static bool isPointerLockEnabled();
+
     WEBKIT_EXPORT static void enableMediaSource(bool);
     WEBKIT_EXPORT static bool isMediaSourceEnabled();
 
     WEBKIT_EXPORT static void enableVideoTrack(bool);
     WEBKIT_EXPORT static bool isVideoTrackEnabled();
+
+    WEBKIT_EXPORT static void enableGamepad(bool);
+    WEBKIT_EXPORT static bool isGamepadEnabled();
 
 private:
     WebRuntimeFeatures();

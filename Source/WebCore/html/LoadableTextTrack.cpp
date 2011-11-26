@@ -29,10 +29,18 @@
 
 #include "LoadableTextTrack.h"
 
+#include "Event.h"
+#include "HTMLTrackElement.h"
+#include "ScriptEventListener.h"
+#include "ScriptExecutionContext.h"
+#include "TextTrackCueList.h"
+
 namespace WebCore {
 
-LoadableTextTrack::LoadableTextTrack(const String& kind, const String& label, const String& language, bool isDefault)
-    : TextTrack(kind, label, language)
+LoadableTextTrack::LoadableTextTrack(HTMLTrackElement* track, const String& kind, const String& label, const String& language, bool isDefault)
+    : TextTrack(track->document(), track, kind, label, language, TrackElement)
+    , m_trackElement(track)
+    , m_loadTimer(this, &LoadableTextTrack::loadTimerFired)
     , m_isDefault(isDefault)
 {
 }
@@ -41,44 +49,94 @@ LoadableTextTrack::~LoadableTextTrack()
 {
 }
 
-void LoadableTextTrack::load(const String& url, ScriptExecutionContext* context)
+void LoadableTextTrack::clearClient()
 {
-    return m_parser.load(url, context, this);
+    m_trackElement = 0;
+    TextTrack::clearClient();
 }
 
-bool LoadableTextTrack::supportsType(const String& url)
+void LoadableTextTrack::scheduleLoad(const KURL& url)
 {
-    return m_parser.supportsType(url);
+    m_url = url;
+    if (!m_loadTimer.isActive())
+        m_loadTimer.startOneShot(0);
 }
 
-void LoadableTextTrack::newCuesParsed()
+void LoadableTextTrack::loadTimerFired(Timer<LoadableTextTrack>*)
 {
-    // FIXME(62883): Fetch new cues from parser and temporarily store to give to CueLoaderClient when fetchNewCuesFromLoader is called.
+    setReadyState(TextTrack::LOADING);
+    
+    if (m_loader)
+        m_loader->cancelLoad();
+
+    if (!m_trackElement || !m_trackElement->canLoadUrl(this, m_url)) {
+        setReadyState(TextTrack::HTML_ERROR);
+        return;
+    }
+
+    m_loader = TextTrackLoader::create(this, static_cast<ScriptExecutionContext*>(m_trackElement->document()));
+    m_loader->load(m_url);
 }
 
-void LoadableTextTrack::trackLoadStarted()
+void LoadableTextTrack::newCuesAvailable(TextTrackLoader* loader)
 {
-    setReadyState(TextTrack::Loading);
+    ASSERT_UNUSED(loader, m_loader == loader);
+
+    Vector<RefPtr<TextTrackCue> > newCues;
+    m_loader->getNewCues(newCues);
+
+    if (!m_cues)
+        m_cues = TextTrackCueList::create();    
+
+    for (size_t i = 0; i < newCues.size(); ++i) {
+        newCues[i]->setTrack(this);
+        m_cues->add(newCues[i]);
+    }
+
+    if (client())
+        client()->textTrackAddCues(this, m_cues.get());
 }
 
-void LoadableTextTrack::trackLoadError()
+void LoadableTextTrack::cueLoadingStarted(TextTrackLoader* loader)
 {
-    setReadyState(TextTrack::Error);
+    ASSERT_UNUSED(loader, m_loader == loader);
+    
+    setReadyState(TextTrack::LOADING);
 }
 
-void LoadableTextTrack::trackLoadCompleted()
+void LoadableTextTrack::cueLoadingCompleted(TextTrackLoader* loader, bool loadingFailed)
 {
-    setReadyState(TextTrack::Loaded);
+    ASSERT_UNUSED(loader, m_loader == loader);
+
+    loadingFailed ? setReadyState(TextTrack::HTML_ERROR) : setReadyState(TextTrack::LOADED);
+
+    if (m_trackElement)
+        m_trackElement->didCompleteLoad(this, loadingFailed);
 }
 
-void LoadableTextTrack::newCuesLoaded()
+void LoadableTextTrack::fireCueChangeEvent()
 {
-    // FIXME(62885): Tell the client to fetch the latest cues.
+    TextTrack::fireCueChangeEvent();
+    ExceptionCode ec = 0;
+    m_trackElement->dispatchEvent(Event::create(eventNames().cuechangeEvent, false, false), ec);
 }
 
-void LoadableTextTrack::fetchNewestCues(Vector<TextTrackCue*>&)
+size_t LoadableTextTrack::trackElementIndex()
 {
-    // FIXME(62885): Implement.
+    ASSERT(m_trackElement);
+    ASSERT(m_trackElement->parentNode());
+
+    size_t index = 0;
+    for (Node* node = m_trackElement->parentNode()->firstChild(); node; node = node->nextSibling()) {
+        if (!node->hasTagName(trackTag))
+            continue;
+        if (node == m_trackElement)
+            return index;
+        ++index;
+    }
+    ASSERT_NOT_REACHED();
+
+    return 0;
 }
 
 } // namespace WebCore

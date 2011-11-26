@@ -39,7 +39,9 @@ typedef uint16_t PredictedType;
 static const PredictedType PredictNone          = 0x0000; // We don't know anything yet.
 static const PredictedType PredictFinalObject   = 0x0001; // It's definitely a JSFinalObject.
 static const PredictedType PredictArray         = 0x0002; // It's definitely a JSArray.
-static const PredictedType PredictObjectOther   = 0x0010; // It's definitely an object but not JSFinalObject or JSArray.
+static const PredictedType PredictByteArray     = 0x0004; // It's definitely a JSByteArray or one of its subclasses.
+static const PredictedType PredictFunction      = 0x0008; // It's definitely a JSFunction or one of its subclasses.
+static const PredictedType PredictObjectOther   = 0x0020; // It's definitely an object but not JSFinalObject, JSArray, JSByteArray, or JSFunction.
 static const PredictedType PredictObjectMask    = 0x003f; // Bitmask used for testing for any kind of object prediction.
 static const PredictedType PredictString        = 0x0040; // It's definitely a JSString.
 static const PredictedType PredictCellOther     = 0x0080; // It's definitely a JSCell but not a subclass of JSObject and definitely not a JSString.
@@ -50,6 +52,8 @@ static const PredictedType PredictNumber        = 0x0300; // It's either an Int3
 static const PredictedType PredictBoolean       = 0x0400; // It's definitely a Boolean.
 static const PredictedType PredictOther         = 0x4000; // It's definitely none of the above.
 static const PredictedType PredictTop           = 0x7fff; // It can be any of the above.
+
+typedef bool (*PredictionChecker)(PredictedType);
 
 inline bool isCellPrediction(PredictedType value)
 {
@@ -79,6 +83,16 @@ inline bool isStringPrediction(PredictedType value)
 inline bool isArrayPrediction(PredictedType value)
 {
     return value == PredictArray;
+}
+
+inline bool isFunctionPrediction(PredictedType value)
+{
+    return value == PredictFunction;
+}
+
+inline bool isByteArrayPrediction(PredictedType value)
+{
+    return value == PredictByteArray;
 }
 
 inline bool isArrayOrOtherPrediction(PredictedType value)
@@ -115,6 +129,10 @@ inline bool isOtherPrediction(PredictedType value)
 const char* predictionToString(PredictedType value);
 #endif
 
+// Merge two predictions. Note that currently this just does left | right. It may
+// seem tempting to do so directly, but you would be doing so at your own peril,
+// since the merging protocol PredictedType may change at any time (and has already
+// changed several times in its history).
 inline PredictedType mergePredictions(PredictedType left, PredictedType right)
 {
     return left | right;

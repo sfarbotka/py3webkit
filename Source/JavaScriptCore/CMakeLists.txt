@@ -17,7 +17,7 @@ SET(JavaScriptCore_INCLUDE_DIRECTORIES
     "${JAVASCRIPTCORE_DIR}/yarr"
     "${JAVASCRIPTCORE_DIR}/wtf"
     "${DERIVED_SOURCES_JAVASCRIPTCORE_DIR}"
-    "${CMAKE_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/Source"
 )
 
 SET(JavaScriptCore_SOURCES
@@ -45,11 +45,32 @@ SET(JavaScriptCore_SOURCES
     bytecompiler/BytecodeGenerator.cpp
     bytecompiler/NodesCodegen.cpp
 
+    dfg/DFGAbstractState.cpp
+    dfg/DFGAssemblyHelpers.cpp
+    dfg/DFGByteCodeParser.cpp
+    dfg/DFGCapabilities.cpp
+    dfg/DFGCorrectableJumpPoint.cpp
+    dfg/DFGDriver.cpp
+    dfg/DFGGraph.cpp
+    dfg/DFGJITCompiler.cpp
+    dfg/DFGOSREntry.cpp
+    dfg/DFGOSRExit.cpp
+    dfg/DFGOSRExitCompiler.cpp
+    dfg/DFGOSRExitCompiler32_64.cpp
+    dfg/DFGOSRExitCompiler64.cpp
+    dfg/DFGOperations.cpp
+    dfg/DFGPropagator.cpp
+    dfg/DFGRepatch.cpp
+    dfg/DFGSpeculativeJIT.cpp
+    dfg/DFGSpeculativeJIT32_64.cpp
+    dfg/DFGSpeculativeJIT64.cpp
+    dfg/DFGThunks.cpp
+
     heap/AllocationSpace.cpp
+    heap/DFGCodeBlocks.cpp
     heap/Heap.cpp
     heap/HandleHeap.cpp
     heap/HandleStack.cpp
-    heap/JettisonedCodeBlocks.cpp
     heap/MachineStackMarker.cpp
     heap/MarkedBlock.cpp
     heap/MarkedSpace.cpp
@@ -77,7 +98,6 @@ SET(JavaScriptCore_SOURCES
     jit/JITStubs.cpp
     jit/ThunkGenerators.cpp
 
-    parser/JSParser.cpp
     parser/Lexer.cpp
     parser/Nodes.cpp
     parser/Parser.cpp
@@ -123,11 +143,13 @@ SET(JavaScriptCore_SOURCES
     runtime/JSArray.cpp
     runtime/JSByteArray.cpp
     runtime/JSCell.cpp
+    runtime/JSDateMath.cpp
     runtime/JSFunction.cpp
     runtime/JSBoundFunction.cpp
     runtime/JSGlobalData.cpp
     runtime/JSGlobalObject.cpp
     runtime/JSGlobalObjectFunctions.cpp
+    runtime/JSGlobalThis.cpp
     runtime/JSLock.cpp
     runtime/JSNotAnObject.cpp
     runtime/JSObject.cpp
@@ -157,7 +179,6 @@ SET(JavaScriptCore_SOURCES
     runtime/RegExpConstructor.cpp
     runtime/RegExpObject.cpp
     runtime/RegExpPrototype.cpp
-    runtime/RopeImpl.cpp
     runtime/ScopeChain.cpp
     runtime/SmallStrings.cpp
     runtime/StrictEvalActivation.cpp
@@ -246,7 +267,7 @@ ELSE ()
 ENDIF ()
 
 
-INCLUDE_IF_EXISTS(${JAVASCRIPTCORE_DIR}/CMakeLists${PORT}.txt)
+INCLUDE_IF_EXISTS(${JAVASCRIPTCORE_DIR}/Platform${PORT}.cmake)
 
 
 ADD_SUBDIRECTORY(wtf)

@@ -236,6 +236,46 @@ void JSArray::finishCreation(JSGlobalData& globalData, const ArgList& list)
     Heap::heap(this)->reportExtraMemoryCost(storageSize(initialStorage));
 }
 
+void JSArray::finishCreation(JSGlobalData& globalData, const JSValue* values, size_t length)
+{
+    Base::finishCreation(globalData);
+    ASSERT(inherits(&s_info));
+
+    unsigned initialCapacity = length;
+    unsigned initialStorage;
+    
+    // If the ArgList is empty, allocate space for 3 entries.  This value empirically
+    // works well for benchmarks.
+    if (!initialCapacity)
+        initialStorage = 3;
+    else
+        initialStorage = initialCapacity;
+    
+    m_storage = static_cast<ArrayStorage*>(fastMalloc(storageSize(initialStorage)));
+    m_storage->m_allocBase = m_storage;
+    m_indexBias = 0;
+    m_storage->m_length = initialCapacity;
+    m_vectorLength = initialStorage;
+    m_storage->m_numValuesInVector = initialCapacity;
+    m_storage->m_sparseValueMap = 0;
+    m_storage->subclassData = 0;
+    m_storage->reportedMapCapacity = 0;
+#if CHECK_ARRAY_CONSISTENCY
+    m_storage->m_inCompactInitialization = false;
+#endif
+
+    size_t i = 0;
+    WriteBarrier<Unknown>* vector = m_storage->m_vector;
+    for ( ; i != length; ++i)
+        vector[i].set(globalData, this, values[i]);
+    for (; i < initialStorage; i++)
+        vector[i].clear();
+
+    checkConsistency();
+
+    Heap::heap(this)->reportExtraMemoryCost(storageSize(initialStorage));
+}
+
 JSArray::~JSArray()
 {
     ASSERT(vptr() == JSGlobalData::jsArrayVPtr);
@@ -245,17 +285,18 @@ JSArray::~JSArray()
     fastFree(m_storage->m_allocBase);
 }
 
-bool JSArray::getOwnPropertySlot(ExecState* exec, unsigned i, PropertySlot& slot)
+bool JSArray::getOwnPropertySlotByIndex(JSCell* cell, ExecState* exec, unsigned i, PropertySlot& slot)
 {
-    ArrayStorage* storage = m_storage;
+    JSArray* thisObject = jsCast<JSArray*>(cell);
+    ArrayStorage* storage = thisObject->m_storage;
     
     if (i >= storage->m_length) {
         if (i > MAX_ARRAY_INDEX)
-            return getOwnPropertySlot(exec, Identifier::from(exec, i), slot);
+            return thisObject->methodTable()->getOwnPropertySlot(thisObject, exec, Identifier::from(exec, i), slot);
         return false;
     }
 
-    if (i < m_vectorLength) {
+    if (i < thisObject->m_vectorLength) {
         JSValue value = storage->m_vector[i].get();
         if (value) {
             slot.setValue(value);
@@ -271,39 +312,41 @@ bool JSArray::getOwnPropertySlot(ExecState* exec, unsigned i, PropertySlot& slot
         }
     }
 
-    return JSObject::getOwnPropertySlot(exec, Identifier::from(exec, i), slot);
+    return JSObject::getOwnPropertySlot(thisObject, exec, Identifier::from(exec, i), slot);
 }
 
-bool JSArray::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
+bool JSArray::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     if (propertyName == exec->propertyNames().length) {
-        slot.setValue(jsNumber(length()));
+        slot.setValue(jsNumber(thisObject->length()));
         return true;
     }
 
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
     if (isArrayIndex)
-        return JSArray::getOwnPropertySlot(exec, i, slot);
+        return JSArray::getOwnPropertySlotByIndex(thisObject, exec, i, slot);
 
-    return JSObject::getOwnPropertySlot(exec, propertyName, slot);
+    return JSObject::getOwnPropertySlot(thisObject, exec, propertyName, slot);
 }
 
-bool JSArray::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool JSArray::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
+    JSArray* thisObject = jsCast<JSArray*>(object);
     if (propertyName == exec->propertyNames().length) {
-        descriptor.setDescriptor(jsNumber(length()), DontDelete | DontEnum);
+        descriptor.setDescriptor(jsNumber(thisObject->length()), DontDelete | DontEnum);
         return true;
     }
 
-    ArrayStorage* storage = m_storage;
+    ArrayStorage* storage = thisObject->m_storage;
     
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
     if (isArrayIndex) {
         if (i >= storage->m_length)
             return false;
-        if (i < m_vectorLength) {
+        if (i < thisObject->m_vectorLength) {
             WriteBarrier<Unknown>& value = storage->m_vector[i];
             if (value) {
                 descriptor.setDescriptor(value.get(), 0);
@@ -319,22 +362,17 @@ bool JSArray::getOwnPropertyDescriptor(ExecState* exec, const Identifier& proper
             }
         }
     }
-    return JSObject::getOwnPropertyDescriptor(exec, propertyName, descriptor);
-}
-
-void JSArray::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
-{
-    put(this, exec, propertyName, value, slot);
+    return JSObject::getOwnPropertyDescriptor(thisObject, exec, propertyName, descriptor);
 }
 
 // ECMA 15.4.5.1
 void JSArray::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    JSArray* thisObject = static_cast<JSArray*>(cell);
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
     if (isArrayIndex) {
-        put(thisObject, exec, i, value);
+        putByIndex(thisObject, exec, i, value);
         return;
     }
 
@@ -351,14 +389,9 @@ void JSArray::put(JSCell* cell, ExecState* exec, const Identifier& propertyName,
     JSObject::put(thisObject, exec, propertyName, value, slot);
 }
 
-void JSArray::put(ExecState* exec, unsigned i, JSValue value)
+void JSArray::putByIndex(JSCell* cell, ExecState* exec, unsigned i, JSValue value)
 {
-    put(this, exec, i, value);
-}
-
-void JSArray::put(JSCell* cell, ExecState* exec, unsigned i, JSValue value)
-{
-    JSArray* thisObject = static_cast<JSArray*>(cell);
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     thisObject->checkConsistency();
 
     ArrayStorage* storage = thisObject->m_storage;
@@ -394,7 +427,7 @@ NEVER_INLINE void JSArray::putSlowCase(ExecState* exec, unsigned i, JSValue valu
     if (i >= MIN_SPARSE_ARRAY_INDEX) {
         if (i > MAX_ARRAY_INDEX) {
             PutPropertySlot slot;
-            put(exec, Identifier::from(exec, i), value, slot);
+            methodTable()->put(this, exec, Identifier::from(exec, i), value, slot);
             return;
         }
 
@@ -495,18 +528,13 @@ NEVER_INLINE void JSArray::putSlowCase(ExecState* exec, unsigned i, JSValue valu
     Heap::heap(this)->reportExtraMemoryCost(storageSize(newVectorLength) - storageSize(vectorLength));
 }
 
-bool JSArray::deleteProperty(ExecState* exec, const Identifier& propertyName)
-{
-    return deleteProperty(this, exec, propertyName);
-}
-
 bool JSArray::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
 {
-    JSArray* thisObject = static_cast<JSArray*>(cell);
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     bool isArrayIndex;
     unsigned i = propertyName.toArrayIndex(isArrayIndex);
     if (isArrayIndex)
-        return thisObject->deleteProperty(exec, i);
+        return thisObject->methodTable()->deletePropertyByIndex(thisObject, exec, i);
 
     if (propertyName == exec->propertyNames().length)
         return false;
@@ -514,14 +542,9 @@ bool JSArray::deleteProperty(JSCell* cell, ExecState* exec, const Identifier& pr
     return JSObject::deleteProperty(thisObject, exec, propertyName);
 }
 
-bool JSArray::deleteProperty(ExecState* exec, unsigned i)
+bool JSArray::deletePropertyByIndex(JSCell* cell, ExecState* exec, unsigned i)
 {
-    return deleteProperty(this, exec, i);
-}
-
-bool JSArray::deleteProperty(JSCell* cell, ExecState* exec, unsigned i)
-{
-    JSArray* thisObject = static_cast<JSArray*>(cell);
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     thisObject->checkConsistency();
 
     ArrayStorage* storage = thisObject->m_storage;
@@ -552,20 +575,21 @@ bool JSArray::deleteProperty(JSCell* cell, ExecState* exec, unsigned i)
     thisObject->checkConsistency();
 
     if (i > MAX_ARRAY_INDEX)
-        return thisObject->deleteProperty(exec, Identifier::from(exec, i));
+        return thisObject->methodTable()->deleteProperty(thisObject, exec, Identifier::from(exec, i));
 
     return false;
 }
 
-void JSArray::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
+void JSArray::getOwnPropertyNames(JSObject* object, ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
 {
+    JSArray* thisObject = jsCast<JSArray*>(object);
     // FIXME: Filling PropertyNameArray with an identifier for every integer
     // is incredibly inefficient for large arrays. We need a different approach,
     // which almost certainly means a different structure for PropertyNameArray.
 
-    ArrayStorage* storage = m_storage;
+    ArrayStorage* storage = thisObject->m_storage;
     
-    unsigned usedVectorLength = min(storage->m_length, m_vectorLength);
+    unsigned usedVectorLength = min(storage->m_length, thisObject->m_vectorLength);
     for (unsigned i = 0; i < usedVectorLength; ++i) {
         if (storage->m_vector[i])
             propertyNames.add(Identifier::from(exec, i));
@@ -580,7 +604,7 @@ void JSArray::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNa
     if (mode == IncludeDontEnumProperties)
         propertyNames.add(exec->propertyNames().length);
 
-    JSObject::getOwnPropertyNames(exec, propertyNames, mode);
+    JSObject::getOwnPropertyNames(thisObject, exec, propertyNames, mode);
 }
 
 ALWAYS_INLINE unsigned JSArray::getNewVectorLength(unsigned desiredLength)
@@ -769,7 +793,7 @@ void JSArray::push(ExecState* exec, JSValue value)
     ArrayStorage* storage = m_storage;
 
     if (UNLIKELY(storage->m_length == 0xFFFFFFFFu)) {
-        put(exec, storage->m_length, value);
+        methodTable()->putByIndex(this, exec, storage->m_length, value);
         throwError(exec, createRangeError(exec, "Invalid array length"));
         return;
     }
@@ -823,7 +847,7 @@ void JSArray::shiftCount(ExecState* exec, int count)
                 PropertySlot slot(this);
                 JSValue p = prototype();
                 if ((!p.isNull()) && (asObject(p)->getPropertySlot(exec, i, slot)))
-                    put(exec, i, slot.getValue(exec, i));
+                    methodTable()->putByIndex(this, exec, i, slot.getValue(exec, i));
             }
         }
 
@@ -872,7 +896,7 @@ void JSArray::unshiftCount(ExecState* exec, int count)
                 PropertySlot slot(this);
                 JSValue p = prototype();
                 if ((!p.isNull()) && (asObject(p)->getPropertySlot(exec, i, slot)))
-                    put(exec, i, slot.getValue(exec, i));
+                    methodTable()->putByIndex(this, exec, i, slot.getValue(exec, i));
             }
         }
     }
@@ -897,11 +921,23 @@ void JSArray::unshiftCount(ExecState* exec, int count)
 
 void JSArray::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSArray* thisObject = static_cast<JSArray*>(cell);
+    JSArray* thisObject = jsCast<JSArray*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
-    thisObject->visitChildrenDirect(visitor);
+
+    JSNonFinalObject::visitChildren(thisObject, visitor);
+    
+    ArrayStorage* storage = thisObject->m_storage;
+
+    unsigned usedVectorLength = std::min(storage->m_length, thisObject->m_vectorLength);
+    visitor.appendValues(storage->m_vector, usedVectorLength);
+
+    if (SparseArrayValueMap* map = storage->m_sparseValueMap) {
+        SparseArrayValueMap::iterator end = map->end();
+        for (SparseArrayValueMap::iterator it = map->begin(); it != end; ++it)
+            visitor.append(&it->second);
+    }
 }
 
 static int compareNumbersForQSort(const void* a, const void* b)

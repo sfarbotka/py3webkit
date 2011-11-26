@@ -98,6 +98,12 @@ enum {
 };
 typedef NSUInteger WebFindOptions;
 
+typedef enum {
+    WebPaginationModeUnpaginated,
+    WebPaginationModeHorizontal,
+    WebPaginationModeVertical,
+} WebPaginationMode;
+
 @interface WebController : NSTreeController {
     IBOutlet WebView *webView;
 }
@@ -479,6 +485,7 @@ Could be worth adding to the API.
 - (BOOL)_postsAcceleratedCompositingNotifications;
 - (void)_setPostsAcceleratedCompositingNotifications:(BOOL)flag;
 - (BOOL)_isUsingAcceleratedCompositing;
+- (void)_setBaseCTM:(CGAffineTransform)transform forContext:(CGContextRef)context;
 
 // For DumpRenderTree
 - (BOOL)interactiveFormValidationEnabled;
@@ -542,6 +549,8 @@ Could be worth adding to the API.
 
 + (void)_setDomainRelaxationForbidden:(BOOL)forbidden forURLScheme:(NSString *)scheme;
 + (void)_registerURLSchemeAsSecure:(NSString *)scheme;
++ (void)_registerURLSchemeAsAllowingLocalStorageAccessInPrivateBrowsing:(NSString *)scheme;
++ (void)_registerURLSchemeAsAllowingDatabaseAccessInPrivateBrowsing:(NSString *)scheme;
 
 - (void)_scaleWebView:(float)scale atOrigin:(NSPoint)origin;
 - (float)_viewScaleFactor;
@@ -552,7 +561,14 @@ Could be worth adding to the API.
 - (BOOL)_useFixedLayout;
 - (NSSize)_fixedLayoutSize;
 
+- (void)_setPaginationMode:(WebPaginationMode)paginationMode;
+- (WebPaginationMode)_paginationMode;
+- (void)_setGapBetweenPages:(CGFloat)pageGap;
+- (CGFloat)_gapBetweenPages;
+- (NSUInteger)_pageCount;
+
 - (void)_setCustomBackingScaleFactor:(CGFloat)overrideScaleFactor;
+- (CGFloat)_backingScaleFactor;
 
 // Deprecated. Use the methods in pending public above instead.
 - (NSUInteger)markAllMatchesForText:(NSString *)string caseSensitive:(BOOL)caseFlag highlight:(BOOL)highlight limit:(NSUInteger)limit;
@@ -698,7 +714,7 @@ Could be worth adding to the API.
 - (JSValueRef)_nodesFromRect:(JSContextRef)context forDocument:(JSValueRef)value x:(int)x  y:(int)y top:(unsigned)top right:(unsigned)right bottom:(unsigned)bottom left:(unsigned)left ignoreClipping:(BOOL)ignoreClipping;
 @end
 
-@interface NSObject (WebFrameLoadDelegatePrivate)
+@interface NSObject (WebViewFrameLoadDelegatePrivate)
 - (void)webView:(WebView *)sender didFirstLayoutInFrame:(WebFrame *)frame;
 
 // didFinishDocumentLoadForFrame is sent when the document has finished loading, though not necessarily all
@@ -716,7 +732,7 @@ Could be worth adding to the API.
 
 @end
 
-@interface NSObject (WebResourceLoadDelegatePrivate)
+@interface NSObject (WebViewResourceLoadDelegatePrivate)
 // Addresses <rdar://problem/5008925> - SPI for now
 - (NSCachedURLResponse *)webView:(WebView *)sender resource:(id)identifier willCacheResponse:(NSCachedURLResponse *)response fromDataSource:(WebDataSource *)dataSource;
 @end

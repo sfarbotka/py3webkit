@@ -55,12 +55,12 @@ SOFT_LINK(libxslt, xsltLoadStylesheetPI, xsltStylesheetPtr, (xmlDocPtr doc), (do
 namespace WebCore {
 
 XSLStyleSheet::XSLStyleSheet(XSLImportRule* parentRule, const String& originalURL, const KURL& finalURL)
-    : StyleSheet(parentRule, originalURL, finalURL)
+    : StyleSheet(static_cast<Node*>(0), originalURL, finalURL)
     , m_embedded(false)
     , m_processed(false) // Child sheets get marked as processed when the libxslt engine has finally seen them.
     , m_stylesheetDoc(0)
     , m_stylesheetDocTaken(false)
-    , m_parentStyleSheet(0)
+    , m_parentStyleSheet(parentRule ? parentRule->parentStyleSheet() : 0)
 {
 }
 
@@ -78,18 +78,18 @@ XSLStyleSheet::~XSLStyleSheet()
 {
     if (!m_stylesheetDocTaken)
         xmlFreeDoc(m_stylesheetDoc);
+
+    for (unsigned i = 0; i < m_children.size(); ++i) {
+        ASSERT(m_children.at(i)->parentStyleSheet() == this);
+        m_children.at(i)->setParentStyleSheet(0);
+    }
 }
 
 bool XSLStyleSheet::isLoading()
 {
-    unsigned len = length();
-    for (unsigned i = 0; i < len; ++i) {
-        StyleBase* rule = item(i);
-        if (rule->isImportRule()) {
-            XSLImportRule* import = static_cast<XSLImportRule*>(rule);
-            if (import->isLoading())
-                return true;
-        }
+    for (unsigned i = 0; i < m_children.size(); ++i) {
+        if (m_children.at(i)->isLoading())
+            return true;
     }
     return false;
 }
@@ -98,8 +98,8 @@ void XSLStyleSheet::checkLoaded()
 {
     if (isLoading())
         return;
-    if (parent())
-        parent()->checkLoaded();
+    if (XSLStyleSheet* styleSheet = parentStyleSheet())
+        styleSheet->checkLoaded();
     if (ownerNode())
         ownerNode()->sheetLoaded();
 }
@@ -114,14 +114,10 @@ xmlDocPtr XSLStyleSheet::document()
 void XSLStyleSheet::clearDocuments()
 {
     m_stylesheetDoc = 0;
-    unsigned len = length();
-    for (unsigned i = 0; i < len; ++i) {
-        StyleBase* rule = item(i);
-        if (rule->isImportRule()) {
-            XSLImportRule* import = static_cast<XSLImportRule*>(rule);
-            if (import->styleSheet())
-                import->styleSheet()->clearDocuments();
-        }
+    for (unsigned i = 0; i < m_children.size(); ++i) {
+        XSLImportRule* import = m_children.at(i).get();
+        if (import->styleSheet())
+            import->styleSheet()->clearDocuments();
     }
 }
 
@@ -233,9 +229,10 @@ void XSLStyleSheet::loadChildSheets()
 
 void XSLStyleSheet::loadChildSheet(const String& href)
 {
-    RefPtr<XSLImportRule> childRule = XSLImportRule::create(this, href);
-    append(childRule);
-    childRule->loadSheet();
+    OwnPtr<XSLImportRule> childRule = XSLImportRule::create(this, href);
+    XSLImportRule* c = childRule.get();
+    m_children.append(childRule.release());
+    c->loadSheet();
 }
 
 xsltStylesheetPtr XSLStyleSheet::compileStyleSheet()
@@ -271,38 +268,34 @@ Document* XSLStyleSheet::ownerDocument()
 xmlDocPtr XSLStyleSheet::locateStylesheetSubResource(xmlDocPtr parentDoc, const xmlChar* uri)
 {
     bool matchedParent = (parentDoc == document());
-    unsigned len = length();
-    for (unsigned i = 0; i < len; ++i) {
-        StyleBase* rule = item(i);
-        if (rule->isImportRule()) {
-            XSLImportRule* import = static_cast<XSLImportRule*>(rule);
-            XSLStyleSheet* child = import->styleSheet();
-            if (!child)
-                continue;
-            if (matchedParent) {
-                if (child->processed())
-                    continue; // libxslt has been given this sheet already.
+    for (unsigned i = 0; i < m_children.size(); ++i) {
+        XSLImportRule* import = m_children.at(i).get();
+        XSLStyleSheet* child = import->styleSheet();
+        if (!child)
+            continue;
+        if (matchedParent) {
+            if (child->processed())
+                continue; // libxslt has been given this sheet already.
 
-                // Check the URI of the child stylesheet against the doc URI.
-                // In order to ensure that libxml canonicalized both URLs, we get the original href
-                // string from the import rule and canonicalize it using libxml before comparing it
-                // with the URI argument.
-                CString importHref = import->href().utf8();
-                xmlChar* base = xmlNodeGetBase(parentDoc, (xmlNodePtr)parentDoc);
-                xmlChar* childURI = xmlBuildURI((const xmlChar*)importHref.data(), base);
-                bool equalURIs = xmlStrEqual(uri, childURI);
-                xmlFree(base);
-                xmlFree(childURI);
-                if (equalURIs) {
-                    child->markAsProcessed();
-                    return child->document();
-                }
-            } else {
-                xmlDocPtr result = import->styleSheet()->locateStylesheetSubResource(parentDoc, uri);
-                if (result)
-                    return result;
+            // Check the URI of the child stylesheet against the doc URI.
+            // In order to ensure that libxml canonicalized both URLs, we get the original href
+            // string from the import rule and canonicalize it using libxml before comparing it
+            // with the URI argument.
+            CString importHref = import->href().utf8();
+            xmlChar* base = xmlNodeGetBase(parentDoc, (xmlNodePtr)parentDoc);
+            xmlChar* childURI = xmlBuildURI((const xmlChar*)importHref.data(), base);
+            bool equalURIs = xmlStrEqual(uri, childURI);
+            xmlFree(base);
+            xmlFree(childURI);
+            if (equalURIs) {
+                child->markAsProcessed();
+                return child->document();
             }
+            continue;
         }
+        xmlDocPtr result = import->styleSheet()->locateStylesheetSubResource(parentDoc, uri);
+        if (result)
+            return result;
     }
 
     return 0;

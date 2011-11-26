@@ -24,6 +24,7 @@
 #ifndef RenderMenuList_h
 #define RenderMenuList_h
 
+#include "LayoutTypes.h"
 #include "PopupMenu.h"
 #include "PopupMenuClient.h"
 #include "RenderDeprecatedFlexibleBox.h"

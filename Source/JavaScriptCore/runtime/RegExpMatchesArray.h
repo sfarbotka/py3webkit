@@ -39,88 +39,79 @@ namespace JSC {
         }
         virtual ~RegExpMatchesArray();
 
+        static JS_EXPORTDATA const ClassInfo s_info;
+        
+        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
+        {
+            return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info);
+        }
+        
     protected:
         void finishCreation(JSGlobalData&, RegExpConstructorPrivate* data);
 
     private:
-        virtual bool getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
+        static bool getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            return JSArray::getOwnPropertySlot(exec, propertyName, slot);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            return JSArray::getOwnPropertySlot(thisObject, exec, propertyName, slot);
         }
 
-        virtual bool getOwnPropertySlot(ExecState* exec, unsigned propertyName, PropertySlot& slot)
+        static bool getOwnPropertySlotByIndex(JSCell* cell, ExecState* exec, unsigned propertyName, PropertySlot& slot)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            return JSArray::getOwnPropertySlot(exec, propertyName, slot);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            return JSArray::getOwnPropertySlotByIndex(thisObject, exec, propertyName, slot);
         }
 
-        virtual bool getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+        static bool getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            return JSArray::getOwnPropertyDescriptor(exec, propertyName, descriptor);
-        }
-
-        virtual void put(ExecState* exec, const Identifier& propertyName, JSValue v, PutPropertySlot& slot)
-        {
-            put(this, exec, propertyName, v, slot);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(object);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            return JSArray::getOwnPropertyDescriptor(thisObject, exec, propertyName, descriptor);
         }
 
         static void put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue v, PutPropertySlot& slot)
         {
-            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
             if (thisObject->subclassData())
                 thisObject->fillArrayInstance(exec);
             JSArray::put(thisObject, exec, propertyName, v, slot);
         }
         
-        virtual void put(ExecState* exec, unsigned propertyName, JSValue v)
+        static void putByIndex(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue v)
         {
-            put(this, exec, propertyName, v);
-        }
-        
-        static void put(JSCell* cell, ExecState* exec, unsigned propertyName, JSValue v)
-        {
-            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
             if (thisObject->subclassData())
                 thisObject->fillArrayInstance(exec);
-            JSArray::put(thisObject, exec, propertyName, v);
-        }
-
-        virtual bool deleteProperty(ExecState* exec, const Identifier& propertyName)
-        {
-            return deleteProperty(this, exec, propertyName);
+            JSArray::putByIndex(thisObject, exec, propertyName, v);
         }
 
         static bool deleteProperty(JSCell* cell, ExecState* exec, const Identifier& propertyName)
         {
-            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
             if (thisObject->subclassData())
                 thisObject->fillArrayInstance(exec);
             return JSArray::deleteProperty(thisObject, exec, propertyName);
         }
 
-        virtual bool deleteProperty(ExecState* exec, unsigned propertyName)
+        static bool deletePropertyByIndex(JSCell* cell, ExecState* exec, unsigned propertyName)
         {
-            return deleteProperty(this, exec, propertyName);
-        }
-
-        static bool deleteProperty(JSCell* cell, ExecState* exec, unsigned propertyName)
-        {
-            RegExpMatchesArray* thisObject = static_cast<RegExpMatchesArray*>(cell);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(cell);
             if (thisObject->subclassData())
                 thisObject->fillArrayInstance(exec);
-            return JSArray::deleteProperty(thisObject, exec, propertyName);
+            return JSArray::deletePropertyByIndex(thisObject, exec, propertyName);
         }
 
-        virtual void getOwnPropertyNames(ExecState* exec, PropertyNameArray& arr, EnumerationMode mode = ExcludeDontEnumProperties)
+        static void getOwnPropertyNames(JSObject* object, ExecState* exec, PropertyNameArray& arr, EnumerationMode mode = ExcludeDontEnumProperties)
         {
-            if (subclassData())
-                fillArrayInstance(exec);
-            JSArray::getOwnPropertyNames(exec, arr, mode);
+            RegExpMatchesArray* thisObject = jsCast<RegExpMatchesArray*>(object);
+            if (thisObject->subclassData())
+                thisObject->fillArrayInstance(exec);
+            JSArray::getOwnPropertyNames(thisObject, exec, arr, mode);
         }
 
         void fillArrayInstance(ExecState*);

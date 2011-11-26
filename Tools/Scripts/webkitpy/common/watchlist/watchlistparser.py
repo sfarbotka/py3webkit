@@ -28,6 +28,7 @@
 
 
 import difflib
+import logging
 import re
 
 from webkitpy.common.watchlist.amountchangedpattern import AmountChangedPattern
@@ -35,6 +36,10 @@ from webkitpy.common.watchlist.changedlinepattern import ChangedLinePattern
 from webkitpy.common.watchlist.filenamepattern import FilenamePattern
 from webkitpy.common.watchlist.watchlist import WatchList
 from webkitpy.common.watchlist.watchlistrule import WatchListRule
+from webkitpy.common.config.committers import CommitterList
+
+
+_log = logging.getLogger(__name__)
 
 
 class WatchListParser(object):
@@ -43,7 +48,8 @@ class WatchListParser(object):
     _MESSAGE_RULES = 'MESSAGE_RULES'
     _INVALID_DEFINITION_NAME_REGEX = r'\|'
 
-    def __init__(self):
+    def __init__(self, log_error=None):
+        self._log_error = log_error or _log.error
         self._section_parsers = {
             self._DEFINITIONS: self._parse_definition_section,
             self._CC_RULES: self._parse_cc_rules,
@@ -51,10 +57,10 @@ class WatchListParser(object):
         }
         self._definition_pattern_parsers = {
             'filename': FilenamePattern,
-            'in_added_lines': (lambda regex: ChangedLinePattern(regex, 0)),
-            'in_deleted_lines': (lambda regex: ChangedLinePattern(regex, 1)),
-            'less': (lambda regex: AmountChangedPattern(regex, 1)),
-            'more': (lambda regex: AmountChangedPattern(regex, 0)),
+            'in_added_lines': (lambda compiled_regex: ChangedLinePattern(compiled_regex, 0)),
+            'in_deleted_lines': (lambda compiled_regex: ChangedLinePattern(compiled_regex, 1)),
+            'less': (lambda compiled_regex: AmountChangedPattern(compiled_regex, 1)),
+            'more': (lambda compiled_regex: AmountChangedPattern(compiled_regex, 0)),
         }
 
     def parse(self, watch_list_contents):
@@ -67,9 +73,10 @@ class WatchListParser(object):
         for section in dictionary:
             parser = self._section_parsers.get(section)
             if not parser:
-                raise Exception(('Unknown section "%s" in watch list.'
-                                 + self._suggest_words(section, self._section_parsers.keys()))
-                                % section)
+                self._log_error(('Unknown section "%s" in watch list.'
+                                + self._suggest_words(section, self._section_parsers.keys()))
+                               % section)
+                continue
             parser(dictionary[section], watch_list)
 
         self._validate(watch_list)
@@ -89,21 +96,30 @@ class WatchListParser(object):
         for name in definition_section:
             invalid_character = re.search(self._INVALID_DEFINITION_NAME_REGEX, name)
             if invalid_character:
-                raise Exception('Invalid character "%s" in definition "%s".' % (invalid_character.group(0), name))
+                self._log_error('Invalid character "%s" in definition "%s".' % (invalid_character.group(0), name))
+                continue
 
             definition = definition_section[name]
             definitions[name] = []
             for pattern_type in definition:
                 pattern_parser = self._definition_pattern_parsers.get(pattern_type)
                 if not pattern_parser:
-                    raise Exception(('Unknown pattern type "%s" in definition "%s".'
+                    self._log_error(('Unknown pattern type "%s" in definition "%s".'
                                      + self._suggest_words(pattern_type, self._definition_pattern_parsers.keys()))
                                     % (pattern_type, name))
+                    continue
 
-                pattern = pattern_parser(definition[pattern_type])
+                try:
+                    compiled_regex = re.compile(definition[pattern_type])
+                except Exception, e:
+                    self._log_error('The regex "%s" is invalid due to "%s".' % (definition[pattern_type], str(e)))
+                    continue
+
+                pattern = pattern_parser(compiled_regex)
                 definitions[name].append(pattern)
             if not definitions[name]:
-                raise Exception('The definition "%s" has no patterns, so it should be deleted.' % name)
+                self._log_error('The definition "%s" has no patterns, so it should be deleted.' % name)
+                continue
         watch_list.definitions = definitions
 
     def _parse_rules(self, rules_section):
@@ -111,7 +127,8 @@ class WatchListParser(object):
         for complex_definition in rules_section:
             instructions = rules_section[complex_definition]
             if not instructions:
-                raise Exception('A rule for definition "%s" is empty, so it should be deleted.' % complex_definition)
+                self._log_error('A rule for definition "%s" is empty, so it should be deleted.' % complex_definition)
+                continue
             rules.append(WatchListRule(complex_definition, instructions))
         return rules
 
@@ -129,11 +146,22 @@ class WatchListParser(object):
         self._validate_definitions(cc_definitions_set, self._CC_RULES, watch_list)
         self._validate_definitions(messages_definitions_set, self._MESSAGE_RULES, watch_list)
 
+        accounts = CommitterList()
+        for cc_rule in watch_list.cc_rules:
+            # Copy the instructions since we'll be remove items from the original list and
+            # modifying a list while iterating through it leads to undefined behavior.
+            intructions_copy = cc_rule.instructions()[:]
+            for email in intructions_copy:
+                if not accounts.account_by_login(email):
+                    cc_rule.remove_instruction(email)
+                    self._log_error("The email alias %s which is in the watchlist is not listed as a contributor in committers.py" % email)
+                    continue
+
     def _verify_all_definitions_are_used(self, watch_list, used_definitions):
         definitions_not_used = set(watch_list.definitions.keys())
         definitions_not_used.difference_update(used_definitions)
         if definitions_not_used:
-            raise Exception('The following definitions are not used and should be removed: %s' % (', '.join(definitions_not_used)))
+            self._log_error('The following definitions are not used and should be removed: %s' % (', '.join(definitions_not_used)))
 
     def _validate_definitions(self, definitions, rules_section_name, watch_list):
         declared_definitions = watch_list.definitions.keys()
@@ -144,7 +172,7 @@ class WatchListParser(object):
             suggestions = ''
             if len(definition_set) == 1:
                 suggestions = self._suggest_words(set().union(definition_set).pop(), declared_definitions)
-            raise Exception('In section "%s", the following definitions are not used and should be removed: %s%s' % (rules_section_name, ', '.join(definition_set), suggestions))
+            self._log_error('In section "%s", the following definitions are not used and should be removed: %s%s' % (rules_section_name, ', '.join(definition_set), suggestions))
 
     def _rule_definitions_as_set(self, rules):
         definition_set = set()

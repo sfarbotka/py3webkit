@@ -157,19 +157,19 @@ public:
 
     virtual IntRect windowResizerRect() const { return IntRect(); }
 
-    virtual void invalidateWindow(const IntRect&, bool) { }
-    virtual void invalidateContentsAndWindow(const IntRect&, bool) { }
-    virtual void invalidateContentsForSlowScroll(const IntRect&, bool) {};
+    virtual void invalidateRootView(const IntRect&, bool) OVERRIDE { }
+    virtual void invalidateContentsAndRootView(const IntRect&, bool) OVERRIDE { }
+    virtual void invalidateContentsForSlowScroll(const IntRect&, bool) OVERRIDE { }
     virtual void scroll(const IntSize&, const IntRect&, const IntRect&) { }
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     virtual void delegatedScrollRequested(const IntPoint&) { }
 #endif
 #if ENABLE(REQUEST_ANIMATION_FRAME) && !USE(REQUEST_ANIMATION_FRAME_TIMER)
     virtual void scheduleAnimation() { }
 #endif
 
-    virtual IntPoint screenToWindow(const IntPoint& p) const { return p; }
-    virtual IntRect windowToScreen(const IntRect& r) const { return r; }
+    virtual IntPoint screenToRootView(const IntPoint& p) const OVERRIDE { return p; }
+    virtual IntRect rootViewToScreen(const IntRect& r) const OVERRIDE { return r; }
     virtual PlatformPageClient platformPageClient() const { return 0; }
     virtual void contentsSizeChanged(Frame*, const IntSize&) const { }
 
@@ -197,8 +197,8 @@ public:
 
 #if ENABLE(INPUT_COLOR)
     void openColorChooser(ColorChooser*, const Color&) { }
-    void cleanupColorChooser() { }
-    void setSelectedColorInColorChooser(const Color&) { }
+    void cleanupColorChooser(ColorChooser*) { }
+    void setSelectedColorInColorChooser(ColorChooser*, const Color&) { }
 #endif
 
     virtual void runOpenPanel(Frame*, PassRefPtr<FileChooser>) { }
@@ -370,6 +370,7 @@ public:
     virtual bool canCachePage() const { return false; }
     virtual void didDisplayInsecureContent() { }
     virtual void didRunInsecureContent(SecurityOrigin*, const KURL&) { }
+    virtual void didDetectXSS(const KURL&, bool) { }
     virtual PassRefPtr<Frame> createFrame(const KURL&, const String&, HTMLFrameOwnerElement*, const String&, bool, int, int) { return 0; }
     virtual void didTransferChildFrameToNewDocument(Page*) { }
     virtual void transferLoadingResourceFromPage(ResourceLoader*, const ResourceRequest&, Page*) { }
@@ -459,7 +460,7 @@ public:
     //
     virtual void didBeginEditing() { }
     virtual void respondToChangedContents() { }
-    virtual void respondToChangedSelection() { }
+    virtual void respondToChangedSelection(Frame*) { }
     virtual void didEndEditing() { }
     virtual void didWriteSelectionToPasteboard() { }
     virtual void didSetSelectionTypesForPasteboard() { }
@@ -589,6 +590,7 @@ public:
     virtual void inspectorDestroyed() { }
     
     virtual void openInspectorFrontend(InspectorController*) { }
+    virtual void bringFrontendToFront() { }
 
     virtual void highlight() { }
     virtual void hideHighlight() { }

@@ -177,66 +177,62 @@ static void initializeFonts(const char* testURL = 0)
     if (!FcConfigParseAndLoad(config, reinterpret_cast<FcChar8*>(fontConfigFilename.get()), true))
         g_error("Couldn't load font configuration file from: %s", fontConfigFilename.get());
 
-    static const char *const fontPaths[][2] = {
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationMono-BoldItalic.ttf",
-          "/usr/share/fonts/liberation/LiberationMono-BoldItalic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationMono-Bold.ttf",
-          "/usr/share/fonts/liberation/LiberationMono-Bold.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationMono-Italic.ttf",
-          "/usr/share/fonts/liberation/LiberationMono-Italic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationMono-Regular.ttf",
-          "/usr/share/fonts/liberation/LiberationMono-Regular.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSans-BoldItalic.ttf",
-          "/usr/share/fonts/liberation/LiberationSans-BoldItalic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSans-Bold.ttf",
-          "/usr/share/fonts/liberation/LiberationSans-Bold.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSans-Italic.ttf",
-          "/usr/share/fonts/liberation/LiberationSans-Italic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSans-Regular.ttf",
-          "/usr/share/fonts/liberation/LiberationSans-Regular.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSerif-BoldItalic.ttf",
-          "/usr/share/fonts/liberation/LiberationSerif-BoldItalic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSerif-Bold.ttf",
-          "/usr/share/fonts/liberation/LiberationSerif-Bold.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSerif-Italic.ttf",
-          "/usr/share/fonts/liberation/LiberationSerif-Italic.ttf", },
-        { "/usr/share/fonts/truetype/ttf-liberation/LiberationSerif-Regular.ttf",
-          "/usr/share/fonts/liberation/LiberationSerif-Regular.ttf", },
-        { "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSans.ttf",
-          "/usr/share/fonts/dejavu/DejaVuSans.ttf", },
-        { "/usr/share/fonts/truetype/ttf-dejavu/DejaVuSerif.ttf",
-          "/usr/share/fonts/dejavu/DejaVuSerif.ttf", },
+    static const char *const fontDirectories[] = {
+        "/usr/share/fonts/truetype/liberation",
+        "/usr/share/fonts/truetype/ttf-liberation",
+        "/usr/share/fonts/liberation",
+        "/usr/share/fonts/truetype/ttf-dejavu",
+        "/usr/share/fonts/dejavu",
+        "/usr/share/fonts/opentype/stix",
+        "/usr/share/fonts/stix"
+    };
+
+    static const char *const fontPaths[] = {
+        "LiberationMono-BoldItalic.ttf",
+        "LiberationMono-Bold.ttf",
+        "LiberationMono-Italic.ttf",
+        "LiberationMono-Regular.ttf",
+        "LiberationSans-BoldItalic.ttf",
+        "LiberationSans-Bold.ttf",
+        "LiberationSans-Italic.ttf",
+        "LiberationSans-Regular.ttf",
+        "LiberationSerif-BoldItalic.ttf",
+        "LiberationSerif-Bold.ttf",
+        "LiberationSerif-Italic.ttf",
+        "LiberationSerif-Regular.ttf",
+        "DejaVuSans.ttf",
+        "DejaVuSerif.ttf",
 
         // MathML tests require the STIX fonts.
-        { "/usr/share/fonts/opentype/stix/STIXGeneral.otf",
-          "/usr/share/fonts/stix/STIXGeneral.otf" },
-        { "/usr/share/fonts/opentype/stix/STIXGeneralBolIta.otf",
-          "/usr/share/fonts/stix/STIXGeneralBolIta.otf" },
-        { "/usr/share/fonts/opentype/stix/STIXGeneralBol.otf",
-          "/usr/share/fonts/stix/STIXGeneralBol.otf" },
-        { "/usr/share/fonts/opentype/stix/STIXGeneralItalic.otf",
-          "/usr/share/fonts/stix/STIXGeneralItalic.otf" }
+        "STIXGeneral.otf",
+        "STIXGeneralBolIta.otf",
+        "STIXGeneralBol.otf",
+        "STIXGeneralItalic.otf"
     };
 
     // TODO: Some tests use Lucida. We should load these as well, once it becomes
     // clear how to install these fonts easily on Fedora.
     for (size_t font = 0; font < G_N_ELEMENTS(fontPaths); font++) {
         bool found = false;
-        for (size_t path = 0; path < 2; path++) {
-
-            if (g_file_test(fontPaths[font][path], G_FILE_TEST_EXISTS)) {
+        for (size_t path = 0; path < G_N_ELEMENTS(fontDirectories); path++) {
+            GOwnPtr<gchar> fullPath(g_build_filename(fontDirectories[path], fontPaths[font], NULL));
+            if (g_file_test(fullPath.get(), G_FILE_TEST_EXISTS)) {
                 found = true;
-                if (!FcConfigAppFontAddFile(config, reinterpret_cast<const FcChar8*>(fontPaths[font][path])))
-                    g_error("Could not load font at %s!", fontPaths[font][path]);
+                if (!FcConfigAppFontAddFile(config, reinterpret_cast<const FcChar8*>(fullPath.get())))
+                    g_error("Could not load font at %s!", fullPath.get());
                 else
                     break;
             }
         }
 
-        if (!found)
-            g_error("Could not find font at %s. Either install this font or file a bug "
+        if (!found) {
+            GOwnPtr<gchar> directoriesDescription;
+            for (size_t path = 0; path < G_N_ELEMENTS(fontDirectories); path++)
+                directoriesDescription.set(g_strjoin(":", directoriesDescription.release(), fontDirectories[path], NULL));
+            g_error("Could not find font %s in %s. Either install this font or file a bug "
                     "at http://bugs.webkit.org if it is installed in another location.",
-                    fontPaths[font][0]);
+                    fontPaths[font], directoriesDescription.get());
+        }
     }
 
     // Ahem is used by many layout tests.
@@ -478,6 +474,10 @@ static void resetDefaultsToConsistentValues()
         axController->resetToConsistentState();
 
     DumpRenderTreeSupportGtk::clearOpener(mainFrame);
+
+    DumpRenderTreeSupportGtk::resetGeolocationClientMock(webView);
+
+    DumpRenderTreeSupportGtk::setHixie76WebSocketProtocolEnabled(webView, true);
 }
 
 static bool useLongRunningServerMode(int argc, char *argv[])
@@ -724,6 +724,8 @@ static void runTest(const string& testPathOrURL)
         g_slist_free(webViewList);
         webViewList = 0;
     }
+
+    WebCoreTestSupport::resetInternalsObject(webkit_web_frame_get_global_context(mainFrame));
 
     // A blank load seems to be necessary to reset state after certain tests.
     webkit_web_view_open(webView, "about:blank");
@@ -1096,9 +1098,11 @@ static void willSendRequestCallback(WebKitWebView* webView, WebKitWebFrame*, Web
 
 static WebKitWebView* createWebView()
 {
-    WebKitWebView* view = WEBKIT_WEB_VIEW(self_scrolling_webkit_web_view_new());
-
+    // It is important to declare DRT is running early so when creating
+    // web view mock clients are used instead of proper ones.
     DumpRenderTreeSupportGtk::setDumpRenderTreeModeEnabled(true);
+
+    WebKitWebView* view = WEBKIT_WEB_VIEW(self_scrolling_webkit_web_view_new());
 
     g_object_connect(G_OBJECT(view),
                      "signal::load-started", webViewLoadStarted, 0,
@@ -1168,7 +1172,6 @@ static void logHandler(const gchar* domain, GLogLevelFlags level, const gchar* m
 
 int main(int argc, char* argv[])
 {
-    g_thread_init(NULL);
     gtk_init(&argc, &argv);
 
     // Some plugins might try to use the GLib logger for printing debug

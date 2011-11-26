@@ -57,9 +57,11 @@ public:
         Vector<RenderTableCell*, 1> cells; 
         bool inColSpan; // true for columns after the first in a colspan
 
-        CellStruct():
-          inColSpan(false) {}
-        
+        CellStruct()
+            : inColSpan(false)
+        {
+        }
+
         RenderTableCell* primaryCell()
         {
             return hasCells() ? cells[cells.size() - 1] : 0;
@@ -76,22 +78,28 @@ public:
     typedef Vector<CellStruct> Row;
 
     struct RowStruct {
-        Row* row;
+        RowStruct()
+            : rowRenderer(0)
+            , baseline(0)
+        {
+        }
+
+        Row row;
         RenderTableRow* rowRenderer;
         LayoutUnit baseline;
         Length logicalHeight;
     };
 
-    CellStruct& cellAt(int row,  int col) { return (*m_grid[row].row)[col]; }
-    const CellStruct& cellAt(int row, int col) const { return (*m_grid[row].row)[col]; }
-    RenderTableCell* primaryCellAt(int row, int col)
+    CellStruct& cellAt(unsigned row,  unsigned col) { return m_grid[row].row[col]; }
+    const CellStruct& cellAt(unsigned row, unsigned col) const { return m_grid[row].row[col]; }
+    RenderTableCell* primaryCellAt(unsigned row, unsigned col)
     {
-        CellStruct& c = (*m_grid[row].row)[col];
+        CellStruct& c = m_grid[row].row[col];
         return c.primaryCell();
     }
 
-    void appendColumn(int pos);
-    void splitColumn(int pos, int first);
+    void appendColumn(unsigned pos);
+    void splitColumn(unsigned pos, unsigned first);
 
     LayoutUnit calcOuterBorderBefore() const;
     LayoutUnit calcOuterBorderAfter() const;
@@ -104,8 +112,8 @@ public:
     LayoutUnit outerBorderStart() const { return m_outerBorderStart; }
     LayoutUnit outerBorderEnd() const { return m_outerBorderEnd; }
 
-    int numRows() const { return m_gridRows; }
-    int numColumns() const;
+    unsigned numRows() const { return m_grid.size(); }
+    unsigned numColumns() const;
     void recalcCells();
     void recalcCellsIfNeeded()
     {
@@ -116,7 +124,11 @@ public:
     bool needsCellRecalc() const { return m_needsCellRecalc; }
     void setNeedsCellRecalc();
 
-    LayoutUnit getBaseline(int row) { return m_grid[row].baseline; }
+    LayoutUnit getBaseline(unsigned row) { return m_grid[row].baseline; }
+
+    void rowLogicalHeightChanged(unsigned rowIndex);
+
+    unsigned rowIndexForRenderer(const RenderTableRow*) const;
 
 protected:
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
@@ -143,8 +155,7 @@ private:
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const LayoutPoint& pointInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
 
-    bool ensureRows(int);
-    void clearGrid();
+    void ensureRows(unsigned);
 
     bool hasOverflowingCell() const { return m_overflowingCells.size() || m_forceSlowPaintPathWithOverflowingCell; }
 
@@ -153,11 +164,9 @@ private:
     Vector<RowStruct> m_grid;
     Vector<LayoutUnit> m_rowPos;
 
-    int m_gridRows;
-
     // the current insertion position
-    int m_cCol;
-    int m_cRow;
+    unsigned m_cCol;
+    unsigned m_cRow;
 
     LayoutUnit m_outerBorderStart;
     LayoutUnit m_outerBorderEnd;

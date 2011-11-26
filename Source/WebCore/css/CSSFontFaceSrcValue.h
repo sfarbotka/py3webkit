@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef CSSFontFaceSrcValue_h
@@ -45,8 +45,6 @@ public:
         return adoptRef(new CSSFontFaceSrcValue(resource, true));
     }
 
-    virtual ~CSSFontFaceSrcValue();
-
     const String& resource() const { return m_resource; }
     const String& format() const { return m_format; }
     bool isLocal() const { return m_isLocal; }
@@ -62,13 +60,14 @@ public:
     void setSVGFontFaceElement(SVGFontFaceElement* element) { m_svgFontFaceElement = element; }
 #endif
 
-    virtual String cssText() const;
+    String customCssText() const;
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
+    void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
 
 private:
     CSSFontFaceSrcValue(const String& resource, bool local)
-        : m_resource(resource)
+        : CSSValue(FontFaceSrcClass)
+        , m_resource(resource)
         , m_isLocal(local)
 #if ENABLE(SVG_FONTS)
         , m_svgFontFaceElement(0)

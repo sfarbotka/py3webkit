@@ -1,25 +1,32 @@
-TEMPLATE = app
-TARGET = tst_qmltests
-CONFIG += warn_on testcase
-SOURCES += tst_qmltests.cpp
+include(../tests.pri)
 
-QT += declarative qmltest
+CONFIG += qtwebkit-private
+CONFIG += warn_on testcase
+
+QT -= testlib
+QT += qmltest
+
+# FIXME: When webkit-private works let's use it.
+load(javascriptcore)
+load(webcore)
+load(webkit2)
 
 # QML files tested are the ones in WebKit source repository.
 DEFINES += QUICK_TEST_SOURCE_DIR=\"\\\"$$PWD\\\"\"
+DEFINES += IMPORT_DIR=\"\\\"$${ROOT_BUILD_DIR}$${QMAKE_DIR_SEP}imports\\\"\"
 
 OTHER_FILES += \
-    DesktopWebView/tst_properties.qml \
-    DesktopWebView/tst_navigationPolicyForUrl.qml \
-    DesktopWebView/tst_loadZeroSizeView.qml \
-    DesktopWebView/tst_loadProgress.qml \
-    DesktopWebView/tst_loadProgressSignal.qml \
-    DesktopWebView/tst_linkHovered.qml \
-    TouchWebView/tst_properties.qml \
-    TouchWebView/tst_load.qml \
-    TouchWebView/tst_loadZeroSizeView.qml \
-    TouchWebView/tst_loadNegativeSizeView.qml \
-    TouchWebView/tst_loadProgress.qml \
-    TouchWebView/tst_loadProgressSignal.qml
-
-
+    WebView/tst_javaScriptDialogs.qml \
+    WebView/tst_properties.qml \
+    WebView/tst_loadFail.qml \
+    WebView/tst_loadProgress.qml \
+    WebView/tst_loadProgressSignal.qml \
+    WebView/tst_loadZeroSizeView.qml \
+    WebView/tst_preferences.qml \
+    WebView/tst_loadHtml.qml \
+    WebView/tst_download.qml \
+    DesktopBehavior/tst_linkHovered.qml \
+    DesktopBehavior/tst_messaging.qml \
+    DesktopBehavior/tst_navigationRequested.qml \
+    DesktopBehavior/tst_loadHtml.qml \
+    DesktopBehavior/DesktopWebView.qml

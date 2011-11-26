@@ -274,6 +274,9 @@ bool WebPopupMenuImpl::handleInputEvent(const WebInputEvent& inputEvent)
 
     case WebInputEvent::GestureScrollBegin:
     case WebInputEvent::GestureScrollEnd:
+    case WebInputEvent::GestureScrollUpdate:
+    case WebInputEvent::GestureFlingStart:
+    case WebInputEvent::GestureFlingCancel:
     case WebInputEvent::GestureTap:
         return GestureEvent(*static_cast<const WebGestureEvent*>(&inputEvent));
 
@@ -327,11 +330,6 @@ WebTextInputType WebPopupMenuImpl::textInputType()
     return WebTextInputTypeNone;
 }
 
-WebRect WebPopupMenuImpl::caretOrSelectionBounds()
-{
-    return WebRect();
-}
-
 bool WebPopupMenuImpl::caretOrSelectionRange(size_t* location, size_t* length)
 {
     *location = 0;
@@ -352,12 +350,12 @@ void WebPopupMenuImpl::invalidateContents(const IntRect&, bool)
     notImplemented();
 }
 
-void WebPopupMenuImpl::invalidateWindow(const IntRect&, bool)
+void WebPopupMenuImpl::invalidateRootView(const IntRect&, bool)
 {
     notImplemented();
 }
 
-void WebPopupMenuImpl::invalidateContentsAndWindow(const IntRect& paintRect, bool /*immediate*/)
+void WebPopupMenuImpl::invalidateContentsAndRootView(const IntRect& paintRect, bool /*immediate*/)
 {
     if (paintRect.isEmpty())
         return;
@@ -367,7 +365,7 @@ void WebPopupMenuImpl::invalidateContentsAndWindow(const IntRect& paintRect, boo
 
 void WebPopupMenuImpl::invalidateContentsForSlowScroll(const IntRect& updateRect, bool immediate)
 {
-    invalidateContentsAndWindow(updateRect, immediate);
+    invalidateContentsAndRootView(updateRect, immediate);
 }
 
 void WebPopupMenuImpl::scheduleAnimation()
@@ -385,13 +383,13 @@ void WebPopupMenuImpl::scroll(const IntSize& scrollDelta,
     }
 }
 
-IntPoint WebPopupMenuImpl::screenToWindow(const IntPoint& point) const
+IntPoint WebPopupMenuImpl::screenToRootView(const IntPoint& point) const
 {
     notImplemented();
     return IntPoint();
 }
 
-IntRect WebPopupMenuImpl::windowToScreen(const IntRect& rect) const
+IntRect WebPopupMenuImpl::rootViewToScreen(const IntRect& rect) const
 {
     notImplemented();
     return IntRect();

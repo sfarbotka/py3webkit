@@ -31,7 +31,7 @@
 #include "ChromiumDataObject.h"
 #include "ClipboardMimeTypes.h"
 #include "ClipboardUtilitiesChromium.h"
-#include "DataTransferItemsChromium.h"
+#include "DataTransferItemListChromium.h"
 #include "Document.h"
 #include "DragData.h"
 #include "Element.h"
@@ -42,6 +42,7 @@
 #include "Image.h"
 #include "MIMETypeRegistry.h"
 #include "NamedNodeMap.h"
+#include "PlatformSupport.h"
 #include "Range.h"
 #include "RenderImage.h"
 #include "ScriptExecutionContext.h"
@@ -77,7 +78,7 @@ ClipboardChromium::ClipboardChromium(ClipboardType clipboardType,
     : Clipboard(policy, clipboardType)
     , m_dataObject(dataObject)
     , m_frame(frame)
-    , m_originalSequenceNumber(m_dataObject->getSequenceNumber())
+    , m_originalSequenceNumber(PlatformSupport::clipboardSequenceNumber(currentPasteboardBuffer()))
 {
 }
 
@@ -111,7 +112,7 @@ String ClipboardChromium::getData(const String& type, bool& success) const
     if (policy() != ClipboardReadable || !m_dataObject)
         return String();
 
-    if (platformClipboardChanged())
+    if (isForCopyAndPaste() && platformClipboardChanged())
         return String();
 
     return m_dataObject->getData(normalizeType(type), success);
@@ -127,7 +128,7 @@ bool ClipboardChromium::setData(const String& type, const String& data)
 
 bool ClipboardChromium::platformClipboardChanged() const
 {
-    return m_dataObject->getSequenceNumber() != m_originalSequenceNumber;
+    return PlatformSupport::clipboardSequenceNumber(currentPasteboardBuffer()) != m_originalSequenceNumber;
 }
 
 // extensions beyond IE's API
@@ -224,10 +225,10 @@ static void writeImageToDataObject(ChromiumDataObject* dataObject, Element* elem
 {
     // Shove image data into a DataObject for use as a file
     CachedImage* cachedImage = getCachedImage(element);
-    if (!cachedImage || !cachedImage->image() || !cachedImage->isLoaded())
+    if (!cachedImage || !cachedImage->imageForRenderer(element->renderer()) || !cachedImage->isLoaded())
         return;
 
-    SharedBuffer* imageBuffer = cachedImage->image()->data();
+    SharedBuffer* imageBuffer = cachedImage->imageForRenderer(element->renderer())->data();
     if (!imageBuffer || !imageBuffer->size())
         return;
 
@@ -317,6 +318,7 @@ void ClipboardChromium::writePlainText(const String& text)
 
 bool ClipboardChromium::hasData()
 {
+    ASSERT(isForDragAndDrop());
     if (!m_dataObject)
         return false;
 
@@ -324,9 +326,9 @@ bool ClipboardChromium::hasData()
 }
 
 #if ENABLE(DATA_TRANSFER_ITEMS)
-PassRefPtr<DataTransferItems> ClipboardChromium::items()
+PassRefPtr<DataTransferItemList> ClipboardChromium::items()
 {
-    RefPtr<DataTransferItemsChromium> items = DataTransferItemsChromium::create(this, m_frame->document()->scriptExecutionContext());
+    RefPtr<DataTransferItemListChromium> items = DataTransferItemListChromium::create(this, m_frame->document()->scriptExecutionContext());
 
     if (!m_dataObject)
         return items;

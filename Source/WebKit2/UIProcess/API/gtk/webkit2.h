@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2011 Igalia S.L.
+ * Portions Copyright (c) 2011 Motorola Mobility, Inc.  All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,9 +23,13 @@
 
 #define __WEBKIT2_H_INSIDE__
 
+#include <webkit2/WebKitBackForwardList.h>
+#include <webkit2/WebKitBackForwardListItem.h>
 #include <webkit2/WebKitDefines.h>
 #include <webkit2/WebKitEnumTypes.h>
 #include <webkit2/WebKitError.h>
+#include <webkit2/WebKitNetworkRequest.h>
+#include <webkit2/WebKitSettings.h>
 #include <webkit2/WebKitWebContext.h>
 #include <webkit2/WebKitWebLoaderClient.h>
 #include <webkit2/WebKitWebViewBase.h>

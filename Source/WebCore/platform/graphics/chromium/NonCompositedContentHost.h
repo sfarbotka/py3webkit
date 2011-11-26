@@ -35,10 +35,12 @@
 
 namespace WebCore {
 
+class Color;
 class GraphicsLayer;
 class GraphicsContext;
 class IntPoint;
 class IntRect;
+class LayerChromium;
 class LayerPainterChromium;
 
 class NonCompositedContentHost : public GraphicsLayerClient {
@@ -51,8 +53,9 @@ public:
     virtual ~NonCompositedContentHost();
 
     void invalidateRect(const IntRect&);
-    void setRootLayer(GraphicsLayer*);
-    void setViewport(const IntSize& viewportSize, const IntSize& contentsSize, const IntPoint& scrollPosition);
+    void setBackgroundColor(const Color&);
+    void setScrollLayer(GraphicsLayer*);
+    void setViewport(const IntSize& viewportSize, const IntSize& contentsSize, const IntPoint& scrollPosition, float pageScale);
     void protectVisibleTileTextures();
     GraphicsLayer* topLevelRootLayer() const { return m_graphicsLayer.get(); }
 
@@ -66,6 +69,8 @@ private:
     virtual bool showDebugBorders() const;
     virtual bool showRepaintCounter() const;
 
+    LayerChromium* scrollLayer();
+
     OwnPtr<GraphicsLayer> m_graphicsLayer;
     OwnPtr<LayerPainterChromium> m_contentPaint;
     IntSize m_viewportSize;
@@ -74,4 +79,3 @@ private:
 } // namespace WebCore
 
 #endif // NonCompositedContentHost_h
-

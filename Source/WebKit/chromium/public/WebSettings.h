@@ -31,7 +31,7 @@
 #ifndef WebSettings_h
 #define WebSettings_h
 
-#include "WebCommon.h"
+#include "platform/WebCommon.h"
 #include <unicode/uscript.h>
 
 #define HAS_WEBAUDIO_FEATURE_ENABLE 1
@@ -95,6 +95,7 @@ public:
     virtual void setWebAudioEnabled(bool) = 0;
     virtual void setExperimentalWebGLEnabled(bool) = 0;
     virtual void setOpenGLMultisamplingEnabled(bool) = 0;
+    virtual void setPrivilegedWebGLExtensionsEnabled(bool) = 0;
     virtual void setShowDebugBorders(bool) = 0;
     virtual void setShowFPSCounter(bool) = 0;
     virtual bool showFPSCounter() const = 0;
@@ -103,6 +104,7 @@ public:
     virtual void setEditingBehavior(EditingBehavior) = 0;
     virtual void setAcceleratedCompositingEnabled(bool) = 0;
     virtual void setForceCompositingMode(bool) = 0;
+    virtual void setMockScrollbarsEnabled(bool) = 0;
     virtual void setCompositeToTextureEnabled(bool) = 0;
     virtual bool compositeToTextureEnabled() const = 0;
     virtual void setAcceleratedCompositingFor3DTransformsEnabled(bool) = 0;
@@ -111,6 +113,7 @@ public:
     virtual void setAcceleratedCompositingForPluginsEnabled(bool) = 0;
     virtual void setAcceleratedCompositingForAnimationEnabled(bool) = 0;
     virtual void setAccelerated2dCanvasEnabled(bool) = 0;
+    virtual void setAcceleratedCompositingForFixedPositionEnabled(bool)  = 0;
     virtual void setLegacyAccelerated2dCanvasEnabled(bool) = 0;
     virtual void setMinimumAccelerated2dCanvasSize(int) = 0;
     virtual void setAcceleratedDrawingEnabled(bool) = 0;
@@ -119,6 +122,7 @@ public:
     virtual void setMemoryInfoEnabled(bool) = 0;
     virtual void setHyperlinkAuditingEnabled(bool) = 0;
     virtual void setAsynchronousSpellCheckingEnabled(bool) = 0;
+    virtual void setUnifiedTextCheckerEnabled(bool) = 0;
     virtual void setCaretBrowsingEnabled(bool) = 0;
     virtual void setInteractiveFormValidationEnabled(bool) = 0;
     virtual void setValidationMessageTimerMagnification(int) = 0;
@@ -129,6 +133,7 @@ public:
     virtual void setShouldPrintBackgrounds(bool) = 0;
     virtual void setEnableScrollAnimator(bool) = 0;
     virtual void setHixie76WebSocketProtocolEnabled(bool) = 0;
+    virtual void setVisualWordMovementEnabled(bool) = 0;
 
 protected:
     ~WebSettings() { }

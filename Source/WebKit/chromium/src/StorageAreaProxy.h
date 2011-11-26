@@ -26,8 +26,6 @@
 #ifndef StorageAreaProxy_h
 #define StorageAreaProxy_h
 
-#if ENABLE(DOM_STORAGE)
-
 #include "StorageArea.h"
 
 namespace WebKit { class WebStorageArea; }
@@ -51,6 +49,8 @@ public:
     virtual bool clear(Frame* sourceFrame);
     virtual bool contains(const String& key, Frame* sourceFrame) const;
 
+    virtual bool disabledByPrivateBrowsingInFrame(const Frame*) const { return false; }
+
 private:
     void storageEvent(const String& key, const String& oldValue, const String& newValue, StorageType, SecurityOrigin*, Frame* sourceFrame);
     bool canAccessStorage(Frame*) const;
@@ -60,7 +60,5 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(DOM_STORAGE)
 
 #endif // StorageAreaProxy_h

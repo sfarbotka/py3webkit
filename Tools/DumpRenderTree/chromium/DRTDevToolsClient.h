@@ -54,9 +54,7 @@ public:
     void reset();
 
     // WebDevToolsFrontendClient implementation
-    virtual void sendFrontendLoaded();
     virtual void sendMessageToBackend(const WebKit::WebString&);
-    virtual void sendDebuggerCommandToAgent(const WebKit::WebString& command);
 
     virtual void activateWindow();
     virtual void closeWindow();

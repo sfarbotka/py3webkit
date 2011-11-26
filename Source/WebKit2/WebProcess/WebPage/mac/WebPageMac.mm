@@ -293,7 +293,7 @@ void WebPage::getMarkedRange(uint64_t& location, uint64_t& length)
     RefPtr<Range> range = frame->editor()->compositionRange();
     size_t locationSize;
     size_t lengthSize;
-    if (range && TextIterator::locationAndLengthFromRange(range.get(), locationSize, lengthSize)) {
+    if (range && TextIterator::getLocationAndLengthFromRange(frame->selection()->rootEditableElementOrDocumentElement(), range.get(), locationSize, lengthSize)) {
         location = static_cast<uint64_t>(locationSize);
         length = static_cast<uint64_t>(lengthSize);
     }
@@ -310,7 +310,7 @@ void WebPage::getSelectedRange(uint64_t& location, uint64_t& length)
     size_t locationSize;
     size_t lengthSize;
     RefPtr<Range> range = frame->selection()->toNormalizedRange();
-    if (range && TextIterator::locationAndLengthFromRange(range.get(), locationSize, lengthSize)) {
+    if (range && TextIterator::getLocationAndLengthFromRange(frame->selection()->rootEditableElementOrDocumentElement(), range.get(), locationSize, lengthSize)) {
         location = static_cast<uint64_t>(locationSize);
         length = static_cast<uint64_t>(lengthSize);
     }
@@ -360,7 +360,7 @@ void WebPage::characterIndexForPoint(IntPoint point, uint64_t& index)
 
     size_t location;
     size_t length;
-    if (TextIterator::locationAndLengthFromRange(range.get(), location, length))
+    if (TextIterator::getLocationAndLengthFromRange(frame->selection()->rootEditableElementOrDocumentElement(), range.get(), location, length))
         index = static_cast<uint64_t>(location);
 }
 
@@ -377,9 +377,7 @@ PassRefPtr<Range> convertToRange(Frame* frame, NSRange nsrange)
     // directly in the document DOM, so serialization is problematic. Our solution is
     // to use the root editable element of the selection start as the positional base.
     // That fits with AppKit's idea of an input context.
-    Element* selectionRoot = frame->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : frame->document()->documentElement();
-    return TextIterator::rangeFromLocationAndLength(scope, nsrange.location, nsrange.length);
+    return TextIterator::rangeFromLocationAndLength(frame->selection()->rootEditableElementOrDocumentElement(), nsrange.location, nsrange.length);
 }
     
 void WebPage::firstRectForCharacterRange(uint64_t location, uint64_t length, WebCore::IntRect& resultRect)
@@ -522,9 +520,12 @@ void WebPage::performDictionaryLookupForRange(DictionaryPopupInfo::Type type, Fr
     RenderObject* renderer = range->startContainer()->renderer();
     RenderStyle* style = renderer->style();
     NSFont *font = style->font().primaryFont()->getNSFont();
-    if (!font)
-        return;
     
+    // We won't be able to get an NSFont in the case that a Web Font is being used, so use
+    // the default system font at the same size instead.
+    if (!font)
+        font = [NSFont systemFontOfSize:style->font().primaryFont()->platformData().size()];
+
     CFDictionaryRef fontDescriptorAttributes = (CFDictionaryRef)[[font fontDescriptor] fontAttributes];
     if (!fontDescriptorAttributes)
         return;
@@ -538,7 +539,7 @@ void WebPage::performDictionaryLookupForRange(DictionaryPopupInfo::Type type, Fr
     
     DictionaryPopupInfo dictionaryPopupInfo;
     dictionaryPopupInfo.type = type;
-    dictionaryPopupInfo.origin = FloatPoint(rangeRect.x(), rangeRect.y());
+    dictionaryPopupInfo.origin = FloatPoint(rangeRect.x(), rangeRect.y() + style->fontMetrics().ascent());
     dictionaryPopupInfo.fontInfo.fontAttributeDictionary = fontDescriptorAttributes;
 #if !defined(BUILDING_ON_SNOW_LEOPARD)
     dictionaryPopupInfo.options = (CFDictionaryRef)options;

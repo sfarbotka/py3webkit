@@ -31,10 +31,10 @@
 #ifndef WebClipboard_h
 #define WebClipboard_h
 
-#include "WebCommon.h"
-#include "WebData.h"
-#include "WebString.h"
-#include "WebVector.h"
+#include "platform/WebCommon.h"
+#include "platform/WebData.h"
+#include "platform/WebString.h"
+#include "platform/WebVector.h"
 
 namespace WebKit {
 
@@ -60,15 +60,24 @@ public:
         BufferDrag,
     };
 
-    virtual bool isFormatAvailable(Format, Buffer) { return false; }
-
-    virtual WebString readPlainText(Buffer) { return WebString(); }
-    virtual WebString readHTML(Buffer, WebURL*) { return WebString(); }
-    virtual WebData readImage(Buffer) { return WebData(); }
-
     // Returns an identifier which can be used to determine whether the data
     // contained within the clipboard has changed.
-    virtual uint64 getSequenceNumber() { return 0; }
+    virtual uint64 sequenceNumber(Buffer) { return 0; }
+
+    virtual bool isFormatAvailable(Format, Buffer) { return false; }
+
+    virtual WebVector<WebString> readAvailableTypes(
+        Buffer, bool* containsFilenames) { return WebVector<WebString>(); }
+    virtual WebString readPlainText(Buffer) { return WebString(); }
+    // fragmentStart and fragmentEnd are indexes into the returned markup that
+    // indicate the start and end of the fragment if the returned markup
+    // contains additional context. If there is no additional context,
+    // fragmentStart will be zero and fragmentEnd will be the same as the length
+    // of the returned markup.
+    virtual WebString readHTML(
+        Buffer buffer, WebURL* pageURL, unsigned* fragmentStart,
+        unsigned* fragmentEnd) { return WebString(); }
+    virtual WebData readImage(Buffer) { return WebData(); }
 
     virtual void writePlainText(const WebString&) { }
     virtual void writeHTML(
@@ -78,21 +87,7 @@ public:
         const WebURL&, const WebString& title) { }
     virtual void writeImage(
         const WebImage&, const WebURL&, const WebString& title) { }
-    virtual void writeData(
-        const WebString& type,
-        const WebString& data,
-        const WebString& metadata) { }
-
-    // The following functions are used for reading platform data for copy and
-    // paste, drag and drop, and selection copy (on X).
-    virtual WebVector<WebString> readAvailableTypes(
-        Buffer, bool* containsFilenames) { return WebVector<WebString>(); }
-    // Returns true if the requested type was successfully read from the buffer. 
-    virtual bool readData(
-        Buffer, const WebString& type, WebString* data,
-        WebString* metadata) { return false; }
-    virtual WebVector<WebString> readFilenames(
-        Buffer) { return WebVector<WebString>(); }
+    virtual void writeDataObject(const WebDragData&) { }
 
 protected:
     ~WebClipboard() {}

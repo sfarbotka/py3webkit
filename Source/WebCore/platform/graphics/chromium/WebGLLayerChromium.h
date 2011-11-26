@@ -35,7 +35,7 @@
 #if USE(ACCELERATED_COMPOSITING)
 
 #include "CanvasLayerChromium.h"
-#include "Timer.h"
+#include "DrawingBuffer.h"
 
 namespace WebCore {
 
@@ -50,29 +50,27 @@ public:
     virtual ~WebGLLayerChromium();
 
     virtual bool drawsContent() const;
-    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*);
-    void setTextureUpdated();
+    virtual void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&);
+    virtual void contentChanged();
     bool paintRenderedResultsToCanvas(ImageBuffer*);
 
-    void setContext(const GraphicsContext3D* context);
-    GraphicsContext3D* context() { return m_context; }
+    GraphicsContext3D* context() const;
 
+    void setDrawingBuffer(DrawingBuffer*);
+    DrawingBuffer* drawingBuffer() const { return m_drawingBuffer; }
 private:
     explicit WebGLLayerChromium(CCLayerDelegate*);
     friend class WebGLLayerChromiumRateLimitTask;
 
     GraphicsContext3D* layerRendererContext();
 
-    void rateLimitContext(Timer<WebGLLayerChromium>*);
-
-    // GraphicsContext3D::platformLayer has a side-effect of assigning itself
-    // to the layer. Because of that GraphicsContext3D's destructor will reset
-    // layer's context to 0.
-    GraphicsContext3D* m_context;
     bool m_textureChanged;
-    bool m_contextSupportsRateLimitingExtension;
-    Timer<WebGLLayerChromium> m_rateLimitingTimer;
     bool m_textureUpdated;
+
+    // The DrawingBuffer holding the WebGL contents for this layer.
+    // A reference is not held here, because the DrawingBuffer already holds
+    // a reference to the WebGLLayerChromium.
+    DrawingBuffer* m_drawingBuffer;
 };
 
 }

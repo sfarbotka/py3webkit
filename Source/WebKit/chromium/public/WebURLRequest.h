@@ -31,8 +31,8 @@
 #ifndef WebURLRequest_h
 #define WebURLRequest_h
 
-#include "WebCommon.h"
 #include "WebHTTPBody.h"
+#include "platform/WebCommon.h"
 
 #if defined(WEBKIT_IMPLEMENTATION)
 namespace WebCore { class ResourceRequest; }
@@ -72,6 +72,8 @@ public:
         TargetIsPrerender = 12,
         TargetIsFavicon = 13,
         TargetIsXHR = 14,
+        TargetIsTextTrack = 15,
+        TargetIsUnspecified = 16,
     };
 
     class ExtraData {

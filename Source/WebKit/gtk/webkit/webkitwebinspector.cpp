@@ -90,7 +90,7 @@ enum {
     PROP_WEB_VIEW,
     PROP_INSPECTED_URI,
     PROP_JAVASCRIPT_PROFILING_ENABLED,
-    PROP_TIMELINE_PROFILING_ENABLED    
+    PROP_TIMELINE_PROFILING_ENABLED
 };
 
 G_DEFINE_TYPE(WebKitWebInspector, webkit_web_inspector, G_TYPE_OBJECT)
@@ -364,12 +364,7 @@ static void webkit_web_inspector_set_property(GObject* object, guint prop_id, co
         break;
     }
     case PROP_TIMELINE_PROFILING_ENABLED: {
-        bool enabled = g_value_get_boolean(value);
-        WebCore::InspectorController* controller = priv->page->inspectorController();
-        if (enabled)
-            controller->startTimelineProfiler();
-        else
-            controller->stopTimelineProfiler();
+        g_message("PROP_TIMELINE_PROFILING_ENABLED has been deprecated\n");
         break;
     }
     default:
@@ -398,7 +393,7 @@ static void webkit_web_inspector_get_property(GObject* object, guint prop_id, GV
 #endif
         break;
     case PROP_TIMELINE_PROFILING_ENABLED:
-        g_value_set_boolean(value, priv->page->inspectorController()->timelineProfilerEnabled());
+        g_message("PROP_TIMELINE_PROFILING_ENABLED has been deprecated\n");
         break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -423,6 +418,7 @@ void webkit_web_inspector_set_web_view(WebKitWebInspector *web_inspector, WebKit
 
 /**
  * webkit_web_inspector_get_web_view:
+ * @web_inspector: a #WebKitWebInspector
  *
  * Obtains the #WebKitWebView that is used to render the
  * inspector. The #WebKitWebView instance is created by the
@@ -455,6 +451,7 @@ void webkit_web_inspector_set_inspected_uri(WebKitWebInspector* web_inspector, c
 
 /**
  * webkit_web_inspector_get_inspected_uri:
+ * @web_inspector: a #WebKitWebInspector
  *
  * Obtains the URI that is currently being inspected.
  *
@@ -480,7 +477,7 @@ webkit_web_inspector_set_inspector_client(WebKitWebInspector* web_inspector, Web
 
 /**
  * webkit_web_inspector_show:
- * @webInspector: the #WebKitWebInspector that will be shown
+ * @web_inspector: the #WebKitWebInspector that will be shown
  *
  * Causes the Web Inspector to be shown.
  *
@@ -558,7 +555,7 @@ void webkit_web_inspector_inspect_coordinates(WebKitWebInspector* webInspector, 
 
 /**
  * webkit_web_inspector_close:
- * @webInspector: the #WebKitWebInspector that will be closed
+ * @web_inspector: the #WebKitWebInspector that will be closed
  *
  * Causes the Web Inspector to be closed.
  *

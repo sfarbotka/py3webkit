@@ -494,6 +494,11 @@ bool MediaPlayer::supportsSave() const
     return m_private->supportsSave();
 }
 
+bool MediaPlayer::supportsScanning() const
+{
+    return m_private->supportsScanning();
+}
+
 IntSize MediaPlayer::naturalSize()
 {
     return m_private->naturalSize();
@@ -602,6 +607,11 @@ void MediaPlayer::setPreservesPitch(bool preservesPitch)
 PassRefPtr<TimeRanges> MediaPlayer::buffered()
 {
     return m_private->buffered();
+}
+
+PassRefPtr<TimeRanges> MediaPlayer::seekable()
+{
+    return m_private->seekable();
 }
 
 float MediaPlayer::maxTimeSeekable()

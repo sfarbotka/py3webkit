@@ -53,15 +53,13 @@ private:
     virtual void setStyle(PassRefPtr<RenderStyle>);
     virtual void styleDidChange(StyleDifference, const RenderStyle*);
 
-    // FIXME: We need objectBoundingBox for DRT results and filters at the moment.
-    // This should be fixed to give back the objectBoundingBox of the text root.
-    virtual FloatRect objectBoundingBox() const { return FloatRect(); }
+    virtual FloatRect objectBoundingBox() const { return linesBoundingBox(); }
 
     virtual bool requiresLayer() const { return false; }
     virtual bool isSVGInlineText() const { return true; }
 
     virtual VisiblePosition positionForPoint(const LayoutPoint&);
-    virtual IntRect localCaretRect(InlineBox*, int caretOffset, int* extraWidthToEndOfLine = 0);
+    virtual LayoutRect localCaretRect(InlineBox*, int caretOffset, LayoutUnit* extraWidthToEndOfLine = 0);
     virtual LayoutRect linesBoundingBox() const;
     virtual InlineTextBox* createTextBox();
 

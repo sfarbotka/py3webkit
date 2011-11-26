@@ -167,6 +167,12 @@ public:
     bool printing() const { return m_printing; }
     void setPrinting(bool p) { m_printing = p; }
 
+    // Returns if the context allows rendering of fonts using native platform
+    // APIs. If false is returned font rendering is performed using the skia
+    // text drawing APIs.
+    // if USE(SKIA_TEXT) is enabled, this always returns false
+    bool isNativeFontRenderingAllowed();
+
     void getImageResamplingHint(IntSize* srcSize, FloatSize* dstSize) const;
     void setImageResamplingHint(const IntSize& srcSize, const FloatSize& dstSize);
     void clearImageResamplingHint();
@@ -179,7 +185,6 @@ private:
     // Used when restoring and the state has an image clip. Only shows the pixels in
     // m_canvas that are also in imageBuffer.
     void applyClipFromImage(const FloatRect&, const SkBitmap&);
-    void applyAntiAliasedClipPaths(WTF::Vector<SkPath>& paths);
 
     // common code between setupPaintFor[Filling,Stroking]
     void setupShader(SkPaint*, Gradient*, Pattern*, SkColor) const;

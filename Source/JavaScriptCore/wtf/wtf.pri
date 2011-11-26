@@ -1,4 +1,9 @@
-# wtf - qmake build info
+# -------------------------------------------------------------------
+# Project file for WTF
+#
+# See 'Tools/qmake/README' for an overview of the build system
+# -------------------------------------------------------------------
+
 HEADERS += \
     wtf/Alignment.h \
     wtf/AlwaysInline.h \
@@ -14,7 +19,6 @@ HEADERS += \
     wtf/ByteArray.h \
     wtf/CheckedArithmetic.h \
     wtf/Compiler.h \
-    wtf/CrossThreadRefCounted.h \
     wtf/CryptographicallyRandomNumber.h \
     wtf/CurrentTime.h \
     wtf/DateMath.h \
@@ -71,7 +75,6 @@ HEADERS += \
     wtf/PackedIntVector.h \
     wtf/PageAllocationAligned.h \
     wtf/PageAllocation.h \
-    wtf/PageAllocatorSymbian.h \
     wtf/PageBlock.h \
     wtf/PageReservation.h \
     wtf/ParallelJobsGeneric.h \
@@ -94,6 +97,7 @@ HEADERS += \
     wtf/RefPtrHashMap.h \
     wtf/RetainPtr.h \
     wtf/SHA1.h \
+    wtf/Spectrum.h \
     wtf/StackBounds.h \
     wtf/StaticConstructors.h \
     wtf/StdLibExtras.h \
@@ -110,7 +114,6 @@ HEADERS += \
     wtf/text/StringBuilder.h \
     wtf/text/StringConcatenate.h \
     wtf/text/StringHash.h \
-    wtf/text/StringImplBase.h \
     wtf/text/StringImpl.h \
     wtf/text/StringOperators.h \
     wtf/text/TextPosition.h \
@@ -186,16 +189,5 @@ SOURCES += \
     wtf/unicode/icu/CollatorICU.cpp \
     wtf/unicode/UTF8.cpp
 
-linux-*:!contains(DEFINES, USE_QTMULTIMEDIA=1) {
-    !contains(QT_CONFIG, no-pkg-config):system(pkg-config --exists glib-2.0 gio-2.0 gstreamer-0.10): {
-        DEFINES += ENABLE_GLIB_SUPPORT=1
-        PKGCONFIG += glib-2.0 gio-2.0
-        CONFIG += link_pkgconfig
-
-        HEADERS += wtf/gobject/GOwnPtr.h
-    }
-}
-
-unix:!symbian: SOURCES += wtf/OSAllocatorPosix.cpp
-symbian: SOURCES += wtf/OSAllocatorSymbian.cpp
+unix: SOURCES += wtf/OSAllocatorPosix.cpp
 win*|wince*: SOURCES += wtf/OSAllocatorWin.cpp

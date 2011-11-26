@@ -23,14 +23,23 @@
 #define NodeRareData_h
 
 #include "ClassNodeList.h"
+#include "DOMSettableTokenList.h"
 #include "DynamicNodeList.h"
+#include "MutationObserverRegistration.h"
 #include "NameNodeList.h"
 #include "QualifiedName.h"
 #include "TagNodeList.h"
+#include "WebKitMutationObserver.h"
 #include <wtf/HashSet.h>
 #include <wtf/OwnPtr.h>
 #include <wtf/PassOwnPtr.h>
+#include <wtf/text/AtomicString.h>
 #include <wtf/text/StringHash.h>
+
+#if ENABLE(MICRODATA)
+#include "HTMLPropertiesCollection.h"
+#include "MicroDataItemList.h"
+#endif
 
 namespace WebCore {
 
@@ -56,7 +65,12 @@ public:
 
     typedef HashMap<RefPtr<QualifiedName::QualifiedNameImpl>, TagNodeList*> TagNodeListCacheNS;
     TagNodeListCacheNS m_tagNodeListCacheNS;
- 
+
+#if ENABLE(MICRODATA)
+    typedef HashMap<String, MicroDataItemList*> MicroDataItemListCache;
+    MicroDataItemListCache m_microDataItemListCache;
+#endif
+
     LabelsNodeList* m_labelsNodeListCache;
  
     static PassOwnPtr<NodeListsNodeData> create()
@@ -66,12 +80,17 @@ public:
     
     void invalidateCaches();
     void invalidateCachesThatDependOnAttributes();
+
+#if ENABLE(MICRODATA)
+    void invalidateMicrodataItemListCaches();
+#endif
+
     bool isEmpty() const;
 
 private:
     NodeListsNodeData() : m_labelsNodeListCache(0) {}
 };
-    
+
 class NodeRareData {
     WTF_MAKE_NONCOPYABLE(NodeRareData); WTF_MAKE_FAST_ALLOCATED;
 public:    
@@ -121,6 +140,82 @@ public:
         return m_eventTargetData.get();
     }
 
+#if ENABLE(MUTATION_OBSERVERS)
+    Vector<OwnPtr<MutationObserverRegistration> >* mutationObserverRegistry() { return m_mutationObserverRegistry.get(); }
+    Vector<OwnPtr<MutationObserverRegistration> >* ensureMutationObserverRegistry()
+    {
+        if (!m_mutationObserverRegistry)
+            m_mutationObserverRegistry = adoptPtr(new Vector<OwnPtr<MutationObserverRegistration> >);
+        return m_mutationObserverRegistry.get();
+    }
+
+    HashSet<MutationObserverRegistration*>* transientMutationObserverRegistry() { return m_transientMutationObserverRegistry.get(); }
+    HashSet<MutationObserverRegistration*>* ensureTransientMutationObserverRegistry()
+    {
+        if (!m_transientMutationObserverRegistry)
+            m_transientMutationObserverRegistry = adoptPtr(new HashSet<MutationObserverRegistration*>);
+        return m_transientMutationObserverRegistry.get();
+    }
+#endif
+
+#if ENABLE(MICRODATA)
+    DOMSettableTokenList* itemProp() const
+    {
+        if (!m_itemProp)
+            m_itemProp = DOMSettableTokenList::create();
+
+        return m_itemProp.get();
+    }
+
+    void setItemProp(const String& value)
+    {
+        if (!m_itemProp)
+            m_itemProp = DOMSettableTokenList::create();
+
+        m_itemProp->setValue(value);
+    }
+
+    DOMSettableTokenList* itemRef() const
+    {
+        if (!m_itemRef)
+            m_itemRef = DOMSettableTokenList::create();
+
+        return m_itemRef.get();
+    }
+
+    void setItemRef(const String& value)
+    {
+        if (!m_itemRef)
+            m_itemRef = DOMSettableTokenList::create();
+
+        m_itemRef->setValue(value);
+    }
+
+    DOMSettableTokenList* itemType() const
+    {
+        if (!m_itemType)
+            m_itemType = DOMSettableTokenList::create();
+
+        return m_itemType.get();
+    }
+
+    void setItemType(const String& value)
+    {
+        if (!m_itemType)
+            m_itemType = DOMSettableTokenList::create();
+
+        m_itemType->setValue(value);
+    }
+
+    HTMLPropertiesCollection* properties(Node* node)
+    {
+        if (!m_properties)
+            m_properties = HTMLPropertiesCollection::create(node);
+
+        return m_properties.get();
+    }
+#endif
+
     bool isFocused() const { return m_isFocused; }
     void setFocused(bool focused) { m_isFocused = focused; }
 
@@ -137,6 +232,18 @@ private:
     bool m_tabIndexWasSetExplicitly : 1;
     bool m_isFocused : 1;
     bool m_needsFocusAppearanceUpdateSoonAfterAttach : 1;
+
+#if ENABLE(MUTATION_OBSERVERS)
+    OwnPtr<Vector<OwnPtr<MutationObserverRegistration> > > m_mutationObserverRegistry;
+    OwnPtr<HashSet<MutationObserverRegistration*> > m_transientMutationObserverRegistry;
+#endif
+
+#if ENABLE(MICRODATA)
+    mutable RefPtr<DOMSettableTokenList> m_itemProp;
+    mutable RefPtr<DOMSettableTokenList> m_itemRef;
+    mutable RefPtr<DOMSettableTokenList> m_itemType;
+    mutable RefPtr<HTMLPropertiesCollection> m_properties;
+#endif
 };
 
 } // namespace WebCore

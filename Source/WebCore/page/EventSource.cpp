@@ -69,7 +69,7 @@ inline EventSource::EventSource(const KURL& url, ScriptExecutionContext* context
 {
 }
 
-PassRefPtr<EventSource> EventSource::create(const String& url, ScriptExecutionContext* context, ExceptionCode& ec)
+PassRefPtr<EventSource> EventSource::create(ScriptExecutionContext* context, const String& url, ExceptionCode& ec)
 {
     if (url.isEmpty()) {
         ec = SYNTAX_ERR;
@@ -186,6 +186,11 @@ void EventSource::close()
     m_state = CLOSED;
 }
 
+const AtomicString& EventSource::interfaceName() const
+{
+    return eventNames().interfaceForEventSource;
+}
+
 ScriptExecutionContext* EventSource::scriptExecutionContext() const
 {
     return ActiveDOMObject::scriptExecutionContext();
@@ -208,7 +213,7 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
             message += charset;
             message += "\") that is not UTF-8. Aborting the connection.";
             // FIXME: We are missing the source line.
-            scriptExecutionContext()->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message, 1, String(), 0);
+            scriptExecutionContext()->addConsoleMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message);
         }
     } else {
         // To keep the signal-to-noise ratio low, we only log 200-response with an invalid MIME type.
@@ -217,7 +222,7 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
             message += response.mimeType();
             message += "\") that is not \"text/event-stream\". Aborting the connection.";
             // FIXME: We are missing the source line.
-            scriptExecutionContext()->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message, 1, String(), 0);
+            scriptExecutionContext()->addConsoleMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message);
         }
     }
 

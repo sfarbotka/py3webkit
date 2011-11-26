@@ -162,16 +162,16 @@ bool HTMLButtonElement::appendFormData(FormDataList& formData, bool)
     return true;
 }
 
-void HTMLButtonElement::accessKeyAction(bool sendToAnyElement)
+void HTMLButtonElement::accessKeyAction(bool sendMouseEvents)
 {
     focus();
-    // send the mouse button events iff the caller specified sendToAnyElement
-    dispatchSimulatedClick(0, sendToAnyElement);
+    // Send the mouse button events if the caller specified sendMouseEvents
+    dispatchSimulatedClick(0, sendMouseEvents);
 }
 
 bool HTMLButtonElement::isURLAttribute(Attribute* attr) const
 {
-    return attr->name() == formactionAttr;
+    return attr->name() == formactionAttr || HTMLFormControlElement::isURLAttribute(attr);
 }
 
 String HTMLButtonElement::value() const

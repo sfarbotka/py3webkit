@@ -30,6 +30,16 @@
 
 namespace JSC { namespace Heuristics {
 
+extern unsigned maximumEvalOptimizationCandidateInstructionCount;
+extern unsigned maximumProgramOptimizationCandidateInstructionCount;
+extern unsigned maximumFunctionForCallOptimizationCandidateInstructionCount;
+extern unsigned maximumFunctionForConstructOptimizationCandidateInstructionCount;
+
+extern unsigned maximumFunctionForCallInlineCandidateInstructionCount;
+extern unsigned maximumFunctionForConstructInlineCandidateInstructionCount;
+
+extern unsigned maximumInliningDepth; // Depth of inline stack, so 1 = no inlining, 2 = one level, etc.
+
 extern int32_t executionCounterValueForOptimizeAfterWarmUp;
 extern int32_t executionCounterValueForOptimizeAfterLongWarmUp;
 extern int32_t executionCounterValueForDontOptimizeAnytimeSoon;
@@ -41,15 +51,27 @@ extern int32_t executionCounterIncrementForReturn;
 
 extern unsigned desiredSpeculativeSuccessFailRatio;
 
+extern unsigned likelyToTakeSlowCaseThreshold;
+extern unsigned couldTakeSlowCaseThreshold;
+
 extern unsigned largeFailCountThresholdBase;
 extern unsigned largeFailCountThresholdBaseForLoop;
 
 extern unsigned reoptimizationRetryCounterMax;
 extern unsigned reoptimizationRetryCounterStep;
 
+extern unsigned minimumOptimizationDelay;
 extern unsigned maximumOptimizationDelay;
 extern double desiredProfileLivenessRate;
 extern double desiredProfileFullnessRate;
+
+extern unsigned minimumNumberOfScansBetweenRebalance;
+extern unsigned gcMarkStackSegmentSize;
+extern unsigned minimumNumberOfCellsToKeep;
+extern unsigned maximumNumberOfSharedSegments;
+extern unsigned sharedStackWakeupThreshold;
+extern unsigned numberOfGCMarkers;
+extern unsigned opaqueRootMergeThreshold;
 
 void initializeHeuristics();
 

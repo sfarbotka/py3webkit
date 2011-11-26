@@ -188,23 +188,6 @@ void SVGFilterElement::childrenChanged(bool changedByParser, Node* beforeChange,
         object->setNeedsLayout(true);
 }
 
-FloatRect SVGFilterElement::filterBoundingBox(const FloatRect& objectBoundingBox) const
-{
-    FloatRect filterBBox;
-    if (filterUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX)
-        filterBBox = FloatRect(x().valueAsPercentage() * objectBoundingBox.width() + objectBoundingBox.x(),
-                               y().valueAsPercentage() * objectBoundingBox.height() + objectBoundingBox.y(),
-                               width().valueAsPercentage() * objectBoundingBox.width(),
-                               height().valueAsPercentage() * objectBoundingBox.height());
-    else
-        filterBBox = FloatRect(x().value(this),
-                               y().value(this),
-                               width().value(this),
-                               height().value(this));
-
-    return filterBBox;
-}
-
 RenderObject* SVGFilterElement::createRenderer(RenderArena* arena, RenderStyle*)
 {
     return new (arena) RenderSVGResourceFilter(this);

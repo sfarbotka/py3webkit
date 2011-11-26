@@ -43,15 +43,13 @@ using namespace HTMLNames;
 
 RenderTableCell::RenderTableCell(Node* node)
     : RenderBlock(node)
-    , m_row(-1)
-    , m_column(-1)
-    , m_rowSpan(1)
-    , m_columnSpan(1)
+    , m_row(unsetRowIndex)
     , m_cellWidthChanged(false)
+    , m_column(unsetColumnIndex)
+    , m_hasAssociatedTableCellElement(node && (node->hasTagName(tdTag) || node->hasTagName(thTag)))
     , m_intrinsicPaddingBefore(0)
     , m_intrinsicPaddingAfter(0)
 {
-    updateFromElement();
 }
 
 void RenderTableCell::willBeDestroyed()
@@ -64,22 +62,31 @@ void RenderTableCell::willBeDestroyed()
         recalcSection->setNeedsCellRecalc();
 }
 
-void RenderTableCell::updateFromElement()
+unsigned RenderTableCell::colSpan() const
 {
-    Node* n = node();
-    if (n && (n->hasTagName(tdTag) || n->hasTagName(thTag))) {
-        HTMLTableCellElement* tc = static_cast<HTMLTableCellElement*>(n);
-        int oldRSpan = m_rowSpan;
-        int oldCSpan = m_columnSpan;
+    if (UNLIKELY(!m_hasAssociatedTableCellElement))
+        return 1;
 
-        m_columnSpan = tc->colSpan();
-        m_rowSpan = tc->rowSpan();
-        if ((oldRSpan != m_rowSpan || oldCSpan != m_columnSpan) && style() && parent()) {
-            setNeedsLayoutAndPrefWidthsRecalc();
-            if (section())
-                section()->setNeedsCellRecalc();
-        }
-    }
+    return toHTMLTableCellElement(node())->colSpan();
+}
+
+unsigned RenderTableCell::rowSpan() const
+{
+    if (UNLIKELY(!m_hasAssociatedTableCellElement))
+        return 1;
+
+    return toHTMLTableCellElement(node())->rowSpan();
+}
+
+void RenderTableCell::colSpanOrRowSpanChanged()
+{
+    ASSERT(m_hasAssociatedTableCellElement);
+    ASSERT(node());
+    ASSERT(node()->hasTagName(tdTag) || node()->hasTagName(thTag));
+
+    setNeedsLayoutAndPrefWidthsRecalc();
+    if (parent() && section())
+        section()->setNeedsCellRecalc();
 }
 
 Length RenderTableCell::styleOrColLogicalWidth() const
@@ -89,10 +96,10 @@ Length RenderTableCell::styleOrColLogicalWidth() const
         return w;
 
     if (RenderTableCol* tableCol = table()->colElement(col())) {
-        int colSpanCount = colSpan();
+        unsigned colSpanCount = colSpan();
 
         Length colWidthSum = Length(0, Fixed);
-        for (int i = 1; i <= colSpanCount; i++) {
+        for (unsigned i = 1; i <= colSpanCount; i++) {
             Length colWidth = tableCol->style()->logicalWidth();
 
             // Percentage value should be returned only for colSpan == 1.
@@ -148,7 +155,7 @@ void RenderTableCell::computeLogicalWidth()
 {
 }
 
-void RenderTableCell::updateLogicalWidth(int w)
+void RenderTableCell::updateLogicalWidth(LayoutUnit w)
 {
     if (w == logicalWidth())
         return;
@@ -212,7 +219,7 @@ LayoutUnit RenderTableCell::paddingAfter(bool includeIntrinsicPadding) const
     return result + intrinsicPaddingAfter();
 }
 
-void RenderTableCell::setOverrideHeightFromRowHeight(int rowHeight)
+void RenderTableCell::setOverrideHeightFromRowHeight(LayoutUnit rowHeight)
 {
     clearIntrinsicPadding();
     RenderBlock::setOverrideHeight(max<LayoutUnit>(0, rowHeight - borderBefore() - paddingBefore() - borderAfter() - paddingAfter()));
@@ -229,7 +236,7 @@ LayoutSize RenderTableCell::offsetFromContainer(RenderObject* o, const LayoutPoi
     return offset;
 }
 
-IntRect RenderTableCell::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderTableCell::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     // If the table grid is dirty, we cannot get reliable information about adjoining cells,
     // so we ignore outside borders. This should not be a problem because it means that
@@ -281,7 +288,7 @@ IntRect RenderTableCell::clippedOverflowRectForRepaint(RenderBoxModelObject* rep
     return r;
 }
 
-void RenderTableCell::computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect& r, bool fixed) const
+void RenderTableCell::computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect& r, bool fixed) const
 {
     if (repaintContainer == this)
         return;
@@ -292,31 +299,26 @@ void RenderTableCell::computeRectForRepaint(RenderBoxModelObject* repaintContain
     RenderBlock::computeRectForRepaint(repaintContainer, r, fixed);
 }
 
-int RenderTableCell::cellBaselinePosition() const
+LayoutUnit RenderTableCell::cellBaselinePosition() const
 {
     // <http://www.w3.org/TR/2007/CR-CSS21-20070719/tables.html#height-layout>: The baseline of a cell is the baseline of
     // the first in-flow line box in the cell, or the first in-flow table-row in the cell, whichever comes first. If there
     // is no such line box or table-row, the baseline is the bottom of content edge of the cell box.
-    int firstLineBaseline = firstLineBoxBaseline();
+    LayoutUnit firstLineBaseline = firstLineBoxBaseline();
     if (firstLineBaseline != -1)
         return firstLineBaseline;
     return paddingBefore() + borderBefore() + contentLogicalHeight();
 }
 
-void RenderTableCell::styleWillChange(StyleDifference diff, const RenderStyle* newStyle)
-{
-    if (parent() && section() && style() && style()->height() != newStyle->height())
-        section()->setNeedsCellRecalc();
-
-    ASSERT(newStyle->display() == TABLE_CELL);
-
-    RenderBlock::styleWillChange(diff, newStyle);
-}
-
 void RenderTableCell::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
+    ASSERT(style()->display() == TABLE_CELL);
+
     RenderBlock::styleDidChange(diff, oldStyle);
     setHasBoxDecorations(true);
+
+    if (parent() && section() && oldStyle && style()->height() != oldStyle->height() && rowWasSet())
+        section()->rowLogicalHeightChanged(row());
 
     // If border was changed, notify table.
     if (parent()) {
@@ -864,7 +866,7 @@ public:
 
     CollapsedBorder* nextBorder()
     {
-        for (int i = 0; i < m_count; i++) {
+        for (unsigned i = 0; i < m_count; i++) {
             if (m_borders[i].borderValue.exists() && m_borders[i].shouldPaint) {
                 m_borders[i].shouldPaint = false;
                 return &m_borders[i];
@@ -875,7 +877,7 @@ public:
     }
     
     CollapsedBorder m_borders[4];
-    int m_count;
+    unsigned m_count;
 };
 
 static void addBorderStyle(RenderTable::CollapsedBorderValues& borderValues,
@@ -1034,7 +1036,7 @@ void RenderTableCell::paintMask(PaintInfo& paintInfo, const LayoutPoint& paintOf
 
 void RenderTableCell::scrollbarsChanged(bool horizontalScrollbarChanged, bool verticalScrollbarChanged)
 {
-    int scrollbarHeight = scrollbarLogicalHeight();
+    LayoutUnit scrollbarHeight = scrollbarLogicalHeight();
     if (!scrollbarHeight)
         return; // Not sure if we should be doing something when a scrollbar goes away or not.
     

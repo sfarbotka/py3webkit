@@ -39,11 +39,13 @@
 #include "Document.h"
 #include "Element.h"
 #include "HTMLHeadElement.h"
+#include "HTMLNames.h"
 #include "HTMLParserIdioms.h"
 #include "InspectorCSSAgent.h"
 #include "InspectorPageAgent.h"
 #include "InspectorValues.h"
 #include "Node.h"
+#include "SVGNames.h"
 #include "StyleSheetList.h"
 #include "WebKitCSSKeyframesRule.h"
 
@@ -102,6 +104,13 @@ RefPtr<WebCore::CSSRuleSourceData> ParsedStyleSheet::ruleSourceDataAt(unsigned i
 
 namespace WebCore {
 
+enum MediaListSource {
+    MediaListSourceLinkedSheet,
+    MediaListSourceInlineSheet,
+    MediaListSourceMediaRule,
+    MediaListSourceImportRule
+};
+
 static PassRefPtr<InspectorObject> buildSourceRangeObject(const SourceRange& range)
 {
     RefPtr<InspectorObject> result = InspectorObject::create();
@@ -110,33 +119,106 @@ static PassRefPtr<InspectorObject> buildSourceRangeObject(const SourceRange& ran
     return result.release();
 }
 
-static PassRefPtr<CSSRuleList> asCSSRuleList(StyleBase* styleBase)
+static PassRefPtr<InspectorObject> buildMediaObject(const MediaList* media, MediaListSource mediaListSource, const String& sourceURL)
 {
-    if (!styleBase)
+    RefPtr<InspectorObject> mediaObject = InspectorObject::create();
+    switch (mediaListSource) {
+    case MediaListSourceMediaRule:
+        mediaObject->setString("source", "mediaRule");
+        break;
+    case MediaListSourceImportRule:
+        mediaObject->setString("source", "importRule");
+        break;
+    case MediaListSourceLinkedSheet:
+        mediaObject->setString("source", "linkedSheet");
+        break;
+    case MediaListSourceInlineSheet:
+        mediaObject->setString("source", "inlineSheet");
+        break;
+    }
+    if (!sourceURL.isEmpty()) {
+        mediaObject->setString("sourceURL", sourceURL);
+        mediaObject->setNumber("sourceLine", media->lastLine());
+    }
+    mediaObject->setString("text", media->mediaText());
+    return mediaObject.release();
+}
+
+static PassRefPtr<CSSRuleList> asCSSRuleList(CSSStyleSheet* styleSheet)
+{
+    if (!styleSheet)
         return 0;
 
-    if (styleBase->isCSSStyleSheet())
-        return CSSRuleList::create(static_cast<CSSStyleSheet*>(styleBase), true);
-    if (styleBase->isRule()) {
-        unsigned ruleType = static_cast<CSSRule*>(styleBase)->type();
-        RefPtr<CSSRuleList> result = 0;
+    return CSSRuleList::create(styleSheet, true);
+}
 
-        switch (ruleType) {
-        case CSSRule::MEDIA_RULE:
-            result = static_cast<CSSMediaRule*>(styleBase)->cssRules();
-            break;
-        case CSSRule::WEBKIT_KEYFRAMES_RULE:
-            result = static_cast<WebKitCSSKeyframesRule*>(styleBase)->cssRules();
-            break;
-        case CSSRule::IMPORT_RULE:
-        case CSSRule::PAGE_RULE:
-        default:
-            return 0;
-        }
+static PassRefPtr<CSSRuleList> asCSSRuleList(CSSRule* rule)
+{
+    if (!rule)
+        return 0;
 
-        return result.release();
-    }
+    if (rule->isMediaRule())
+        return static_cast<CSSMediaRule*>(rule)->cssRules();
+
+    if (rule->isKeyframesRule())
+        return static_cast<WebKitCSSKeyframesRule*>(rule)->cssRules();
+
     return 0;
+}
+
+static void fillMediaListChain(CSSRule* rule, InspectorArray* mediaArray)
+{
+    MediaList* mediaList;
+    CSSRule* parentRule = rule;
+    String sourceURL;
+    while (parentRule) {
+        CSSStyleSheet* parentStyleSheet = 0;
+        bool isMediaRule = true;
+        if (parentRule->isMediaRule()) {
+            CSSMediaRule* mediaRule = static_cast<CSSMediaRule*>(parentRule);
+            mediaList = mediaRule->media();
+            parentStyleSheet = mediaRule->parentStyleSheet();
+        } else if (parentRule->isImportRule()) {
+            CSSImportRule* importRule = static_cast<CSSImportRule*>(parentRule);
+            mediaList = importRule->media();
+            parentStyleSheet = importRule->parentStyleSheet();
+            isMediaRule = false;
+        } else
+            mediaList = 0;
+
+        if (parentStyleSheet) {
+            sourceURL = parentStyleSheet->finalURL();
+            if (sourceURL.isEmpty())
+                sourceURL = InspectorDOMAgent::documentURLString(parentStyleSheet->findDocument());
+        } else
+            sourceURL = "";
+
+        if (mediaList && mediaList->length())
+            mediaArray->pushObject(buildMediaObject(mediaList, isMediaRule ? MediaListSourceMediaRule : MediaListSourceImportRule, sourceURL));
+
+        if (parentRule->parentRule())
+            parentRule = parentRule->parentRule();
+        else {
+            CSSStyleSheet* styleSheet = parentRule->parentStyleSheet();
+            while (styleSheet) {
+                mediaList = styleSheet->media();
+                if (mediaList && mediaList->length()) {
+                    Document* doc = styleSheet->findDocument();
+                    if (doc)
+                        sourceURL = doc->url();
+                    else if (!styleSheet->finalURL().isEmpty())
+                        sourceURL = styleSheet->finalURL();
+                    else
+                        sourceURL = "";
+                    mediaArray->pushObject(buildMediaObject(mediaList, styleSheet->ownerNode() ? MediaListSourceLinkedSheet : MediaListSourceInlineSheet, sourceURL));
+                }
+                parentRule = styleSheet->parentRule();
+                if (parentRule)
+                    break;
+                styleSheet = styleSheet->parentStyleSheet();
+            }
+        }
+    }
 }
 
 PassRefPtr<InspectorStyle> InspectorStyle::create(const InspectorCSSId& styleId, PassRefPtr<CSSStyleDeclaration> style, InspectorStyleSheet* parentStyleSheet)
@@ -175,6 +257,23 @@ PassRefPtr<InspectorObject> InspectorStyle::buildObjectForStyle() const
     return result.release();
 }
 
+PassRefPtr<InspectorArray> InspectorStyle::buildArrayForComputedStyle() const
+{
+    RefPtr<InspectorArray> result = InspectorArray::create();
+    Vector<InspectorStyleProperty> properties;
+    populateAllProperties(&properties);
+
+    for (Vector<InspectorStyleProperty>::iterator it = properties.begin(), itEnd = properties.end(); it != itEnd; ++it) {
+        const CSSPropertySourceData& propertyEntry = it->sourceData;
+        RefPtr<InspectorObject> entry = InspectorObject::create();
+        entry->setString("name", propertyEntry.name);
+        entry->setString("value", propertyEntry.value);
+        result->pushObject(entry);
+    }
+
+    return result.release();
+}
+
 // This method does the following preprocessing of |propertyText| with |overwrite| == false and |index| past the last active property:
 // - If the last property (if present) has no closing ";", the ";" is prepended to the current |propertyText| value.
 // - A heuristic formatting is attempted to retain the style structure.
@@ -196,9 +295,9 @@ bool InspectorStyle::setPropertyText(ErrorString* errorString, unsigned index, c
 
     if (propertyText.stripWhiteSpace().length()) {
         RefPtr<CSSMutableStyleDeclaration> tempMutableStyle = CSSMutableStyleDeclaration::create();
-        CSSParser p;
         RefPtr<CSSStyleSourceData> sourceData = CSSStyleSourceData::create();
-        p.parseDeclaration(tempMutableStyle.get(), propertyText + " " + bogusPropertyName + ": none", &sourceData);
+        CSSParser p;
+        p.parseDeclaration(tempMutableStyle.get(), propertyText + " " + bogusPropertyName + ": none", &sourceData, m_style->parentStyleSheet());
         Vector<CSSPropertySourceData>& propertyData = sourceData->propertyData;
         unsigned propertyCount = propertyData.size();
 
@@ -723,6 +822,12 @@ PassRefPtr<InspectorObject> InspectorStyleSheet::buildObjectForRule(CSSStyleRule
         result->setObject("selectorRange", selectorRange.release());
     }
 
+    RefPtr<InspectorArray> mediaArray = InspectorArray::create();
+
+    fillMediaListChain(rule, mediaArray.get());
+    if (mediaArray->length())
+        result->setArray("media", mediaArray.release());
+
     return result.release();
 }
 
@@ -836,7 +941,7 @@ InspectorCSSId InspectorStyleSheet::ruleOrStyleId(CSSStyleDeclaration* style) co
 
 Document* InspectorStyleSheet::ownerDocument() const
 {
-    return m_pageStyleSheet->document();
+    return m_pageStyleSheet->findDocument();
 }
 
 RefPtr<CSSRuleSourceData> InspectorStyleSheet::ruleSourceDataFor(CSSStyleDeclaration* style) const
@@ -998,7 +1103,7 @@ bool InspectorStyleSheet::resourceStyleSheetText(String* result) const
     if (m_origin == "user" || m_origin == "user-agent")
         return false;
 
-    if (!m_pageStyleSheet || !ownerDocument())
+    if (!m_pageStyleSheet || !ownerDocument() || !ownerDocument()->frame())
         return false;
 
     String error;
@@ -1016,7 +1121,12 @@ bool InspectorStyleSheet::inlineStyleSheetText(String* result) const
     if (!ownerNode || ownerNode->nodeType() != Node::ELEMENT_NODE)
         return false;
     Element* ownerElement = static_cast<Element*>(ownerNode);
-    if (ownerElement->tagName().lower() != "style")
+
+    if (!ownerElement->hasTagName(HTMLNames::styleTag)
+#if ENABLE(SVG)
+        && !ownerElement->hasTagName(SVGNames::styleTag)
+#endif
+    )
         return false;
     *result = ownerElement->innerText();
     return true;
@@ -1203,7 +1313,7 @@ bool InspectorStyleSheetForInlineStyle::getStyleAttributeRanges(RefPtr<CSSStyleS
 
     RefPtr<CSSMutableStyleDeclaration> tempDeclaration = CSSMutableStyleDeclaration::create();
     CSSParser p;
-    p.parseDeclaration(tempDeclaration.get(), m_styleText, result);
+    p.parseDeclaration(tempDeclaration.get(), m_styleText, result, m_element->document()->elementSheet());
     return true;
 }
 

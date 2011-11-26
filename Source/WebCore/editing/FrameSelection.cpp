@@ -114,6 +114,12 @@ FrameSelection::FrameSelection(Frame* frame)
         m_selection.setIsDirectional(true);
 }
 
+Element* FrameSelection::rootEditableElementOrDocumentElement() const
+{
+    Element* selectionRoot = m_selection.rootEditableElement();
+    return selectionRoot ? selectionRoot : m_frame->document()->documentElement();
+}
+
 void FrameSelection::moveTo(const VisiblePosition &pos, EUserTriggered userTriggered, CursorAlignOnScroll align)
 {
     SetSelectionOptions options = CloseTyping | ClearTypingStyle | userTriggered;
@@ -628,6 +634,10 @@ VisiblePosition FrameSelection::modifyMovingRight(TextGranularity granularity)
             pos = VisiblePosition(m_selection.extent(), m_selection.affinity()).right(true);
         break;
     case WordGranularity:
+        if (visualWordMovementEnabled()) {
+            pos = rightWordPosition(VisiblePosition(m_selection.extent(), m_selection.affinity()));
+            break;
+        }
     case SentenceGranularity:
     case LineGranularity:
     case ParagraphGranularity:
@@ -799,6 +809,10 @@ VisiblePosition FrameSelection::modifyMovingLeft(TextGranularity granularity)
             pos = VisiblePosition(m_selection.extent(), m_selection.affinity()).left(true);
         break;
     case WordGranularity:
+        if (visualWordMovementEnabled()) {
+            pos = leftWordPosition(VisiblePosition(m_selection.extent(), m_selection.affinity()));
+            break;
+        }
     case SentenceGranularity:
     case LineGranularity:
     case ParagraphGranularity:
@@ -1010,7 +1024,11 @@ bool FrameSelection::modify(EAlteration alter, unsigned verticalDistance, Vertic
     VisiblePosition result;
     VisiblePosition next;
     for (VisiblePosition p = pos; ; p = next) {
-        next = (direction == DirectionUp ? previousLinePosition : nextLinePosition)(p, xPos);
+        if (direction == DirectionUp)
+            next = previousLinePosition(p, xPos);
+        else
+            next = nextLinePosition(p, xPos);
+
         if (next.isNull() || next == p)
             break;
         LayoutUnit nextY;
@@ -1514,7 +1532,7 @@ void FrameSelection::selectAll()
     Document* document = m_frame->document();
 
     if (document->focusedNode() && document->focusedNode()->hasTagName(selectTag)) {
-        HTMLSelectElement* selectElement = static_cast<HTMLSelectElement*>(document->focusedNode());
+        HTMLSelectElement* selectElement = toHTMLSelectElement(document->focusedNode());
         if (selectElement->canSelectAll()) {
             selectElement->selectAll();
             return;
@@ -1949,6 +1967,12 @@ bool FrameSelection::dispatchSelectStart()
         return true;
 
     return selectStartTarget->dispatchEvent(Event::create(eventNames().selectstartEvent, true, true));
+}
+
+inline bool FrameSelection::visualWordMovementEnabled() const
+{
+    Settings* settings = m_frame ? m_frame->settings() : 0;
+    return settings && settings->visualWordMovementEnabled();
 }
 
 #ifndef NDEBUG

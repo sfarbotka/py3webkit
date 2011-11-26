@@ -102,12 +102,12 @@ bool ScriptValue::isFunction() const
 
 PassRefPtr<SerializedScriptValue> ScriptValue::serialize(ScriptState* scriptState, SerializationErrorMode throwExceptions)
 {
-    return SerializedScriptValue::create(scriptState, jsValue(), throwExceptions);
+    return SerializedScriptValue::create(scriptState, jsValue(), 0, throwExceptions);
 }
 
 ScriptValue ScriptValue::deserialize(ScriptState* scriptState, SerializedScriptValue* value, SerializationErrorMode throwExceptions)
 {
-    return ScriptValue(scriptState->globalData(), value->deserialize(scriptState, scriptState->lexicalGlobalObject(), throwExceptions));
+    return ScriptValue(scriptState->globalData(), value->deserialize(scriptState, scriptState->lexicalGlobalObject(), 0, throwExceptions));
 }
 
 #if ENABLE(INSPECTOR)
@@ -149,7 +149,7 @@ static PassRefPtr<InspectorValue> jsToInspectorValue(ScriptState* scriptState, J
         RefPtr<InspectorObject> inspectorObject = InspectorObject::create();
         JSObject* object = value.getObject();
         PropertyNameArray propertyNames(scriptState);
-        object->getOwnPropertyNames(scriptState, propertyNames);
+        object->methodTable()->getOwnPropertyNames(object, scriptState, propertyNames, ExcludeDontEnumProperties);
         for (size_t i = 0; i < propertyNames.size(); i++) {
             const Identifier& name =  propertyNames[i];
             JSValue propertyValue = object->get(scriptState, name);

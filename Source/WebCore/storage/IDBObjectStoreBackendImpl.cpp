@@ -131,7 +131,7 @@ void IDBObjectStoreBackendImpl::put(PassRefPtr<SerializedScriptValue> prpValue, 
     RefPtr<IDBCallbacks> callbacks = prpCallbacks;
     RefPtr<IDBTransactionBackendInterface> transaction = transactionPtr;
 
-    if (key && (key->type() == IDBKey::NullType)) {
+    if (key && (key->type() == IDBKey::InvalidType)) {
         ec = IDBDatabaseException::DATA_ERR;
         return;
     }
@@ -139,6 +139,11 @@ void IDBObjectStoreBackendImpl::put(PassRefPtr<SerializedScriptValue> prpValue, 
     const bool autoIncrement = objectStore->autoIncrement();
     const bool hasKeyPath = !objectStore->m_keyPath.isNull();
     if (!key && !autoIncrement && !hasKeyPath) {
+        ec = IDBDatabaseException::DATA_ERR;
+        return;
+    }
+
+    if (key && hasKeyPath && (putMode == AddOnly || putMode == AddOrUpdate)) {
         ec = IDBDatabaseException::DATA_ERR;
         return;
     }
@@ -219,8 +224,8 @@ void IDBObjectStoreBackendImpl::putInternal(ScriptExecutionContext*, PassRefPtr<
     if (!key)
         return;
 
-    if (key->type() == IDBKey::NullType) {
-        callbacks->onError(IDBDatabaseError::create(IDBDatabaseException::DATA_ERR, "NULL key is not allowed."));
+    if (key->type() == IDBKey::InvalidType) {
+        callbacks->onError(IDBDatabaseError::create(IDBDatabaseException::DATA_ERR, "Not a valid key."));
         return;
     }
 
@@ -233,8 +238,8 @@ void IDBObjectStoreBackendImpl::putInternal(ScriptExecutionContext*, PassRefPtr<
             indexKeys.append(indexKey.release());
             continue;
         }
-        if (indexKey->type() == IDBKey::NullType) {
-            callbacks->onError(IDBDatabaseError::create(IDBDatabaseException::DATA_ERR, "One of the derived (from a keyPath) keys for an index is NULL."));
+        if (indexKey->type() == IDBKey::InvalidType) {
+            callbacks->onError(IDBDatabaseError::create(IDBDatabaseException::DATA_ERR, "One of the derived (from a keyPath) keys for an index is not valid."));
             return;
         }
         if (!index->addingKeyAllowed(indexKey.get(), key.get())) { // So problem is that if key() is the same as the old key for this record in this index, then we're not really *adding it*, just updating it...
@@ -296,7 +301,7 @@ void IDBObjectStoreBackendImpl::deleteFunction(PassRefPtr<IDBKey> prpKey, PassRe
     RefPtr<IDBObjectStoreBackendImpl> objectStore = this;
     RefPtr<IDBKey> key = prpKey;
     RefPtr<IDBCallbacks> callbacks = prpCallbacks;
-    if (key->type() == IDBKey::NullType) {
+    if (key->type() == IDBKey::InvalidType) {
         ec = IDBDatabaseException::DATA_ERR;
         return;
     }
@@ -309,7 +314,7 @@ void IDBObjectStoreBackendImpl::deleteInternal(ScriptExecutionContext*, PassRefP
 {
     RefPtr<IDBBackingStore::ObjectStoreRecordIdentifier> recordIdentifier = objectStore->m_backingStore->createInvalidRecordIdentifier();
     if (!objectStore->m_backingStore->keyExistsInObjectStore(objectStore->m_databaseId, objectStore->id(), *key, recordIdentifier.get())) {
-        callbacks->onError(IDBDatabaseError::create(IDBDatabaseException::NOT_FOUND_ERR, "Key does not exist in the object store."));
+        callbacks->onSuccess(SerializedScriptValue::booleanValue(false));
         return;
     }
 
@@ -322,7 +327,7 @@ void IDBObjectStoreBackendImpl::deleteInternal(ScriptExecutionContext*, PassRefP
     }
 
     objectStore->m_backingStore->deleteObjectStoreRecord(objectStore->m_databaseId, objectStore->id(), recordIdentifier.get());
-    callbacks->onSuccess(SerializedScriptValue::nullValue());
+    callbacks->onSuccess(SerializedScriptValue::booleanValue(true));
 }
 
 void IDBObjectStoreBackendImpl::clear(PassRefPtr<IDBCallbacks> prpCallbacks, IDBTransactionBackendInterface* transaction, ExceptionCode& ec)

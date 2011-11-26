@@ -1,8 +1,8 @@
 %modules = ( # path to module name map
-    "QtWebKit" => "$basedir/WebCore",
+    "QtWebKit" => "$basedir"
 );
 %moduleheaders = ( # restrict the module headers to those found in relative path
-    "QtWebKit" => "../WebKit/qt/Api",
+    "QtWebKit" => "WebKit/qt/Api;WebKit2/UIProcess/API/qt",
 );
 %classnames = (
 );
@@ -13,6 +13,6 @@
     "script" => "#include <QtScript/QtScript>\n",
 );
 %modulepris = (
-    "QtWebKit" => "$basedir/WebKit/qt/qt_webkit_version.pri",
+    "QtWebKit" => "$basedir/../Tools/qmake/mkspecs/modules/qt_webkit.pri",
 );
 @ignore_for_master_contents = ( "qwebscriptworld.h" );

@@ -80,6 +80,11 @@ void CCTiledLayerImpl::dumpLayerProperties(TextStream& ts, int indent) const
     ts << "skipsDraw: " << (!m_tiler || m_skipsDraw) << "\n";
 }
 
+bool CCTiledLayerImpl::hasTileAt(int i, int j) const
+{
+    return m_tiler->tileAt(i, j);
+}
+
 DrawableTile* CCTiledLayerImpl::tileAt(int i, int j) const
 {
     return static_cast<DrawableTile*>(m_tiler->tileAt(i, j));
@@ -104,9 +109,6 @@ TransformationMatrix CCTiledLayerImpl::tilingTransform() const
 
     // Tiler draws with a different origin from other layers.
     transform.translate(-contentBounds().width() / 2.0, -contentBounds().height() / 2.0);
-
-    transform.translate(-scrollPosition().x(), -scrollPosition().y());
-
     return transform;
 }
 
@@ -142,10 +144,8 @@ void CCTiledLayerImpl::draw(LayerRendererChromium* layerRenderer)
     }
 
     GraphicsContext3D* context = layerRenderer->context();
-    if (isNonCompositedContent()) {
-        context->colorMask(true, true, true, false);
+    if (isNonCompositedContent())
         GLC(context, context->disable(GraphicsContext3D::BLEND));
-    }
 
     switch (m_sampledTexelFormat) {
     case LayerTextureUpdater::SampledTexelFormatRGBA:
@@ -153,8 +153,13 @@ void CCTiledLayerImpl::draw(LayerRendererChromium* layerRenderer)
             const ProgramAA* program = layerRenderer->tilerProgramAA();
             drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, program->fragmentShader().fragmentTexTransformLocation(), program->fragmentShader().edgeLocation());
         } else {
-            const Program* program = layerRenderer->tilerProgram();
-            drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            if (isNonCompositedContent()) {
+                const ProgramOpaque* program = layerRenderer->tilerProgramOpaque();
+                drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            } else {
+                const Program* program = layerRenderer->tilerProgram();
+                drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            }
         }
         break;
     case LayerTextureUpdater::SampledTexelFormatBGRA:
@@ -162,18 +167,21 @@ void CCTiledLayerImpl::draw(LayerRendererChromium* layerRenderer)
             const ProgramSwizzleAA* program = layerRenderer->tilerProgramSwizzleAA();
             drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, program->fragmentShader().fragmentTexTransformLocation(), program->fragmentShader().edgeLocation());
         } else {
-            const ProgramSwizzle* program = layerRenderer->tilerProgramSwizzle();
-            drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            if (isNonCompositedContent()) {
+                const ProgramSwizzleOpaque* program = layerRenderer->tilerProgramSwizzleOpaque();
+                drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            } else {
+                const ProgramSwizzle* program = layerRenderer->tilerProgramSwizzle();
+                drawTiles(layerRenderer, layerRect, layerTransform, deviceMatrix, deviceRect, layerQuad, drawOpacity(), program, -1, -1);
+            }
         }
         break;
     default:
         ASSERT_NOT_REACHED();
     }
 
-    if (isNonCompositedContent()) {
-        context->colorMask(true, true, true, true);
+    if (isNonCompositedContent())
         GLC(context, context->enable(GraphicsContext3D::BLEND));
-    }
 }
 
 void CCTiledLayerImpl::setTilingData(const CCLayerTilingData& tiler)
@@ -216,6 +224,7 @@ void CCTiledLayerImpl::drawTiles(LayerRendererChromium* layerRenderer, const Int
     m_tiler->contentRectToTileIndices(contentRect, left, top, right, bottom);
     IntRect layerRect = m_tiler->contentRectToLayerRect(contentRect);
     float sign = FloatQuad(contentRect).isCounterclockwise() ? -1 : 1;
+    const GC3Dint filter = m_tiler->hasBorderTexels() ? GraphicsContext3D::LINEAR : GraphicsContext3D::NEAREST;
     for (int j = top; j <= bottom; ++j) {
         CCLayerQuad::Edge prevEdgeX = contentQuad.left();
 
@@ -244,14 +253,10 @@ void CCTiledLayerImpl::drawTiles(LayerRendererChromium* layerRenderer, const Int
 
         for (int i = left; i <= right; ++i) {
             DrawableTile* tile = tileAt(i, j);
-            if (!tile || !tile->textureId())
-                continue;
-
-            context->bindTexture(GraphicsContext3D::TEXTURE_2D, tile->textureId());
 
             // Don't use tileContentRect here, as that contains the full
             // rect with border texels which shouldn't be drawn.
-            IntRect tileRect = m_tiler->tileBounds(tile->i(), tile->j());
+            IntRect tileRect = m_tiler->tileBounds(i, j);
             IntRect displayRect = tileRect;
             tileRect.intersect(layerRect);
 
@@ -279,7 +284,7 @@ void CCTiledLayerImpl::drawTiles(LayerRendererChromium* layerRenderer, const Int
             clampRect.inflateY(-clampY);
             FloatSize clampOffset = clampRect.minXMinYCorner() - FloatRect(tileRect).minXMinYCorner();
 
-            FloatPoint texOffset = m_tiler->textureOffset(tile->i(), tile->j()) + clampOffset + FloatSize(displayOffset);
+            FloatPoint texOffset = m_tiler->textureOffset(i, j) + clampOffset + FloatSize(displayOffset);
             float tileWidth = static_cast<float>(m_tiler->tileSize().width());
             float tileHeight = static_cast<float>(m_tiler->tileSize().height());
 
@@ -342,11 +347,32 @@ void CCTiledLayerImpl::drawTiles(LayerRendererChromium* layerRenderer, const Int
 
             GLC(context, context->uniform4f(program->vertexShader().vertexTexTransformLocation(), vertexTexTranslateX, vertexTexTranslateY, vertexTexScaleX, vertexTexScaleY));
 
-            layerRenderer->drawTexturedQuad(globalTransform,
-                                            tileRect.width(), tileRect.height(), opacity, quad,
-                                            program->vertexShader().matrixLocation(),
-                                            program->fragmentShader().alphaLocation(),
-                                            program->vertexShader().pointLocation());
+            if (tile && tile->textureId()) {
+                context->bindTexture(GraphicsContext3D::TEXTURE_2D, tile->textureId());
+                GLC(context, context->texParameteri(GraphicsContext3D::TEXTURE_2D, GraphicsContext3D::TEXTURE_MIN_FILTER, filter));
+                GLC(context, context->texParameteri(GraphicsContext3D::TEXTURE_2D, GraphicsContext3D::TEXTURE_MAG_FILTER, filter));
+
+                layerRenderer->drawTexturedQuad(globalTransform,
+                                                tileRect.width(), tileRect.height(), opacity, quad,
+                                                program->vertexShader().matrixLocation(),
+                                                program->fragmentShader().alphaLocation(),
+                                                program->vertexShader().pointLocation());
+            } else {
+                TransformationMatrix tileTransform = globalTransform;
+                tileTransform.translate(tileRect.x() + tileRect.width() / 2.0, tileRect.y() + tileRect.height() / 2.0);
+
+                const LayerChromium::BorderProgram* solidColorProgram = layerRenderer->borderProgram();
+                GLC(context, context->useProgram(solidColorProgram->program()));
+
+                GLC(context, context->uniform4f(solidColorProgram->fragmentShader().colorLocation(), backgroundColor().red(), backgroundColor().green(), backgroundColor().blue(), backgroundColor().alpha()));
+
+                layerRenderer->drawTexturedQuad(tileTransform,
+                                                tileRect.width(), tileRect.height(), opacity, quad,
+                                                solidColorProgram->vertexShader().matrixLocation(),
+                                                -1, -1);
+
+                GLC(context, context->useProgram(program->program()));
+            }
 
             prevEdgeX = edgeX;
             // Reverse direction.

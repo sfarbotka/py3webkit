@@ -30,7 +30,6 @@
 
 
 var Preferences = {
-    canEditScriptSource: false,
     maxInlineTextChildLength: 80,
     minConsoleHeight: 75,
     minSidebarWidth: 100,
@@ -42,7 +41,6 @@ var Preferences = {
     showColorNicknames: true,
     debuggerAlwaysEnabled: false,
     profilerAlwaysEnabled: false,
-    onlineDetectionEnabled: true,
     nativeInstrumentationEnabled: false,
     useDataURLForResourceImageIcons: true,
     showTimingTab: false,
@@ -56,7 +54,10 @@ var Preferences = {
     canClearCacheAndCookies: false,
     canDisableCache: false,
     showNetworkPanelInitiatorColumn: false,
-    haveExtensions: false
+    haveExtensions: false,
+    sharedWorkersDebugNote: undefined,
+    localizeUI: true,
+    applicationTitle: "Web Inspector - %s"
 }
 
 /**
@@ -86,8 +87,9 @@ WebInspector.Settings = function()
     this.eventListenerBreakpoints = this.createSetting("eventListenerBreakpoints", []);
     this.domBreakpoints = this.createSetting("domBreakpoints", []);
     this.xhrBreakpoints = this.createSetting("xhrBreakpoints", []);
-    this.workerInspectionEnabled = this.createSetting("workerInspectionEnabled", []);
     this.cacheDisabled = this.createSetting("cacheDisabled", false);
+    this.overrideUserAgent = this.createSetting("overrideUserAgent", "");
+    this.userAgent = this.createSetting("userAgent", "");
     this.showScriptFolders = this.createSetting("showScriptFolders", true);
 
     // If there are too many breakpoints in a storage, it is likely due to a recent bug that caused

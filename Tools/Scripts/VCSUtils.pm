@@ -249,8 +249,7 @@ sub isGitBranchBuild()
 sub isSVNDirectory($)
 {
     my ($dir) = @_;
-
-    return -d File::Spec->catdir($dir, ".svn");
+    return system("cd $dir && svn info > " . File::Spec->devnull() . " 2>&1") == 0;
 }
 
 sub isSVN()
@@ -349,7 +348,7 @@ sub determineVCSRoot()
         # Some users have a workflow where svn-create-patch, svn-apply and
         # svn-unapply are used outside of multiple svn working directores,
         # so warn the user and assume Subversion is being used in this case.
-        warn "Unable to determine VCS root; assuming Subversion";
+        warn "Unable to determine VCS root for '" . Cwd::getcwd() . "'; assuming Subversion";
         $isSVN = 1;
     }
 
@@ -421,19 +420,6 @@ sub possiblyColored($$)
     } else {
         return $string;
     }
-}
-
-sub adjustPathForRecentRenamings($)
-{
-    my ($fullPath) = @_;
-
-    if ($fullPath =~ m|^WebCore/|
-        || $fullPath =~ m|^JavaScriptCore/|
-        || $fullPath =~ m|^WebKit/|
-        || $fullPath =~ m|^WebKit2/|) {
-        return "Source/$fullPath";
-    }
-    return $fullPath;
 }
 
 sub canonicalizePath($)
@@ -625,7 +611,7 @@ sub parseGitDiffHeader($$)
         # The first and second paths can differ in the case of copies
         # and renames.  We use the second file path because it is the
         # destination path.
-        $indexPath = adjustPathForRecentRenamings($4);
+        $indexPath = $4;
         # Use $POSTMATCH to preserve the end-of-line character.
         $_ = "Index: $indexPath$POSTMATCH"; # Convert to SVN format.
     } else {
@@ -741,7 +727,7 @@ sub parseSvnDiffHeader($$)
 
     my $indexPath;
     if (/$svnDiffStartRegEx/) {
-        $indexPath = adjustPathForRecentRenamings($1);
+        $indexPath = $1;
     } else {
         die("First line of SVN diff does not begin with \"Index \": \"$_\"");
     }

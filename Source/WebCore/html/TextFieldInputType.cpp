@@ -33,8 +33,10 @@
 #include "TextFieldInputType.h"
 
 #include "BeforeTextInsertedEvent.h"
+#include "FormDataList.h"
 #include "Frame.h"
 #include "HTMLInputElement.h"
+#include "HTMLNames.h"
 #include "KeyboardEvent.h"
 #include "Page.h"
 #include "RenderLayer.h"
@@ -48,6 +50,8 @@
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
+
+using namespace HTMLNames;
 
 TextFieldInputType::TextFieldInputType(HTMLInputElement* element)
     : InputType(element)
@@ -142,7 +146,7 @@ void TextFieldInputType::handleWheelEventForSpinButton(WheelEvent* event)
 
 void TextFieldInputType::forwardEvent(Event* event)
 {
-    if (element()->renderer() && (event->isMouseEvent() || event->isDragEvent() || event->isWheelEvent() || event->type() == eventNames().blurEvent || event->type() == eventNames().focusEvent)) {
+    if (element()->renderer() && (event->isMouseEvent() || event->isDragEvent() || event->hasInterface(eventNames().interfaceForWheelEvent) || event->type() == eventNames().blurEvent || event->type() == eventNames().focusEvent)) {
         RenderTextControlSingleLine* renderTextControl = toRenderTextControlSingleLine(element()->renderer());
         if (event->type() == eventNames().blurEvent) {
             if (RenderBox* innerTextRenderer = innerTextElement()->renderBox()) {
@@ -160,7 +164,7 @@ void TextFieldInputType::forwardEvent(Event* event)
 
 bool TextFieldInputType::shouldSubmitImplicitly(Event* event)
 {
-    return (event->type() == eventNames().textInputEvent && event->isTextEvent() && static_cast<TextEvent*>(event)->data() == "\n") || InputType::shouldSubmitImplicitly(event);
+    return (event->type() == eventNames().textInputEvent && event->hasInterface(eventNames().interfaceForTextEvent) && static_cast<TextEvent*>(event)->data() == "\n") || InputType::shouldSubmitImplicitly(event);
 }
 
 RenderObject* TextFieldInputType::createRenderer(RenderArena* arena, RenderStyle*) const
@@ -299,7 +303,7 @@ static String limitLength(const String& string, int maxLength)
     return string.left(newLength);
 }
 
-String TextFieldInputType::sanitizeValue(const String& proposedValue)
+String TextFieldInputType::sanitizeValue(const String& proposedValue) const
 {
     return limitLength(proposedValue.removeCharacters(isASCIILineBreak), HTMLInputElement::maximumLength);
 }
@@ -362,6 +366,15 @@ void TextFieldInputType::updatePlaceholderText()
     }
     m_placeholder->setInnerText(placeholderText, ec);
     ASSERT(!ec);
+}
+
+bool TextFieldInputType::appendFormData(FormDataList& list, bool multipart) const
+{
+    InputType::appendFormData(list, multipart);
+    const AtomicString& dirnameAttrValue = element()->fastGetAttribute(dirnameAttr);
+    if (!dirnameAttrValue.isNull())
+        list.appendData(dirnameAttrValue, element()->directionForFormData());
+    return true;
 }
 
 } // namespace WebCore

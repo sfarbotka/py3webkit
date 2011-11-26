@@ -84,11 +84,7 @@ bool RenderSVGResourceMasker::applyResource(RenderObject* object, RenderStyle*, 
 {
     ASSERT(object);
     ASSERT(context);
-#ifndef NDEBUG
-    ASSERT(resourceMode == ApplyToDefaultMode);
-#else
-    UNUSED_PARAM(resourceMode);
-#endif
+    ASSERT_UNUSED(resourceMode, resourceMode == ApplyToDefaultMode);
 
     if (!m_masker.contains(object))
         m_masker.set(object, new MaskerData);
@@ -187,7 +183,7 @@ FloatRect RenderSVGResourceMasker::resourceBoundingBox(RenderObject* object)
     ASSERT(maskElement);
 
     FloatRect objectBoundingBox = object->objectBoundingBox();
-    FloatRect maskBoundaries = maskElement->maskBoundingBox(objectBoundingBox);
+    FloatRect maskBoundaries = SVGLengthContext::resolveRectangle<SVGMaskElement>(maskElement, maskElement->maskUnits(), objectBoundingBox);
 
     // Resource was not layouted yet. Give back clipping rect of the mask.
     if (selfNeedsLayout())

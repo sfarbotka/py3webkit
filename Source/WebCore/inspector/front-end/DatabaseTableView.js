@@ -38,13 +38,12 @@ WebInspector.DatabaseTableView = function(database, tableName)
     this.element.addStyleClass("table");
 
     this.refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-storage-status-bar-item");
-    this.refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this), false);
+    this.refreshButton.addEventListener("click", this._refreshButtonClicked, this);
 }
 
 WebInspector.DatabaseTableView.prototype = {
-    show: function(parentElement)
+    wasShown: function()
     {
-        WebInspector.View.prototype.show.call(this, parentElement);
         this.update();
     },
 
@@ -60,6 +59,7 @@ WebInspector.DatabaseTableView.prototype = {
 
     _queryFinished: function(columnNames, values)
     {
+        this.detachChildViews();
         this.element.removeChildren();
 
         var dataGrid = WebInspector.DataGrid.createSortableDataGrid(columnNames, values);
@@ -68,13 +68,13 @@ WebInspector.DatabaseTableView.prototype = {
             this._emptyView.show(this.element);
             return;
         }
-
-        this.element.appendChild(dataGrid.element);
+        dataGrid.show(this.element);
         dataGrid.autoSizeColumns(5);
     },
 
     _queryError: function(error)
     {
+        this.detachChildViews();
         this.element.removeChildren();
 
         var errorMsgElement = document.createElement("div");

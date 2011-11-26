@@ -43,6 +43,7 @@
 
 namespace WebCore {
 
+class Blob;
 class ScriptExecutionContext;
 
 class FileWriter : public FileWriterBase, public ActiveDOMObject, public EventTarget, public AsyncFileWriterClient {
@@ -76,7 +77,7 @@ public:
     virtual void stop();
 
     // EventTarget
-    virtual FileWriter* toFileWriter() { return this; }
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const { return ActiveDOMObject::scriptExecutionContext(); }
 
     using RefCounted<FileWriterBase>::ref;

@@ -51,8 +51,6 @@
 #include "InspectorInstrumentation.h"
 #include "Logging.h"
 #include "MediaCanStartListener.h"
-#include "MediaStreamClient.h"
-#include "MediaStreamController.h"
 #include "Navigator.h"
 #include "NetworkStateNotifier.h"
 #include "PageGroup.h"
@@ -61,6 +59,7 @@
 #include "PluginViewBase.h"
 #include "ProgressTracker.h"
 #include "RenderTheme.h"
+#include "RenderView.h"
 #include "RenderWidget.h"
 #include "RuntimeEnabledFeatures.h"
 #include "SchemeRegistry.h"
@@ -68,6 +67,8 @@
 #include "SharedBuffer.h"
 #include "SpeechInput.h"
 #include "SpeechInputClient.h"
+#include "StorageArea.h"
+#include "StorageNamespace.h"
 #include "TextResourceDecoder.h"
 #include "Widget.h"
 #include <wtf/HashMap.h>
@@ -75,13 +76,12 @@
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/StringHash.h>
 
-#if ENABLE(DOM_STORAGE)
-#include "StorageArea.h"
-#include "StorageNamespace.h"
-#endif
-
 #if ENABLE(CLIENT_BASED_GEOLOCATION)
 #include "GeolocationController.h"
+#endif
+
+#if ENABLE(MEDIA_STREAM)
+#include "UserMediaClient.h"
 #endif
 
 namespace WebCore {
@@ -137,11 +137,11 @@ Page::Page(PageClients& pageClients)
     , m_deviceMotionController(RuntimeEnabledFeatures::deviceMotionEnabled() ? adoptPtr(new DeviceMotionController(pageClients.deviceMotionClient)) : nullptr)
     , m_deviceOrientationController(RuntimeEnabledFeatures::deviceOrientationEnabled() ? adoptPtr(new DeviceOrientationController(this, pageClients.deviceOrientationClient)) : nullptr)
 #endif
-#if ENABLE(MEDIA_STREAM)
-    , m_mediaStreamController(RuntimeEnabledFeatures::mediaStreamEnabled() ? adoptPtr(new MediaStreamController(pageClients.mediaStreamClient)) : PassOwnPtr<MediaStreamController>())
-#endif
 #if ENABLE(INPUT_SPEECH)
     , m_speechInputClient(pageClients.speechInputClient)
+#endif
+#if ENABLE(MEDIA_STREAM)
+    , m_userMediaClient(pageClients.userMediaClient)
 #endif
     , m_settings(adoptPtr(new Settings(this)))
     , m_progress(adoptPtr(new ProgressTracker))
@@ -172,6 +172,7 @@ Page::Page(PageClients& pageClients)
 #if ENABLE(PAGE_VISIBILITY_API)
     , m_visibilityState(PageVisibilityStateVisible)
 #endif
+    , m_displayID(0)
 {
     if (!allPages) {
         allPages = new HashSet<Page*>;
@@ -207,6 +208,11 @@ Page::~Page()
     InspectorInstrumentation::inspectedPageDestroyed(this);
 #if ENABLE(INSPECTOR)
     m_inspectorController->inspectedPageDestroyed();
+#endif
+
+#if ENABLE(MEDIA_STREAM)
+    if (m_userMediaClient)
+        m_userMediaClient->pageDestroyed();
 #endif
 
     backForward()->close();
@@ -398,11 +404,11 @@ void Page::setNeedsRecalcStyleInAllFrames()
 
 void Page::updateViewportArguments()
 {
-    if (!mainFrame() || !mainFrame()->document() || mainFrame()->document()->viewportArguments() == m_viewportArguments)
+    if (!mainFrame() || !mainFrame()->document())
         return;
 
     m_viewportArguments = mainFrame()->document()->viewportArguments();
-    chrome()->dispatchViewportDataDidChange(m_viewportArguments);
+    chrome()->dispatchViewportPropertiesDidChange(m_viewportArguments);
 }
 
 void Page::refreshPlugins(bool reload)
@@ -521,7 +527,7 @@ PassRefPtr<Range> Page::rangeOfString(const String& target, Range* referenceRang
     Frame* frame = referenceRange ? referenceRange->ownerDocument()->frame() : mainFrame();
     Frame* startFrame = frame;
     do {
-        if (RefPtr<Range> resultRange = frame->editor()->rangeOfString(target, frame == startFrame ? referenceRange : 0, (options & ~WrapAround) | StartInSelection))
+        if (RefPtr<Range> resultRange = frame->editor()->rangeOfString(target, frame == startFrame ? referenceRange : 0, options & ~WrapAround))
             return resultRange.release();
 
         frame = incrementFrame(frame, !(options & Backwards), shouldWrap);
@@ -618,7 +624,7 @@ void Page::setMediaVolume(float volume)
     }
 }
 
-void Page::setPageScaleFactor(float scale, const LayoutPoint& origin)
+void Page::setPageScaleFactor(float scale, const IntPoint& origin)
 {
     if (scale == m_pageScaleFactor)
         return;
@@ -655,7 +661,8 @@ void Page::setDeviceScaleFactor(float scaleFactor)
     setNeedsRecalcStyleInAllFrames();
 
 #if USE(ACCELERATED_COMPOSITING)
-    m_mainFrame->deviceOrPageScaleFactorChanged();
+    if (mainFrame())
+        mainFrame()->deviceOrPageScaleFactorChanged();
 #endif
 
     for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext())
@@ -664,12 +671,40 @@ void Page::setDeviceScaleFactor(float scaleFactor)
     backForward()->markPagesForFullStyleRecalc();
 }
 
+void Page::setPagination(const Pagination& pagination)
+{
+    if (m_pagination.mode == pagination.mode && m_pagination.gap == pagination.gap)
+        return;
+
+    m_pagination = pagination;
+
+    setNeedsRecalcStyleInAllFrames();
+    backForward()->markPagesForFullStyleRecalc();
+}
+
+unsigned Page::pageCount() const
+{
+    if (m_pagination.mode == Pagination::Unpaginated)
+        return 0;
+
+    FrameView* frameView = mainFrame()->view();
+    if (!frameView->didFirstLayout())
+        return 0;
+
+    mainFrame()->view()->forceLayout();
+
+    RenderView* contentRenderer = mainFrame()->contentRenderer();
+    return contentRenderer->columnCount(contentRenderer->columnInfo());
+}
+
 void Page::didMoveOnscreen()
 {
     for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
         if (frame->view())
             frame->view()->didMoveOnscreen();
     }
+    
+    resumeScriptedAnimations();
 }
 
 void Page::willMoveOffscreen()
@@ -677,6 +712,34 @@ void Page::willMoveOffscreen()
     for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
         if (frame->view())
             frame->view()->willMoveOffscreen();
+    }
+    
+    suspendScriptedAnimations();
+}
+
+void Page::windowScreenDidChange(PlatformDisplayID displayID)
+{
+    m_displayID = displayID;
+    
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        if (frame->document())
+            frame->document()->windowScreenDidChange(displayID);
+    }
+}
+
+void Page::suspendScriptedAnimations()
+{
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        if (frame->document())
+            frame->document()->suspendScriptedAnimationControllerCallbacks();
+    }
+}
+
+void Page::resumeScriptedAnimations()
+{
+    for (Frame* frame = mainFrame(); frame; frame = frame->tree()->traverseNext()) {
+        if (frame->document())
+            frame->document()->resumeScriptedAnimationControllerCallbacks();
     }
 }
 
@@ -824,7 +887,6 @@ void Page::setDebugger(JSC::Debugger* debugger)
         frame->script()->attachDebugger(m_debugger);
 }
 
-#if ENABLE(DOM_STORAGE)
 StorageNamespace* Page::sessionStorage(bool optionalCreate)
 {
     if (!m_sessionStorage && optionalCreate)
@@ -837,7 +899,6 @@ void Page::setSessionStorage(PassRefPtr<StorageNamespace> newStorage)
 {
     m_sessionStorage = newStorage;
 }
-#endif
 
 void Page::setCustomHTMLTokenizerTimeDelay(double customHTMLTokenizerTimeDelay)
 {
@@ -1002,7 +1063,7 @@ Page::PageClients::PageClients()
     , deviceMotionClient(0)
     , deviceOrientationClient(0)
     , speechInputClient(0)
-    , mediaStreamClient(0)
+    , userMediaClient(0)
 {
 }
 

@@ -32,6 +32,7 @@
 #include "JSONObject.h"
 #include "Tracing.h"
 #include <algorithm>
+#include <wtf/CurrentTime.h>
 
 
 using namespace std;
@@ -45,7 +46,18 @@ static const size_t largeHeapSize = 16 * 1024 * 1024;
 static const size_t smallHeapSize = 512 * 1024;
 
 #if ENABLE(GC_LOGGING)
-    
+#if COMPILER(CLANG)
+#define DEFINE_GC_LOGGING_GLOBAL(type, name, arguments) \
+_Pragma("clang diagnostic push") \
+_Pragma("clang diagnostic ignored \"-Wglobal-constructors\"") \
+_Pragma("clang diagnostic ignored \"-Wexit-time-destructors\"") \
+static type name arguments; \
+_Pragma("clang diagnostic pop")
+#else
+#define DEFINE_GC_LOGGING_GLOBAL(type, name, arguments) \
+static type name arguments;
+#endif // COMPILER(CLANG)
+
 struct GCTimer {
     GCTimer(const char* name)
         : m_time(0)
@@ -86,14 +98,45 @@ struct GCTimerScope {
     double m_start;
 };
 
-#define GCPHASE(name) static GCTimer name##Timer(#name); GCTimerScope name##TimerScope(&name##Timer)
-#define COND_GCPHASE(cond, name1, name2) static GCTimer name1##Timer(#name1); static GCTimer name2##Timer(#name2); GCTimerScope name1##CondTimerScope(cond ? &name1##Timer : &name2##Timer)
+struct GCCounter {
+    GCCounter(const char* name)
+        : m_name(name)
+        , m_count(0)
+        , m_total(0)
+        , m_min(10000000)
+        , m_max(0)
+    {
+    }
+    
+    void count(size_t amount)
+    {
+        m_count++;
+        m_total += amount;
+        if (amount < m_min)
+            m_min = amount;
+        if (amount > m_max)
+            m_max = amount;
+    }
+    ~GCCounter()
+    {
+        printf("%s: %zu values (avg. %zu, min. %zu, max. %zu)\n", m_name, m_total, m_total / m_count, m_min, m_max);
+    }
+    const char* m_name;
+    size_t m_count;
+    size_t m_total;
+    size_t m_min;
+    size_t m_max;
+};
 
+#define GCPHASE(name) DEFINE_GC_LOGGING_GLOBAL(GCTimer, name##Timer, (#name)); GCTimerScope name##TimerScope(&name##Timer)
+#define COND_GCPHASE(cond, name1, name2) DEFINE_GC_LOGGING_GLOBAL(GCTimer, name1##Timer, (#name1)); DEFINE_GC_LOGGING_GLOBAL(GCTimer, name2##Timer, (#name2)); GCTimerScope name1##CondTimerScope(cond ? &name1##Timer : &name2##Timer)
+#define GCCOUNTER(name, value) do { DEFINE_GC_LOGGING_GLOBAL(GCCounter, name##Counter, (#name)); name##Counter.count(value); } while (false)
+    
 #else
 
 #define GCPHASE(name) do { } while (false)
 #define COND_GCPHASE(cond, name1, name2) do { } while (false)
-
+#define GCCOUNTER(name, value) do { } while (false)
 #endif
 
 static size_t heapSizeForHint(HeapSize heapSize)
@@ -269,11 +312,13 @@ Heap::Heap(JSGlobalData* globalData, HeapSize heapSize)
     , m_lastFullGCSize(0)
     , m_operationInProgress(NoOperation)
     , m_objectSpace(this)
+    , m_blockFreeingThreadShouldQuit(false)
     , m_extraCost(0)
     , m_markListSet(0)
     , m_activityCallback(DefaultGCActivityCallback::create(this))
     , m_machineThreads(this)
-    , m_slotVisitor(globalData->jsArrayVPtr)
+    , m_sharedData(globalData)
+    , m_slotVisitor(m_sharedData, globalData->jsArrayVPtr, globalData->jsFinalObjectVPtr, globalData->jsStringVPtr)
     , m_handleHeap(globalData)
     , m_isSafeToCollect(false)
     , m_globalData(globalData)
@@ -282,19 +327,20 @@ Heap::Heap(JSGlobalData* globalData, HeapSize heapSize)
     (*m_activityCallback)();
     m_numberOfFreeBlocks = 0;
     m_blockFreeingThread = createThread(blockFreeingThreadStartFunc, this, "JavaScriptCore::BlockFree");
+    
     ASSERT(m_blockFreeingThread);
 }
 
 Heap::~Heap()
 {
-    // destroy our thread
+    // Destroy our block freeing thread.
     {
         MutexLocker locker(m_freeBlockLock);
         m_blockFreeingThreadShouldQuit = true;
         m_freeBlockCondition.broadcast();
     }
     waitForThreadCompletion(m_blockFreeingThread, 0);
-    
+
     // The destroy function must already have been called, so assert this.
     ASSERT(!m_globalData);
 }
@@ -440,16 +486,16 @@ bool Heap::unprotect(JSValue k)
     return m_protectedValues.remove(k.asCell());
 }
 
+void Heap::jettisonDFGCodeBlock(PassOwnPtr<CodeBlock> codeBlock)
+{
+    m_dfgCodeBlocks.jettison(codeBlock);
+}
+
 void Heap::markProtectedObjects(HeapRootVisitor& heapRootVisitor)
 {
     ProtectCountSet::iterator end = m_protectedValues.end();
     for (ProtectCountSet::iterator it = m_protectedValues.begin(); it != end; ++it)
         heapRootVisitor.visit(&it->first);
-}
-
-void Heap::addJettisonedCodeBlock(PassOwnPtr<CodeBlock> codeBlock)
-{
-    m_jettisonedCodeBlocks.addCodeBlock(codeBlock);
 }
 
 void Heap::pushTempSortVector(Vector<ValueStringPair>* tempVector)
@@ -484,6 +530,11 @@ void Heap::harvestWeakReferences()
     m_slotVisitor.harvestWeakReferences();
 }
 
+void Heap::finalizeUnconditionalFinalizers()
+{
+    m_slotVisitor.finalizeUnconditionalFinalizers();
+}
+
 inline RegisterFile& Heap::registerFile()
 {
     return m_globalData->interpreter->registerFile();
@@ -508,6 +559,8 @@ void Heap::getConservativeRegisterRoots(HashSet<JSCell*>& roots)
 
 void Heap::markRoots(bool fullGC)
 {
+    SamplingRegion samplingRegion("Garbage Collection: Tracing");
+
     COND_GCPHASE(fullGC, MarkFullRoots, MarkYoungRoots);
     UNUSED_PARAM(fullGC);
     ASSERT(isValidThreadState(m_globalData));
@@ -526,12 +579,11 @@ void Heap::markRoots(bool fullGC)
     }
 
     ConservativeRoots registerFileRoots(&m_objectSpace.blocks());
-    m_jettisonedCodeBlocks.clearMarks();
+    m_dfgCodeBlocks.clearMarks();
     {
         GCPHASE(GatherRegisterFileRoots);
-        registerFile().gatherConservativeRoots(registerFileRoots, m_jettisonedCodeBlocks);
+        registerFile().gatherConservativeRoots(registerFileRoots, m_dfgCodeBlocks);
     }
-    m_jettisonedCodeBlocks.deleteUnmarkedCodeBlocks();
 #if ENABLE(GGC)
     MarkedBlock::DirtyCellVector dirtyCells;
     if (!fullGC) {
@@ -547,81 +599,108 @@ void Heap::markRoots(bool fullGC)
     SlotVisitor& visitor = m_slotVisitor;
     HeapRootVisitor heapRootVisitor(visitor);
 
+    {
+        ParallelModeEnabler enabler(visitor);
 #if ENABLE(GGC)
-    if (size_t dirtyCellCount = dirtyCells.size()) {
-        GCPHASE(VisitDirtyCells);
-        for (size_t i = 0; i < dirtyCellCount; i++) {
-            heapRootVisitor.visitChildren(dirtyCells[i]);
-            visitor.drain();
+        {
+            size_t dirtyCellCount = dirtyCells.size();
+            GCPHASE(VisitDirtyCells);
+            GCCOUNTER(DirtyCellCount, dirtyCellCount);
+            for (size_t i = 0; i < dirtyCellCount; i++) {
+                heapRootVisitor.visitChildren(dirtyCells[i]);
+                visitor.donateAndDrain();
+            }
         }
-    }
 #endif
-
-    {
-        GCPHASE(VisitMachineRoots);
-        visitor.append(machineThreadRoots);
-        visitor.drain();
-    }
-    {
-        GCPHASE(VisitRegisterFileRoots);
-        visitor.append(registerFileRoots);
-        visitor.drain();
-    }
-    {
-        GCPHASE(VisitProtectedObjects);
-        markProtectedObjects(heapRootVisitor);
-        visitor.drain();
-    }
-    {
-        GCPHASE(VisitTempSortVectors);
-        markTempSortVectors(heapRootVisitor);
-        visitor.drain();
-    }
-
-    {
-        GCPHASE(MarkingArgumentBuffers);
-        if (m_markListSet && m_markListSet->size()) {
-            MarkedArgumentBuffer::markLists(heapRootVisitor, *m_markListSet);
-            visitor.drain();
+    
+        if (m_globalData->codeBlocksBeingCompiled.size()) {
+            GCPHASE(VisitActiveCodeBlock);
+            for (size_t i = 0; i < m_globalData->codeBlocksBeingCompiled.size(); i++)
+                m_globalData->codeBlocksBeingCompiled[i]->visitAggregate(visitor);
         }
-    }
-    if (m_globalData->exception) {
-        GCPHASE(MarkingException);
-        heapRootVisitor.visit(&m_globalData->exception);
-        visitor.drain();
-    }
     
-    {
-        GCPHASE(VisitStrongHandles);
-        m_handleHeap.visitStrongHandles(heapRootVisitor);
-        visitor.drain();
-    }
+        {
+            GCPHASE(VisitMachineRoots);
+            visitor.append(machineThreadRoots);
+            visitor.donateAndDrain();
+        }
+        {
+            GCPHASE(VisitRegisterFileRoots);
+            visitor.append(registerFileRoots);
+            visitor.donateAndDrain();
+        }
+        {
+            GCPHASE(VisitProtectedObjects);
+            markProtectedObjects(heapRootVisitor);
+            visitor.donateAndDrain();
+        }
+        {
+            GCPHASE(VisitTempSortVectors);
+            markTempSortVectors(heapRootVisitor);
+            visitor.donateAndDrain();
+        }
+
+        {
+            GCPHASE(MarkingArgumentBuffers);
+            if (m_markListSet && m_markListSet->size()) {
+                MarkedArgumentBuffer::markLists(heapRootVisitor, *m_markListSet);
+                visitor.donateAndDrain();
+            }
+        }
+        if (m_globalData->exception) {
+            GCPHASE(MarkingException);
+            heapRootVisitor.visit(&m_globalData->exception);
+            visitor.donateAndDrain();
+        }
     
-    {
-        GCPHASE(HandleStack);
-        m_handleStack.visit(heapRootVisitor);
-        visitor.drain();
-    }
+        {
+            GCPHASE(VisitStrongHandles);
+            m_handleHeap.visitStrongHandles(heapRootVisitor);
+            visitor.donateAndDrain();
+        }
     
-    {
-        GCPHASE(TraceCodeBlocks);
-        m_jettisonedCodeBlocks.traceCodeBlocks(visitor);
-        visitor.drain();
+        {
+            GCPHASE(HandleStack);
+            m_handleStack.visit(heapRootVisitor);
+            visitor.donateAndDrain();
+        }
+    
+        {
+            GCPHASE(TraceCodeBlocks);
+            m_dfgCodeBlocks.traceMarkedCodeBlocks(visitor);
+            visitor.donateAndDrain();
+        }
+    
+#if ENABLE(PARALLEL_GC)
+        {
+            GCPHASE(Convergence);
+            visitor.drainFromShared(SlotVisitor::MasterDrain);
+        }
+#endif
     }
 
     // Weak handles must be marked last, because their owners use the set of
     // opaque roots to determine reachability.
     {
         GCPHASE(VisitingWeakHandles);
-        int lastOpaqueRootCount;
-        do {
-            lastOpaqueRootCount = visitor.opaqueRootCount();
+        while (true) {
             m_handleHeap.visitWeakHandles(heapRootVisitor);
-            visitor.drain();
-            // If the set of opaque roots has grown, more weak handles may have become reachable.
-        } while (lastOpaqueRootCount != visitor.opaqueRootCount());
+            harvestWeakReferences();
+            if (visitor.isEmpty())
+                break;
+            {
+                ParallelModeEnabler enabler(visitor);
+                visitor.donateAndDrain();
+#if ENABLE(PARALLEL_GC)
+                visitor.drainFromShared(SlotVisitor::MasterDrain);
+#endif
+            }
+        }
     }
+    GCCOUNTER(VisitedValueCount, visitor.visitCount());
+
     visitor.reset();
+    m_sharedData.reset();
 
     m_operationInProgress = NoOperation;
 }
@@ -688,6 +767,8 @@ void Heap::collectAllGarbage()
 
 void Heap::collect(SweepToggle sweepToggle)
 {
+    SamplingRegion samplingRegion("Garbage Collection");
+    
     GCPHASE(Collect);
     ASSERT(globalData()->identifierTable == wtfThreadData().currentIdentifierTable());
     ASSERT(m_isSafeToCollect);
@@ -705,22 +786,32 @@ void Heap::collect(SweepToggle sweepToggle)
     }
 
     markRoots(fullGC);
-
+    
     {
-        GCPHASE(HarvestWeakReferences);
-        harvestWeakReferences();
+        GCPHASE(FinalizeUnconditionalFinalizers);
+        finalizeUnconditionalFinalizers();
+    }
+        
+    {
+        GCPHASE(FinalizeWeakHandles);
         m_handleHeap.finalizeWeakHandles();
         m_globalData->smallStrings.finalizeSmallStrings();
     }
-
+    
     JAVASCRIPTCORE_GC_MARKED();
 
     {
         GCPHASE(ResetAllocator);
         resetAllocator();
     }
+    
+    {
+        GCPHASE(DeleteCodeBlocks);
+        m_dfgCodeBlocks.deleteUnmarkedJettisonedCodeBlocks();
+    }
 
     if (sweepToggle == DoSweep) {
+        SamplingRegion samplingRegion("Garbage Collection: Sweeping");
         GCPHASE(Sweeping);
         sweep();
         shrink();

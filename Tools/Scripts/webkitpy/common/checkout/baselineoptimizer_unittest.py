@@ -31,12 +31,13 @@ import unittest
 
 from webkitpy.common.checkout.baselineoptimizer import BaselineOptimizer
 from webkitpy.common.system.filesystem_mock import MockFileSystem
-from webkitpy.tool.mocktool import MockSCM
+from webkitpy.common.host_mock import MockHost
 
 
 class TestBaselineOptimizer(BaselineOptimizer):
     def __init__(self, mock_results_by_directory):
-        BaselineOptimizer.__init__(self, MockSCM(), MockFileSystem())
+        host = MockHost()
+        BaselineOptimizer.__init__(self, host)
         self._mock_results_by_directory = mock_results_by_directory
 
     # We override this method for testing so we don't have to construct an
@@ -52,11 +53,11 @@ class BaselineOptimizerTest(unittest.TestCase):
         self.assertEqual(new_results_by_directory, expected_new_results_by_directory)
 
     def test_move_baselines(self):
-        fs = MockFileSystem()
-        fs.write_binary_file('/mock-checkout/LayoutTests/platform/chromium-win/another/test-expected.txt', 'result A')
-        fs.write_binary_file('/mock-checkout/LayoutTests/platform/chromium-cg-mac/another/test-expected.txt', 'result A')
-        fs.write_binary_file('/mock-checkout/LayoutTests/platform/chromium/another/test-expected.txt', 'result B')
-        baseline_optimizer = BaselineOptimizer(MockSCM(), fs)
+        host = MockHost()
+        host.filesystem.write_binary_file('/mock-checkout/LayoutTests/platform/chromium-win/another/test-expected.txt', 'result A')
+        host.filesystem.write_binary_file('/mock-checkout/LayoutTests/platform/chromium-cg-mac/another/test-expected.txt', 'result A')
+        host.filesystem.write_binary_file('/mock-checkout/LayoutTests/platform/chromium/another/test-expected.txt', 'result B')
+        baseline_optimizer = BaselineOptimizer(host)
         baseline_optimizer._move_baselines('another/test-expected.txt', {
             'LayoutTests/platform/chromium-win': 'aaa',
             'LayoutTests/platform/chromium-cg-mac': 'aaa',
@@ -64,7 +65,7 @@ class BaselineOptimizerTest(unittest.TestCase):
         }, {
             'LayoutTests/platform/chromium': 'aaa',
         })
-        self.assertEqual(fs.read_binary_file('/mock-checkout/LayoutTests/platform/chromium/another/test-expected.txt'), 'result A')
+        self.assertEqual(host.filesystem.read_binary_file('/mock-checkout/LayoutTests/platform/chromium/another/test-expected.txt'), 'result A')
 
     def test_chromium_linux_redundant_with_win(self):
         self._assertOptimization({
@@ -132,6 +133,7 @@ class BaselineOptimizerTest(unittest.TestCase):
 
     def test_complex_shadowing(self):
         # This test relies on OS specific functionality, so it doesn't work on Windows.
+        # FIXME: What functionality does this rely on?  When can we remove this if?
         if sys.platform == 'win32':
             return
         self._assertOptimization({

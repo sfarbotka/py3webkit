@@ -117,6 +117,7 @@
 #import <WebCore/DocumentLoader.h>
 #import <WebCore/DragController.h>
 #import <WebCore/DragData.h>
+#import <WebCore/DragSession.h>
 #import <WebCore/Editor.h>
 #import <WebCore/EventHandler.h>
 #import <WebCore/ExceptionHandlers.h>
@@ -154,6 +155,7 @@
 #import <WebCore/ScriptController.h>
 #import <WebCore/ScriptValue.h>
 #import <WebCore/SecurityOrigin.h>
+#import <WebCore/SecurityPolicy.h>
 #import <WebCore/Settings.h>
 #import <WebCore/TextResourceDecoder.h>
 #import <WebCore/ThreadCheck.h>
@@ -392,9 +394,6 @@ FindOptions coreOptions(WebFindOptions options)
 + (void)_preflightSpellChecker;
 - (BOOL)_continuousCheckingAllowed;
 - (NSResponder *)_responderForResponderOperations;
-#if USE(ACCELERATED_COMPOSITING)
-- (void)_clearLayerSyncLoopObserver;
-#endif
 #if ENABLE(GLIB_SUPPORT)
 - (void)_clearGlibLoopObserver;
 #endif
@@ -706,9 +705,7 @@ static NSString *leakOutlookQuirksUserScriptContents()
         WebKitInitializeDatabasesIfNecessary();
 #endif
 
-#if ENABLE(DOM_STORAGE)
         WebKitInitializeStorageIfNecessary();
-#endif
         WebKitInitializeApplicationCachePathIfNecessary();
         patchMailRemoveAttributesMethod();
         
@@ -778,11 +775,11 @@ static NSString *leakOutlookQuirksUserScriptContents()
 
     if (!WebKitLinkedOnOrAfter(WEBKIT_FIRST_VERSION_WITH_LOCAL_RESOURCE_SECURITY_RESTRICTION)) {
         // Originally, we allowed all local loads.
-        SecurityOrigin::setLocalLoadPolicy(SecurityOrigin::AllowLocalLoadsForAll);
+        SecurityPolicy::setLocalLoadPolicy(SecurityPolicy::AllowLocalLoadsForAll);
     } else if (!WebKitLinkedOnOrAfter(WEBKIT_FIRST_VERSION_WITH_MORE_STRICT_LOCAL_RESOURCE_SECURITY_RESTRICTION)) {
         // Later, we allowed local loads for local URLs and documents loaded
         // with substitute data.
-        SecurityOrigin::setLocalLoadPolicy(SecurityOrigin::AllowLocalLoadsForLocalAndSubstituteData);
+        SecurityPolicy::setLocalLoadPolicy(SecurityPolicy::AllowLocalLoadsForLocalAndSubstituteData);
     }
 
     if (!WebKitLinkedOnOrAfter(WEBKIT_FIRST_VERSION_WITHOUT_CONTENT_SNIFFING_FOR_FILE_URLS))
@@ -1096,7 +1093,10 @@ static bool fastDocumentTeardownEnabled()
     }
 
 #if USE(ACCELERATED_COMPOSITING)
-    [self _clearLayerSyncLoopObserver];
+    if (_private->layerFlushController) {
+        _private->layerFlushController->invalidateObserver();
+        _private->layerFlushController = nullptr;
+    }
 #endif
     
 #if ENABLE(GLIB_SUPPORT)
@@ -1382,7 +1382,7 @@ static bool needsSelfRetainWhileLoadingQuirk()
     settings->setFTPDirectoryTemplatePath([preferences _ftpDirectoryTemplatePath]);
     settings->setLocalStorageDatabasePath([preferences _localStorageDatabasePath]);
     settings->setJavaEnabled([preferences isJavaEnabled]);
-    settings->setJavaScriptEnabled([preferences isJavaScriptEnabled]);
+    settings->setScriptEnabled([preferences isJavaScriptEnabled]);
     settings->setWebSecurityEnabled([preferences isWebSecurityEnabled]);
     settings->setAllowUniversalAccessFromFileURLs([preferences allowUniversalAccessFromFileURLs]);
     settings->setAllowFileAccessFromFileURLs([preferences allowFileAccessFromFileURLs]);
@@ -1476,6 +1476,7 @@ static bool needsSelfRetainWhileLoadingQuirk()
     settings->setMediaPlaybackRequiresUserGesture([preferences mediaPlaybackRequiresUserGesture]);
     settings->setMediaPlaybackAllowsInline([preferences mediaPlaybackAllowsInline]);
     settings->setSuppressIncrementalRendering([preferences suppressIncrementalRendering]);
+    settings->setBackspaceKeyNavigationEnabled([preferences backspaceKeyNavigationEnabled]);
 
     // Application Cache Preferences are stored on the global cache storage manager, not in Settings.
     [WebApplicationCache setDefaultOriginQuota:[preferences applicationCacheDefaultOriginQuota]];
@@ -1553,6 +1554,7 @@ static inline IMP getMethod(id o, SEL s)
     cache->windowScriptObjectAvailableFunc = getMethod(delegate, @selector(webView:windowScriptObjectAvailable:));
     cache->didDisplayInsecureContentFunc = getMethod(delegate, @selector(webViewDidDisplayInsecureContent:));
     cache->didRunInsecureContentFunc = getMethod(delegate, @selector(webView:didRunInsecureContent:));
+    cache->didDetectXSSFunc = getMethod(delegate, @selector(webView:didDetectXSS:));
 }
 
 - (void)_cacheScriptDebugDelegateImplementations
@@ -2371,6 +2373,11 @@ static inline IMP getMethod(id o, SEL s)
     return NO;
 }
 
+- (void)_setBaseCTM:(CGAffineTransform)transform forContext:(CGContextRef)context
+{
+    WKSetBaseCTM(context, transform);
+}
+
 - (BOOL)interactiveFormValidationEnabled
 {
     return _private->interactiveFormValidationEnabled;
@@ -2461,17 +2468,17 @@ static inline IMP getMethod(id o, SEL s)
 
 + (void)_addOriginAccessWhitelistEntryWithSourceOrigin:(NSString *)sourceOrigin destinationProtocol:(NSString *)destinationProtocol destinationHost:(NSString *)destinationHost allowDestinationSubdomains:(BOOL)allowDestinationSubdomains
 {
-    SecurityOrigin::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
+    SecurityPolicy::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
 }
 
 + (void)_removeOriginAccessWhitelistEntryWithSourceOrigin:(NSString *)sourceOrigin destinationProtocol:(NSString *)destinationProtocol destinationHost:(NSString *)destinationHost allowDestinationSubdomains:(BOOL)allowDestinationSubdomains
 {
-    SecurityOrigin::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
+    SecurityPolicy::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
 }
 
 +(void)_resetOriginAccessWhitelists
 {
-    SecurityOrigin::resetOriginAccessWhitelists();
+    SecurityPolicy::resetOriginAccessWhitelists();
 }
 
 - (void)_updateActiveState
@@ -2627,12 +2634,22 @@ static PassOwnPtr<Vector<String> > toStringVector(NSArray* patterns)
 
 + (void)_setDomainRelaxationForbidden:(BOOL)forbidden forURLScheme:(NSString *)scheme
 {
-    SecurityOrigin::setDomainRelaxationForbiddenForURLScheme(forbidden, scheme);
+    SchemeRegistry::setDomainRelaxationForbiddenForURLScheme(forbidden, scheme);
 }
 
 + (void)_registerURLSchemeAsSecure:(NSString *)scheme
 {
     SchemeRegistry::registerURLSchemeAsSecure(scheme);
+}
+
++ (void)_registerURLSchemeAsAllowingLocalStorageAccessInPrivateBrowsing:(NSString *)scheme
+{
+    SchemeRegistry::registerURLSchemeAsAllowingLocalStorageAccessInPrivateBrowsing(scheme);
+}
+
++ (void)_registerURLSchemeAsAllowingDatabaseAccessInPrivateBrowsing:(NSString *)scheme
+{
+    SchemeRegistry::registerURLSchemeAsAllowingDatabaseAccessInPrivateBrowsing(scheme);
 }
 
 - (void)_scaleWebView:(float)scale atOrigin:(NSPoint)origin
@@ -2698,6 +2715,83 @@ static PassOwnPtr<Vector<String> > toStringVector(NSArray* patterns)
         return IntSize();
 
     return view->fixedLayoutSize();
+}
+
+- (void)_setPaginationMode:(WebPaginationMode)paginationMode
+{
+    Page* page = core(self);
+    if (!page)
+        return;
+
+    Page::Pagination pagination = page->pagination();
+    switch (paginationMode) {
+    case WebPaginationModeUnpaginated:
+        pagination.mode = Page::Pagination::Unpaginated;
+        break;
+    case WebPaginationModeHorizontal:
+        pagination.mode = Page::Pagination::HorizontallyPaginated;
+        break;
+    case WebPaginationModeVertical:
+        pagination.mode = Page::Pagination::VerticallyPaginated;
+        break;
+    default:
+        return;
+    }
+
+    page->setPagination(pagination);
+}
+
+- (WebPaginationMode)_paginationMode
+{
+    Page* page = core(self);
+    if (!page)
+        return WebPaginationModeUnpaginated;
+
+    switch (page->pagination().mode) {
+    case Page::Pagination::Unpaginated:
+        return WebPaginationModeUnpaginated;
+    case Page::Pagination::HorizontallyPaginated:
+        return WebPaginationModeHorizontal;
+    case Page::Pagination::VerticallyPaginated:
+        return WebPaginationModeVertical;
+    }
+
+    ASSERT_NOT_REACHED();
+    return WebPaginationModeUnpaginated;
+}
+
+- (void)_setGapBetweenPages:(CGFloat)pageGap
+{
+    Page* page = core(self);
+    if (!page)
+        return;
+
+    Page::Pagination pagination = page->pagination();
+    pagination.gap = pageGap;
+    page->setPagination(pagination);
+}
+
+- (CGFloat)_gapBetweenPages
+{
+    Page* page = core(self);
+    if (!page)
+        return 0;
+
+    return page->pagination().gap;
+}
+
+- (NSUInteger)_pageCount
+{
+    Page* page = core(self);
+    if (!page)
+        return 0;
+
+    return page->pageCount();
+}
+
+- (CGFloat)_backingScaleFactor
+{
+    return [self _deviceScaleFactor];
 }
 
 - (void)_setCustomBackingScaleFactor:(CGFloat)customScaleFactor
@@ -3202,8 +3296,9 @@ static bool needsWebViewInitThreadWorkaround()
     return _private->shouldCloseWithWindow;
 }
 
-// FIXME: Use an AppKit constant for this once one is available.
-static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidChangeResolutionNotification";
+// FIXME: Use AppKit constants for these when they are available.
+static NSString * const windowDidChangeBackingPropertiesNotification = @"NSWindowDidChangeBackingPropertiesNotification";
+static NSString * const backingPropertyOldScaleFactorKey = @"NSBackingPropertyOldScaleFactorKey"; 
 
 - (void)addWindowObserversForWindow:(NSWindow *)window
 {
@@ -3216,8 +3311,10 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
             name:WKWindowWillOrderOnScreenNotification() object:window];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowWillOrderOffScreen:)
             name:WKWindowWillOrderOffScreenNotification() object:window];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeResolution:)
-            name:windowDidChangeResolutionNotification object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeBackingProperties:)
+            name:windowDidChangeBackingPropertiesNotification object:window];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(_windowDidChangeScreen:)
+            name:NSWindowDidChangeScreenNotification object:window];
     }
 }
 
@@ -3234,7 +3331,9 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
         [[NSNotificationCenter defaultCenter] removeObserver:self
             name:WKWindowWillOrderOffScreenNotification() object:window];
         [[NSNotificationCenter defaultCenter] removeObserver:self
-            name:windowDidChangeResolutionNotification object:window];
+            name:windowDidChangeBackingPropertiesNotification object:window];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+            name:NSWindowDidChangeScreenNotification object:window];
     }
 }
 
@@ -3287,6 +3386,12 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     [self _updateActiveState];
 }
 
+- (void)doWindowDidChangeScreen
+{
+    if (_private && _private->page)
+        _private->page->windowScreenDidChange((PlatformDisplayID)[[[[[self window] screen] deviceDescription] objectForKey:@"NSScreenNumber"] intValue]);
+}
+
 - (void)_windowDidBecomeKey:(NSNotification *)notification
 {
     NSWindow *keyWindow = [notification object];
@@ -3310,6 +3415,17 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
 
     if (![self shouldUpdateWhileOffscreen])
         [self setNeedsDisplay:YES];
+
+    // Send a change screen to make sure the initial displayID is set
+    [self doWindowDidChangeScreen];
+
+    if (_private && _private->page)
+        _private->page->resumeScriptedAnimations();    
+}
+
+- (void)_windowDidChangeScreen:(NSNotification *)notification
+{
+    [self doWindowDidChangeScreen];
 }
 
 - (void)_windowWillOrderOffScreen:(NSNotification *)notification
@@ -3318,6 +3434,9 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     // This is needed because the normal NSWindowDidResignKeyNotification is not fired
     // for NSPopover windows since they share key with their parent window.
     [self _updateActiveState];
+    
+    if (_private && _private->page)
+        _private->page->suspendScriptedAnimations();    
 }
 
 - (void)_windowWillClose:(NSNotification *)notification
@@ -3326,9 +3445,14 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
         [self close];
 }
 
-- (void)_windowDidChangeResolution:(NSNotification *)notification
+- (void)_windowDidChangeBackingProperties:(NSNotification *)notification
 {
-    _private->page->setDeviceScaleFactor([self _deviceScaleFactor]);
+    CGFloat oldBackingScaleFactor = [[notification.userInfo objectForKey:backingPropertyOldScaleFactorKey] doubleValue]; 
+    CGFloat newBackingScaleFactor = [self _deviceScaleFactor];
+    if (oldBackingScaleFactor == newBackingScaleFactor) 
+        return; 
+
+    _private->page->setDeviceScaleFactor(newBackingScaleFactor);
 }
 
 - (void)setPreferences:(WebPreferences *)prefs
@@ -3831,7 +3955,7 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     IntPoint client([draggingInfo draggingLocation]);
     IntPoint global(globalPoint([draggingInfo draggingLocation], [self window]));
     DragData dragData(draggingInfo, client, global, static_cast<DragOperation>([draggingInfo draggingSourceOperationMask]), [self applicationFlags:draggingInfo]);
-    return core(self)->dragController()->dragEntered(&dragData);
+    return core(self)->dragController()->dragEntered(&dragData).operation;
 }
 
 - (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)draggingInfo
@@ -3843,7 +3967,7 @@ static NSString * const windowDidChangeResolutionNotification = @"NSWindowDidCha
     IntPoint client([draggingInfo draggingLocation]);
     IntPoint global(globalPoint([draggingInfo draggingLocation], [self window]));
     DragData dragData(draggingInfo, client, global, static_cast<DragOperation>([draggingInfo draggingSourceOperationMask]), [self applicationFlags:draggingInfo]);
-    return page->dragController()->dragUpdated(&dragData);
+    return page->dragController()->dragUpdated(&dragData).operation;
 }
 
 - (void)draggingExited:(id <NSDraggingInfo>)draggingInfo
@@ -5807,18 +5931,6 @@ static inline uint64_t roundUpToPowerOf2(uint64_t num)
 #endif
 }
 
-#if USE(ACCELERATED_COMPOSITING)
-- (void)_clearLayerSyncLoopObserver
-{
-    if (!_private->layerSyncRunLoopObserver)
-        return;
-
-    CFRunLoopObserverInvalidate(_private->layerSyncRunLoopObserver);
-    CFRelease(_private->layerSyncRunLoopObserver);
-    _private->layerSyncRunLoopObserver = 0;
-}
-#endif
-
 #if ENABLE(GLIB_SUPPORT)
 - (void)_clearGlibLoopObserver
 {
@@ -6024,12 +6136,10 @@ static inline uint64_t roundUpToPowerOf2(uint64_t num)
        until the time is right (essentially when there are no more pending layouts).
     
 */
-
-static void layerSyncRunLoopObserverCallBack(CFRunLoopObserverRef, CFRunLoopActivity, void* info)
+void LayerFlushController::flushLayers()
 {
-    WebView *webView = reinterpret_cast<WebView*>(info);
-    NSWindow *window = [webView window];
-
+    NSWindow *window = [m_webView window];
+    
     // An NSWindow may not display in the next runloop cycle after dirtying due to delayed window display logic,
     // in which case this observer can fire first. So if the window is due for a display, don't commit
     // layer changes, otherwise they'll show on screen before the view drawing.
@@ -6044,8 +6154,8 @@ static void layerSyncRunLoopObserverCallBack(CFRunLoopObserverRef, CFRunLoopActi
     if (viewsNeedDisplay)
         return;
 
-    if ([webView _syncCompositingChanges]) {
-        [webView _clearLayerSyncLoopObserver];
+    if ([m_webView _syncCompositingChanges]) {
+        m_layerFlushScheduler.invalidate();
         // AppKit may have disabled screen updates, thinking an upcoming window flush will re-enable them.
         // In case setNeedsDisplayInRect() has prevented the window from needing to be flushed, re-enable screen
         // updates here.
@@ -6054,34 +6164,15 @@ static void layerSyncRunLoopObserverCallBack(CFRunLoopObserverRef, CFRunLoopActi
     } else {
         // Since the WebView does not need display, -viewWillDraw will not be called. Perform pending layout now,
         // so that the layers draw with up-to-date layout. 
-        [webView _viewWillDrawInternal];
+        [m_webView _viewWillDrawInternal];
     }
 }
 
 - (void)_scheduleCompositingLayerSync
 {
-    CFRunLoopRef currentRunLoop = CFRunLoopGetCurrent();
-
-    // Make sure we wake up the loop or the observer could be delayed until some other source fires.
-    CFRunLoopWakeUp(currentRunLoop);
-
-    if (_private->layerSyncRunLoopObserver)
-        return;
-
-    // Run after AppKit does its window update. If we do any painting, we'll commit
-    // layer changes from FrameView::paintContents(), otherwise we'll commit via
-    // _syncCompositingChanges when this observer fires.
-    // Also leave a slot for the requestAnimationFrameRunLoopObserver, if it's enabled
-    const CFIndex runLoopOrder = NSDisplayWindowRunLoopOrdering + 2;
-
-    // The WebView always outlives the observer, so no need to retain/release.
-    CFRunLoopObserverContext context = { 0, self, 0, 0, 0 };
-
-    _private->layerSyncRunLoopObserver = CFRunLoopObserverCreate(NULL,
-        kCFRunLoopBeforeWaiting | kCFRunLoopExit, true /* repeats */,
-        runLoopOrder, layerSyncRunLoopObserverCallBack, &context);
-
-    CFRunLoopAddObserver(currentRunLoop, _private->layerSyncRunLoopObserver, kCFRunLoopCommonModes);
+    if (!_private->layerFlushController)
+        _private->layerFlushController = LayerFlushController::create(self);
+    _private->layerFlushController->scheduleLayerFlush();
 }
 
 #endif

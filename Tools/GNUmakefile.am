@@ -2,36 +2,7 @@ noinst_PROGRAMS += \
 	Programs/DumpRenderTree \
 	Programs/GtkLauncher
 
-if ENABLE_WEBKIT2
-noinst_PROGRAMS += \
-	Programs/GtkLauncher2
-
-# FIXME: should this dependency be automatically identified by
-# automake somehow?
-Tools/GtkLauncher/main.c: $(GENSOURCES_WEBKIT2)/webkit2gtk/webkit2/WebKitEnumTypes.h $(GENSOURCES_WEBKIT2)/webkit2gtk/webkit2/WebKitEnumTypes.cpp
-endif
-
 # GtkLauncher
-gtklauncher_sources = \
-	Tools/GtkLauncher/main.c
-
-gtklauncher_cflags = \
-	-fno-strict-aliasing \
-	$(global_cflags) \
-	$(GTK_CFLAGS) \
-	$(LIBSOUP_CFLAGS)
-
-gtklauncher_ldadd = \
-	libjavascriptcoregtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
-	$(GTK_LIBS) \
-	$(GLIB_LIBS) \
-	$(LIBSOUP_LIBS) \
-	$(WINMM_LIBS)
-
-gtklauncher_ldflags = \
-	-no-fast-install \
-	-no-install
-
 Programs_GtkLauncher_CPPFLAGS = \
 	-I$(srcdir)/Source/WebKit/gtk \
 	-I$(srcdir)/Source/WebCore/platform/network/soup/cache/ \
@@ -41,48 +12,26 @@ Programs_GtkLauncher_CPPFLAGS = \
 	$(javascriptcore_cppflags)
 
 Programs_GtkLauncher_SOURCES = \
-	$(gtklauncher_sources)
+	Tools/GtkLauncher/main.c
 
 Programs_GtkLauncher_CFLAGS = \
 	-ansi \
-	$(gtklauncher_cflags)
+	-fno-strict-aliasing \
+	$(global_cflags) \
+	$(GTK_CFLAGS) \
+	$(LIBSOUP_CFLAGS)
 
 Programs_GtkLauncher_LDADD = \
 	libwebkitgtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
-	$(gtklauncher_ldadd)
+	libjavascriptcoregtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
+	$(GTK_LIBS) \
+	$(GLIB_LIBS) \
+	$(LIBSOUP_LIBS) \
+	$(WINMM_LIBS)
 
 Programs_GtkLauncher_LDFLAGS = \
-	$(gtklauncher_ldflags)
-
-if ENABLE_WEBKIT2
-Programs_GtkLauncher2_CPPFLAGS = \
-	-I$(srcdir)/Source \
-	-I$(top_builddir)/DerivedSources/WebKit2/include \
-	-I$(srcdir)/Source/WebKit2/UIProcess/API/gtk \
-	-I$(top_builddir)/Source/WebKit2/UIProcess/API/gtk \
-	-I$(srcdir)/Source/WebKit/gtk \
-	-I$(top_builddir)/DerivedSources/WebKit2/webkit2gtk \
-	-I$(top_builddir)/DerivedSources/WebKit2/webkit2gtk/include \
-	-I$(top_builddir)/Source/WebKit/gtk \
-	-I$(top_builddir)/DerivedSources \
-	$(global_cppflags) \
-	$(javascriptcore_cppflags)
-
-Programs_GtkLauncher2_SOURCES = \
-	$(gtklauncher_sources)
-
-Programs_GtkLauncher2_CFLAGS = \
-	-DWEBKIT2=\"1\" \
-	$(gtklauncher_cflags)
-
-Programs_GtkLauncher2_LDADD = \
-	libwebkit2gtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
-	$(gtklauncher_ldadd)
-
-Programs_GtkLauncher2_LDFLAGS = \
-	$(gtklauncher_ldflags)
-
-endif
+	-no-fast-install \
+	-no-install
 
 # libWebCoreInternals
 # We must split off the window.internals implementation into a separate
@@ -132,7 +81,8 @@ Programs_DumpRenderTree_CPPFLAGS = \
 	-I$(srcdir)/Source/WebCore/testing/js \
 	-I$(top_builddir)/DerivedSources \
 	-I$(top_builddir)/Source/WebKit/gtk \
-	$(javascriptcore_cppflags)
+	$(javascriptcore_cppflags) \
+	$(webcore_cppflags)
 
 if TARGET_X11
 Programs_DumpRenderTree_CPPFLAGS += \
@@ -219,11 +169,6 @@ CLEANFILES += \
 	Programs/DumpRenderTree \
 	Programs/GtkLauncher
 
-if ENABLE_WEBKIT2
-CLEANFILES += \
-	Programs/GtkLauncher2
-endif
-
 if TARGET_X11
 
 # Build TestNetscapePlugin only for X11
@@ -282,3 +227,55 @@ TestNetscapePlugin_libtestnetscapeplugin_la_LDFLAGS = \
 
 CLEANFILES += TestNetscapePlugin/libtestnetscapeplugin.la
 endif
+
+EXTRA_DIST += \
+	Tools/gtk/common.py \
+	Tools/gtk/generate-gtkdoc \
+	Tools/gtk/gtkdoc.py \
+	Tools/Scripts/VCSUtils.pm \
+	Tools/Scripts/webkit-build-directory \
+	Tools/Scripts/webkitdirs.pm
+
+docs: docs-build.stamp
+.PHONY : docs
+DISTCLEANFILES += docs-build.stamp
+
+if ENABLE_WEBKIT2
+docs-build.stamp: \
+	$(BUILT_SOURCES) \
+	Source/WebKit/gtk/docs/webkitenvironment.xml \
+	Source/WebKit/gtk/docs/webkitgtk-docs.sgml \
+	Source/WebKit/gtk/docs/webkitgtk-sections.txt \
+	libwebkitgtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
+	libwebkit2gtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
+	Source/WebKit2/UIProcess/API/gtk/docs/webkit2gtk-docs.sgml \
+	Source/WebKit2/UIProcess/API/gtk/docs/webkit2gtk-sections.txt
+	$(srcdir)/Tools/gtk/generate-gtkdoc
+	@touch docs-build.stamp
+else
+docs-build.stamp: \
+	$(BUILT_SOURCES) \
+	libwebkitgtk-@WEBKITGTK_API_MAJOR_VERSION@.@WEBKITGTK_API_MINOR_VERSION@.la \
+	Source/WebKit/gtk/docs/webkitenvironment.xml \
+	Source/WebKit/gtk/docs/webkitgtk-docs.sgml \
+	Source/WebKit/gtk/docs/webkitgtk-sections.txt
+	$(srcdir)/Tools/gtk/generate-gtkdoc
+	@touch docs-build.stamp
+endif
+
+clean-local: doc-clean-local
+doc-clean-local:
+	@rm -f Documentation/webkitgtk/*~ Documentation/webkitgtk*.bak
+	@rm -f Documentation/webkit2gtk/*~ Documentation/webkit2gtk*.bak
+distclean-local: doc-distclean-local
+doc-distclean-local:
+	@rm -rf Documentation
+maintainer-clean-local: doc-maintainer-clean-local
+doc-maintainer-clean-local: clean
+	@rm -rf Documentation/webkitgtk Documentation/webkit2gtk
+	-@rmdir Documentation
+
+if ENABLE_GTK_DOC
+all: docs-build.stamp
+endif
+

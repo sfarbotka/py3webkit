@@ -63,6 +63,38 @@ String VertexShaderPosTex::getShaderString() const
     );
 }
 
+VertexShaderPosTexStretch::VertexShaderPosTexStretch()
+    : m_matrixLocation(-1)
+    , m_offsetLocation(-1)
+    , m_scaleLocation(-1)
+{
+}
+
+void VertexShaderPosTexStretch::init(GraphicsContext3D* context, unsigned program)
+{
+    m_matrixLocation = context->getUniformLocation(program, "matrix");
+    m_offsetLocation = context->getUniformLocation(program, "offset");
+    m_scaleLocation = context->getUniformLocation(program, "scale");
+    ASSERT(m_matrixLocation != -1 && m_offsetLocation != -1 && m_scaleLocation != -1);
+}
+
+String VertexShaderPosTexStretch::getShaderString() const
+{
+    return SHADER(
+        attribute vec4 a_position;
+        attribute vec2 a_texCoord;
+        uniform mat4 matrix;
+        uniform vec2 offset;
+        uniform vec2 scale;
+        varying vec2 v_texCoord;
+        void main()
+        {
+            gl_Position = matrix * a_position;
+            v_texCoord = scale * a_texCoord + offset;
+        }
+    );
+}
+
 VertexShaderPosTexYUVStretch::VertexShaderPosTexYUVStretch()
     : m_matrixLocation(-1)
     , m_yWidthScaleFactorLocation(-1)
@@ -237,6 +269,18 @@ void FragmentTexAlphaBinding::init(GraphicsContext3D* context, unsigned program)
     ASSERT(m_samplerLocation != -1 && m_alphaLocation != -1);
 }
 
+FragmentTexOpaqueBinding::FragmentTexOpaqueBinding()
+    : m_samplerLocation(-1)
+{
+}
+
+void FragmentTexOpaqueBinding::init(GraphicsContext3D* context, unsigned program)
+{
+    m_samplerLocation = context->getUniformLocation(program, "s_texture");
+
+    ASSERT(m_samplerLocation != -1);
+}
+
 String FragmentShaderRGBATexFlipAlpha::getShaderString() const
 {
     return SHADER(
@@ -267,6 +311,51 @@ String FragmentShaderRGBATexAlpha::getShaderString() const
     );
 }
 
+String FragmentShaderRGBATexRectFlipAlpha::getShaderString() const
+{
+    // This must be paired with VertexShaderPosTexTransform to pick up the texTransform uniform.
+    // The necessary #extension preprocessing directive breaks the SHADER and SHADER0 macros.
+    return "#extension GL_ARB_texture_rectangle : require\n"
+            "precision mediump float;\n"
+            "varying vec2 v_texCoord;\n"
+            "uniform vec4 texTransform;\n"
+            "uniform sampler2DRect s_texture;\n"
+            "uniform float alpha;\n"
+            "void main()\n"
+            "{\n"
+            "    vec4 texColor = texture2DRect(s_texture, vec2(v_texCoord.x, texTransform.w - v_texCoord.y));\n"
+            "    gl_FragColor = vec4(texColor.x, texColor.y, texColor.z, texColor.w) * alpha;\n"
+            "}\n";
+}
+
+String FragmentShaderRGBATexRectAlpha::getShaderString() const
+{
+    return "#extension GL_ARB_texture_rectangle : require\n"
+            "precision mediump float;\n"
+            "varying vec2 v_texCoord;\n"
+            "uniform sampler2DRect s_texture;\n"
+            "uniform float alpha;\n"
+            "void main()\n"
+            "{\n"
+            "    vec4 texColor = texture2DRect(s_texture, v_texCoord);\n"
+            "    gl_FragColor = texColor * alpha;\n"
+            "}\n";
+}
+
+String FragmentShaderRGBATexOpaque::getShaderString() const
+{
+    return SHADER(
+        precision mediump float;
+        varying vec2 v_texCoord;
+        uniform sampler2D s_texture;
+        void main()
+        {
+            vec4 texColor = texture2D(s_texture, v_texCoord);
+            gl_FragColor = vec4(texColor.rgb, 1.0);
+        }
+    );
+}
+
 String FragmentShaderRGBATexSwizzleAlpha::getShaderString() const
 {
     return SHADER(
@@ -278,6 +367,20 @@ String FragmentShaderRGBATexSwizzleAlpha::getShaderString() const
         {
             vec4 texColor = texture2D(s_texture, v_texCoord);
             gl_FragColor = vec4(texColor.z, texColor.y, texColor.x, texColor.w) * alpha;
+        }
+    );
+}
+
+String FragmentShaderRGBATexSwizzleOpaque::getShaderString() const
+{
+    return SHADER(
+        precision mediump float;
+        varying vec2 v_texCoord;
+        uniform sampler2D s_texture;
+        void main()
+        {
+            vec4 texColor = texture2D(s_texture, v_texCoord);
+            gl_FragColor = vec4(texColor.z, texColor.y, texColor.x, 1.0);
         }
     );
 }

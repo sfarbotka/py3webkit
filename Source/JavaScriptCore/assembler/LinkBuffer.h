@@ -135,6 +135,11 @@ public:
         return CodeLocationNearCall(MacroAssembler::getLinkerAddress(code(), applyOffset(call.m_label)));
     }
 
+    CodeLocationLabel locationOf(Jump jump)
+    {
+        return CodeLocationLabel(MacroAssembler::getLinkerAddress(code(), applyOffset(jump.m_label)));
+    }
+
     CodeLocationLabel locationOf(Label label)
     {
         return CodeLocationLabel(MacroAssembler::getLinkerAddress(code(), applyOffset(label.m_label)));
@@ -161,6 +166,11 @@ public:
     {
         call.m_label = applyOffset(call.m_label);
         return MacroAssembler::getLinkerCallReturnOffset(call);
+    }
+
+    uint32_t offsetOf(Label label)
+    {
+        return applyOffset(label.m_label).m_offset;
     }
 
     // Upon completion of all patching either 'finalizeCode()' or 'finalizeCodeAddendum()' should be called

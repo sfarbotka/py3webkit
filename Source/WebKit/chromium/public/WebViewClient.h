@@ -38,10 +38,10 @@
 #include "WebFileChooserParams.h"
 #include "WebPageVisibilityState.h"
 #include "WebPopupType.h"
-#include "WebString.h"
 #include "WebTextAffinity.h"
 #include "WebTextDirection.h"
 #include "WebWidgetClient.h"
+#include "platform/WebString.h"
 
 namespace WebKit {
 
@@ -67,6 +67,7 @@ class WebSpeechInputListener;
 class WebStorageNamespace;
 class WebURL;
 class WebURLRequest;
+class WebUserMediaClient;
 class WebView;
 class WebWidget;
 struct WebConsoleMessage;
@@ -212,11 +213,6 @@ public:
     virtual bool runModalBeforeUnloadDialog(
         WebFrame*, const WebString& message) { return true; }
 
-    virtual bool supportsFullscreen() { return false; }
-    virtual void enterFullscreenForNode(const WebNode&) { }
-    virtual void exitFullscreenForNode(const WebNode&) { }
-    virtual void enterFullscreen() { }
-    virtual void exitFullscreen() { }
 
     // UI ------------------------------------------------------------------
 
@@ -323,6 +319,10 @@ public:
     {
         return WebPageVisibilityStateVisible;
     }
+
+    // Media Streams -------------------------------------------------------
+
+    virtual WebUserMediaClient* userMediaClient() { return 0; }
 
 protected:
     ~WebViewClient() { }

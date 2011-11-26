@@ -397,6 +397,15 @@ bool WebAccessibilityObject::isSelected() const
     return m_private->isSelected();
 }
 
+bool WebAccessibilityObject::isSelectedOptionActive() const
+{
+    if (m_private.isNull())
+        return false;
+
+    m_private->updateBackingStore();
+    return m_private->isSelectedOptionActive();
+}
+
 bool WebAccessibilityObject::isVertical() const
 {
     if (m_private.isNull())
@@ -532,7 +541,7 @@ WebAccessibilityObject WebAccessibilityObject::hitTest(const WebPoint& point) co
     IntPoint contentsPoint = m_private->documentFrameView()->windowToContents(point);
     RefPtr<AccessibilityObject> hit = m_private->accessibilityHitTest(contentsPoint);
 
-    if (hit.get())
+    if (hit)
         return WebAccessibilityObject(hit);
 
     if (m_private->boundingBoxRect().contains(contentsPoint))
@@ -551,7 +560,7 @@ WebString WebAccessibilityObject::keyboardShortcut() const
     if (accessKey.isNull())
         return WebString();
 
-    static String modifierString;
+    DEFINE_STATIC_LOCAL(String, modifierString, ());
     if (modifierString.isNull()) {
         unsigned modifiers = EventHandler::accessKeyModifiers();
         // Follow the same order as Mozilla MSAA implementation:
@@ -630,6 +639,15 @@ WebString WebAccessibilityObject::title() const
 
     m_private->updateBackingStore();
     return m_private->title();
+}
+
+WebAccessibilityObject WebAccessibilityObject::titleUIElement() const
+{
+    if (m_private.isNull())
+        return WebAccessibilityObject();
+
+    m_private->updateBackingStore();
+    return WebAccessibilityObject(m_private->titleUIElement());
 }
 
 WebURL WebAccessibilityObject::url() const
@@ -762,7 +780,7 @@ bool WebAccessibilityObject::lineBreaks(WebVector<int>& result) const
 
     VisiblePosition pos = m_private->visiblePositionForIndex(textLength);
     int lineBreakCount = m_private->lineForPosition(pos);
-    if (!lineBreakCount)
+    if (lineBreakCount <= 0)
         return false;
 
     WebVector<int> lineBreaks(static_cast<size_t>(lineBreakCount));

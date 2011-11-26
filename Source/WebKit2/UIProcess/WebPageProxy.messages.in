@@ -31,7 +31,7 @@ messages -> WebPageProxy {
     ShouldInterruptJavaScript() -> (bool shouldInterupt)
     MouseDidMoveOverElement(WebKit::WebHitTestResult::Data hitTestResultData, uint32_t modifiers, WebKit::InjectedBundleUserMessageEncoder userData);
     MissingPluginButtonClicked(WTF::String mimeType, WTF::String url, WTF::String pluginsPageURL)
-    DidChangeViewportData(WebCore::ViewportArguments arguments)
+    DidChangeViewportProperties(WebCore::ViewportArguments arguments)
     DidReceiveEvent(uint32_t type, bool handled)
     StopResponsivenessTimer()
     SetCursor(WebCore::Cursor cursor)
@@ -57,16 +57,17 @@ messages -> WebPageProxy {
     WindowToScreen(WebCore::IntRect rect) -> (WebCore::IntRect screenFrame)
     RunBeforeUnloadConfirmPanel(WTF::String message, uint64_t frameID) -> (bool shouldClose)
     PageDidScroll()
-    RunOpenPanel(uint64_t frameID, WebKit::WebOpenPanelParameters::Data parameters)
+    RunOpenPanel(uint64_t frameID, WebCore::FileChooserSettings parameters)
     PrintFrame(uint64_t frameID) -> ()
     RunModal()
     NotifyScrollerThumbIsVisibleInRect(WebCore::IntRect scrollerThumb)
     DidChangeScrollbarsForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar)
     DidChangeScrollOffsetPinningForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar)
+    DidChangePageCount(unsigned pageCount);
     DidFailToInitializePlugin(WTF::String mimeType)
     NumWheelEventHandlersChanged(unsigned count)
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     PageDidRequestScroll(WebCore::IntPoint point)
 #endif
 #if PLATFORM(QT)
@@ -108,6 +109,7 @@ messages -> WebPageProxy {
     DidReceiveTitleForFrame(uint64_t frameID, WTF::String title, WebKit::InjectedBundleUserMessageEncoder userData)
     DidDisplayInsecureContentForFrame(uint64_t frameID, WebKit::InjectedBundleUserMessageEncoder userData)
     DidRunInsecureContentForFrame(uint64_t frameID, WebKit::InjectedBundleUserMessageEncoder userData)
+    DidDetectXSSForFrame(uint64_t frameID, WebKit::InjectedBundleUserMessageEncoder userData)
     DidSameDocumentNavigationForFrame(uint64_t frameID, uint32_t type, WTF::String url, WebKit::InjectedBundleUserMessageEncoder userData)
 
     FrameDidBecomeFrameSet(uint64_t frameID, bool value)
@@ -164,7 +166,7 @@ messages -> WebPageProxy {
 
     # Find messages
     DidCountStringMatches(WTF::String string, uint32_t matchCount)
-    SetFindIndicator(WebCore::FloatRect selectionRect, Vector<WebCore::FloatRect> textRects, float contentImageScaleFactor, WebKit::ShareableBitmap::Handle contentImageHandle, bool fadeOut)
+    SetFindIndicator(WebCore::FloatRect selectionRect, Vector<WebCore::FloatRect> textRects, float contentImageScaleFactor, WebKit::ShareableBitmap::Handle contentImageHandle, bool fadeOut, bool animate)
     DidFindString(WTF::String string, uint32_t matchCount)
     DidFailToFindString(WTF::String string)
 #if PLATFORM(WIN)
@@ -205,14 +207,14 @@ messages -> WebPageProxy {
     IgnoreWord(WTF::String word);
 
     # Drag and drop messages
-    DidPerformDragControllerAction(uint64_t resultOperation)
+    DidPerformDragControllerAction(WebCore::DragSession dragSession)
 #if PLATFORM(MAC)
     SetDragImage(WebCore::IntPoint clientPosition, WebKit::ShareableBitmap::Handle dragImage, bool linkDrag)
 #endif
 #if PLATFORM(WIN)
     StartDragDrop(WebCore::IntPoint imagePoint, WebCore::IntPoint dragPoint, uint64_t okEffect, HashMap<UINT,Vector<String> > dataMap, uint64_t fileSize, String pathname, WebKit::SharedMemory::Handle fileContentHandle, WebCore::IntSize dragImageSize, WebKit::SharedMemory::Handle dragImage, bool linkDrag)
 #endif
-#if PLATFORM(QT)
+#if PLATFORM(QT) || PLATFORM(GTK)
     StartDrag(WebCore::DragData dragData, WebKit::ShareableBitmap::Handle dragImage)
 #endif
 

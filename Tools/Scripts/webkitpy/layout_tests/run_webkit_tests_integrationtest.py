@@ -61,16 +61,14 @@ SHOULD_TEST_PROCESSES = multiprocessing and sys.platform not in ('cygwin', 'win3
 
 from webkitpy.common import array_stream
 from webkitpy.common.system import outputcapture
-from webkitpy.common.system import filesystem_mock
-from webkitpy.tool import mocktool
+from webkitpy.common.host_mock import MockHost
+
 from webkitpy.layout_tests import port
 from webkitpy.layout_tests import run_webkit_tests
 from webkitpy.layout_tests.port.test import TestPort, TestDriver, unit_test_filesystem
 from webkitpy.layout_tests.port.test_files import is_reference_html_file
 from webkitpy.python24.versioning import compare_version
 from webkitpy.test.skip import skip_if
-
-from webkitpy.thirdparty.mock import Mock
 
 
 def parse_args(extra_args=None, record_results=False, tests_included=False, new_results=False, print_nothing=True):
@@ -100,8 +98,10 @@ def parse_args(extra_args=None, record_results=False, tests_included=False, new_
 
 def passing_run(extra_args=None, port_obj=None, record_results=False, tests_included=False, filesystem=None):
     options, parsed_args = parse_args(extra_args, record_results, tests_included)
+    filesystem = filesystem or unit_test_filesystem()
     if not port_obj:
-        port_obj = port.get(port_name=options.platform, options=options, user=mocktool.MockUser(), filesystem=filesystem)
+        host = MockHost()
+        port_obj = host.port_factory.get(port_name=options.platform, options=options, filesystem=filesystem)
     buildbot_output = array_stream.ArrayStream()
     regular_output = array_stream.ArrayStream()
     res = run_webkit_tests.run(port_obj, options, parsed_args, buildbot_output=buildbot_output, regular_output=regular_output)
@@ -113,12 +113,13 @@ def logging_run(extra_args=None, port_obj=None, record_results=False, tests_incl
                                       record_results=record_results,
                                       tests_included=tests_included,
                                       print_nothing=False, new_results=new_results)
-    user = mocktool.MockUser()
+    host = MockHost()
+    filesystem = filesystem or unit_test_filesystem()
     if not port_obj:
-        port_obj = port.get(port_name=options.platform, options=options, user=user, filesystem=filesystem)
+        port_obj = host.port_factory.get(port_name=options.platform, options=options, filesystem=filesystem)
 
     res, buildbot_output, regular_output = run_and_capture(port_obj, options, parsed_args)
-    return (res, buildbot_output, regular_output, user)
+    return (res, buildbot_output, regular_output, host.user)
 
 
 def run_and_capture(port_obj, options, parsed_args):
@@ -144,19 +145,15 @@ def get_tests_run(extra_args=None, tests_included=False, flatten_batches=False,
         extra_args = ['passes', 'failures'] + extra_args
     options, parsed_args = parse_args(extra_args, tests_included=True)
 
-    user = mocktool.MockUser()
+    host = MockHost()
 
     test_batches = []
 
 
     class RecordingTestDriver(TestDriver):
         def __init__(self, port, worker_number):
-            TestDriver.__init__(self, port, worker_number)
+            TestDriver.__init__(self, port, worker_number, pixel_tests=port.get_option('pixel_test'))
             self._current_test_batch = None
-
-        def poll(self):
-            # So that we don't create a new driver for every test
-            return None
 
         def stop(self):
             self._current_test_batch = None
@@ -177,7 +174,7 @@ def get_tests_run(extra_args=None, tests_included=False, flatten_batches=False,
         def create_driver(self, worker_number):
             return RecordingTestDriver(self, worker_number)
 
-    recording_port = RecordingTestPort(options=options, user=user, filesystem=filesystem)
+    recording_port = RecordingTestPort(options=options, host=host, filesystem=filesystem)
     run_and_capture(recording_port, options, parsed_args)
 
     if flatten_batches:
@@ -189,8 +186,8 @@ def get_tests_run(extra_args=None, tests_included=False, flatten_batches=False,
 class MainTest(unittest.TestCase):
     def test_accelerated_compositing(self):
         # This just tests that we recognize the command line args
-        self.assertTrue(passing_run(['--accelerated-compositing']))
-        self.assertTrue(passing_run(['--no-accelerated-compositing']))
+        self.assertTrue(passing_run(['--accelerated-video']))
+        self.assertTrue(passing_run(['--no-accelerated-video']))
 
     def test_accelerated_2d_canvas(self):
         # This just tests that we recognize the command line args
@@ -290,8 +287,8 @@ class MainTest(unittest.TestCase):
 
     def test_lint_test_files__errors(self):
         options, parsed_args = parse_args(['--lint-test-files'])
-        user = mocktool.MockUser()
-        port_obj = port.get(options.platform, options=options, user=user)
+        host = MockHost()
+        port_obj = host.port_factory.get(options.platform, options=options)
         port_obj.test_expectations = lambda: "# syntax error"
         res, out, err = run_and_capture(port_obj, options, parsed_args)
 
@@ -323,6 +320,16 @@ class MainTest(unittest.TestCase):
 
     def test_threaded(self):
         self.assertTrue(passing_run(['--threaded']))
+
+    def test_repeat_each(self):
+        tests_to_run = ['passes/image.html', 'passes/text.html']
+        tests_run = get_tests_run(['--repeat-each', '2'] + tests_to_run, tests_included=True, flatten_batches=True)
+        self.assertEquals(tests_run, ['passes/image.html', 'passes/image.html', 'passes/text.html', 'passes/text.html'])
+
+    def test_iterations(self):
+        tests_to_run = ['passes/image.html', 'passes/text.html']
+        tests_run = get_tests_run(['--iterations', '2'] + tests_to_run, tests_included=True, flatten_batches=True)
+        self.assertEquals(tests_run, ['passes/image.html', 'passes/text.html', 'passes/image.html', 'passes/text.html'])
 
     def test_run_chunk(self):
         # Test that we actually select the right chunk
@@ -369,7 +376,7 @@ class MainTest(unittest.TestCase):
 
     def test_run_singly_actually_runs_tests(self):
         res, _, _, _ = logging_run(['--run-singly', 'failures/unexpected'])
-        self.assertEquals(res, 6)
+        self.assertEquals(res, 7)
 
     def test_single_file(self):
         # FIXME: We should consider replacing more of the get_tests_run()-style tests
@@ -419,12 +426,49 @@ class MainTest(unittest.TestCase):
 
         # Update this magic number if you add an unexpected test to webkitpy.layout_tests.port.test
         # FIXME: It's nice to have a routine in port/test.py that returns this number.
-        unexpected_tests_count = 6
+        unexpected_tests_count = 7
 
         self.assertEqual(res, unexpected_tests_count)
         self.assertFalse(out.empty())
         self.assertFalse(err.empty())
         self.assertEqual(user.opened_urls, ['/tmp/layout-test-results/results.html'])
+
+    def test_missing_and_unexpected_results(self):
+        # Test that we update expectations in place. If the expectation
+        # is missing, update the expected generic location.
+        fs = unit_test_filesystem()
+        res, out, err, _ = logging_run(['--no-show-results',
+            'failures/expected/missing_image.html',
+            'failures/unexpected/missing_text.html',
+            'failures/unexpected/text-image-checksum.html'],
+            tests_included=True, filesystem=fs, record_results=True)
+        file_list = fs.written_files.keys()
+        file_list.remove('/tmp/layout-test-results/tests_run0.txt')
+        self.assertEquals(res, 1)
+        expected_token = '"unexpected":{"text-image-checksum.html":{"expected":"PASS","actual":"TEXT"},"missing_text.html":{"expected":"PASS","is_missing_text":true,"actual":"MISSING"}'
+        json_string = fs.read_text_file('/tmp/layout-test-results/full_results.json')
+        self.assertTrue(json_string.find(expected_token) != -1)
+        self.assertTrue(json_string.find('"num_regression":1') == -1)
+        self.assertTrue(json_string.find('"num_flaky":1') == -1)
+        self.assertTrue(json_string.find('"num_missing":1') != -1)
+
+    def test_missing_and_unexpected_results_with_custom_exit_code(self):
+        # Test that we update expectations in place. If the expectation
+        # is missing, update the expected generic location.
+        fs = unit_test_filesystem()
+
+        class CustomExitCodePort(TestPort):
+            def exit_code_from_summarized_results(self, unexpected_results):
+                return unexpected_results['num_regressions'] + unexpected_results['num_missing']
+
+        options, parsed_args = run_webkit_tests.parse_args(['--pixel-tests', '--no-new-test-results'])
+        test_port = CustomExitCodePort(options=options)
+        res, out, err, _ = logging_run(['--no-show-results',
+            'failures/expected/missing_image.html',
+            'failures/unexpected/missing_text.html',
+            'failures/unexpected/text-image-checksum.html'],
+            tests_included=True, filesystem=fs, record_results=True, port_obj=test_port)
+        self.assertEquals(res, 2)
 
     def test_crash_with_stderr(self):
         fs = unit_test_filesystem()
@@ -461,6 +505,22 @@ class MainTest(unittest.TestCase):
         if sys.platform != "darwin":
             expected_crash_log = "mock-std-error-output"
         self.assertEquals(fs.read_text_file('/tmp/layout-test-results/failures/unexpected/crash-with-stderr-crash-log.txt'), expected_crash_log)
+
+    def test_web_process_crash_log(self):
+        mock_crash_report = 'mock-crash-report'
+        fs = unit_test_filesystem()
+        fs.write_text_file('/Users/mock/Library/Logs/DiagnosticReports/WebProcess_2011-06-13-150719_quadzen.crash', mock_crash_report)
+        res, buildbot_output, regular_output, user = logging_run([
+                'failures/unexpected/web-process-crash-with-stderr.html',
+            ],
+            tests_included=True,
+            record_results=True,
+            filesystem=fs)
+        expected_crash_log = mock_crash_report
+        # Currently CrashLog uploading only works on Darwin.
+        if sys.platform != "darwin":
+            expected_crash_log = "mock-std-error-output"
+        self.assertEquals(fs.read_text_file('/tmp/layout-test-results/failures/unexpected/web-process-crash-with-stderr-crash-log.txt'), expected_crash_log)
 
     def test_exit_after_n_failures_upload(self):
         fs = unit_test_filesystem()
@@ -590,7 +650,7 @@ class MainTest(unittest.TestCase):
 
         def get_port_for_run(args):
             options, parsed_args = run_webkit_tests.parse_args(args)
-            test_port = ImageDiffTestPort(options=options, user=mocktool.MockUser())
+            test_port = ImageDiffTestPort(options=options)
             res = passing_run(args, port_obj=test_port, tests_included=True)
             self.assertTrue(res)
             return test_port
@@ -632,8 +692,14 @@ class MainTest(unittest.TestCase):
         tests_run = get_tests_run(['passes/reftest.html'], tests_included=True, flatten_batches=True)
         self.assertEquals(['passes/reftest.html'], tests_run)
 
-    def test_reftest_skip_reftests_if_pixel_tests_are_disabled(self):
+    def test_reftest_run_reftests_if_pixel_tests_are_disabled(self):
         tests_run = get_tests_run(['--no-pixel-tests', 'passes/reftest.html'], tests_included=True, flatten_batches=True)
+        self.assertEquals(['passes/reftest.html'], tests_run)
+
+    def test_reftest_skip_reftests_if_no_ref_tests(self):
+        tests_run = get_tests_run(['--no-ref-tests', 'passes/reftest.html'], tests_included=True, flatten_batches=True)
+        self.assertEquals([], tests_run)
+        tests_run = get_tests_run(['--no-ref-tests', '--no-pixel-tests', 'passes/reftest.html'], tests_included=True, flatten_batches=True)
         self.assertEquals([], tests_run)
 
     def test_reftest_expected_html_should_be_ignored(self):
@@ -691,8 +757,8 @@ class EndToEndTest(unittest.TestCase):
         fs = unit_test_filesystem()
         res, out, err, user = logging_run(record_results=True, tests_included=True, filesystem=fs)
 
-        # Six tests should fail, so the return code should be 6.
-        self.assertEquals(res, 6)
+        # Seven tests should fail, so the return code should be 7.
+        self.assertEquals(res, 7)
         results = self.parse_full_results(fs.files['/tmp/layout-test-results/full_results.json'])
 
         # Check to ensure we're passing back image diff %age correctly.
@@ -737,15 +803,17 @@ class RebaselineTest(unittest.TestCase):
         res, out, err, _ = logging_run(['--no-show-results',
                      'failures/unexpected/missing_text.html',
                      'failures/unexpected/missing_image.html',
-                     'failures/unexpected/missing_audio.html'],
+                     'failures/unexpected/missing_audio.html',
+                     'failures/unexpected/missing_render_tree_dump.html'],
                      tests_included=True, filesystem=fs, new_results=True)
         file_list = fs.written_files.keys()
         file_list.remove('/tmp/layout-test-results/tests_run0.txt')
         self.assertEquals(res, 0)
         self.assertFalse(out.empty())
-        self.assertEqual(len(file_list), 4)
+        self.assertEqual(len(file_list), 6)
         self.assertBaselines(file_list, "/failures/unexpected/missing_text", [".txt"], err)
-        self.assertBaselines(file_list, "/failures/unexpected/missing_image", [".png"], err)
+        self.assertBaselines(file_list, "/platform/test-mac-leopard/failures/unexpected/missing_image", [".png"], err)
+        self.assertBaselines(file_list, "/platform/test-mac-leopard/failures/unexpected/missing_render_tree_dump", [".txt"], err)
 
     def test_new_baseline(self):
         # Test that we update the platform expectations. If the expectation
@@ -776,14 +844,11 @@ class DryrunTest(unittest.TestCase):
         if sys.platform != "darwin":
             return
 
-        self.assertTrue(passing_run(['--platform', 'dryrun', 'fast/html'],
-                        tests_included=True))
-        self.assertTrue(passing_run(['--platform', 'dryrun-mac', 'fast/html'],
-                        tests_included=True))
+        self.assertTrue(passing_run(['--platform', 'dryrun', 'fast/html'], tests_included=True))
+        self.assertTrue(passing_run(['--platform', 'dryrun-mac', 'fast/html'], tests_included=True))
 
     def test_test(self):
-        self.assertTrue(passing_run(['--platform', 'dryrun-test',
-                                           '--pixel-tests']))
+        self.assertTrue(passing_run(['--platform', 'dryrun-test', '--pixel-tests']))
 
 
 if __name__ == '__main__':

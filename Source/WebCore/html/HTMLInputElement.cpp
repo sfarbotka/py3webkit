@@ -94,6 +94,7 @@ HTMLInputElement::HTMLInputElement(const QualifiedName& tagName, Document* docum
     , m_stateRestored(false)
     , m_parsingInProgress(createdByParser)
     , m_wasModifiedByUser(false)
+    , m_canReceiveDroppedFiles(false)
     , m_inputType(InputType::createText(this))
 {
     ASSERT(hasTagName(inputTag) || hasTagName(isindexTag));
@@ -698,9 +699,9 @@ bool HTMLInputElement::canHaveSelection() const
     return isTextField();
 }
 
-void HTMLInputElement::accessKeyAction(bool sendToAnyElement)
+void HTMLInputElement::accessKeyAction(bool sendMouseEvents)
 {
-    m_inputType->accessKeyAction(sendToAnyElement);
+    m_inputType->accessKeyAction(sendMouseEvents);
 }
 
 bool HTMLInputElement::mapToEntry(const QualifiedName& attrName, MappedAttributeEntry& result) const
@@ -747,8 +748,10 @@ void HTMLInputElement::parseMappedAttribute(Attribute* attr)
         updateType();
     } else if (attr->name() == valueAttr) {
         // We only need to setChanged if the form is looking at the default value right now.
-        if (!hasDirtyValue())
+        if (!hasDirtyValue()) {
+            updatePlaceholderVisibility(false);
             setNeedsStyleRecalc();
+        }
         setFormControlValueMatchesRenderer(false);
         setNeedsValidityCheck();
     } else if (attr->name() == checkedAttr) {
@@ -1089,8 +1092,6 @@ void HTMLInputElement::setValue(const String& value, bool sendChangeEvent)
     m_suggestedValue = String(); // Prevent TextFieldInputType::setValue from using the suggested value.
     m_inputType->setValue(sanitizedValue, valueChanged, sendChangeEvent);
 
-    setNeedsValidityCheck();
-
     if (!valueChanged)
         return;
 
@@ -1108,6 +1109,7 @@ void HTMLInputElement::setValueInternal(const String& sanitizedValue, bool sendC
 {
     m_valueIfDirty = sanitizedValue;
     m_wasModifiedByUser = sendChangeEvent;
+    setNeedsValidityCheck();
 }
 
 double HTMLInputElement::valueAsDate() const
@@ -1270,7 +1272,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     if (evt->isBeforeTextInsertedEvent())
         m_inputType->handleBeforeTextInsertedEvent(static_cast<BeforeTextInsertedEvent*>(evt));
 
-    if (evt->isWheelEvent()) {
+    if (evt->hasInterface(eventNames().interfaceForWheelEvent)) {
         m_inputType->handleWheelEvent(static_cast<WheelEvent*>(evt));
         if (evt->defaultHandled())
             return;
@@ -1290,7 +1292,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
 
 bool HTMLInputElement::isURLAttribute(Attribute *attr) const
 {
-    return (attr->name() == srcAttr || attr->name() == formactionAttr);
+    return attr->name() == srcAttr || attr->name() == formactionAttr || HTMLTextFormControlElement::isURLAttribute(attr);
 }
 
 String HTMLInputElement::defaultValue() const
@@ -1306,6 +1308,45 @@ void HTMLInputElement::setDefaultValue(const String &value)
 void HTMLInputElement::setDefaultName(const AtomicString& name)
 {
     m_name = name;
+}
+
+static inline bool isRFC2616TokenCharacter(UChar ch)
+{
+    return isASCII(ch) && ch > ' ' && ch != '"' && ch != '(' && ch != ')' && ch != ',' && ch != '/' && (ch < ':' || ch > '@') && (ch < '[' || ch > ']') && ch != '{' && ch != '}' && ch != 0x7f;
+}
+
+static inline bool isValidMIMEType(const String& type)
+{
+    size_t slashPosition = type.find('/');
+    if (slashPosition == notFound || !slashPosition || slashPosition == type.length() - 1)
+        return false;
+    for (size_t i = 0; i < type.length(); ++i) {
+        if (!isRFC2616TokenCharacter(type[i]) && i != slashPosition)
+            return false;
+    }
+    return true;
+}
+
+Vector<String> HTMLInputElement::acceptMIMETypes()
+{
+    Vector<String> mimeTypes;
+
+    String acceptString = accept();
+    if (acceptString.isEmpty())
+        return mimeTypes;
+
+    Vector<String> splitTypes;
+    acceptString.split(',', false, splitTypes);
+    for (size_t i = 0; i < splitTypes.size(); ++i) {
+        String trimmedMimeType = stripLeadingAndTrailingHTMLSpaces(splitTypes[i]);
+        if (trimmedMimeType.isEmpty())
+            continue;
+        if (!isValidMIMEType(trimmedMimeType))
+            continue;
+        mimeTypes.append(trimmedMimeType.lower());
+    }
+
+    return mimeTypes;
 }
 
 String HTMLInputElement::accept() const
@@ -1370,6 +1411,19 @@ Icon* HTMLInputElement::icon() const
     return m_inputType->icon();
 }
 
+bool HTMLInputElement::canReceiveDroppedFiles() const
+{
+    return m_canReceiveDroppedFiles;
+}
+
+void HTMLInputElement::setCanReceiveDroppedFiles(bool canReceiveDroppedFiles)
+{
+    if (m_canReceiveDroppedFiles == canReceiveDroppedFiles)
+        return;
+    m_canReceiveDroppedFiles = canReceiveDroppedFiles;
+    renderer()->updateFromElement();
+}
+
 String HTMLInputElement::visibleValue() const
 {
     return m_inputType->visibleValue();
@@ -1387,6 +1441,8 @@ bool HTMLInputElement::isAcceptableValue(const String& proposedValue) const
 
 String HTMLInputElement::sanitizeValue(const String& proposedValue) const
 {
+    if (proposedValue.isNull())
+        return proposedValue;
     return m_inputType->sanitizeValue(proposedValue);
 }
 
@@ -1481,12 +1537,14 @@ bool HTMLInputElement::recalcWillValidate() const
 }
 
 #if ENABLE(INPUT_COLOR)
-bool HTMLInputElement::connectToColorChooser()
+void HTMLInputElement::selectColorInColorChooser(const Color& color)
 {
     if (!m_inputType->isColorControl())
-        return false;
-    ColorChooser::chooser()->connectClient(static_cast<ColorInputType*>(m_inputType.get()));
-    return true;
+        return;
+    RefPtr<ColorChooser> chooser = static_cast<ColorInputType*>(m_inputType.get())->chooser();
+    if (!chooser)
+        return;
+    chooser->didChooseColor(color);
 }
 #endif
     
@@ -1782,8 +1840,14 @@ void HTMLInputElement::parseMaxLengthAttribute(Attribute* attribute)
 void HTMLInputElement::updateValueIfNeeded()
 {
     String newValue = sanitizeValue(m_valueIfDirty);
+    ASSERT(!m_valueIfDirty.isNull() || newValue.isNull());
     if (newValue != m_valueIfDirty)
         setValue(newValue);
+}
+
+String HTMLInputElement::defaultToolTip() const
+{
+    return m_inputType->defaultToolTip();
 }
 
 } // namespace

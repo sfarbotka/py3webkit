@@ -122,9 +122,7 @@ Settings::Settings(Page* page)
     , m_maximumDecodedImageSize(numeric_limits<size_t>::max())
     , m_deviceWidth(480)
     , m_deviceHeight(854)
-#if ENABLE(DOM_STORAGE)
     , m_sessionStorageQuota(StorageMap::noQuota)
-#endif
     , m_editingBehaviorType(editingBehaviorTypeForPlatform())
     , m_maximumHTMLParserDOMTreeDepth(defaultMaximumHTMLParserDOMTreeDepth)
     , m_isSpatialNavigationEnabled(false)
@@ -137,7 +135,7 @@ Settings::Settings(Page* page)
     , m_isMediaEnabled(true)
     , m_arePluginsEnabled(false)
     , m_localStorageEnabled(false)
-    , m_isJavaScriptEnabled(false)
+    , m_isScriptEnabled(false)
     , m_isWebSecurityEnabled(true)
     , m_allowUniversalAccessFromFileURLs(true)
     , m_allowFileAccessFromFileURLs(true)
@@ -182,11 +180,14 @@ Settings::Settings(Page* page)
     , m_acceleratedCompositingForPluginsEnabled(true)
     , m_acceleratedCompositingForCanvasEnabled(true)
     , m_acceleratedCompositingForAnimationEnabled(true)
+    , m_acceleratedCompositingForFixedPositionEnabled(false)
+    , m_acceleratedCompositingForScrollableFramesEnabled(false)
     , m_showDebugBorders(false)
     , m_showRepaintCounter(false)
     , m_experimentalNotificationsEnabled(false)
     , m_webGLEnabled(false)
     , m_openGLMultisamplingEnabled(true)
+    , m_privilegedWebGLExtensionsEnabled(false)
     , m_webAudioEnabled(false)
     , m_acceleratedCanvas2dEnabled(false)
     , m_legacyAcceleratedCanvas2dEnabled(false)
@@ -198,6 +199,11 @@ Settings::Settings(Page* page)
     , m_fullScreenAPIEnabled(false)
 #endif
     , m_asynchronousSpellCheckingEnabled(false)
+#if USE(UNIFIED_TEXT_CHECKING)
+    , m_unifiedTextCheckerEnabled(true)
+#else
+    , m_unifiedTextCheckerEnabled(false)
+#endif
     , m_memoryInfoEnabled(false)
     , m_interactiveFormValidation(false)
     , m_usePreHTML5ParserQuirks(false)
@@ -221,10 +227,9 @@ Settings::Settings(Page* page)
     , m_passwordEchoEnabled(false)
 #endif
     , m_suppressIncrementalRendering(false)
+    , m_backspaceKeyNavigationEnabled(true)
+    , m_visualWordMovementEnabled(false)
     , m_loadsImagesAutomaticallyTimer(this, &Settings::loadsImagesAutomaticallyTimerFired)
-    , m_zoomAnimatorScale(1)
-    , m_zoomAnimatorPosX(0)
-    , m_zoomAnimatorPosY(0)
 {
     // A Frame may not have been created yet, so we initialize the AtomicString 
     // hash before trying to use it.
@@ -361,9 +366,9 @@ void Settings::setLoadsSiteIconsIgnoringImageLoadingSetting(bool loadsSiteIcons)
     m_loadsSiteIconsIgnoringImageLoadingSetting = loadsSiteIcons;
 }
 
-void Settings::setJavaScriptEnabled(bool isJavaScriptEnabled)
+void Settings::setScriptEnabled(bool isScriptEnabled)
 {
-    m_isJavaScriptEnabled = isJavaScriptEnabled;
+    m_isScriptEnabled = isScriptEnabled;
 }
 
 void Settings::setWebSecurityEnabled(bool isWebSecurityEnabled)
@@ -411,12 +416,10 @@ void Settings::setLocalStorageEnabled(bool localStorageEnabled)
     m_localStorageEnabled = localStorageEnabled;
 }
 
-#if ENABLE(DOM_STORAGE)
 void Settings::setSessionStorageQuota(unsigned sessionStorageQuota)
 {
     m_sessionStorageQuota = sessionStorageQuota;
 }
-#endif
 
 void Settings::setPrivateBrowsingEnabled(bool privateBrowsingEnabled)
 {
@@ -714,11 +717,6 @@ void Settings::setCanvasUsesAcceleratedDrawing(bool enabled)
     m_canvasUsesAcceleratedDrawing = enabled;
 }
 
-void Settings::setAcceleratedDrawingEnabled(bool enabled)
-{
-    m_acceleratedDrawingEnabled = enabled;
-}
-
 void Settings::setAcceleratedCompositingFor3DTransformsEnabled(bool enabled)
 {
     m_acceleratedCompositingFor3DTransformsEnabled = enabled;
@@ -789,6 +787,11 @@ void Settings::setOpenGLMultisamplingEnabled(bool enabled)
     m_openGLMultisamplingEnabled = enabled;
 }
 
+void Settings::setPrivilegedWebGLExtensionsEnabled(bool enabled)
+{
+    m_privilegedWebGLExtensionsEnabled = enabled;
+}
+
 void Settings::setAccelerated2dCanvasEnabled(bool enabled)
 {
     m_acceleratedCanvas2dEnabled = enabled;
@@ -812,7 +815,7 @@ void Settings::setLoadDeferringEnabled(bool enabled)
 void Settings::setTiledBackingStoreEnabled(bool enabled)
 {
     m_tiledBackingStoreEnabled = enabled;
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     if (m_page->mainFrame())
         m_page->mainFrame()->setTiledBackingStoreEnabled(enabled);
 #endif

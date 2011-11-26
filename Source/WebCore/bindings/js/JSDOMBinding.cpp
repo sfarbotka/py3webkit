@@ -21,40 +21,14 @@
 #include "config.h"
 #include "JSDOMBinding.h"
 
-#include "DOMCoreException.h"
 #include "DOMObjectHashTableMap.h"
-#include "EventException.h"
-#include "ExceptionBase.h"
 #include "ExceptionCode.h"
-#include "FileException.h"
+#include "ExceptionHeaders.h"
+#include "ExceptionInterfaces.h"
 #include "Frame.h"
-#include "IDBDatabaseException.h"
-#include "JSDOMCoreException.h"
 #include "JSDOMWindowCustom.h"
-#include "JSEventException.h"
 #include "JSExceptionBase.h"
-#if ENABLE(BLOB) || ENABLE(FILE_SYSTEM)
-#include "JSFileException.h"
-#include "JSOperationNotAllowedException.h"
-#endif
-#include "JSRangeException.h"
-#if ENABLE(SQL_DATABASE)
-#include "JSSQLException.h"
-#endif
-#if ENABLE(SVG)
-#include "JSSVGException.h"
-#endif
-#include "JSXMLHttpRequestException.h"
-#if ENABLE(XPATH)
-#include "JSXPathException.h"
-#endif
-#include "OperationNotAllowedException.h"
-#include "RangeException.h"
-#include "SQLException.h"
-#include "SVGException.h"
 #include "ScriptCallStack.h"
-#include "XMLHttpRequestException.h"
-#include "XPathException.h"
 #include <runtime/DateInstance.h>
 #include <runtime/Error.h>
 #include <runtime/ExceptionHelpers.h>
@@ -201,6 +175,11 @@ void reportCurrentException(ExecState* exec)
     reportException(exec, exception);
 }
 
+#define TRY_TO_CREATE_EXCEPTION(interfaceName) \
+    case interfaceName##Type: \
+        errorObject = toJS(exec, globalObject, interfaceName::create(description)); \
+        break;
+
 void setDOMException(ExecState* exec, ExceptionCode ec)
 {
     if (!ec || exec->hadException())
@@ -211,56 +190,18 @@ void setDOMException(ExecState* exec, ExceptionCode ec)
     // frames[0].document.createElement(null, null); // throws an exception which should have the subframes prototypes.
     JSDOMGlobalObject* globalObject = deprecatedGlobalObjectForPrototype(exec);
 
-    ExceptionCodeDescription description;
-    getExceptionCodeDescription(ec, description);
+    ExceptionCodeDescription description(ec);
 
     JSValue errorObject;
     switch (description.type) {
-        case DOMExceptionType:
-            errorObject = toJS(exec, globalObject, DOMCoreException::create(description));
-            break;
-        case RangeExceptionType:
-            errorObject = toJS(exec, globalObject, RangeException::create(description));
-            break;
-        case EventExceptionType:
-            errorObject = toJS(exec, globalObject, EventException::create(description));
-            break;
-        case XMLHttpRequestExceptionType:
-            errorObject = toJS(exec, globalObject, XMLHttpRequestException::create(description));
-            break;
-#if ENABLE(SVG)
-        case SVGExceptionType:
-            errorObject = toJS(exec, globalObject, SVGException::create(description).get());
-            break;
-#endif
-#if ENABLE(XPATH)
-        case XPathExceptionType:
-            errorObject = toJS(exec, globalObject, XPathException::create(description));
-            break;
-#endif
-#if ENABLE(SQL_DATABASE)
-        case SQLExceptionType:
-            errorObject = toJS(exec, globalObject, SQLException::create(description));
-            break;
-#endif
-#if ENABLE(BLOB) || ENABLE(FILE_SYSTEM)
-        case FileExceptionType:
-            errorObject = toJS(exec, globalObject, FileException::create(description));
-            break;
-        case OperationNotAllowedExceptionType:
-            errorObject = toJS(exec, globalObject, OperationNotAllowedException::create(description));
-            break;
-#endif
-#if ENABLE(INDEXED_DATABASE)
-        case IDBDatabaseExceptionType:
-            errorObject = toJS(exec, globalObject, IDBDatabaseException::create(description));
-            break;
-#endif
+        DOM_EXCEPTION_INTERFACES_FOR_EACH(TRY_TO_CREATE_EXCEPTION)
     }
 
     ASSERT(errorObject);
     throwError(exec, errorObject);
 }
+
+#undef TRY_TO_CREATE_EXCEPTION
 
 DOMWindow* activeDOMWindow(ExecState* exec)
 {

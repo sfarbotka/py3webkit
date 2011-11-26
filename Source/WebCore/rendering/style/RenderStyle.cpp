@@ -80,11 +80,12 @@ ALWAYS_INLINE RenderStyle::RenderStyle()
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
+    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
-    , m_affectedByDirectAdjacentRules(false)
+    , m_explicitInheritance(false)
     , m_childIndex(0)
     , m_box(defaultStyle()->m_box)
     , visual(defaultStyle()->visual)
@@ -98,6 +99,8 @@ ALWAYS_INLINE RenderStyle::RenderStyle()
 #endif
 {
     setBitDefaults(); // Would it be faster to copy this from the default style?
+    COMPILE_ASSERT((sizeof(InheritedFlags) <= 8), InheritedFlags_does_not_grow);
+    COMPILE_ASSERT((sizeof(NonInheritedFlags) <= 8), NonInheritedFlags_does_not_grow);
 }
 
 ALWAYS_INLINE RenderStyle::RenderStyle(bool)
@@ -107,11 +110,12 @@ ALWAYS_INLINE RenderStyle::RenderStyle(bool)
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
+    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
-    , m_affectedByDirectAdjacentRules(false)
+    , m_explicitInheritance(false)
     , m_childIndex(0)
 {
     setBitDefaults();
@@ -122,9 +126,7 @@ ALWAYS_INLINE RenderStyle::RenderStyle(bool)
     surround.init();
     rareNonInheritedData.init();
     rareNonInheritedData.access()->m_deprecatedFlexibleBox.init();
-#if ENABLE(CSS3_FLEXBOX)
     rareNonInheritedData.access()->m_flexibleBox.init();
-#endif
     rareNonInheritedData.access()->m_marquee.init();
     rareNonInheritedData.access()->m_multiCol.init();
     rareNonInheritedData.access()->m_transform.init();
@@ -147,11 +149,12 @@ ALWAYS_INLINE RenderStyle::RenderStyle(const RenderStyle& o)
     , m_emptyState(false)
     , m_childrenAffectedByFirstChildRules(false)
     , m_childrenAffectedByLastChildRules(false)
+    , m_childrenAffectedByDirectAdjacentRules(false)
     , m_childrenAffectedByForwardPositionalRules(false)
     , m_childrenAffectedByBackwardPositionalRules(false)
     , m_firstChildState(false)
     , m_lastChildState(false)
-    , m_affectedByDirectAdjacentRules(false)
+    , m_explicitInheritance(false)
     , m_childIndex(0)
     , m_box(o.m_box)
     , visual(o.visual)
@@ -177,6 +180,34 @@ void RenderStyle::inheritFrom(const RenderStyle* inheritParent)
     if (m_svgStyle != inheritParent->m_svgStyle)
         m_svgStyle.access()->inheritFrom(inheritParent->m_svgStyle.get());
 #endif
+}
+
+void RenderStyle::copyNonInheritedFrom(const RenderStyle* other)
+{
+    m_box = other->m_box;
+    visual = other->visual;
+    m_background = other->m_background;
+    surround = other->surround;
+    rareNonInheritedData = other->rareNonInheritedData;
+    // The flags are copied one-by-one because noninherited_flags contains a bunch of stuff other than real style data.
+    noninherited_flags._effectiveDisplay = other->noninherited_flags._effectiveDisplay;
+    noninherited_flags._originalDisplay = other->noninherited_flags._originalDisplay;
+    noninherited_flags._overflowX = other->noninherited_flags._overflowX;
+    noninherited_flags._overflowY = other->noninherited_flags._overflowY;
+    noninherited_flags._vertical_align = other->noninherited_flags._vertical_align;
+    noninherited_flags._clear = other->noninherited_flags._clear;
+    noninherited_flags._position = other->noninherited_flags._position;
+    noninherited_flags._floating = other->noninherited_flags._floating;
+    noninherited_flags._table_layout = other->noninherited_flags._table_layout;
+    noninherited_flags._page_break_before = other->noninherited_flags._page_break_before;
+    noninherited_flags._page_break_after = other->noninherited_flags._page_break_after;
+    noninherited_flags._page_break_inside = other->noninherited_flags._page_break_inside;
+    noninherited_flags._unicodeBidi = other->noninherited_flags._unicodeBidi;
+#if ENABLE(SVG)
+    if (m_svgStyle != other->m_svgStyle)
+        m_svgStyle.access()->copyNonInheritedFrom(other->m_svgStyle.get());
+#endif
+    ASSERT(zoom() == initialZoom());
 }
 
 RenderStyle::~RenderStyle()
@@ -232,16 +263,11 @@ void RenderStyle::setHasPseudoStyle(PseudoId pseudo)
 
 RenderStyle* RenderStyle::getCachedPseudoStyle(PseudoId pid) const
 {
-    ASSERT(styleType() != VISITED_LINK);
-
     if (!m_cachedPseudoStyles || !m_cachedPseudoStyles->size())
         return 0;
 
-    if (styleType() != NOPSEUDO) {
-        if (pid == VISITED_LINK)
-            return m_cachedPseudoStyles->at(0)->styleType() == VISITED_LINK ? m_cachedPseudoStyles->at(0).get() : 0;
+    if (styleType() != NOPSEUDO) 
         return 0;
-    }
 
     for (size_t i = 0; i < m_cachedPseudoStyles->size(); ++i) {
         RenderStyle* pseudoStyle = m_cachedPseudoStyles->at(i).get();
@@ -256,7 +282,9 @@ RenderStyle* RenderStyle::addCachedPseudoStyle(PassRefPtr<RenderStyle> pseudo)
 {
     if (!pseudo)
         return 0;
-    
+
+    ASSERT(pseudo->styleType() > NOPSEUDO);
+
     RenderStyle* result = pseudo.get();
 
     if (!m_cachedPseudoStyles)
@@ -357,15 +385,19 @@ StyleDifference RenderStyle::diff(const RenderStyle* other, unsigned& changedCon
         if (rareNonInheritedData->m_regionOverflow != other->rareNonInheritedData->m_regionOverflow)
             return StyleDifferenceLayout;
 
+        if (rareNonInheritedData->m_wrapFlow != other->rareNonInheritedData->m_wrapFlow
+            || rareNonInheritedData->m_wrapThrough != other->rareNonInheritedData->m_wrapThrough
+            || rareNonInheritedData->m_wrapMargin != other->rareNonInheritedData->m_wrapMargin
+            || rareNonInheritedData->m_wrapPadding != other->rareNonInheritedData->m_wrapPadding)
+            return StyleDifferenceLayout;
+
         if (rareNonInheritedData->m_deprecatedFlexibleBox.get() != other->rareNonInheritedData->m_deprecatedFlexibleBox.get()
             && *rareNonInheritedData->m_deprecatedFlexibleBox.get() != *other->rareNonInheritedData->m_deprecatedFlexibleBox.get())
             return StyleDifferenceLayout;
 
-#if ENABLE(CSS3_FLEXBOX)
         if (rareNonInheritedData->m_flexibleBox.get() != other->rareNonInheritedData->m_flexibleBox.get()
             && *rareNonInheritedData->m_flexibleBox.get() != *other->rareNonInheritedData->m_flexibleBox.get())
             return StyleDifferenceLayout;
-#endif
 
         // FIXME: We should add an optimized form of layout that just recomputes visual overflow.
         if (!rareNonInheritedData->shadowDataEquivalent(*other->rareNonInheritedData.get()))
@@ -387,6 +419,13 @@ StyleDifference RenderStyle::diff(const RenderStyle* other, unsigned& changedCon
             return StyleDifferenceLayout;
 #endif
         }
+
+#if ENABLE(CSS_FILTERS)
+        if (rareNonInheritedData->m_filter.get() != other->rareNonInheritedData->m_filter.get()
+            && *rareNonInheritedData->m_filter.get() != *other->rareNonInheritedData->m_filter.get()) {
+            return StyleDifferenceLayout;
+        }
+#endif
 
 #if !USE(ACCELERATED_COMPOSITING)
         if (rareNonInheritedData.get() != other->rareNonInheritedData.get()) {
@@ -424,7 +463,9 @@ StyleDifference RenderStyle::diff(const RenderStyle* other, unsigned& changedCon
             || rareInheritedData->textEmphasisMark != other->rareInheritedData->textEmphasisMark
             || rareInheritedData->textEmphasisPosition != other->rareInheritedData->textEmphasisPosition
             || rareInheritedData->textEmphasisCustomMark != other->rareInheritedData->textEmphasisCustomMark
-            || rareInheritedData->m_lineBoxContain != other->rareInheritedData->m_lineBoxContain)
+            || rareInheritedData->m_lineBoxContain != other->rareInheritedData->m_lineBoxContain
+            || rareInheritedData->m_lineGrid != other->rareInheritedData->m_lineGrid
+            || rareInheritedData->m_lineGridSnap != other->rareInheritedData->m_lineGridSnap)
             return StyleDifferenceLayout;
 
         if (!rareInheritedData->shadowDataEquivalent(*other->rareInheritedData.get()))
@@ -567,7 +608,7 @@ StyleDifference RenderStyle::diff(const RenderStyle* other, unsigned& changedCon
     if (inherited->color != other->inherited->color
         || inherited_flags._visibility != other->inherited_flags._visibility
         || inherited_flags._text_decorations != other->inherited_flags._text_decorations
-        || inherited_flags._force_backgrounds_to_white != other->inherited_flags._force_backgrounds_to_white
+        || inherited_flags.m_printColorAdjust != other->inherited_flags.m_printColorAdjust
         || inherited_flags._insideLink != other->inherited_flags._insideLink
         || surround->border != other->surround->border
         || *m_background.get() != *other->m_background.get()
@@ -588,7 +629,8 @@ StyleDifference RenderStyle::diff(const RenderStyle* other, unsigned& changedCon
         // the parent container. For sure, I will have to revisit this code, but for now I've added this in order 
         // to avoid having diff() == StyleDifferenceEqual where wrap-shapes actually differ.
         // Tracking bug: https://bugs.webkit.org/show_bug.cgi?id=62991
-        if (rareNonInheritedData->m_wrapShape != other->rareNonInheritedData->m_wrapShape)
+        if (rareNonInheritedData->m_wrapShapeInside != other->rareNonInheritedData->m_wrapShapeInside
+            || rareNonInheritedData->m_wrapShapeOutside != other->rareNonInheritedData->m_wrapShapeOutside)
             return StyleDifferenceRepaint;
 
 #if USE(ACCELERATED_COMPOSITING)
@@ -1121,46 +1163,46 @@ void RenderStyle::getShadowVerticalExtent(const ShadowData* shadow, LayoutUnit &
     }
 }
 
-Color RenderStyle::colorIncludingFallback(int colorProperty) const
+Color RenderStyle::colorIncludingFallback(int colorProperty, bool visitedLink) const
 {
     Color result;
     EBorderStyle borderStyle = BNONE;
     switch (colorProperty) {
     case CSSPropertyBackgroundColor:
-        return backgroundColor(); // Background color doesn't fall back.
+        return visitedLink ? rareNonInheritedData->m_visitedLinkBackgroundColor : backgroundColor(); // Background color doesn't fall back.
     case CSSPropertyBorderLeftColor:
-        result = borderLeftColor();
+        result = visitedLink ? rareNonInheritedData->m_visitedLinkBorderLeftColor : borderLeftColor();
         borderStyle = borderLeftStyle();
         break;
     case CSSPropertyBorderRightColor:
-        result = borderRightColor();
+        result = visitedLink ? rareNonInheritedData->m_visitedLinkBorderRightColor : borderRightColor();
         borderStyle = borderRightStyle();
         break;
     case CSSPropertyBorderTopColor:
-        result = borderTopColor();
+        result = visitedLink ? rareNonInheritedData->m_visitedLinkBorderTopColor : borderTopColor();
         borderStyle = borderTopStyle();
         break;
     case CSSPropertyBorderBottomColor:
-        result = borderBottomColor();
+        result = visitedLink ? rareNonInheritedData->m_visitedLinkBorderBottomColor : borderBottomColor();
         borderStyle = borderBottomStyle();
         break;
     case CSSPropertyColor:
-        result = color();
+        result = visitedLink ? inherited->visitedLinkColor : color();
         break;
     case CSSPropertyOutlineColor:
-        result = outlineColor();
+        result = visitedLink ? rareNonInheritedData->m_visitedLinkOutlineColor : outlineColor();
         break;
     case CSSPropertyWebkitColumnRuleColor:
-        result = columnRuleColor();
+        result = visitedLink ? rareNonInheritedData->m_multiCol->m_visitedLinkColumnRuleColor : columnRuleColor();
         break;
     case CSSPropertyWebkitTextEmphasisColor:
-        result = textEmphasisColor();
+        result = visitedLink ? rareInheritedData->visitedLinkTextEmphasisColor : textEmphasisColor();
         break;
     case CSSPropertyWebkitTextFillColor:
-        result = textFillColor();
+        result = visitedLink ? rareInheritedData->visitedLinkTextFillColor : textFillColor();
         break;
     case CSSPropertyWebkitTextStrokeColor:
-        result = textStrokeColor();
+        result = visitedLink ? rareInheritedData->visitedLinkTextStrokeColor : textStrokeColor();
         break;
     default:
         ASSERT_NOT_REACHED();
@@ -1168,25 +1210,21 @@ Color RenderStyle::colorIncludingFallback(int colorProperty) const
     }
 
     if (!result.isValid()) {
-        if (borderStyle == INSET || borderStyle == OUTSET || borderStyle == RIDGE || borderStyle == GROOVE)
+        if (!visitedLink && (borderStyle == INSET || borderStyle == OUTSET || borderStyle == RIDGE || borderStyle == GROOVE))
             result.setRGB(238, 238, 238);
         else
-            result = color();
+            result = visitedLink ? inherited->visitedLinkColor : color();
     }
-
     return result;
 }
 
 Color RenderStyle::visitedDependentColor(int colorProperty) const
 {
-    Color unvisitedColor = colorIncludingFallback(colorProperty);
+    Color unvisitedColor = colorIncludingFallback(colorProperty, false);
     if (insideLink() != InsideVisitedLink)
         return unvisitedColor;
 
-    RenderStyle* visitedStyle = getCachedPseudoStyle(VISITED_LINK);
-    if (!visitedStyle)
-        return unvisitedColor;
-    Color visitedColor = visitedStyle->colorIncludingFallback(colorProperty);
+    Color visitedColor = colorIncludingFallback(colorProperty, true);
 
     // FIXME: Technically someone could explicitly specify the color transparent, but for now we'll just
     // assume that if the background color is transparent that it wasn't set. Note that it's weird that

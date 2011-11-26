@@ -20,7 +20,7 @@
 #ifndef TiledBackingStore_h
 #define TiledBackingStore_h
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 
 #include "FloatPoint.h"
 #include "IntPoint.h"
@@ -105,6 +105,7 @@ private:
     IntRect contentsRect() const;
     
     void paintCheckerPattern(GraphicsContext*, const IntRect&, const Tile::Coordinate&);
+    IntRect visibleContentsRect();
 
 private:
     TiledBackingStoreClient* m_client;

@@ -318,17 +318,8 @@ bool isStartOfWord(const VisiblePosition& p)
 
 // ---------
 
-static VisiblePosition positionAvoidingFirstPositionInTable(const VisiblePosition& c)
-{
-    // return table offset 0 instead of the first VisiblePosition inside the table
-    VisiblePosition previous = c.previous();
-    if (isLastPositionBeforeTable(previous) && isEditablePosition(previous.deepEquivalent()))
-        return previous;
-
-    return c;
-}
-
-static VisiblePosition startPositionForLine(const VisiblePosition& c)
+enum LineEndpointComputationMode { UseLogicalOrdering, UseInlineBoxOrdering };
+static VisiblePosition startPositionForLine(const VisiblePosition& c, LineEndpointComputationMode mode)
 {
     if (c.isNull())
         return VisiblePosition();
@@ -339,44 +330,69 @@ static VisiblePosition startPositionForLine(const VisiblePosition& c)
         // RootInlineBoxes, like empty editable blocks and bordered blocks.
         Position p = c.deepEquivalent();
         if (p.deprecatedNode()->renderer() && p.deprecatedNode()->renderer()->isRenderBlock() && !p.deprecatedEditingOffset())
-            return positionAvoidingFirstPositionInTable(c);
-        
+            return c;
+
         return VisiblePosition();
     }
-    
-    // Generated content (e.g. list markers and CSS :before and :after
-    // pseudoelements) have no corresponding DOM element, and so cannot be
-    // represented by a VisiblePosition.  Use whatever follows instead.
-    InlineBox *startBox = rootBox->firstLeafChild();
-    Node *startNode;
-    while (1) {
-        if (!startBox)
-            return VisiblePosition();
 
-        RenderObject *startRenderer = startBox->renderer();
-        if (!startRenderer)
+    Node* startNode;
+    InlineBox* startBox;
+    if (mode == UseLogicalOrdering) {
+        startNode = rootBox->getLogicalStartBoxWithNode(startBox);
+        if (!startNode)
             return VisiblePosition();
+    } else {
+        // Generated content (e.g. list markers and CSS :before and :after pseudoelements) have no corresponding DOM element,
+        // and so cannot be represented by a VisiblePosition. Use whatever follows instead.
+        startBox = rootBox->firstLeafChild();
+        while (true) {
+            if (!startBox)
+                return VisiblePosition();
 
-        startNode = startRenderer->node();
-        if (startNode)
-            break;
-        
-        startBox = startBox->nextLeafChild();
+            RenderObject* startRenderer = startBox->renderer();
+            if (!startRenderer)
+                return VisiblePosition();
+
+            startNode = startRenderer->node();
+            if (startNode)
+                break;
+
+            startBox = startBox->nextLeafChild();
+        }
     }
-    
-    VisiblePosition visPos = startNode->isTextNode() ? VisiblePosition(Position(static_cast<Text*>(startNode), static_cast<InlineTextBox*>(startBox)->start()), DOWNSTREAM)
-                                                     : VisiblePosition(positionBeforeNode(startNode), DOWNSTREAM);
-    return positionAvoidingFirstPositionInTable(visPos);
+
+    return startNode->isTextNode() ? Position(static_cast<Text*>(startNode), toInlineTextBox(startBox)->start())
+        : positionBeforeNode(startNode);
 }
 
-VisiblePosition startOfLine(const VisiblePosition& c)
+static VisiblePosition startOfLine(const VisiblePosition& c, LineEndpointComputationMode mode)
 {
-    VisiblePosition visPos = startPositionForLine(c);
+    // TODO: this is the current behavior that might need to be fixed.
+    // Please refer to https://bugs.webkit.org/show_bug.cgi?id=49107 for detail.
+    VisiblePosition visPos = startPositionForLine(c, mode);
+
+    if (mode == UseLogicalOrdering) {
+        if (Node* editableRoot = highestEditableRoot(c.deepEquivalent())) {
+            if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
+                return firstPositionInNode(editableRoot);
+        }
+    }
 
     return c.honorEditingBoundaryAtOrBefore(visPos);
 }
 
-static VisiblePosition endPositionForLine(const VisiblePosition& c)
+// FIXME: Rename this function to reflect the fact it ignores bidi levels.
+VisiblePosition startOfLine(const VisiblePosition& currentPosition)
+{
+    return startOfLine(currentPosition, UseInlineBoxOrdering);
+}
+
+VisiblePosition logicalStartOfLine(const VisiblePosition& currentPosition)
+{
+    return startOfLine(currentPosition, UseLogicalOrdering);
+}
+
+static VisiblePosition endPositionForLine(const VisiblePosition& c, LineEndpointComputationMode mode)
 {
     if (c.isNull())
         return VisiblePosition();
@@ -390,32 +406,38 @@ static VisiblePosition endPositionForLine(const VisiblePosition& c)
             return c;
         return VisiblePosition();
     }
-    
-    // Generated content (e.g. list markers and CSS :before and :after
-    // pseudoelements) have no corresponding DOM element, and so cannot be
-    // represented by a VisiblePosition.  Use whatever precedes instead.
-    Node *endNode;
-    InlineBox *endBox = rootBox->lastLeafChild();
-    while (1) {
-        if (!endBox)
-            return VisiblePosition();
 
-        RenderObject *endRenderer = endBox->renderer();
-        if (!endRenderer)
+    Node* endNode;
+    InlineBox* endBox;
+    if (mode == UseLogicalOrdering) {
+        endNode = rootBox->getLogicalEndBoxWithNode(endBox);
+        if (!endNode)
             return VisiblePosition();
+    } else {
+        // Generated content (e.g. list markers and CSS :before and :after pseudoelements) have no corresponding DOM element,
+        // and so cannot be represented by a VisiblePosition. Use whatever precedes instead.
+        endBox = rootBox->lastLeafChild();
+        while (true) {
+            if (!endBox)
+                return VisiblePosition();
 
-        endNode = endRenderer->node();
-        if (endNode)
-            break;
-        
-        endBox = endBox->prevLeafChild();
+            RenderObject* endRenderer = endBox->renderer();
+            if (!endRenderer)
+                return VisiblePosition();
+
+            endNode = endRenderer->node();
+            if (endNode)
+                break;
+            
+            endBox = endBox->prevLeafChild();
+        }
     }
-    
+
     Position pos;
-    if (endNode->hasTagName(brTag)) {
+    if (endNode->hasTagName(brTag))
         pos = positionBeforeNode(endNode);
-    } else if (endBox->isInlineTextBox() && endNode->isTextNode()) {
-        InlineTextBox* endTextBox = static_cast<InlineTextBox *>(endBox);
+    else if (endBox->isInlineTextBox() && endNode->isTextNode()) {
+        InlineTextBox* endTextBox = toInlineTextBox(endBox);
         int endOffset = endTextBox->start();
         if (!endTextBox->isLineBreak())
             endOffset += endTextBox->len();
@@ -426,10 +448,34 @@ static VisiblePosition endPositionForLine(const VisiblePosition& c)
     return VisiblePosition(pos, VP_UPSTREAM_IF_POSSIBLE);
 }
 
-VisiblePosition endOfLine(const VisiblePosition& c)
+static bool inSameLogicalLine(const VisiblePosition& a, const VisiblePosition& b)
 {
-    VisiblePosition visPos = endPositionForLine(c);
-    
+    return a.isNotNull() && logicalStartOfLine(a) == logicalStartOfLine(b);
+}
+
+static VisiblePosition endOfLine(const VisiblePosition& c, LineEndpointComputationMode mode)
+{
+    // TODO: this is the current behavior that might need to be fixed.
+    // Please refer to https://bugs.webkit.org/show_bug.cgi?id=49107 for detail.
+    VisiblePosition visPos = endPositionForLine(c, mode);
+
+    if (mode == UseLogicalOrdering) {
+        // Make sure the end of line is at the same line as the given input position. For a wrapping line, the logical end
+        // position for the not-last-2-lines might incorrectly hand back the logical beginning of the next line. 
+        // For example, <div contenteditable dir="rtl" style="line-break:before-white-space">abcdefg abcdefg abcdefg
+        // a abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg </div>
+        // In this case, use the previous position of the computed logical end position.
+        if (!inSameLogicalLine(c, visPos))
+            visPos = visPos.previous();
+
+        if (Node* editableRoot = highestEditableRoot(c.deepEquivalent())) {
+            if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
+                return lastPositionInNode(editableRoot);
+        }
+
+        return c.honorEditingBoundaryAtOrAfter(visPos);
+    }
+
     // Make sure the end of line is at the same line as the given input position.  Else use the previous position to 
     // obtain end of line.  This condition happens when the input position is before the space character at the end 
     // of a soft-wrapped non-editable line. In this scenario, endPositionForLine would incorrectly hand back a position
@@ -439,10 +485,21 @@ VisiblePosition endOfLine(const VisiblePosition& c)
         visPos = c.previous();
         if (visPos.isNull())
             return VisiblePosition();
-        visPos = endPositionForLine(visPos);
+        visPos = endPositionForLine(visPos, UseInlineBoxOrdering);
     }
     
     return c.honorEditingBoundaryAtOrAfter(visPos);
+}
+
+// FIXME: Rename this function to reflect the fact it ignores bidi levels.
+VisiblePosition endOfLine(const VisiblePosition& currentPosition)
+{
+    return endOfLine(currentPosition, UseInlineBoxOrdering);
+}
+
+VisiblePosition logicalEndOfLine(const VisiblePosition& currentPosition)
+{
+    return endOfLine(currentPosition, UseLogicalOrdering);
 }
 
 bool inSameLine(const VisiblePosition &a, const VisiblePosition &b)
@@ -1030,109 +1087,6 @@ VisiblePosition endOfEditableContent(const VisiblePosition& visiblePosition)
     return lastPositionInNode(highestRoot);
 }
 
-static VisiblePosition logicalStartPositionForLine(const VisiblePosition& c)
-{
-    if (c.isNull())
-        return VisiblePosition();
-
-    RootInlineBox* rootBox = RenderedPosition(c).rootBox();
-    if (!rootBox) {
-        // There are VisiblePositions at offset 0 in blocks without
-        // RootInlineBoxes, like empty editable blocks and bordered blocks.
-        Position p = c.deepEquivalent();
-        if (p.deprecatedNode()->renderer() && p.deprecatedNode()->renderer()->isRenderBlock() && !p.deprecatedEditingOffset())
-            return positionAvoidingFirstPositionInTable(c);
-        
-        return VisiblePosition();
-    }
-    
-    InlineBox* logicalStartBox;
-    Node* logicalStartNode = rootBox->getLogicalStartBoxWithNode(logicalStartBox);
-
-    if (!logicalStartNode)
-        return VisiblePosition();
-
-    VisiblePosition visPos = logicalStartNode->isTextNode() ? VisiblePosition(Position(logicalStartNode, logicalStartBox->caretMinOffset(), Position::PositionIsOffsetInAnchor), DOWNSTREAM)
-                                                            : VisiblePosition(positionBeforeNode(logicalStartNode), DOWNSTREAM);
-    return positionAvoidingFirstPositionInTable(visPos);
-}
-
-VisiblePosition logicalStartOfLine(const VisiblePosition& c)
-{
-    // TODO: this is the current behavior that might need to be fixed.
-    // Please refer to https://bugs.webkit.org/show_bug.cgi?id=49107 for detail.
-    VisiblePosition visPos = logicalStartPositionForLine(c);
-
-    if (Node* editableRoot = highestEditableRoot(c.deepEquivalent())) {
-        if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
-            return firstPositionInNode(editableRoot);
-    }
-    return c.honorEditingBoundaryAtOrBefore(visPos);
-}
-
-static VisiblePosition logicalEndPositionForLine(const VisiblePosition& c)
-{
-    if (c.isNull())
-        return VisiblePosition();
-
-    RootInlineBox* rootBox = RenderedPosition(c).rootBox();
-    if (!rootBox) {
-        // There are VisiblePositions at offset 0 in blocks without
-        // RootInlineBoxes, like empty editable blocks and bordered blocks.
-        Position p = c.deepEquivalent();
-        if (p.deprecatedNode()->renderer() && p.deprecatedNode()->renderer()->isRenderBlock() && !p.deprecatedEditingOffset())
-            return c;
-        return VisiblePosition();
-    }
-    
-    InlineBox* logicalEndBox;
-    Node* logicalEndNode = rootBox->getLogicalEndBoxWithNode(logicalEndBox);
-
-    if (!logicalEndNode)
-        return VisiblePosition();
-    
-    Position pos;
-    if (logicalEndNode->hasTagName(brTag))
-        pos = positionBeforeNode(logicalEndNode);
-    else if (logicalEndBox->isInlineTextBox()) {
-        InlineTextBox* endTextBox = static_cast<InlineTextBox*>(logicalEndBox);
-        int endOffset = endTextBox->start();
-        if (!endTextBox->isLineBreak())
-            endOffset += endTextBox->len();
-        pos = Position(logicalEndNode, endOffset, Position::PositionIsOffsetInAnchor);
-    } else
-        pos = positionAfterNode(logicalEndNode);
-    
-    return VisiblePosition(pos, VP_UPSTREAM_IF_POSSIBLE);
-}
-
-bool inSameLogicalLine(const VisiblePosition& a, const VisiblePosition& b)
-{
-    return a.isNotNull() && logicalStartOfLine(a) == logicalStartOfLine(b);
-}
-
-VisiblePosition logicalEndOfLine(const VisiblePosition& c)
-{
-    // TODO: this is the current behavior that might need to be fixed.
-    // Please refer to https://bugs.webkit.org/show_bug.cgi?id=49107 for detail.
-
-    VisiblePosition visPos = logicalEndPositionForLine(c);
-    
-    // Make sure the end of line is at the same line as the given input position. For a wrapping line, the logical end
-    // position for the not-last-2-lines might incorrectly hand back the logical beginning of the next line. 
-    // For example, <div contenteditable dir="rtl" style="line-break:before-white-space">abcdefg abcdefg abcdefg
-    // a abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg abcdefg </div>
-    // In this case, use the previous position of the computed logical end position.
-    if (!inSameLogicalLine(c, visPos))
-        visPos = visPos.previous();
-
-    if (Node* editableRoot = highestEditableRoot(c.deepEquivalent())) {
-        if (!editableRoot->contains(visPos.deepEquivalent().containerNode()))
-            return lastPositionInNode(editableRoot);
-    }
-    return c.honorEditingBoundaryAtOrAfter(visPos);
-}
-
 VisiblePosition leftBoundaryOfLine(const VisiblePosition& c, TextDirection direction)
 {
     return direction == LTR ? logicalStartOfLine(c) : logicalEndOfLine(c);
@@ -1472,6 +1426,53 @@ static int smallestOffsetAbove(int offset, bool boxAndBlockAreInSameDirection, c
     return offsetNotFound;
 }
 
+static const RootInlineBox* previousRootInlineBox(const InlineBox* box)
+{
+    Node* node = box->renderer()->node();
+    Node* enclosingBlockNode = enclosingNodeWithNonInlineRenderer(node);
+    Node* previousNode = node->previousLeafNode();
+    while (previousNode && enclosingBlockNode == enclosingNodeWithNonInlineRenderer(previousNode))
+        previousNode = previousNode->previousLeafNode();
+  
+    while (previousNode && !previousNode->isShadowRoot()) {
+        Position pos = createLegacyEditingPosition(previousNode, caretMaxOffset(previousNode));
+        
+        if (pos.isCandidate()) {
+            RenderedPosition renderedPos(pos, DOWNSTREAM);
+            RootInlineBox* root = renderedPos.rootBox();
+            if (root)
+                return root;
+        }
+
+        previousNode = previousNode->previousLeafNode();
+    }
+    return 0;
+}
+
+static const RootInlineBox* nextRootInlineBox(const InlineBox* box)
+{
+    Node* node = box->renderer()->node();
+    Node* enclosingBlockNode = enclosingNodeWithNonInlineRenderer(node);
+    Node* nextNode = node->nextLeafNode();
+    while (nextNode && enclosingBlockNode == enclosingNodeWithNonInlineRenderer(nextNode))
+        nextNode = nextNode->nextLeafNode();
+  
+    while (nextNode && !nextNode->isShadowRoot()) {
+        Position pos;
+        pos = createLegacyEditingPosition(nextNode, caretMinOffset(nextNode));
+        
+        if (pos.isCandidate()) {
+            RenderedPosition renderedPos(pos, DOWNSTREAM);
+            RootInlineBox* root = renderedPos.rootBox();
+            if (root)
+                return root;
+        }
+
+        nextNode = nextNode->nextLeafNode();
+    }
+    return 0;
+}
+
 static const InlineBox* leftInlineBox(const InlineBox* box, TextDirection blockDirection)
 {
     if (box->prevLeafChild())
@@ -1483,7 +1484,9 @@ static const InlineBox* leftInlineBox(const InlineBox* box, TextDirection blockD
     if (leftLineBox)
         return leftLineBox->lastLeafChild();
 
-    return 0;
+    const RootInlineBox* leftRootInlineBox = isBlockLTR ? previousRootInlineBox(box) :
+        nextRootInlineBox(box); 
+    return leftRootInlineBox ? leftRootInlineBox->lastLeafChild() : 0; 
 }
 
 static const InlineBox* rightInlineBox(const InlineBox* box, TextDirection blockDirection)
@@ -1497,7 +1500,9 @@ static const InlineBox* rightInlineBox(const InlineBox* box, TextDirection block
     if (rightLineBox)
         return rightLineBox->firstLeafChild();
 
-    return 0;
+    const RootInlineBox* rightRootInlineBox = isBlockLTR ? nextRootInlineBox(box) :
+        previousRootInlineBox(box); 
+    return rightRootInlineBox ? rightRootInlineBox->firstLeafChild() : 0; 
 }
 
 static VisiblePosition leftWordBoundary(const InlineBox* box, int offset, TextDirection blockDirection)

@@ -35,15 +35,25 @@
 namespace JSC { namespace DFG {
 
 enum CompileMode { CompileFunction, CompileOther };
-inline bool compile(CompileMode compileMode, ExecState* exec, ExecState* calleeArgsExec, CodeBlock* codeBlock, JITCode& jitCode, MacroAssemblerCodePtr* jitCodeWithArityCheck)
+inline bool compile(CompileMode compileMode, ExecState* exec, CodeBlock* codeBlock, JITCode& jitCode, MacroAssemblerCodePtr* jitCodeWithArityCheck)
 {
+    SamplingRegion samplingRegion("DFG Compilation (Driver)");
+    
+    ASSERT(codeBlock);
+    ASSERT(codeBlock->alternative());
+    ASSERT(codeBlock->alternative()->getJITType() == JITCode::BaselineJIT);
+
+#if DFG_ENABLE(DEBUG_VERBOSE)
+    fprintf(stderr, "DFG compiling code block %p, number of instructions = %u.\n", codeBlock, codeBlock->instructionCount());
+#endif
+    
     JSGlobalData* globalData = &exec->globalData();
     Graph dfg;
     if (!parse(dfg, globalData, codeBlock))
         return false;
     
     if (compileMode == CompileFunction)
-        dfg.predictArgumentTypes(calleeArgsExec, codeBlock);
+        dfg.predictArgumentTypes(codeBlock);
     
     propagate(dfg, globalData, codeBlock);
     
@@ -58,17 +68,18 @@ inline bool compile(CompileMode compileMode, ExecState* exec, ExecState* calleeA
         
         dataFlowJIT.compile(jitCode);
     }
+    
     return true;
 }
 
 bool tryCompile(ExecState* exec, CodeBlock* codeBlock, JITCode& jitCode)
 {
-    return compile(CompileOther, exec, 0, codeBlock, jitCode, 0);
+    return compile(CompileOther, exec, codeBlock, jitCode, 0);
 }
 
-bool tryCompileFunction(ExecState* exec, ExecState* calleeArgsExec, CodeBlock* codeBlock, JITCode& jitCode, MacroAssemblerCodePtr& jitCodeWithArityCheck)
+bool tryCompileFunction(ExecState* exec, CodeBlock* codeBlock, JITCode& jitCode, MacroAssemblerCodePtr& jitCodeWithArityCheck)
 {
-    return compile(CompileFunction, exec, calleeArgsExec, codeBlock, jitCode, &jitCodeWithArityCheck);
+    return compile(CompileFunction, exec, codeBlock, jitCode, &jitCodeWithArityCheck);
 }
 
 } } // namespace JSC::DFG

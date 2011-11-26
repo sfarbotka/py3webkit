@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,9 +26,10 @@
 #ifndef WebIDBKey_h
 #define WebIDBKey_h
 
-#include "WebCommon.h"
-#include "WebPrivatePtr.h"
-#include "WebString.h"
+#include "platform/WebCommon.h"
+#include "platform/WebPrivatePtr.h"
+#include "platform/WebString.h"
+#include "platform/WebVector.h"
 
 namespace WebCore { class IDBKey; }
 
@@ -43,7 +44,7 @@ public:
     WebIDBKey() { }
     ~WebIDBKey() { reset(); }
 
-    WEBKIT_EXPORT static WebIDBKey createNull();
+    WEBKIT_EXPORT static WebIDBKey createArray(const WebVector<WebIDBKey>&);
     WEBKIT_EXPORT static WebIDBKey createString(const WebString&);
     WEBKIT_EXPORT static WebIDBKey createDate(double);
     WEBKIT_EXPORT static WebIDBKey createNumber(double);
@@ -59,7 +60,7 @@ public:
     }
 
     WEBKIT_EXPORT void assign(const WebIDBKey&);
-    WEBKIT_EXPORT void assignNull();
+    WEBKIT_EXPORT void assignArray(const WebVector<WebIDBKey>&);
     WEBKIT_EXPORT void assignString(const WebString&);
     WEBKIT_EXPORT void assignDate(double);
     WEBKIT_EXPORT void assignNumber(double);
@@ -67,15 +68,15 @@ public:
     WEBKIT_EXPORT void reset();
 
     enum Type {
-        NullType = 0,
+        InvalidType = 0,
+        ArrayType,
         StringType,
         DateType,
-        NumberType,
-        // Types not in WebCore::IDBKey:
-        InvalidType
+        NumberType
     };
 
     WEBKIT_EXPORT Type type() const;
+    WEBKIT_EXPORT WebVector<WebIDBKey> array() const; // Only valid for ArrayType.
     WEBKIT_EXPORT WebString string() const; // Only valid for StringType.
     WEBKIT_EXPORT double date() const; // Only valid for DateType.
     WEBKIT_EXPORT double number() const; // Only valid for NumberType.

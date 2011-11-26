@@ -158,7 +158,7 @@ VisiblePosition RenderTextControl::visiblePositionForIndex(int index) const
 int RenderTextControl::scrollbarThickness() const
 {
     // FIXME: We should get the size of the scrollbar from the RenderTheme instead.
-    return ScrollbarTheme::nativeTheme()->scrollbarThickness();
+    return ScrollbarTheme::theme()->scrollbarThickness();
 }
 
 void RenderTextControl::computeLogicalHeight()
@@ -187,7 +187,7 @@ void RenderTextControl::hitInnerTextElement(HitTestResult& result, const LayoutP
     HTMLElement* innerText = innerTextElement();
     result.setInnerNode(innerText);
     result.setInnerNonSharedNode(innerText);
-    result.setLocalPoint(pointInContainer - toSize(adjustedLocation + innerText->renderBox()->location()));
+    result.setLocalPoint(pointInContainer - toLayoutSize(adjustedLocation + innerText->renderBox()->location()));
 }
 
 static const char* fontFamiliesWithInvalidCharWidth[] = {

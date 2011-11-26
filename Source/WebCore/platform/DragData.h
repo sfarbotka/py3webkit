@@ -116,11 +116,12 @@ public:
     bool canSmartReplace() const;
     bool containsColor() const;
     bool containsFiles() const;
+    unsigned numberOfFiles() const;
 #if PLATFORM(MAC)
     NSPasteboard *pasteboard() { return m_pasteboard.get(); }
 #endif
 
-#if PLATFORM(QT)
+#if PLATFORM(QT) || PLATFORM(GTK)
     // This constructor should used only by WebKit2 IPC because DragData
     // is initialized by the decoder and not in the constructor.
     DragData() { }

@@ -96,6 +96,8 @@ namespace WebKit {
     macro(WebAudioEnabled, webAudioEnabled, Bool, bool, false) \
     macro(ApplicationChromeModeEnabled, applicationChromeMode, Bool, bool, false) \
     macro(SuppressIncrementalRendering, suppressIncrementalRendering, Bool, bool, false) \
+    macro(BackspaceKeyNavigationEnabled, backspaceKeyNavigationEnabled, Bool, bool, true) \
+    macro(CaretBrowsingEnabled, caretBrowsingEnabled, Bool, bool, false) \
     \
 
 #define FOR_EACH_WEBKIT_DOUBLE_PREFERENCE(macro) \

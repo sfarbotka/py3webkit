@@ -42,6 +42,7 @@ from checkers.cpp import CppChecker
 from checkers.python import PythonChecker
 from checkers.test_expectations import TestExpectationsChecker
 from checkers.text import TextChecker
+from checkers.watchlist import WatchListChecker
 from checkers.xcodeproj import XcodeProjectFileChecker
 from checkers.xml import XMLChecker
 from error_handlers import DefaultStyleErrorHandler
@@ -213,14 +214,6 @@ _PATH_RULES_SPECIFIER = [
       "+pep8/W291",  # Trailing white space
       "+whitespace/carriage_return"]),
 
-    ([# Qt Symbian platform plugin has no config.h or header guard.
-      # Qt code uses '_' in some places (such as private slots
-      # and on test xxx_data methos on tests).
-      "Source/WebKit/qt/symbian/platformplugin/"],
-     ["-readability/naming",
-      "-build/header_guard",
-      "-build/include_order"]),
-
     ([# glu's libtess is third-party code, and doesn't follow WebKit style.
       "Source/ThirdParty/glu"],
      ["-readability",
@@ -311,6 +304,7 @@ def _all_categories():
     # Take the union across all checkers.
     categories = CommonCategories.union(CppChecker.categories)
     categories = categories.union(TestExpectationsChecker.categories)
+    categories = categories.union(ChangeLogChecker.categories)
 
     # FIXME: Consider adding all of the pep8 categories.  Since they
     #        are not too meaningful for documentation purposes, for
@@ -453,8 +447,9 @@ class FileType:
     CPP = 2
     PYTHON = 3
     TEXT = 4
-    XML = 5
-    XCODEPROJ = 6
+    WATCHLIST = 5
+    XML = 6
+    XCODEPROJ = 7
 
 
 class CheckerDispatcher(object):
@@ -523,6 +518,8 @@ class CheckerDispatcher(object):
             return FileType.XML
         elif os.path.basename(file_path).startswith('ChangeLog'):
             return FileType.CHANGELOG
+        elif os.path.basename(file_path) == 'watchlist':
+            return FileType.WATCHLIST
         elif file_extension == _XCODEPROJ_FILE_EXTENSION:
             return FileType.XCODEPROJ
         elif ((not file_extension and os.path.join("Tools", "Scripts") in file_path) or
@@ -557,6 +554,8 @@ class CheckerDispatcher(object):
                 checker = TestExpectationsChecker(file_path, handle_style_error)
             else:
                 checker = TextChecker(file_path, handle_style_error)
+        elif file_type == FileType.WATCHLIST:
+            checker = WatchListChecker(file_path, handle_style_error)
         else:
             raise ValueError('Invalid file type "%(file_type)s": the only valid file types '
                              "are %(NONE)s, %(CPP)s, and %(TEXT)s."

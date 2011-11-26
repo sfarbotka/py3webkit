@@ -46,6 +46,7 @@
 #include "NodeList.h"
 #include "SecurityOrigin.h"
 #include "WebAccessibilityObject.h"
+#include "WebDOMEvent.h"
 #include "WebDocumentType.h"
 #include "WebElement.h"
 #include "WebFormElement.h"
@@ -65,7 +66,7 @@ WebURL WebDocument::url() const
     return constUnwrap<Document>()->url();
 }
 
-WebSecurityOrigin WebDocument::securityOrigin() const 
+WebSecurityOrigin WebDocument::securityOrigin() const
 {
     if (!constUnwrap<Document>())
         return WebSecurityOrigin();
@@ -88,7 +89,7 @@ WebFrame* WebDocument::frame() const
 }
 
 bool WebDocument::isHTMLDocument() const
-{  
+{
     return constUnwrap<Document>()->isHTMLDocument();
 }
 
@@ -98,7 +99,7 @@ bool WebDocument::isXHTMLDocument() const
 }
 
 bool WebDocument::isPluginDocument() const
-{  
+{
     return constUnwrap<Document>()->isPluginDocument();
 }
 
@@ -187,6 +188,24 @@ void WebDocument::cancelFullScreen()
 #if ENABLE(FULLSCREEN_API)
     unwrap<Document>()->webkitCancelFullScreen();
 #endif
+}
+
+WebElement WebDocument::fullScreenElement() const
+{
+    Element* fullScreenElement = 0;
+#if ENABLE(FULLSCREEN_API)
+    fullScreenElement = constUnwrap<Document>()->webkitCurrentFullScreenElement();
+#endif
+    return WebElement(fullScreenElement);
+}
+
+WebDOMEvent WebDocument::createEvent(const WebString& eventType)
+{
+    ExceptionCode ec = 0;
+    WebDOMEvent event(unwrap<Document>()->createEvent(eventType, ec));
+    if (ec)
+        return WebDOMEvent();
+    return event;
 }
 
 WebAccessibilityObject WebDocument::accessibilityObject() const

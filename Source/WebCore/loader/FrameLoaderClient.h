@@ -208,6 +208,7 @@ namespace WebCore {
         // script) from an insecure source.  Note that the insecure content can
         // spread to other frames in the same origin.
         virtual void didRunInsecureContent(SecurityOrigin*, const KURL&) = 0;
+        virtual void didDetectXSS(const KURL&, bool didBlockEntirePage) = 0;
 
         virtual ResourceError cancelledError(const ResourceRequest&) = 0;
         virtual ResourceError blockedError(const ResourceRequest&) = 0;
@@ -299,14 +300,15 @@ namespace WebCore {
 
         virtual void didChangeScrollOffset() { }
 
-        virtual bool allowJavaScript(bool enabledPerSettings) { return enabledPerSettings; }
+        virtual bool allowScript(bool enabledPerSettings) { return enabledPerSettings; }
+        virtual bool allowScriptFromSource(bool enabledPerSettings, const KURL&) { return enabledPerSettings; }
         virtual bool allowPlugins(bool enabledPerSettings) { return enabledPerSettings; }
         virtual bool allowImage(bool enabledPerSettings, const KURL&) { return enabledPerSettings; }
         virtual bool allowDisplayingInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) { return enabledPerSettings; }
         virtual bool allowRunningInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) { return enabledPerSettings; }
         
         // This callback notifies the client that the frame was about to run
-        // JavaScript but did not because allowJavaScript returned false. We
+        // JavaScript but did not because allowScript returned false. We
         // have a separate callback here because there are a number of places
         // that need to know if JavaScript is enabled but are not necessarily
         // preparing to execute script.

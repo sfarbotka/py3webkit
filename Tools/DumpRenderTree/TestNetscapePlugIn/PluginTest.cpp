@@ -29,6 +29,10 @@
 #include <assert.h>
 #include <string.h>
 
+#if defined(ANDROID)
+#include <unistd.h>
+#endif
+
 using namespace std;
 extern NPNetscapeFuncs *browser;
 
@@ -92,7 +96,7 @@ NPError PluginTest::NPP_Destroy(NPSavedData**)
     return NPERR_NO_ERROR;
 }
 
-NPError PluginTest::NPP_SetWindow(NPP, NPWindow*)
+NPError PluginTest::NPP_SetWindow(NPWindow*)
 {
     return NPERR_NO_ERROR;
 }

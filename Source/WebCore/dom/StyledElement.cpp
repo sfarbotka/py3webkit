@@ -25,7 +25,7 @@
 #include "StyledElement.h"
 
 #include "Attribute.h"
-#include "CSSMutableStyleDeclaration.h"
+#include "CSSInlineStyleDeclaration.h"
 #include "CSSStyleSelector.h"
 #include "CSSStyleSheet.h"
 #include "CSSValueKeywords.h"
@@ -129,17 +129,17 @@ PassRefPtr<Attribute> StyledElement::createAttribute(const QualifiedName& name, 
 
 void StyledElement::createInlineStyleDecl()
 {
-    m_inlineStyleDecl = CSSMutableStyleDeclaration::create();
-    m_inlineStyleDecl->setParent(document()->elementSheet());
-    m_inlineStyleDecl->setNode(this);
+    m_inlineStyleDecl = CSSInlineStyleDeclaration::create();
+    m_inlineStyleDecl->setParentStyleSheet(document()->elementSheet());
+    m_inlineStyleDecl->setElement(this);
     m_inlineStyleDecl->setStrictParsing(isHTMLElement() && !document()->inQuirksMode());
 }
 
 void StyledElement::destroyInlineStyleDecl()
 {
     if (m_inlineStyleDecl) {
-        m_inlineStyleDecl->setNode(0);
-        m_inlineStyleDecl->setParent(0);
+        m_inlineStyleDecl->setElement(0);
+        m_inlineStyleDecl->setParentStyleSheet(0);
         m_inlineStyleDecl = 0;
     }
 }
@@ -195,8 +195,8 @@ void StyledElement::attributeChanged(Attribute* attr, bool preserveDecls)
         // Add the decl to the table in the appropriate spot.
         setMappedAttributeDecl(entry, attr, attr->decl());
         attr->decl()->setMappedState(entry, attr->name(), attr->value());
-        attr->decl()->setParent(0);
-        attr->decl()->setNode(0);
+        attr->decl()->setParentStyleSheet(0);
+        attr->decl()->setElement(0);
         if (attributeMap())
             attributeMap()->declAdded();
     }
@@ -249,7 +249,7 @@ void StyledElement::parseMappedAttribute(Attribute* attr)
     }
 }
 
-CSSMutableStyleDeclaration* StyledElement::getInlineStyleDecl()
+CSSInlineStyleDeclaration* StyledElement::getInlineStyleDecl()
 {
     if (!m_inlineStyleDecl)
         createInlineStyleDecl();
@@ -405,9 +405,8 @@ void StyledElement::createMappedDecl(Attribute* attr)
 {
     RefPtr<CSSMappedAttributeDeclaration> decl = CSSMappedAttributeDeclaration::create();
     attr->setDecl(decl);
-    decl->setParent(document()->elementSheet());
-    decl->setNode(this);
-    decl->setStrictParsing(false); // Mapped attributes are just always quirky.
+    decl->setParentStyleSheet(document()->elementSheet());
+    decl->setElement(this);
 }
 
 unsigned MappedAttributeHash::hash(const MappedAttributeKey& key)
@@ -446,7 +445,7 @@ void StyledElement::copyNonAttributeProperties(const Element *sourceElement)
 
 void StyledElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
 {
-    if (CSSMutableStyleDeclaration* style = inlineStyleDecl())
+    if (CSSInlineStyleDeclaration* style = inlineStyleDecl())
         style->addSubresourceStyleURLs(urls);
 }
 
@@ -454,7 +453,7 @@ void StyledElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) const
 void StyledElement::didMoveToNewOwnerDocument()
 {
     if (m_inlineStyleDecl)
-        m_inlineStyleDecl->setParent(document()->elementSheet());
+        m_inlineStyleDecl->setParentStyleSheet(document()->elementSheet());
 
     Element::didMoveToNewOwnerDocument();
 }

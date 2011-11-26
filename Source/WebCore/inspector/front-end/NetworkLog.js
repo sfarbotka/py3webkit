@@ -35,19 +35,20 @@ WebInspector.NetworkLog = function()
 {
     this._resources = [];
     WebInspector.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.ResourceStarted, this._onResourceStarted, this);
-    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, this._frameNavigated, this);
+    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
 }
 
 WebInspector.NetworkLog.prototype = {
+    /**
+     * @return {Array.<WebInspector.Resource>}
+     */
     get resources()
     {
         return this._resources;
     },
 
-    _frameNavigated: function(event)
+    _mainFrameNavigated: function(event)
     {
-        if (!event.data.isMainFrame)
-            return;
         // Preserve resources from the new session.
         var oldResources = this._resources.splice(0, this._resources.length);
         for (var i = 0; i < oldResources.length; ++i) {
@@ -56,9 +57,13 @@ WebInspector.NetworkLog.prototype = {
         }
     },
 
+    /**
+     * @param {WebInspector.Event} event
+     */
     _onResourceStarted: function(event)
     {
-        this._resources.push(event.data);
+        var resource = /** @type {WebInspector.Resource} */ event.data;
+        this._resources.push(resource);
     }
 }
 

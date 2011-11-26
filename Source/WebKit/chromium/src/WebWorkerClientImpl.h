@@ -51,7 +51,7 @@ namespace WebKit {
 class WebWorker;
 class WebFrameImpl;
 
-// This class provides chromium implementation for WorkerContextProxt, WorkerObjectProxy amd WorkerLoaderProxy
+// This class provides chromium implementation for WorkerContextProxy, WorkerObjectProxy amd WorkerLoaderProxy
 // for in-proc dedicated workers. It also acts as a bridge for workers to chromium implementation of file systems,
 // databases and other related functionality.
 //
@@ -69,7 +69,8 @@ public:
     // process, this will be the main WebKit thread.
     virtual void startWorkerContext(const WebCore::KURL&,
                                     const WTF::String&,
-                                    const WTF::String&);
+                                    const WTF::String&,
+                                    WebCore::WorkerThreadStartMode);
     virtual void terminateWorkerContext();
     virtual void postMessageToWorkerContext(
         PassRefPtr<WebCore::SerializedScriptValue> message,
@@ -105,8 +106,6 @@ public:
     virtual void openFileSystem(WebFileSystem::Type, long long size, bool create,
                                 WebFileSystemCallbacks*);
 
-    virtual void dispatchDevToolsMessage(const WebString&);
-
     // WebCommentWorkerBase methods:
     virtual NewWebCommonWorkerClient* newCommonClient() { return this; }
     virtual WebView* view() const;
@@ -119,7 +118,6 @@ private:
     // Guard against context from being destroyed before a worker exits.
     RefPtr<WebCore::ScriptExecutionContext> m_scriptExecutionContext;
     WebFrameImpl* m_webFrame;
-    WebCore::WorkerContextProxy::PageInspector* m_pageInspector;
 };
 
 } // namespace WebKit;

@@ -69,14 +69,14 @@ namespace WebCore {
         // Needed for Objective-C legacy support
         bool isHorizontal() const { return m_wheelDelta.x(); }
 
+        virtual const AtomicString& interfaceName() const;
+
     private:
         WheelEvent();
         WheelEvent(const FloatPoint& wheelTicks, const FloatPoint& rawDelta,
                    Granularity granularity, PassRefPtr<AbstractView>,
                    const IntPoint& screenLocation, const IntPoint& pageLocation,
                    bool ctrlKey, bool altKey, bool shiftKey, bool metaKey, bool directionInvertedFromDevice);
-
-        virtual bool isWheelEvent() const;
 
         IntPoint m_wheelDelta;
         IntPoint m_rawDelta;

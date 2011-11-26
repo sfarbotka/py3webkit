@@ -98,8 +98,9 @@ PassRefPtr<Database> Database::openDatabase(ScriptExecutionContext* context, con
 
     RefPtr<Database> database = adoptRef(new Database(context, name, expectedVersion, displayName, estimatedSize));
 
-    if (!database->openAndVerifyVersion(!creationCallback, e)) {
-        LOG(StorageAPI, "Failed to open and verify version (expected %s) of database %s", expectedVersion.ascii().data(), database->databaseDebugName().ascii().data());
+    String errorMessage;
+    if (!database->openAndVerifyVersion(!creationCallback, e, errorMessage)) {
+        database->logErrorMessage(errorMessage);
         DatabaseTracker::tracker().removeOpenDatabase(database.get());
         return 0;
     }
@@ -124,7 +125,7 @@ Database::Database(ScriptExecutionContext* context, const String& name, const St
     , m_isTransactionQueueEnabled(true)
     , m_deleted(false)
 {
-    m_databaseThreadSecurityOrigin = m_contextThreadSecurityOrigin->threadsafeCopy();
+    m_databaseThreadSecurityOrigin = m_contextThreadSecurityOrigin->isolatedCopy();
 
     ScriptController::initializeThreading();
     ASSERT(m_scriptExecutionContext->databaseThread());
@@ -173,14 +174,14 @@ String Database::version() const
     return AbstractDatabase::version();
 }
 
-bool Database::openAndVerifyVersion(bool setVersionInNewDatabase, ExceptionCode& e)
+bool Database::openAndVerifyVersion(bool setVersionInNewDatabase, ExceptionCode& e, String& errorMessage)
 {
     DatabaseTaskSynchronizer synchronizer;
     if (!m_scriptExecutionContext->databaseThread() || m_scriptExecutionContext->databaseThread()->terminationRequested(&synchronizer))
         return false;
 
     bool success = false;
-    OwnPtr<DatabaseOpenTask> task = DatabaseOpenTask::create(this, setVersionInNewDatabase, &synchronizer, e, success);
+    OwnPtr<DatabaseOpenTask> task = DatabaseOpenTask::create(this, setVersionInNewDatabase, &synchronizer, e, errorMessage, success);
     m_scriptExecutionContext->databaseThread()->scheduleImmediateTask(task.release());
     synchronizer.waitForTaskCompletion();
 
@@ -238,9 +239,9 @@ unsigned long long Database::maximumSize() const
     return DatabaseTracker::tracker().getMaxSizeForDatabase(this);
 }
 
-bool Database::performOpenAndVerify(bool setVersionInNewDatabase, ExceptionCode& e)
+bool Database::performOpenAndVerify(bool setVersionInNewDatabase, ExceptionCode& e, String& errorMessage)
 {
-    if (AbstractDatabase::performOpenAndVerify(setVersionInNewDatabase, e)) {
+    if (AbstractDatabase::performOpenAndVerify(setVersionInNewDatabase, e, errorMessage)) {
         if (m_scriptExecutionContext->databaseThread())
             m_scriptExecutionContext->databaseThread()->recordDatabaseOpen(this);
 
@@ -388,7 +389,7 @@ SQLTransactionCoordinator* Database::transactionCoordinator() const
 
 Vector<String> Database::tableNames()
 {
-    // FIXME: Not using threadsafeCopy on these strings looks ok since threads take strict turns
+    // FIXME: Not using isolatedCopy on these strings looks ok since threads take strict turns
     // in dealing with them. However, if the code changes, this may not be true anymore.
     Vector<String> result;
     DatabaseTaskSynchronizer synchronizer;

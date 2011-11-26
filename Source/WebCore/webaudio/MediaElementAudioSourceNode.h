@@ -28,6 +28,7 @@
 #if ENABLE(VIDEO)
 
 #include "AudioSourceNode.h"
+#include "AudioSourceProviderClient.h"
 #include "HTMLMediaElement.h"
 #include <wtf/PassRefPtr.h>
 #include <wtf/Threading.h>
@@ -36,7 +37,7 @@ namespace WebCore {
 
 class AudioContext;
     
-class MediaElementAudioSourceNode : public AudioSourceNode {
+class MediaElementAudioSourceNode : public AudioSourceNode, public AudioSourceProviderClient {
 public:
     static PassRefPtr<MediaElementAudioSourceNode> create(AudioContext*, HTMLMediaElement*);
 
@@ -47,6 +48,9 @@ public:
     // AudioNode
     virtual void process(size_t framesToProcess);
     virtual void reset();
+    
+    // AudioSourceProviderClient
+    virtual void setFormat(size_t numberOfChannels, float sampleRate);
     
     void lock();
     void unlock();

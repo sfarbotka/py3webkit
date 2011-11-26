@@ -35,6 +35,10 @@
 #include "FrameTree.h"
 #include "FrameView.h"
 #include "GCController.h"
+#include "GeolocationClientMock.h"
+#include "GeolocationController.h"
+#include "GeolocationError.h"
+#include "GeolocationPosition.h"
 #include "GraphicsContext.h"
 #include "HTMLInputElement.h"
 #include "JSDOMWindow.h"
@@ -52,6 +56,7 @@
 #include "RenderTreeAsText.h"
 #include "RenderView.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 #include "TextIterator.h"
 #include "WebKitDOMRangePrivate.h"
@@ -616,9 +621,7 @@ bool DumpRenderTreeSupportGtk::firstRectForCharacterRange(WebKitWebView* webView
     if (!editor)
         return false;
 
-    Element* selectionRoot = frame->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : frame->document()->documentElement();
-    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(scope, location, length);
+    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(frame->selection()->rootEditableElementOrDocumentElement(), location, length);
     if (!range)
         return false;
 
@@ -665,12 +668,12 @@ void DumpRenderTreeSupportGtk::setSmartInsertDeleteEnabled(WebKitWebView* webVie
 
 void DumpRenderTreeSupportGtk::whiteListAccessFromOrigin(const gchar* sourceOrigin, const gchar* destinationProtocol, const gchar* destinationHost, bool allowDestinationSubdomains)
 {
-    SecurityOrigin::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
+    SecurityPolicy::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
 }
 
 void DumpRenderTreeSupportGtk::resetOriginAccessWhiteLists()
 {
-    SecurityOrigin::resetOriginAccessWhitelists();
+    SecurityPolicy::resetOriginAccessWhitelists();
 }
 
 void DumpRenderTreeSupportGtk::gcCollectJavascriptObjects()
@@ -709,7 +712,8 @@ void DumpRenderTreeSupportGtk::dumpConfigurationForViewport(WebKitWebView* webVi
 
     ViewportArguments arguments = webView->priv->corePage->mainFrame()->document()->viewportArguments();
     ViewportAttributes attrs = computeViewportAttributes(arguments, /* default layout width for non-mobile pages */ 980, deviceWidth, deviceHeight, deviceDPI, IntSize(availableWidth, availableHeight));
-
+    restrictMinimumScaleFactorToViewportSize(attrs, IntSize(availableWidth, availableHeight));
+    restrictScaleFactorToInitialScaleIfNotUserScalable(attrs);
     fprintf(stdout, "viewport size %dx%d scale %f with limits [%f, %f] and userScalable %f\n", attrs.layoutSize.width(), attrs.layoutSize.height(), attrs.initialScale, attrs.minimumScale, attrs.maximumScale, attrs.userScalable);
 }
 
@@ -829,4 +833,70 @@ bool DumpRenderTreeSupportGtk::shouldClose(WebKitWebFrame* frame)
 void DumpRenderTreeSupportGtk::scalePageBy(WebKitWebView* webView, float scaleFactor, float x, float y)
 {
     core(webView)->setPageScaleFactor(scaleFactor, IntPoint(x, y));
+}
+
+void DumpRenderTreeSupportGtk::resetGeolocationClientMock(WebKitWebView* webView)
+{
+#if ENABLE(CLIENT_BASED_GEOLOCATION)
+    GeolocationClientMock* mock = static_cast<GeolocationClientMock*>(core(webView)->geolocationController()->client());
+    mock->reset();
+#endif
+}
+
+void DumpRenderTreeSupportGtk::setMockGeolocationPermission(WebKitWebView* webView, bool allowed)
+{
+#if ENABLE(CLIENT_BASED_GEOLOCATION)
+    GeolocationClientMock* mock = static_cast<GeolocationClientMock*>(core(webView)->geolocationController()->client());
+    mock->setPermission(allowed);
+#endif
+}
+
+void DumpRenderTreeSupportGtk::setMockGeolocationPosition(WebKitWebView* webView, double latitude, double longitude, double accuracy)
+{
+#if ENABLE(CLIENT_BASED_GEOLOCATION)
+    GeolocationClientMock* mock = static_cast<GeolocationClientMock*>(core(webView)->geolocationController()->client());
+
+    double timestamp = g_get_real_time() / 1000000.0;
+    mock->setPosition(GeolocationPosition::create(timestamp, latitude, longitude, accuracy));
+#endif
+}
+
+void DumpRenderTreeSupportGtk::setMockGeolocationError(WebKitWebView* webView, int errorCode, const gchar* errorMessage)
+{
+#if ENABLE(CLIENT_BASED_GEOLOCATION)
+    GeolocationClientMock* mock = static_cast<GeolocationClientMock*>(core(webView)->geolocationController()->client());
+
+    GeolocationError::ErrorCode code;
+    switch (errorCode) {
+    case PositionError::PERMISSION_DENIED:
+        code = GeolocationError::PermissionDenied;
+        break;
+    case PositionError::POSITION_UNAVAILABLE:
+    default:
+        code = GeolocationError::PositionUnavailable;
+        break;
+    }
+
+    mock->setError(GeolocationError::create(code, errorMessage));
+#endif
+}
+
+int DumpRenderTreeSupportGtk::numberOfPendingGeolocationPermissionRequests(WebKitWebView* webView)
+{
+#if ENABLE(CLIENT_BASED_GEOLOCATION)
+    GeolocationClientMock* mock = static_cast<GeolocationClientMock*>(core(webView)->geolocationController()->client());
+    return mock->numberOfPendingPermissionRequests();
+#else
+    return 0;
+#endif
+}
+
+void DumpRenderTreeSupportGtk::setHixie76WebSocketProtocolEnabled(WebKitWebView* webView, bool enabled)
+{
+#if ENABLE(WEB_SOCKETS)
+    core(webView)->settings()->setUseHixie76WebSocketProtocol(enabled);
+#else
+    UNUSED_PARAM(webView);
+    UNUSED_PARAM(enabled);
+#endif
 }

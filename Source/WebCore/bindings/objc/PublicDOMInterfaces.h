@@ -137,13 +137,11 @@
 - (DOMTreeWalker *)createTreeWalker:(DOMNode *)root whatToShow:(unsigned)whatToShow filter:(id <DOMNodeFilter>)filter expandEntityReferences:(BOOL)expandEntityReferences AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 - (DOMNodeIterator *)createNodeIterator:(DOMNode *)root :(unsigned)whatToShow :(id <DOMNodeFilter>)filter :(BOOL)expandEntityReferences;
 - (DOMTreeWalker *)createTreeWalker:(DOMNode *)root :(unsigned)whatToShow :(id <DOMNodeFilter>)filter :(BOOL)expandEntityReferences;
-#if ENABLE_XPATH
 - (DOMXPathExpression *)createExpression:(NSString *)expression :(id <DOMXPathNSResolver>)resolver AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER_BUT_DEPRECATED;
 - (DOMXPathExpression *)createExpression:(NSString *)expression resolver:(id <DOMXPathNSResolver>)resolver AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 - (id <DOMXPathNSResolver>)createNSResolver:(DOMNode *)nodeResolver AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 - (DOMXPathResult *)evaluate:(NSString *)expression :(DOMNode *)contextNode :(id <DOMXPathNSResolver>)resolver :(unsigned short)type :(DOMXPathResult *)inResult AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER_BUT_DEPRECATED;
 - (DOMXPathResult *)evaluate:(NSString *)expression contextNode:(DOMNode *)contextNode resolver:(id <DOMXPathNSResolver>)resolver type:(unsigned short)type inResult:(DOMXPathResult *)inResult AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
-#endif
 - (BOOL)execCommand:(NSString *)command userInterface:(BOOL)userInterface value:(NSString *)value AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 - (BOOL)execCommand:(NSString *)command userInterface:(BOOL)userInterface AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 - (BOOL)execCommand:(NSString *)command AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
@@ -333,7 +331,6 @@
 @end
 
 @interface DOMHTMLAnchorElement : DOMHTMLElement WEBKIT_VERSION_1_3
-@property(copy) NSString *accessKey;
 @property(copy) NSString *charset;
 @property(copy) NSString *coords;
 @property(copy) NSString *href;
@@ -370,7 +367,6 @@
 @end
 
 @interface DOMHTMLAreaElement : DOMHTMLElement WEBKIT_VERSION_1_3
-@property(copy) NSString *accessKey;
 @property(copy) NSString *alt;
 @property(copy) NSString *coords;
 @property(copy) NSString *href;
@@ -413,7 +409,6 @@
 
 @interface DOMHTMLButtonElement : DOMHTMLElement WEBKIT_VERSION_1_3
 @property(readonly, retain) DOMHTMLFormElement *form;
-@property(copy) NSString *accessKey;
 @property BOOL disabled;
 @property(copy) NSString *name;
 @property(readonly, copy) NSString *type;
@@ -473,6 +468,7 @@
 @end
 
 @interface DOMHTMLElement : DOMElement WEBKIT_VERSION_1_3
+@property(copy) NSString *accessKey;
 @property(copy) NSString *title;
 @property(copy) NSString *idName;
 @property(copy) NSString *lang;
@@ -605,7 +601,6 @@
 @property BOOL defaultChecked;
 @property(readonly, retain) DOMHTMLFormElement *form;
 @property(copy) NSString *accept;
-@property(copy) NSString *accessKey;
 @property(copy) NSString *align;
 @property(copy) NSString *alt;
 @property BOOL checked;
@@ -644,13 +639,11 @@
 
 @interface DOMHTMLLabelElement : DOMHTMLElement WEBKIT_VERSION_1_3
 @property(readonly, retain) DOMHTMLFormElement *form;
-@property(copy) NSString *accessKey;
 @property(copy) NSString *htmlFor;
 @end
 
 @interface DOMHTMLLegendElement : DOMHTMLElement WEBKIT_VERSION_1_3
 @property(readonly, retain) DOMHTMLFormElement *form;
-@property(copy) NSString *accessKey;
 @property(copy) NSString *align;
 @end
 
@@ -886,7 +879,6 @@
 @interface DOMHTMLTextAreaElement : DOMHTMLElement WEBKIT_VERSION_1_3
 @property(copy) NSString *defaultValue;
 @property(readonly, retain) DOMHTMLFormElement *form;
-@property(copy) NSString *accessKey;
 @property int cols;
 @property BOOL disabled;
 @property(copy) NSString *name;
@@ -1065,8 +1057,8 @@
 @property(readonly) int detail;
 @property(readonly) int keyCode AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 @property(readonly) int charCode AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
-@property(readonly) int layerX AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
-@property(readonly) int layerY AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
+@property(readonly) int layerX AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER_BUT_DEPRECATED;
+@property(readonly) int layerY AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER_BUT_DEPRECATED;
 @property(readonly) int pageX AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 @property(readonly) int pageY AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;
 @property(readonly) int which AVAILABLE_WEBKIT_VERSION_3_0_AND_LATER;

@@ -29,10 +29,12 @@
 """QtWebKit implementation of the Port interface."""
 
 import logging
+import re
 import sys
 
 import webkit
 
+from webkitpy.common.memoized import memoized
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
 from webkitpy.layout_tests.port.webkit import WebKitPort
 
@@ -57,8 +59,8 @@ class QtPort(WebKitPort):
         return None
 
     # sys_platform exists only for unit testing.
-    def __init__(self, sys_platform=None, **kwargs):
-        WebKitPort.__init__(self, **kwargs)
+    def __init__(self, host, sys_platform=None, **kwargs):
+        WebKitPort.__init__(self, host, **kwargs)
         self._operating_system = self._operating_system_for_platform(sys_platform or sys.platform)
         self._version = self._operating_system
 
@@ -87,20 +89,68 @@ class QtPort(WebKitPort):
         return self._build_path('bin/ImageDiff')
 
     def _path_to_webcore_library(self):
-        return self._build_path('lib/libQtWebKit.so')
+        if self._operating_system == 'mac':
+            return self._build_path('lib/QtWebKit.framework/QtWebKit')
+        else:
+            return self._build_path('lib/libQtWebKit.so')
+
+    @memoized
+    def qt_version(self):
+        version = ''
+        try:
+            for line in self._executive.run_command(['qmake', '-v']).split('\n'):
+                match = re.search('Qt\sversion\s(?P<version>\d\.\d)', line)
+                if match:
+                    version = match.group('version')
+                    break
+        except OSError:
+            version = '4.7'
+        return version
+
+    def baseline_search_path(self):
+        search_paths = []
+        if self.get_option('webkit_test_runner'):
+            search_paths.append(self._wk2_port_name())
+        search_paths.append(self.name())
+        version = self.qt_version()
+        if '4.7' in version:
+            search_paths.append('qt-4.7')
+        elif '4.8' in version:
+            search_paths.append('qt-4.8')
+        elif version:
+            search_paths.append('qt-5.0')
+        search_paths.append(self.port_name)
+        return map(self._webkit_baseline_path, search_paths)
+
+    def _skipped_file_search_paths(self):
+        search_paths = set([self.port_name, self.name()])
+        version = self.qt_version()
+        if '4.7' in version:
+            search_paths.add('qt-4.7')
+        elif '4.8' in version:
+            search_paths.add('qt-4.8')
+        elif version:
+            search_paths.add('qt-5.0')
+        if self.get_option('webkit_test_runner'):
+            search_paths.update(['qt-wk2', 'wk2'])
+        else:
+            search_paths.add('qt-wk1')
+        return search_paths
 
     def _runtime_feature_list(self):
         return None
 
     def setup_environ_for_server(self, server_name=None):
-        env = WebKitPort.setup_environ_for_server(self, server_name)
-        env['QTWEBKIT_PLUGIN_PATH'] = self._build_path('lib/plugins')
-        return env
+        clean_env = WebKitPort.setup_environ_for_server(self, server_name)
+        clean_env['QTWEBKIT_PLUGIN_PATH'] = self._build_path('lib/plugins')
+        self._copy_value_from_environ_if_set(clean_env, 'QT_DRT_WEBVIEW_MODE')
+        return clean_env
 
     # FIXME: We should find a way to share this implmentation with Gtk,
     # or teach run-launcher how to call run-safari and move this down to WebKitPort.
     def show_results_html_file(self, results_filename):
-        run_launcher_args = ["file://%s" % results_filename]
+        run_launcher_args = []
         if self.get_option('webkit_test_runner'):
-            run_launcher_args.append('--webkit-test-runner')
+            run_launcher_args.append('-2')
+        run_launcher_args.append("file://%s" % results_filename)
         self._run_script("run-launcher", run_launcher_args)

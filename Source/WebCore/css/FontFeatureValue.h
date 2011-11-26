@@ -40,11 +40,10 @@ public:
 
     const String& tag() const { return m_tag; }
     int value() const { return m_value; }
-    virtual String cssText() const;
+    String customCssText() const;
 
 private:
     FontFeatureValue(const String&, int);
-    virtual bool isFontFeatureValue() const { return true; }
 
     String m_tag;
     const int m_value;

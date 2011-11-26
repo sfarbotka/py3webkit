@@ -22,13 +22,12 @@
 #ifndef CSSFontFaceRule_h
 #define CSSFontFaceRule_h
 
+#include "CSSMutableStyleDeclaration.h"
 #include "CSSRule.h"
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefPtr.h>
 
 namespace WebCore {
-
-class CSSMutableStyleDeclaration;
 
 class CSSFontFaceRule : public CSSRule {
 public:
@@ -41,22 +40,18 @@ public:
         return adoptRef(new CSSFontFaceRule(parent));
     }
 
-    virtual ~CSSFontFaceRule();
+    ~CSSFontFaceRule();
 
     CSSMutableStyleDeclaration* style() const { return m_style.get(); }
 
-    virtual String cssText() const;
+    String cssText() const;
 
-    void setDeclaration(PassRefPtr<CSSMutableStyleDeclaration>);
+    void setDeclaration(PassRefPtr<CSSMutableStyleDeclaration> style) { m_style = style; }
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>& urls);
+    void addSubresourceStyleURLs(ListHashSet<KURL>& urls);
 
 private:
     CSSFontFaceRule(CSSStyleSheet* parent);
-
-    virtual bool isFontFaceRule() const { return true; }
-    // Inherited from CSSRule
-    virtual CSSRuleType type() const { return FONT_FACE_RULE; }
 
     RefPtr<CSSMutableStyleDeclaration> m_style;
 };

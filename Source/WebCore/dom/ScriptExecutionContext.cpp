@@ -28,11 +28,8 @@
 #include "ScriptExecutionContext.h"
 
 #include "ActiveDOMObject.h"
-#include "Blob.h"
-#include "BlobURL.h"
 #include "ContentSecurityPolicy.h"
 #include "DOMTimer.h"
-#include "DOMURL.h"
 #include "Database.h"
 #include "DatabaseTask.h"
 #include "DatabaseThread.h"
@@ -40,13 +37,10 @@
 #include "EventListener.h"
 #include "EventTarget.h"
 #include "FileThread.h"
-#include "MediaStream.h"
-#include "MediaStreamRegistry.h"
 #include "MessagePort.h"
 #include "ScriptCallStack.h"
 #include "SecurityOrigin.h"
 #include "Settings.h"
-#include "ThreadableBlobRegistry.h"
 #include "WorkerContext.h"
 #include "WorkerThread.h"
 #include <wtf/MainThread.h>
@@ -54,6 +48,7 @@
 #include <wtf/Vector.h>
 
 #if USE(JSC)
+// FIXME: This is a layering violation.
 #include "JSDOMWindow.h"
 #endif
 
@@ -88,6 +83,12 @@ public:
     RefPtr<ScriptCallStack> m_callStack;
 };
 
+void ScriptExecutionContext::AddConsoleMessageTask::performTask(ScriptExecutionContext* context)
+{
+    // FIXME: We should call addConsoleMessage instead, but that uses 1 as the fifth parameter instead of 0.
+    context->addMessage(m_source, m_type, m_level, m_message, 0, String(), 0);
+}
+
 ScriptExecutionContext::ScriptExecutionContext()
     : m_iteratingActiveDOMObjects(false)
     , m_inDestructor(false)
@@ -101,11 +102,12 @@ ScriptExecutionContext::ScriptExecutionContext()
 ScriptExecutionContext::~ScriptExecutionContext()
 {
     m_inDestructor = true;
-    for (HashMap<ActiveDOMObject*, void*>::iterator iter = m_activeDOMObjects.begin(); iter != m_activeDOMObjects.end(); iter = m_activeDOMObjects.begin()) {
-        ActiveDOMObject* object = iter->first;
-        m_activeDOMObjects.remove(iter);
-        ASSERT(object->scriptExecutionContext() == this);
-        object->contextDestroyed();
+
+    for (HashSet<ContextDestructionObserver*>::iterator iter = m_destructionObservers.begin(); iter != m_destructionObservers.end(); iter = m_destructionObservers.begin()) {
+        ContextDestructionObserver* observer = *iter;
+        m_destructionObservers.remove(observer);
+        ASSERT(observer->scriptExecutionContext() == this);
+        observer->contextDestroyed();
     }
 
     HashSet<MessagePort*>::iterator messagePortsEnd = m_messagePorts.end();
@@ -124,24 +126,6 @@ ScriptExecutionContext::~ScriptExecutionContext()
         m_fileThread->stop();
         m_fileThread = 0;
     }
-#endif
-
-#if ENABLE(BLOB)
-    HashSet<String>::iterator publicBlobURLsEnd = m_publicBlobURLs.end();
-    for (HashSet<String>::iterator iter = m_publicBlobURLs.begin(); iter != publicBlobURLsEnd; ++iter)
-        ThreadableBlobRegistry::unregisterBlobURL(KURL(ParsedURLString, *iter));
-
-    HashSet<DOMURL*>::iterator domUrlsEnd = m_domUrls.end();
-    for (HashSet<DOMURL*>::iterator iter = m_domUrls.begin(); iter != domUrlsEnd; ++iter) {
-        ASSERT((*iter)->scriptExecutionContext() == this);
-        (*iter)->contextDestroyed();
-    }
-#endif
-
-#if ENABLE(MEDIA_STREAM)
-    HashSet<String>::iterator publicStreamURLsEnd = m_publicStreamURLs.end();
-    for (HashSet<String>::iterator iter = m_publicStreamURLs.begin(); iter != publicStreamURLsEnd; ++iter)
-        MediaStreamRegistry::registry().unregisterMediaStreamURL(KURL(ParsedURLString, *iter));
 #endif
 }
 
@@ -216,20 +200,6 @@ void ScriptExecutionContext::destroyedMessagePort(MessagePort* port)
     m_messagePorts.remove(port);
 }
 
-#if ENABLE(BLOB)
-void ScriptExecutionContext::createdDomUrl(DOMURL* url)
-{
-    ASSERT(url);
-    m_domUrls.add(url);
-}
-
-void ScriptExecutionContext::destroyedDomUrl(DOMURL* url)
-{
-    ASSERT(url);
-    m_domUrls.remove(url);
-}
-#endif
-
 bool ScriptExecutionContext::canSuspendActiveDOMObjects()
 {
     // No protection against m_activeDOMObjects changing during iteration: canSuspend() shouldn't execute arbitrary JS.
@@ -285,7 +255,7 @@ void ScriptExecutionContext::stopActiveDOMObjects()
     closeMessagePorts();
 }
 
-void ScriptExecutionContext::createdActiveDOMObject(ActiveDOMObject* object, void* upcastPointer)
+void ScriptExecutionContext::didCreateActiveDOMObject(ActiveDOMObject* object, void* upcastPointer)
 {
     ASSERT(object);
     ASSERT(upcastPointer);
@@ -295,12 +265,25 @@ void ScriptExecutionContext::createdActiveDOMObject(ActiveDOMObject* object, voi
     m_activeDOMObjects.add(object, upcastPointer);
 }
 
-void ScriptExecutionContext::destroyedActiveDOMObject(ActiveDOMObject* object)
+void ScriptExecutionContext::willDestroyActiveDOMObject(ActiveDOMObject* object)
 {
     ASSERT(object);
     if (m_iteratingActiveDOMObjects)
         CRASH();
     m_activeDOMObjects.remove(object);
+}
+
+void ScriptExecutionContext::didCreateDestructionObserver(ContextDestructionObserver* observer)
+{
+    ASSERT(observer);
+    ASSERT(!m_inDestructor);
+    m_destructionObservers.add(observer);
+}
+
+void ScriptExecutionContext::willDestroyDestructionObserver(ContextDestructionObserver* observer)
+{
+    ASSERT(observer);
+    m_destructionObservers.remove(observer);
 }
 
 void ScriptExecutionContext::closeMessagePorts() {
@@ -309,16 +292,6 @@ void ScriptExecutionContext::closeMessagePorts() {
         ASSERT((*iter)->scriptExecutionContext() == this);
         (*iter)->close();
     }
-}
-
-void ScriptExecutionContext::setSecurityOrigin(PassRefPtr<SecurityOrigin> securityOrigin)
-{
-    m_securityOrigin = securityOrigin;
-}
-
-void ScriptExecutionContext::setContentSecurityPolicy(PassRefPtr<ContentSecurityPolicy> contentSecurityPolicy)
-{
-    m_contentSecurityPolicy = contentSecurityPolicy;
 }
 
 bool ScriptExecutionContext::sanitizeScriptError(String& errorMessage, int& lineNumber, String& sourceURL)
@@ -355,6 +328,11 @@ void ScriptExecutionContext::reportException(const String& errorMessage, int lin
     m_pendingExceptions.clear();
 }
 
+void ScriptExecutionContext::addConsoleMessage(MessageSource source, MessageType type, MessageLevel level, const String& message)
+{
+    addMessage(source, type, level, message, 1, String(), 0);
+}
+
 bool ScriptExecutionContext::dispatchErrorEvent(const String& errorMessage, int lineNumber, const String& sourceURL)
 {
     EventTarget* target = errorEventTarget();
@@ -389,54 +367,6 @@ DOMTimer* ScriptExecutionContext::findTimeout(int timeoutId)
 {
     return m_timeouts.get(timeoutId);
 }
-
-#if ENABLE(BLOB)
-
-#if ENABLE(MEDIA_STREAM)
-KURL ScriptExecutionContext::createPublicBlobURL(MediaStream* stream)
-{
-    if (!stream)
-        return KURL();
-
-    KURL publicURL = BlobURL::createPublicURL(securityOrigin());
-
-    // Since WebWorkers cannot obtain Stream objects, we should be on the main thread.
-    ASSERT(isMainThread());
-    MediaStreamRegistry::registry().registerMediaStreamURL(publicURL, stream);
-    m_publicStreamURLs.add(publicURL.string());
-    return publicURL;
-}
-#endif // ENABLE(MEDIA_STREAM)
-
-KURL ScriptExecutionContext::createPublicBlobURL(Blob* blob)
-{
-    if (!blob)
-        return KURL();
-    KURL publicURL = BlobURL::createPublicURL(securityOrigin());
-    if (publicURL.isEmpty())
-        return KURL();
-    ThreadableBlobRegistry::registerBlobURL(publicURL, blob->url());
-    m_publicBlobURLs.add(publicURL.string());
-    return publicURL;
-}
-
-void ScriptExecutionContext::revokePublicBlobURL(const KURL& url)
-{
-    if (m_publicBlobURLs.contains(url.string())) {
-        ThreadableBlobRegistry::unregisterBlobURL(url);
-        m_publicBlobURLs.remove(url.string());
-    }
-#if ENABLE(MEDIA_STREAM)
-    if (m_publicStreamURLs.contains(url.string())) {
-        // FIXME: make sure of this assertion below. Raise a spec question if required.
-        // Since WebWorkers cannot obtain Stream objects, we should be on the main thread.
-        ASSERT(isMainThread());
-        MediaStreamRegistry::registry().unregisterMediaStreamURL(url);
-        m_publicStreamURLs.remove(url.string());
-    }
-#endif // ENABLE(MEDIA_STREAM)
-}
-#endif // ENABLE(BLOB)
 
 #if ENABLE(BLOB) || ENABLE(FILE_SYSTEM)
 FileThread* ScriptExecutionContext::fileThread()

@@ -63,7 +63,7 @@ void LayoutTestController::platformInitialize()
     // which makes the use of QFontDatabase unnecessary.
     // See https://bugs.webkit.org/show_bug.cgi?id=53427
     QWebSettings::clearMemoryCaches();
-#if !(defined(Q_OS_SYMBIAN) && QT_VERSION <= QT_VERSION_CHECK(4, 6, 2))
+#if !(QT_VERSION <= QT_VERSION_CHECK(4, 6, 2))
     QFontDatabase::removeAllApplicationFonts();
 #endif
     activateFonts();
@@ -87,6 +87,12 @@ JSRetainPtr<JSStringRef> LayoutTestController::pathToLocalResource(JSStringRef u
 {
     QString path = QDir::toNativeSeparators(QString(reinterpret_cast<const QChar*>(JSStringGetCharactersPtr(url)), JSStringGetLength(url)));
     return JSStringCreateWithCharacters(reinterpret_cast<const JSChar*>(path.constData()), path.length());
+}
+
+JSRetainPtr<JSStringRef> LayoutTestController::platformName()
+{
+    JSRetainPtr<JSStringRef> platformName(Adopt, JSStringCreateWithUTF8CString("qt"));
+    return platformName;
 }
 
 } // namespace WTR

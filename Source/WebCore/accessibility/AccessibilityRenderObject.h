@@ -201,7 +201,6 @@ public:
     virtual FrameView* documentFrameView() const;
     virtual unsigned hierarchicalLevel() const;
 
-    virtual const AccessibilityChildrenVector& children();
     virtual void clearChildren();
     virtual void updateChildrenIfNecessary();
     
@@ -262,7 +261,7 @@ public:
 protected:
     RenderObject* m_renderer;
     AccessibilityRole m_ariaRole;
-    mutable bool m_childrenDirty;
+    bool m_childrenDirty;
     
     void setRenderObject(RenderObject* renderer) { m_renderer = renderer; }
     void ariaLabeledByElements(Vector<Element*>& elements) const;
@@ -281,6 +280,7 @@ private:
     PlainTextRange ariaSelectedTextRange() const;
     Element* rootEditableElementForPosition(const Position&) const;
     bool nodeIsTextControl(const Node*) const;
+    virtual void setNeedsToUpdateChildren() { m_childrenDirty = true; }
 
     Element* menuElementForMenuButton() const;
     Element* menuItemElementForMenu() const;
@@ -300,6 +300,9 @@ private:
     bool renderObjectIsObservable(RenderObject*) const;
     RenderObject* renderParentObject() const;
     bool isDescendantOfElementType(const QualifiedName& tagName) const;
+
+    void addTextFieldChildren();
+    void addImageMapChildren();
     
     void ariaSelectedRows(AccessibilityChildrenVector&);
     
@@ -318,7 +321,6 @@ private:
     virtual bool ariaLiveRegionBusy() const;    
     
     bool inheritsPresentationalRole() const;
-    void setNeedsToUpdateChildren() const { m_childrenDirty = true; }
     
     mutable AccessibilityRole m_roleForMSAA;
 };

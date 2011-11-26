@@ -186,7 +186,7 @@ void WebPluginContainerImpl::handleEvent(Event* event)
     // where mozilla behaves differently than the spec.
     if (event->isMouseEvent())
         handleMouseEvent(static_cast<MouseEvent*>(event));
-    else if (event->isWheelEvent())
+    else if (event->hasInterface(eventNames().interfaceForWheelEvent))
         handleWheelEvent(static_cast<WheelEvent*>(event));
     else if (event->isKeyboardEvent())
         handleKeyboardEvent(static_cast<KeyboardEvent*>(event));
@@ -244,6 +244,11 @@ bool WebPluginContainerImpl::supportsPaginatedPrint() const
     return m_webPlugin->supportsPaginatedPrint();
 }
 
+bool WebPluginContainerImpl::isPrintScalingDisabled() const
+{
+    return m_webPlugin->isPrintScalingDisabled();
+}
+
 int WebPluginContainerImpl::printBegin(const IntRect& printableArea,
                                        int printerDPI) const
 {
@@ -266,7 +271,7 @@ bool WebPluginContainerImpl::printPage(int pageNumber,
 
 void WebPluginContainerImpl::printEnd()
 {
-    return m_webPlugin->printEnd();
+    m_webPlugin->printEnd();
 }
 
 void WebPluginContainerImpl::copy()
@@ -342,6 +347,25 @@ void WebPluginContainerImpl::setBackingTextureId(unsigned id)
 #endif
 }
 
+void WebPluginContainerImpl::setBackingIOSurfaceId(int width,
+                                                   int height,
+                                                   uint32_t ioSurfaceId)
+{
+#if OS(DARWIN) && USE(ACCELERATED_COMPOSITING)
+    uint32_t currentId = m_platformLayer->getIOSurfaceId();
+    if (ioSurfaceId == currentId)
+        return;
+
+    m_platformLayer->setIOSurfaceProperties(width, height, ioSurfaceId);
+
+    // If anyone of the IDs is zero we need to switch between hardware
+    // and software compositing. This is done by triggering a style recalc
+    // on the container element.
+    if (!(ioSurfaceId * currentId))
+        m_element->setNeedsStyleRecalc(WebCore::SyntheticStyleChange);
+#endif
+}
+
 void WebPluginContainerImpl::commitBackingTexture()
 {
 #if USE(ACCELERATED_COMPOSITING)
@@ -401,7 +425,7 @@ void WebPluginContainerImpl::loadFrameRequest(const WebURLRequest& request, cons
 
     FrameLoadRequest frameRequest(frame->document()->securityOrigin(), request.toResourceRequest(), target);
     UserGestureIndicator gestureIndicator(request.hasUserGesture() ? DefinitelyProcessingUserGesture : PossiblyProcessingUserGesture);
-    frame->loader()->loadFrameRequest(frameRequest, false, false, 0, 0, SendReferrer);
+    frame->loader()->loadFrameRequest(frameRequest, false, false, 0, 0, MaybeSendReferrer);
 }
 
 void WebPluginContainerImpl::zoomLevelChanged(double zoomLevel)
@@ -451,7 +475,7 @@ void WebPluginContainerImpl::willDestroyPluginLoadObserver(WebPluginLoadObserver
 #if USE(ACCELERATED_COMPOSITING)
 WebCore::LayerChromium* WebPluginContainerImpl::platformLayer() const
 {
-    return m_platformLayer->textureId() ? m_platformLayer.get() : 0;
+    return (m_platformLayer->textureId() || m_platformLayer->getIOSurfaceId()) ? m_platformLayer.get() : 0;
 }
 #endif
 
@@ -580,7 +604,7 @@ void WebPluginContainerImpl::handleKeyboardEvent(KeyboardEvent* event)
         return;
 
     if (webEvent.type == WebInputEvent::KeyDown) {
-#if defined(OS_MACOSX)
+#if OS(DARWIN)
         if (webEvent.modifiers == WebInputEvent::MetaKey
 #else
         if (webEvent.modifiers == WebInputEvent::ControlKey

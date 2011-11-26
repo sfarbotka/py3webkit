@@ -98,6 +98,9 @@ v8::Handle<v8::Value> constructWebGLArray(const v8::Arguments& args, WrapperType
     if (!args.IsConstructCall())
         return throwError("DOM object constructor cannot be called as a function.", V8Proxy::TypeError);
 
+    if (ConstructorMode::current() == ConstructorMode::WrapExistingObject)
+        return args.Holder();
+
     int argLen = args.Length();
     if (!argLen) {
         // This happens when we return a previously constructed
@@ -189,9 +192,8 @@ v8::Handle<v8::Value> setWebGLArrayHelper(const v8::Arguments& args)
         uint32_t offset = 0;
         if (args.Length() == 2)
             offset = toUInt32(args[1]);
-        ExceptionCode ec = 0;
-        impl->set(src, offset, ec);
-        V8Proxy::setDOMException(ec);
+        if (!impl->set(src, offset))
+            V8Proxy::setDOMException(INDEX_SIZE_ERR);
         return v8::Undefined();
     }
 

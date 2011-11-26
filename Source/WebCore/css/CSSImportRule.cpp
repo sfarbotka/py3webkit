@@ -32,14 +32,15 @@
 namespace WebCore {
 
 CSSImportRule::CSSImportRule(CSSStyleSheet* parent, const String& href, PassRefPtr<MediaList> media)
-    : CSSRule(parent)
+    : CSSRule(parent, CSSRule::IMPORT_RULE)
+    , m_styleSheetClient(this)
     , m_strHref(href)
     , m_lstMedia(media)
     , m_cachedSheet(0)
     , m_loading(false)
 {
     if (m_lstMedia)
-        m_lstMedia->setParent(this);
+        m_lstMedia->setParentStyleSheet(parent);
     else
         m_lstMedia = MediaList::create(this, String());
 }
@@ -47,17 +48,17 @@ CSSImportRule::CSSImportRule(CSSStyleSheet* parent, const String& href, PassRefP
 CSSImportRule::~CSSImportRule()
 {
     if (m_lstMedia)
-        m_lstMedia->setParent(0);
+        m_lstMedia->setParentStyleSheet(0);
     if (m_styleSheet)
-        m_styleSheet->setParent(0);
+        m_styleSheet->setParentRule(0);
     if (m_cachedSheet)
-        m_cachedSheet->removeClient(this);
+        m_cachedSheet->removeClient(&m_styleSheetClient);
 }
 
 void CSSImportRule::setCSSStyleSheet(const String& href, const KURL& baseURL, const String& charset, const CachedCSSStyleSheet* sheet)
 {
     if (m_styleSheet)
-        m_styleSheet->setParent(0);
+        m_styleSheet->setParentRule(0);
     m_styleSheet = CSSStyleSheet::create(this, href, baseURL, charset);
 
     bool crossOriginCSS = false;
@@ -65,7 +66,8 @@ void CSSImportRule::setCSSStyleSheet(const String& href, const KURL& baseURL, co
     CSSStyleSheet* parent = parentStyleSheet();
     bool strict = !parent || parent->useStrictParsing();
     bool enforceMIMEType = strict;
-    bool needsSiteSpecificQuirks = parent && parent->document() && parent->document()->settings() && parent->document()->settings()->needsSiteSpecificQuirks();
+    Document* document = parent ? parent->findDocument() : 0;
+    bool needsSiteSpecificQuirks = document && document->settings() && document->settings()->needsSiteSpecificQuirks();
 
 #ifdef BUILDING_ON_LEOPARD
     if (enforceMIMEType && needsSiteSpecificQuirks) {
@@ -78,7 +80,7 @@ void CSSImportRule::setCSSStyleSheet(const String& href, const KURL& baseURL, co
     String sheetText = sheet->sheetText(enforceMIMEType, &validMIMEType);
     m_styleSheet->parseString(sheetText, strict);
 
-    if (!parent || !parent->document() || !parent->document()->securityOrigin()->canRequest(baseURL))
+    if (!document || !document->securityOrigin()->canRequest(baseURL))
         crossOriginCSS = true;
 
     if (crossOriginCSS && !validMIMEType && !m_styleSheet->hasSyntacticallyValidCSSHeader())
@@ -109,13 +111,16 @@ bool CSSImportRule::isLoading() const
     return m_loading || (m_styleSheet && m_styleSheet->isLoading());
 }
 
-void CSSImportRule::insertedIntoParent()
+void CSSImportRule::requestStyleSheet()
 {
     CSSStyleSheet* parentSheet = parentStyleSheet();
-    if (!parentSheet || !parentSheet->document())
+    if (!parentSheet)
+        return;
+    Document* document = parentSheet->findDocument();
+    if (!document)
         return;
 
-    CachedResourceLoader* cachedResourceLoader = parentSheet->document()->cachedResourceLoader();
+    CachedResourceLoader* cachedResourceLoader = document->cachedResourceLoader();
     if (!cachedResourceLoader)
         return;
 
@@ -126,15 +131,15 @@ void CSSImportRule::insertedIntoParent()
 
     // Check for a cycle in our import chain.  If we encounter a stylesheet
     // in our parent chain with the same URL, then just bail.
-    StyleBase* root = this;
-    for (StyleBase* curr = parent(); curr; curr = curr->parent()) {
-        // FIXME: This is wrong if the finalURL was updated via document::updateBaseURL. 
-        if (curr->isCSSStyleSheet() && absHref == static_cast<CSSStyleSheet*>(curr)->finalURL().string())
+    CSSStyleSheet* rootSheet = parentSheet;
+    for (CSSStyleSheet* sheet = parentSheet; sheet; sheet = sheet->parentStyleSheet()) {
+        // FIXME: This is wrong if the finalURL was updated via document::updateBaseURL.
+        if (absHref == sheet->finalURL().string())
             return;
-        root = curr;
+        rootSheet = sheet;
     }
 
-    ResourceRequest request(parentSheet->document()->completeURL(absHref));
+    ResourceRequest request(document->completeURL(absHref));
     if (parentSheet->isUserStyleSheet())
         m_cachedSheet = cachedResourceLoader->requestUserCSSStyleSheet(request, parentSheet->charset());
     else
@@ -143,10 +148,10 @@ void CSSImportRule::insertedIntoParent()
         // if the import rule is issued dynamically, the sheet may be
         // removed from the pending sheet count, so let the doc know
         // the sheet being imported is pending.
-        if (parentSheet && parentSheet->loadCompleted() && root == parentSheet)
+        if (parentSheet && parentSheet->loadCompleted() && rootSheet == parentSheet)
             parentSheet->startLoadingDynamicSheet();
         m_loading = true;
-        m_cachedSheet->addClient(this);
+        m_cachedSheet->addClient(&m_styleSheetClient);
     }
 }
 

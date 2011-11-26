@@ -25,8 +25,13 @@
 
 #include "config.h"
 #include "Heuristics.h"
+#include <wtf/PageBlock.h>
 
 #include <limits>
+
+#if OS(DARWIN) && ENABLE(PARALLEL_GC)
+#include <sys/sysctl.h>
+#endif
 
 // Set to 1 to control the heuristics using environment variables.
 #define ENABLE_RUN_TIME_HEURISTICS 0
@@ -39,6 +44,16 @@
 
 namespace JSC { namespace Heuristics {
 
+unsigned maximumEvalOptimizationCandidateInstructionCount;
+unsigned maximumProgramOptimizationCandidateInstructionCount;
+unsigned maximumFunctionForCallOptimizationCandidateInstructionCount;
+unsigned maximumFunctionForConstructOptimizationCandidateInstructionCount;
+
+unsigned maximumFunctionForCallInlineCandidateInstructionCount;
+unsigned maximumFunctionForConstructInlineCandidateInstructionCount;
+
+unsigned maximumInliningDepth;
+
 int32_t executionCounterValueForOptimizeAfterWarmUp;
 int32_t executionCounterValueForOptimizeAfterLongWarmUp;
 int32_t executionCounterValueForDontOptimizeAnytimeSoon;
@@ -50,15 +65,27 @@ int32_t executionCounterIncrementForReturn;
 
 unsigned desiredSpeculativeSuccessFailRatio;
 
+unsigned likelyToTakeSlowCaseThreshold;
+unsigned couldTakeSlowCaseThreshold;
+
 unsigned largeFailCountThresholdBase;
 unsigned largeFailCountThresholdBaseForLoop;
 
 unsigned reoptimizationRetryCounterMax;
 unsigned reoptimizationRetryCounterStep;
 
+unsigned minimumOptimizationDelay;
 unsigned maximumOptimizationDelay;
 double desiredProfileLivenessRate;
 double desiredProfileFullnessRate;
+
+unsigned minimumNumberOfScansBetweenRebalance;
+unsigned gcMarkStackSegmentSize;
+unsigned minimumNumberOfCellsToKeep;
+unsigned maximumNumberOfSharedSegments;
+unsigned sharedStackWakeupThreshold;
+unsigned numberOfGCMarkers;
+unsigned opaqueRootMergeThreshold;
 
 #if ENABLE(RUN_TIME_HEURISTICS)
 static bool parse(const char* string, int32_t& value)
@@ -99,26 +126,67 @@ void setHeuristic(T& variable, const char* name, U value)
 
 void initializeHeuristics()
 {
+    // FIXME: Must revisit these heuristics! The DFG, being an optimizing compiler, may
+    // take a long time for pathologically huge code blocks. The best way to cope with
+    // this is to refuse to optimize them.
+    SET(maximumEvalOptimizationCandidateInstructionCount,                 std::numeric_limits<unsigned>::max());
+    SET(maximumProgramOptimizationCandidateInstructionCount,              std::numeric_limits<unsigned>::max());
+    SET(maximumFunctionForCallOptimizationCandidateInstructionCount,      std::numeric_limits<unsigned>::max());
+    SET(maximumFunctionForConstructOptimizationCandidateInstructionCount, std::numeric_limits<unsigned>::max());
+    
+    SET(maximumFunctionForCallInlineCandidateInstructionCount, 150);
+    SET(maximumFunctionForConstructInlineCandidateInstructionCount, 80);
+    
+    SET(maximumInliningDepth, 5);
+
     SET(executionCounterValueForOptimizeAfterWarmUp,     -1000);
     SET(executionCounterValueForOptimizeAfterLongWarmUp, -5000);
     SET(executionCounterValueForDontOptimizeAnytimeSoon, std::numeric_limits<int32_t>::min());
-    SET(executionCounterValueForOptimizeSoon,            -100);
+    SET(executionCounterValueForOptimizeSoon,            -1000);
     SET(executionCounterValueForOptimizeNextInvocation,  0);
 
     SET(executionCounterIncrementForLoop,   1);
     SET(executionCounterIncrementForReturn, 15);
 
     SET(desiredSpeculativeSuccessFailRatio, 6);
+    
+    SET(likelyToTakeSlowCaseThreshold, 100);
+    SET(couldTakeSlowCaseThreshold,    10); // Shouldn't be zero because some ops will spuriously take slow case, for example for linking or caching.
 
     SET(largeFailCountThresholdBase,        20);
     SET(largeFailCountThresholdBaseForLoop, 1);
 
     SET(reoptimizationRetryCounterStep, 1);
 
+    SET(minimumOptimizationDelay,   1);
     SET(maximumOptimizationDelay,   5);
     SET(desiredProfileLivenessRate, 0.75);
-    SET(desiredProfileFullnessRate, 0.25);
+    SET(desiredProfileFullnessRate, 0.35);
     
+    SET(minimumNumberOfScansBetweenRebalance, 10000);
+    SET(gcMarkStackSegmentSize,               pageSize());
+    SET(minimumNumberOfCellsToKeep,           10);
+    SET(maximumNumberOfSharedSegments,        3);
+    SET(sharedStackWakeupThreshold,           1);
+    SET(opaqueRootMergeThreshold,             1000);
+
+    int cpusToUse = 1;
+#if OS(DARWIN) && ENABLE(PARALLEL_GC)
+    int name[2];
+    size_t valueSize = sizeof(cpusToUse);
+    name[0] = CTL_HW;
+    name[1] = HW_AVAILCPU;
+    sysctl(name, 2, &cpusToUse, &valueSize, 0, 0);
+#endif
+    // We don't scale so well beyond 4.
+    if (cpusToUse > 4)
+        cpusToUse = 4;
+    // Be paranoid, it is the OS we're dealing with, after all.
+    if (cpusToUse < 1)
+        cpusToUse = 1;
+    
+    SET(numberOfGCMarkers, cpusToUse);
+
     ASSERT(executionCounterValueForDontOptimizeAnytimeSoon <= executionCounterValueForOptimizeAfterLongWarmUp);
     ASSERT(executionCounterValueForOptimizeAfterLongWarmUp <= executionCounterValueForOptimizeAfterWarmUp);
     ASSERT(executionCounterValueForOptimizeAfterWarmUp <= executionCounterValueForOptimizeSoon);

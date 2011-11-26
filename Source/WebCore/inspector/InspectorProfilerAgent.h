@@ -41,6 +41,7 @@
 
 namespace WebCore {
 
+class InjectedScriptManager;
 class InspectorArray;
 class InspectorConsoleAgent;
 class InspectorFrontend;
@@ -56,7 +57,7 @@ typedef String ErrorString;
 class InspectorProfilerAgent {
     WTF_MAKE_NONCOPYABLE(InspectorProfilerAgent); WTF_MAKE_FAST_ALLOCATED;
 public:
-    static PassOwnPtr<InspectorProfilerAgent> create(InstrumentingAgents*, InspectorConsoleAgent*, Page*, InspectorState*);
+    static PassOwnPtr<InspectorProfilerAgent> create(InstrumentingAgents*, InspectorConsoleAgent*, Page*, InspectorState*, InjectedScriptManager*);
     virtual ~InspectorProfilerAgent();
 
     void addProfile(PassRefPtr<ScriptProfile> prpProfile, unsigned lineNumber, const String& sourceURL);
@@ -69,8 +70,8 @@ public:
     void enable(ErrorString*);
     void disable(ErrorString*);
     void isEnabled(ErrorString*, bool* result) { *result = enabled(); }
-    void start(ErrorString*) { startUserInitiatedProfiling(); }
-    void stop(ErrorString*) { stopUserInitiatedProfiling(); }
+    void start(ErrorString* = 0);
+    void stop(ErrorString* = 0);
 
     void disable();
     void enable(bool skipRecompile);
@@ -78,17 +79,16 @@ public:
     String getCurrentUserInitiatedProfileName(bool incrementProfileNumber = false);
     void getProfileHeaders(ErrorString* error, RefPtr<InspectorArray>* headers);
     void getProfile(ErrorString* error, const String& type, unsigned uid, RefPtr<InspectorObject>* profileObject);
-    bool isRecordingUserInitiatedProfile() { return m_recordingUserInitiatedProfile; }
     void removeProfile(ErrorString* error, const String& type, unsigned uid);
 
     void setFrontend(InspectorFrontend*);
     void clearFrontend();
     void restore();
 
-    void startUserInitiatedProfiling();
-    void stopUserInitiatedProfiling(bool ignoreProfile = false);
     void takeHeapSnapshot(ErrorString*);
     void toggleRecordButton(bool isProfiling);
+
+    void getObjectByHeapObjectId(ErrorString*, int id, RefPtr<InspectorObject>* result);
 
 private:
     typedef HashMap<unsigned int, RefPtr<ScriptProfile> > ProfilesMap;
@@ -97,7 +97,7 @@ private:
     void resetFrontendProfiles();
     void restoreEnablement();
 
-    InspectorProfilerAgent(InstrumentingAgents*, InspectorConsoleAgent*, Page*, InspectorState*);
+    InspectorProfilerAgent(InstrumentingAgents*, InspectorConsoleAgent*, Page*, InspectorState*, InjectedScriptManager*);
     PassRefPtr<InspectorObject> createProfileHeader(const ScriptProfile& profile);
     PassRefPtr<InspectorObject> createSnapshotHeader(const ScriptHeapSnapshot& snapshot);
 
@@ -105,6 +105,7 @@ private:
     InspectorConsoleAgent* m_consoleAgent;
     Page* m_inspectedPage;
     InspectorState* m_inspectorState;
+    InjectedScriptManager* m_injectedScriptManager;
     InspectorFrontend::Profiler* m_frontend;
     bool m_enabled;
     bool m_recordingUserInitiatedProfile;

@@ -384,7 +384,7 @@ void HTMLObjectElement::childrenChanged(bool changedByParser, Node* beforeChange
 
 bool HTMLObjectElement::isURLAttribute(Attribute *attr) const
 {
-    return (attr->name() == dataAttr || (attr->name() == usemapAttr && attr->value().string()[0] != '#'));
+    return attr->name() == dataAttr || (attr->name() == usemapAttr && attr->value().string()[0] != '#') || HTMLPlugInImageElement::isURLAttribute(attr);
 }
 
 const QualifiedName& HTMLObjectElement::imageSourceAttributeName() const
@@ -553,5 +553,17 @@ HTMLFormElement* HTMLObjectElement::virtualForm() const
 {
     return FormAssociatedElement::form();
 }
+
+#if ENABLE(MICRODATA)
+String HTMLObjectElement::itemValueText() const
+{
+    return getURLAttribute(dataAttr);
+}
+
+void HTMLObjectElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setAttribute(dataAttr, value, ec);
+}
+#endif
 
 }

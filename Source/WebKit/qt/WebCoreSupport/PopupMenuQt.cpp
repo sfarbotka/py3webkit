@@ -29,7 +29,6 @@
 #include "ChromeClientQt.h"
 #include "FrameView.h"
 #include "PopupMenuClient.h"
-#include "QtFallbackWebPopup.h"
 
 #include "qwebkitplatformplugin.h"
 
@@ -97,7 +96,6 @@ void PopupMenuQt::disconnectClient()
 
 void PopupMenuQt::show(const IntRect& rect, FrameView* view, int index)
 {
-#ifndef QT_NO_COMBOBOX
     if (!m_popupClient)
         return;
 
@@ -107,16 +105,13 @@ void PopupMenuQt::show(const IntRect& rect, FrameView* view, int index)
         connect(m_popup.get(), SIGNAL(selectItem(int, bool, bool)), this, SLOT(selectItem(int, bool, bool)));
     }
 
-    if (QtFallbackWebPopup* fallback = qobject_cast<QtFallbackWebPopup*>(m_popup.get())) {
-        QRect geometry(rect);
-        geometry.moveTopLeft(view->contentsToWindow(rect.location()));
-        fallback->setGeometry(geometry);
-        fallback->setFont(m_popupClient->menuStyle().font().font());
-    }
+    QRect geometry(rect);
+    geometry.moveTopLeft(view->contentsToWindow(rect.location()));
+    m_popup->setGeometry(geometry);
+    m_popup->setFont(m_popupClient->menuStyle().font().font());
 
     m_selectData = adoptPtr(new SelectData(m_popupClient));
     m_popup->show(*m_selectData.get());
-#endif
 }
 
 void PopupMenuQt::didHide()

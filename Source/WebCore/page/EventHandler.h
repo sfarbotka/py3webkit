@@ -136,7 +136,7 @@ public:
 
     void resizeLayerDestroyed();
 
-    LayoutPoint currentMousePosition() const;
+    IntPoint currentMousePosition() const;
 
     static Frame* subframeForTargetNode(Node*);
     static Frame* subframeForHitTestResult(const MouseEventWithHitTestResults&);
@@ -148,12 +148,12 @@ public:
     bool tabsToLinks(KeyboardEvent*) const;
     bool tabsToAllFormControls(KeyboardEvent*) const;
 
-    bool mouseMoved(const PlatformMouseEvent&);
+    bool mouseMoved(const PlatformMouseEvent&, bool onlyUpdateScrollbars = false);
 
     void lostMouseCapture();
 
     bool handleMousePressEvent(const PlatformMouseEvent&);
-    bool handleMouseMoveEvent(const PlatformMouseEvent&, HitTestResult* hoveredNode = 0);
+    bool handleMouseMoveEvent(const PlatformMouseEvent&, HitTestResult* hoveredNode = 0, bool onlyUpdateScrollbars = false);
     bool handleMouseReleaseEvent(const PlatformMouseEvent&);
     bool handleWheelEvent(PlatformWheelEvent&);
     void defaultWheelEventHandler(Node*, WheelEvent*);
@@ -400,8 +400,8 @@ private:
 
     LayoutSize m_offsetFromResizeCorner; // In the coords of m_resizeLayer.
     
-    LayoutPoint m_currentMousePosition;
-    LayoutPoint m_mouseDownPos; // In our view's coords.
+    IntPoint m_currentMousePosition;
+    IntPoint m_mouseDownPos; // In our view's coords.
     double m_mouseDownTimestamp;
     PlatformMouseEvent m_mouseDown;
 

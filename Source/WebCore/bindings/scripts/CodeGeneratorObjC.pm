@@ -731,17 +731,28 @@ sub GenerateHeader
     # - Add constants.
     if ($numConstants > 0) {
         my @headerConstants = ();
+        my @constants = @{$dataNode->constants};
+        my $combinedConstants = "";
 
         # FIXME: we need a way to include multiple enums.
-        foreach my $constant (@{$dataNode->constants}) {
+        foreach my $constant (@constants) {
             my $constantName = $constant->name;
             my $constantValue = $constant->value;
+            my $conditional = $constant->extendedAttributes->{"Conditional"};
+            my $notLast = $constant ne $constants[-1];
 
-            my $output = "    DOM_" . $constantName . " = " . $constantValue;
-            push(@headerConstants, $output);
+            if ($conditional) {
+                my $conditionalString = $codeGenerator->GenerateConditionalStringFromAttributeValue($conditional);
+                $combinedConstants .= "#if ${conditionalString}\n";
+            }
+            $combinedConstants .= "    DOM_$constantName = $constantValue";
+            $combinedConstants .= "," if $notLast;
+            if ($conditional) {
+                $combinedConstants .= "\n#endif\n";
+            } elsif ($notLast) {
+                $combinedConstants .= "\n";
+            }
         }
-
-        my $combinedConstants = join(",\n", @headerConstants);
 
         # FIXME: the formatting of the enums should line up the equal signs.
         # FIXME: enums are unconditionally placed in the public header.
@@ -1204,7 +1215,7 @@ sub GenerateImplementation
 
                 # TODO: Handle special case for DOMSVGLength. We do need Custom code support for this.
                 if ($svgPropertyType eq "WebCore::SVGLength" and $attributeName eq "value") {
-                    $getterContentHead = "value(IMPL->contextElement(), ";
+                    $getterContentHead = "value(WebCore::SVGLengthContext(IMPL->contextElement()), ";
                 }
             }
 
@@ -1390,6 +1401,7 @@ sub GenerateImplementation
                 }
 
                 if ($svgPropertyType) {
+                    $implIncludes{"ExceptionCode.h"} = 1;
                     $getterContentHead = "$getterExpressionPrefix";
                     push(@implContent, "    if (IMPL->role() == WebCore::AnimValRole) {\n");
                     push(@implContent, "        WebCore::raiseOnDOMError(WebCore::NO_MODIFICATION_ALLOWED_ERR);\n");
@@ -1405,7 +1417,7 @@ sub GenerateImplementation
                     } else {
                         # FIXME: Special case for DOMSVGLength. We do need Custom code support for this.
                         if ($svgPropertyType eq "WebCore::SVGLength" and $attributeName eq "value") {
-                            push(@implContent, "    podImpl.$coreSetterName($arg, IMPL->contextElement()$ec);\n");
+                            push(@implContent, "    podImpl.$coreSetterName($arg, WebCore::SVGLengthContext(IMPL->contextElement())$ec);\n");
                         } else {
                             push(@implContent, "    podImpl.$coreSetterName($arg$ec);\n");
                         }
@@ -1539,7 +1551,7 @@ sub GenerateImplementation
             # FIXME! We need [Custom] support for ObjC, to move these hacks into DOMSVGLength/MatrixCustom.mm
             my $svgLengthConvertToSpecifiedUnits = ($svgPropertyType and $svgPropertyType eq "WebCore::SVGLength" and $functionName eq "convertToSpecifiedUnits");
 
-            push(@parameterNames, "IMPL->contextElement()") if $svgLengthConvertToSpecifiedUnits; 
+            push(@parameterNames, "WebCore::SVGLengthContext(IMPL->contextElement())") if $svgLengthConvertToSpecifiedUnits; 
             push(@parameterNames, "ec") if $raisesExceptions;
 
             # Handle arguments that are 'SVGProperty' based (SVGAngle/SVGLength). We need to convert from SVGPropertyTearOff<Type>* to Type,
@@ -1559,6 +1571,7 @@ sub GenerateImplementation
                 my $implGetter = GetObjCTypeGetter($paramName, $idlType);
                 my $idlTypeWithNamespace = GetSVGTypeWithNamespace($idlType);
 
+                $implIncludes{"ExceptionCode.h"} = 1;
                 push(@functionContent, "    $idlTypeWithNamespace* ${paramName}Core = $implGetter;\n");
                 push(@functionContent, "    if (!${paramName}Core) {\n");
                 push(@functionContent, "        WebCore::ExceptionCode ec = WebCore::TYPE_MISMATCH_ERR;\n");
@@ -1577,6 +1590,7 @@ sub GenerateImplementation
             my $content = $codeGenerator->WK_lcfirst($functionName) . "(" . join(", ", @parameterNames) . ")"; 
 
             if ($svgPropertyType) {
+                $implIncludes{"ExceptionCode.h"} = 1;
                 push(@functionContent, "    if (IMPL->role() == WebCore::AnimValRole) {\n");
                 push(@functionContent, "        WebCore::raiseOnDOMError(WebCore::NO_MODIFICATION_ALLOWED_ERR);\n");
                 if ($returnType eq "void") {

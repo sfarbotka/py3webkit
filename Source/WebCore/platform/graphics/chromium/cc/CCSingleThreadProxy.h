@@ -34,7 +34,7 @@ namespace WebCore {
 
 class CCLayerTreeHost;
 
-class CCSingleThreadProxy : public CCProxy {
+class CCSingleThreadProxy : public CCProxy, CCLayerTreeHostImplClient {
 public:
     static PassOwnPtr<CCProxy> create(CCLayerTreeHost*);
     virtual ~CCSingleThreadProxy();
@@ -48,11 +48,17 @@ public:
     virtual int compositorIdentifier() const { return m_compositorIdentifier; }
     virtual const LayerRendererCapabilities& layerRendererCapabilities() const;
     virtual void loseCompositorContext(int numTimes);
+    virtual void setNeedsAnimate();
     virtual void setNeedsCommit();
-    virtual void setNeedsCommitThenRedraw();
     virtual void setNeedsRedraw();
+    virtual void setVisible(bool);
     virtual void start();
     virtual void stop();
+
+    // CCLayerTreeHostImplClient implementation
+    virtual void onSwapBuffersCompleteOnImplThread() { ASSERT_NOT_REACHED(); }
+    virtual void setNeedsRedrawOnImplThread() { m_layerTreeHost->setNeedsCommit(); }
+    virtual void setNeedsCommitOnImplThread() { m_layerTreeHost->setNeedsCommit(); }
 
     // Called by the legacy path where RenderWidget does the scheduling.
     void compositeImmediately();
@@ -61,6 +67,7 @@ private:
     explicit CCSingleThreadProxy(CCLayerTreeHost*);
     bool recreateContextIfNeeded();
     void commitIfNeeded();
+    void doCommit();
     bool doComposite();
 
     // Accessed on main thread only.
@@ -74,6 +81,7 @@ private:
     int m_numFailedRecreateAttempts;
     bool m_graphicsContextLost;
     int m_timesRecreateShouldFail; // Used during testing.
+    bool m_nextFrameIsNewlyCommittedFrame;
 };
 
 // For use in the single-threaded case. In debug builds, it pretends that the

@@ -37,7 +37,6 @@ import difflib
 import errno
 import os
 
-from webkitpy.common.checkout.scm import detect_scm_system
 from webkitpy.common.memoized import memoized
 
 
@@ -47,14 +46,13 @@ try:
 except ImportError:
     multiprocessing = None
 
-from webkitpy.common import system
 from webkitpy.common.system import logutils
 from webkitpy.common.system import path
-from webkitpy.common.system.executive import Executive, ScriptError
-from webkitpy.common.system.user import User
+from webkitpy.common.system.executive import ScriptError
 from webkitpy.layout_tests import read_checksum_from_png
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
 from webkitpy.layout_tests.port import config as port_config
+from webkitpy.layout_tests.port import driver
 from webkitpy.layout_tests.port import http_lock
 from webkitpy.layout_tests.port import test_files
 from webkitpy.layout_tests.servers import apache_http_server
@@ -67,7 +65,7 @@ _log = logutils.get_logger(__file__)
 class DummyOptions(object):
     """Fake implementation of optparse.Values. Cloned from webkitpy.tool.mocktool.MockOptions."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         # The caller can set option values using keyword arguments. We don't
         # set any values by default because we don't know how this
         # object will be used. Generally speaking unit tests should
@@ -88,7 +86,8 @@ class Port(object):
 
     ALL_BUILD_TYPES = ('debug', 'release')
 
-    def __init__(self, port_name=None, options=None,
+    def __init__(self, host,
+                 port_name=None, options=None,
                  executive=None,
                  user=None,
                  filesystem=None,
@@ -107,9 +106,12 @@ class Port(object):
         # options defined on it.
         self.options = options or DummyOptions()
 
-        self.executive = executive or Executive()
-        self.user = user or User()
-        self.filesystem = filesystem or system.filesystem.FileSystem()
+        self.host = host
+
+        # FIXME: Remove thes accessors once all callers have moved to using self.host.
+        self.executive = executive or self.host.executive
+        self.user = user or self.host.user
+        self.filesystem = filesystem or self.host.filesystem
         self.config = config or port_config.Config(self.executive, self.filesystem)
 
         # FIXME: Remove all of the old "protected" versions when we can.
@@ -553,10 +555,8 @@ class Port(object):
         for test_or_category in self.skipped_layout_tests():
             if test_or_category == test_name:
                 return True
-            category = self._filesystem.join(self.layout_tests_dir(),
-                                             test_or_category)
-            if (self._filesystem.isdir(category) and
-                test_name.startswith(test_or_category)):
+            category = self._filesystem.join(self.layout_tests_dir(), test_or_category)
+            if self._filesystem.isdir(category) and test_name.startswith(test_or_category):
                 return True
         return False
 
@@ -648,13 +648,46 @@ class Port(object):
         """Perform port-specific work at the beginning of a test run."""
         pass
 
-    def setup_environ_for_server(self, server_name=None):
-        """Perform port-specific work at the beginning of a server launch.
+    # FIXME: os.environ access should be moved to onto a common/system class to be more easily mockable.
+    def _value_or_default_from_environ(self, name, default=None):
+        if name in os.environ:
+            return os.environ[name]
+        return default
 
-        Returns:
-           Operating-system's environment.
-        """
-        return os.environ.copy()
+    def _copy_value_from_environ_if_set(self, clean_env, name):
+        if name in os.environ:
+            clean_env[name] = os.environ[name]
+
+    def setup_environ_for_server(self, server_name=None):
+        # We intentionally copy only a subset of os.environ when
+        # launching subprocesses to ensure consistent test results.
+        clean_env = {}
+        variables_to_copy = [
+            # For Linux:
+            'XAUTHORITY',
+            'HOME',
+            'LANG',
+            'LD_LIBRARY_PATH',
+            'DBUS_SESSION_BUS_ADDRESS',
+
+            # Darwin:
+            'DYLD_LIBRARY_PATH',
+            'HOME',
+
+            # CYGWIN:
+            'HOMEDRIVE',
+            'HOMEPATH',
+            '_NT_SYMBOL_PATH',
+
+            # Windows:
+            'PATH',
+        ]
+        for variable in variables_to_copy:
+            self._copy_value_from_environ_if_set(clean_env, variable)
+
+        # For Linux:
+        clean_env['DISPLAY'] = self._value_or_default_from_environ('DISPLAY', ':1')
+        return clean_env
 
     def show_results_html_file(self, results_filename):
         """This routine should display the HTML file pointed at by
@@ -663,7 +696,7 @@ class Port(object):
 
     def create_driver(self, worker_number):
         """Return a newly created Driver subclass for starting/stopping the test driver."""
-        raise NotImplementedError('Port.create_driver')
+        return driver.DriverProxy(self, worker_number, self._driver_class(), pixel_tests=self.get_option('pixel_tests'))
 
     def start_helper(self):
         """If a port needs to reconfigure graphics settings or do other
@@ -720,6 +753,13 @@ class Port(object):
     def release_http_lock(self):
         if self._http_lock:
             self._http_lock.cleanup_http_lock()
+
+    def exit_code_from_summarized_results(self, unexpected_results):
+        """Given summarized results, compute the exit code to be returned by new-run-webkit-tests.
+        Bots turn red when this function returns a non-zero value. By default, return the number of regressions
+        to avoid turning bots red by flaky failures, unexpected passes, and missing results"""
+        # Don't turn bots red for flaky failures, unexpected passes, and missing results.
+        return unexpected_results['num_regressions']
 
     #
     # TEST EXPECTATION-RELATED METHODS
@@ -878,8 +918,6 @@ class Port(object):
     # The routines below should only be called by routines in this class
     # or any of its subclasses.
     #
-    def _webkit_build_directory(self, args):
-        return self._config.build_directory(args[0])
 
     def _uses_apache(self):
         return True
@@ -952,3 +990,7 @@ class Port(object):
         """Generates a list of TestConfiguration instances, representing configurations
         for a platform across all OSes, architectures, build and graphics types."""
         raise NotImplementedError('Port._generate_test_configurations')
+
+    def _driver_class(self):
+        """Returns the port's driver implementation."""
+        raise NotImplementedError('Port._driver_class')

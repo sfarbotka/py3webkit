@@ -43,6 +43,10 @@
 #include <WebKit2/WKBundlePagePrivate.h>
 #include <WebKit2/WKURLRequest.h>
 
+#if PLATFORM(QT)
+#include "DumpRenderTreeSupportQt.h"
+#endif
+
 using namespace std;
 
 namespace WTR {
@@ -211,6 +215,7 @@ InjectedBundlePage::InjectedBundlePage(WKBundlePageRef page)
         willPerformClientRedirectForFrame,
         didHandleOnloadEventsForFrame,
         0, // didLayoutForFrame
+        didDetectXSSForFrame,
     };
     WKBundlePageSetPageLoaderClient(m_page, &loaderClient);
 
@@ -381,6 +386,11 @@ void InjectedBundlePage::didHandleOnloadEventsForFrame(WKBundlePageRef page, WKB
 void InjectedBundlePage::didDisplayInsecureContentForFrame(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef*, const void* clientInfo)
 {
     static_cast<InjectedBundlePage*>(const_cast<void*>(clientInfo))->didDisplayInsecureContentForFrame(frame);
+}
+
+void InjectedBundlePage::didDetectXSSForFrame(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef*, const void* clientInfo)
+{
+    static_cast<InjectedBundlePage*>(const_cast<void*>(clientInfo))->didDetectXSSForFrame(frame);
 }
 
 void InjectedBundlePage::didRunInsecureContentForFrame(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef*, const void* clientInfo)
@@ -645,7 +655,13 @@ void InjectedBundlePage::didClearWindowForFrame(WKBundleFrameRef frame, WKBundle
     InjectedBundle::shared().gcController()->makeWindowObject(context, window, &exception);
     InjectedBundle::shared().eventSendingController()->makeWindowObject(context, window, &exception);
     InjectedBundle::shared().textInputController()->makeWindowObject(context, window, &exception);
+    InjectedBundle::shared().accessibilityController()->makeWindowObject(context, window, &exception);
+
+#if PLATFORM(QT)
+    DumpRenderTreeSupportQt::injectInternalsObject(context);
+#else
     WebCoreTestSupport::injectInternalsObject(context);
+#endif
 }
 
 void InjectedBundlePage::didCancelClientRedirectForFrame(WKBundleFrameRef frame)
@@ -679,6 +695,10 @@ void InjectedBundlePage::didDisplayInsecureContentForFrame(WKBundleFrameRef fram
 }
 
 void InjectedBundlePage::didRunInsecureContentForFrame(WKBundleFrameRef frame)
+{
+}
+
+void InjectedBundlePage::didDetectXSSForFrame(WKBundleFrameRef frame)
 {
 }
 

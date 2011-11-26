@@ -29,7 +29,9 @@
 #
 # WebKit's Python module for committer and reviewer validation.
 
-class Contributor(object):
+from webkitpy.common.editdistance import edit_distance
+
+class Account(object):
     def __init__(self, name, email_or_emails, irc_nickname_or_nicknames=None):
         assert(name)
         assert(email_or_emails)
@@ -68,6 +70,12 @@ class Contributor(object):
         return False
 
 
+class Contributor(Account):
+    def __init__(self, name, email_or_emails, irc_nickname=None):
+        Account.__init__(self, name, email_or_emails, irc_nickname)
+        self.is_contributor = True
+
+
 class Committer(Contributor):
     def __init__(self, name, email_or_emails, irc_nickname=None):
         Contributor.__init__(self, name, email_or_emails, irc_nickname)
@@ -80,6 +88,17 @@ class Reviewer(Committer):
         self.can_review = True
 
 
+# This is a list of email addresses that have bugzilla accounts but are not
+# used for contributing (such as mailing lists).
+
+
+watchers_who_are_not_contributors = [
+    Account("Chromium Compositor Bugs", ["cc-bugs@google.com"], ""),
+    Account("David Levin", ["levin+threading@chromium.org"], ""),
+    Account("David Levin", ["levin+watchlist@chromium.org"], ""),
+]
+
+
 # This is a list of people who are neither committers nor reviewers, but get
 # frequently CC'ed by others on Bugzilla bugs, so their names should be
 # supported by autocomplete. No review needed to add to the list.
@@ -87,7 +106,6 @@ class Reviewer(Committer):
 
 contributors_who_are_not_committers = [
     Contributor("Alexey Marinichev", ["amarinichev@chromium.org", "amarinichev@google.com"], "amarinichev"),
-    Contributor("Alice Boxhall", "aboxhall@chromium.org", "aboxhall"),
     Contributor("Ami Fischman", ["fischman@chromium.org", "fischman@google.com"], "amifischman0"),
     Contributor("Andras Piroska", "pandras@inf.u-szeged.hu", "andris88"),
     Contributor("Anne van Kesteren", "annevankesteren+webkit@gmail.com", "annevk"),
@@ -118,7 +136,6 @@ contributors_who_are_not_committers = [
     Contributor("Tamas Czene", ["tczene@inf.u-szeged.hu", "Czene.Tamas@stud.u-szeged.hu"], "tczene"),
     Contributor("Tom Zakrajsek", "tomz@codeaurora.org", "tomz"),
     Contributor("Wyatt Carss", ["wcarss@chromium.org", "wcarss@google.com"], "wcarss"),
-    Contributor("Xianzhu Wang", ["wangxianzhu@chromium.org", "phnixwxz@gmail.com", "wangxianzhu@google.com"], "wangxianzhu"),
     Contributor("Zoltan Arvai", "zarvai@inf.u-szeged.hu", "azbest_hu"),
     Contributor("Zsolt Feher", "feherzs@inf.u-szeged.hu", "Smith"),
 ]
@@ -141,7 +158,9 @@ committers_unable_to_review = [
     Committer("Alejandro G. Castro", ["alex@igalia.com", "alex@webkit.org"], "alexg"),
     Committer("Alexander Kellett", ["lypanov@mac.com", "a-lists001@lypanov.net", "lypanov@kde.org"], "lypanov"),
     Committer("Alexander Pavlov", "apavlov@chromium.org", "apavlov"),
+    Committer("Alexandru Chiculita", "achicu@adobe.com", "achicu"),
     Committer("Alexis Menard", ["alexis.menard@openbossa.org", "menard@kde.org", "alexis.menard@nokia.com"], "darktears"),
+    Committer("Alice Boxhall", "aboxhall@chromium.org", "aboxhall"),
     Committer("Alok Priyadarshi", "alokp@chromium.org", "alokp"),
     Committer("Amruth Raj", "amruthraj@motorola.com", "amruthraj"),
     Committer("Andre Boule", "aboule@apple.com"),
@@ -178,6 +197,7 @@ committers_unable_to_review = [
     Committer("Diego Gonzalez", ["diegohcg@webkit.org", "diego.gonzalez@openbossa.org"], "diegohcg"),
     Committer("Dmitry Lomov", ["dslomov@google.com", "dslomov@chromium.org"], "dslomov"),
     Committer("Dominic Cooney", ["dominicc@chromium.org", "dominicc@google.com"], "dominicc"),
+    Committer("Dominic Mazzoni", ["dmazzoni@google.com", "dmazzoni@chromium.org"], "dmazzoni"),
     Committer("Drew Wilson", "atwilson@chromium.org", "atwilson"),
     Committer("Eli Fidler", ["eli@staikos.net", "efidler@rim.com"], "efidler"),
     Committer("Emil A Eklund", "eae@chromium.org", "eae"),
@@ -229,7 +249,6 @@ committers_unable_to_review = [
     Committer("Joone Hur", ["joone.hur@collabora.co.uk", "joone@kldp.org", "joone@webkit.org"], "joone"),
     Committer("Joost de Valk", ["joost@webkit.org", "webkit-dev@joostdevalk.nl"], "Altha"),
     Committer("Julie Parent", ["jparent@google.com", "jparent@chromium.org"], "jparent"),
-    Committer("Julien Chaffraix", ["jchaffraix@webkit.org", "julien.chaffraix@gmail.com", "jchaffraix@google.com", "jchaffraix@codeaurora.org"], "jchaffraix"),
     Committer("Jungshik Shin", "jshin@chromium.org"),
     Committer("Justin Schuh", "jschuh@chromium.org", "jschuh"),
     Committer("Keishi Hattori", "keishi@webkit.org", "keishi"),
@@ -263,6 +282,7 @@ committers_unable_to_review = [
     Committer("Michael Nordman", "michaeln@google.com", "michaeln"),
     Committer("Michael Saboff", "msaboff@apple.com"),
     Committer("Michelangelo De Simone", "michelangelo@webkit.org", "michelangelo"),
+    Committer("Mihnea Ovidenie", "mihnea@adobe.com", "mihnea"),
     Committer("Mike Belshe", ["mbelshe@chromium.org", "mike@belshe.com"]),
     Committer("Mike Fenton", ["mifenton@rim.com", "mike.fenton@torchmobile.com"], "mfenton"),
     Committer("Mike Lawther", "mikelawther@chromium.org", "mikelawther"),
@@ -282,6 +302,7 @@ committers_unable_to_review = [
     Committer("Pratik Solanki", "psolanki@apple.com", "psolanki"),
     Committer("Qi Zhang", ["qi.2.zhang@nokia.com", "qi.zhang02180@gmail.com"], "qi"),
     Committer("Rafael Antognolli", "antognolli@profusion.mobi", "antognolli"),
+    Committer("Ravi Kasibhatla", "ravi.kasibhatla@motorola.com", "kphanee"),
     Committer("Renata Hodovan", "reni@webkit.org", "reni"),
     Committer("Robert Hogan", ["robert@webkit.org", "robert@roberthogan.net", "lists@roberthogan.net"], "mwenge"),
     Committer("Roland Steiner", "rolandsteiner@chromium.org"),
@@ -302,14 +323,17 @@ committers_unable_to_review = [
     Committer("Vsevolod Vlasov", "vsevik@chromium.org"),
     Committer("William Siegrist", "wsiegrist@apple.com", "wms"),
     Committer("W. James MacLean", "wjmaclean@chromium.org", "wjmaclean"),
+    Committer("Xianzhu Wang", ["wangxianzhu@chromium.org", "phnixwxz@gmail.com", "wangxianzhu@google.com"], "wangxianzhu"),
     Committer("Xiaomei Ji", "xji@chromium.org", "xji"),
     Committer("Yael Aharon", "yael.aharon@nokia.com", "yael"),
     Committer("Yaar Schnitman", ["yaar@chromium.org", "yaar@google.com"]),
     Committer("Yong Li", ["yong.li.webkit@gmail.com", "yong.li@torchmobile.com", "yoli@rim.com"], "yong"),
     Committer("Yongjun Zhang", ["yongjun.zhang@nokia.com", "yongjun_zhang@apple.com"]),
+    Committer("Yuqiang Xian", "yuqiang.xian@intel.com"),
     Committer("Yi Shen", ["yi.4.shen@nokia.com", "shenyi2006@gmail.com"]),
     Committer("Yuta Kitamura", "yutak@chromium.org", "yutak"),
     Committer("Yuzo Fujishima", "yuzo@google.com", "yuzo"),
+    Committer("Zeno Albisser", ["zeno@webkit.org", "zeno.albisser@nokia.com"], "zalbisser"),
     Committer("Zhenyao Mo", "zmo@google.com", "zhenyao"),
     Committer("Zoltan Horvath", ["zoltan@webkit.org", "hzoltan@inf.u-szeged.hu", "horvath.zoltan.6@stud.u-szeged.hu"], "zoltan"),
     Committer("Naoki Takano", ["honten@chromium.org", "takano.naoki@gmail.com"], "honten"),
@@ -380,6 +404,7 @@ reviewers_list = [
     Reviewer("John Sullivan", "sullivan@apple.com", "sullivan"),
     Reviewer("Jon Honeycutt", "jhoneycutt@apple.com", "jhoneycutt"),
     Reviewer("Joseph Pecoraro", ["joepeck@webkit.org", "pecoraro@apple.com"], "JoePeck"),
+    Reviewer("Julien Chaffraix", ["jchaffraix@webkit.org", "julien.chaffraix@gmail.com", "jchaffraix@google.com", "jchaffraix@codeaurora.org"], "jchaffraix"),
     Reviewer("Justin Garcia", "justin.garcia@apple.com", "justing"),
     Reviewer("Ken Kocienda", "kocienda@apple.com"),
     Reviewer("Kenneth Rohde Christiansen", ["kenneth@webkit.org", "kenneth.christiansen@openbossa.org", "kenneth.christiansen@gmail.com"], ["kenne", "kenneth"]),
@@ -425,18 +450,24 @@ reviewers_list = [
     Reviewer("Zoltan Herczeg", ["zherczeg@webkit.org", "zherczeg@inf.u-szeged.hu"], "zherczeg"),
 ]
 
-
 class CommitterList(object):
 
     # Committers and reviewers are passed in to allow easy testing
     def __init__(self,
                  committers=committers_unable_to_review,
                  reviewers=reviewers_list,
-                 contributors=contributors_who_are_not_committers):
+                 contributors=contributors_who_are_not_committers,
+                 watchers=watchers_who_are_not_contributors):
+        self._accounts = watchers + contributors + committers + reviewers
         self._contributors = contributors + committers + reviewers
         self._committers = committers + reviewers
         self._reviewers = reviewers
-        self._contributors_by_email = {}
+        self._contributors_by_name = {}
+        self._accounts_by_email = {}
+        self._accounts_by_login = {}
+
+    def accounts(self):
+        return self._accounts
 
     def contributors(self):
         return self._contributors
@@ -447,13 +478,35 @@ class CommitterList(object):
     def reviewers(self):
         return self._reviewers
 
-    def _email_to_contributor_map(self):
-        if not len(self._contributors_by_email):
+    def _name_to_contributor_map(self):
+        if not len(self._contributors_by_name):
             for contributor in self._contributors:
-                for email in contributor.emails:
-                    assert(email not in self._contributors_by_email)  # We should never have duplicate emails.
-                    self._contributors_by_email[email] = contributor
-        return self._contributors_by_email
+                assert(contributor.full_name)
+                assert(contributor.full_name.lower() not in self._contributors_by_name)  # We should never have duplicate names.
+                self._contributors_by_name[contributor.full_name.lower()] = contributor
+        return self._contributors_by_name
+
+    def _email_to_account_map(self):
+        if not len(self._accounts_by_email):
+            for account in self._accounts:
+                for email in account.emails:
+                    assert(email not in self._accounts_by_email)  # We should never have duplicate emails.
+                    self._accounts_by_email[email] = account
+        return self._accounts_by_email
+
+    def _login_to_account_map(self):
+        if not len(self._accounts_by_login):
+            for account in self._accounts:
+                if account.emails:
+                    login = account.bugzilla_email()
+                    assert(login not in self._accounts_by_login)  # We should never have duplicate emails.
+                    self._accounts_by_login[login] = account
+        return self._accounts_by_login
+
+    def _contributor_only(self, record):
+        if record and not record.is_contributor:
+            return None
+        return record
 
     def _committer_only(self, record):
         if record and not record.can_commit:
@@ -465,18 +518,12 @@ class CommitterList(object):
             return None
         return record
 
-    def contributor_by_name(self, name):
-        # This could be made into a hash lookup if callers need it to be fast.
-        for contributor in self.contributors():
-            if contributor.full_name and contributor.full_name == name:
-                return contributor
-        return None
-
     def committer_by_name(self, name):
         return self._committer_only(self.contributor_by_name(name))
 
     def contributor_by_irc_nickname(self, irc_nickname):
         for contributor in self.contributors():
+            # FIXME: This should do case-insensitive comparison or assert that all IRC nicknames are in lowercase
             if contributor.irc_nicknames and irc_nickname in contributor.irc_nicknames:
                 return contributor
         return None
@@ -484,11 +531,82 @@ class CommitterList(object):
     def contributors_by_search_string(self, string):
         return filter(lambda contributor: contributor.contains_string(string), self.contributors())
 
+    def contributors_by_email_username(self, string):
+        string = string + '@'
+        result = []
+        for contributor in self.contributors():
+            for email in contributor.emails:
+                if email.startswith(string):
+                    result.append(contributor)
+                    break
+        return result
+
+    def _contributor_name_shorthands(self, contributor):
+        if ' ' not in contributor.full_name:
+            return []
+        split_fullname = contributor.full_name.split()
+        first_name = split_fullname[0]
+        last_name = split_fullname[-1]
+        return first_name, last_name, first_name + last_name[0], first_name + ' ' + last_name[0]
+
+    def _tokenize_contributor_name(self, contributor):
+        full_name_in_lowercase = contributor.full_name.lower()
+        tokens = [full_name_in_lowercase] + full_name_in_lowercase.split()
+        if contributor.irc_nicknames:
+            return tokens + [nickname.lower() for nickname in contributor.irc_nicknames if len(nickname) > 5]
+        return tokens
+
+    def contributors_by_fuzzy_match(self, string):
+        string_in_lowercase = string.lower()
+
+        # 1. Exact match for fullname, email and irc_nicknames
+        account = self.contributor_by_name(string_in_lowercase) or self.account_by_email(string_in_lowercase) or self.contributor_by_irc_nickname(string_in_lowercase)
+        if account:
+            return [account], 0
+
+        # 2. Exact match for email username (before @)
+        accounts = self.contributors_by_email_username(string_in_lowercase)
+        if accounts and len(accounts) == 1:
+            return accounts, 0
+
+        # 3. Exact match for first name, last name, and first name + initial combinations such as "Dan B" and "Tim H"
+        accounts = [contributor for contributor in self.contributors() if string in self._contributor_name_shorthands(contributor)]
+        if accounts and len(accounts) == 1:
+            return accounts, 0
+
+        # 4. Finally, fuzzy-match using edit-distance
+        string = string_in_lowercase
+        contributorWithMinDistance = []
+        minDistance = len(string) / 2 - 1
+        for contributor in self.contributors():
+            tokens = self._tokenize_contributor_name(contributor)
+            editdistances = [edit_distance(token, string) for token in tokens if abs(len(token) - len(string)) <= minDistance]
+            if not editdistances:
+                continue
+            distance = min(editdistances)
+            if distance == minDistance:
+                contributorWithMinDistance.append(contributor)
+            elif distance < minDistance:
+                contributorWithMinDistance = [contributor]
+                minDistance = distance
+        if not len(contributorWithMinDistance):
+            return [], len(string)
+        return contributorWithMinDistance, minDistance
+
+    def account_by_login(self, login):
+        return self._login_to_account_map().get(login.lower()) if login else None
+
+    def account_by_email(self, email):
+        return self._email_to_account_map().get(email.lower()) if email else None
+
+    def contributor_by_name(self, name):
+        return self._name_to_contributor_map().get(name.lower()) if name else None
+
     def contributor_by_email(self, email):
-        return self._email_to_contributor_map().get(email.lower())
+        return self._contributor_only(self.account_by_email(email))
 
     def committer_by_email(self, email):
-        return self._committer_only(self.contributor_by_email(email))
+        return self._committer_only(self.account_by_email(email))
 
     def reviewer_by_email(self, email):
-        return self._reviewer_only(self.contributor_by_email(email))
+        return self._reviewer_only(self.account_by_email(email))

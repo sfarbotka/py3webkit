@@ -79,6 +79,7 @@
 #include <WebCore/DocumentMarkerController.h>
 #include <WebCore/DragController.h>
 #include <WebCore/DragData.h>
+#include <WebCore/DragSession.h>
 #include <WebCore/EventHandler.h>
 #include <WebCore/FocusController.h>
 #include <WebCore/FormState.h>
@@ -128,6 +129,10 @@
 #include <QMimeData>
 #endif
 
+#if PLATFORM(GTK)
+#include "DataObjectGtk.h"
+#endif
+
 #ifndef NDEBUG
 #include <wtf/RefCountedLeakCounter.h>
 #endif
@@ -167,6 +172,7 @@ PassRefPtr<WebPage> WebPage::create(uint64_t pageID, const WebPageCreationParame
 
 WebPage::WebPage(uint64_t pageID, const WebPageCreationParameters& parameters)
     : m_viewSize(parameters.viewSize)
+    , m_useFixedLayout(false)
     , m_drawsBackground(true)
     , m_drawsTransparentBackground(false)
     , m_isInRedo(false)
@@ -188,6 +194,7 @@ WebPage::WebPage(uint64_t pageID, const WebPageCreationParameters& parameters)
     , m_isRunningModal(false)
     , m_cachedMainFrameIsPinnedToLeftSide(false)
     , m_cachedMainFrameIsPinnedToRightSide(false)
+    , m_cachedPageCount(0)
     , m_isShowingContextMenu(false)
 #if PLATFORM(WIN)
     , m_gestureReachedScrollingLimit(false)
@@ -228,10 +235,15 @@ WebPage::WebPage(uint64_t pageID, const WebPageCreationParameters& parameters)
     platformInitialize();
 
     m_drawingArea = DrawingArea::create(this, parameters);
+    m_drawingArea->setPaintingEnabled(false);
+
     m_mainFrame = WebFrame::createMainFrame(this);
 
     setDrawsBackground(parameters.drawsBackground);
     setDrawsTransparentBackground(parameters.drawsTransparentBackground);
+
+    setPaginationMode(parameters.paginationMode);
+    setGapBetweenPages(parameters.gapBetweenPages);
 
     setMemoryCacheMessagesEnabled(parameters.areMemoryCacheClientCallsEnabled);
 
@@ -245,6 +257,8 @@ WebPage::WebPage(uint64_t pageID, const WebPageCreationParameters& parameters)
     
     if (!parameters.sessionState.isEmpty())
         restoreSession(parameters.sessionState);
+
+    m_drawingArea->setPaintingEnabled(true);
 
 #ifndef NDEBUG
     webPageCounter.increment();
@@ -332,7 +346,8 @@ PassRefPtr<Plugin> WebPage::createPlugin(const Plugin::Parameters& parameters)
 
     if (pluginPath.isNull()) {
 #if PLATFORM(MAC)
-        if (parameters.mimeType == "application/pdf")
+        if (parameters.mimeType == "application/pdf"
+            || (parameters.mimeType.isEmpty() && parameters.url.path().lower().endsWith(".pdf")))
             return BuiltInPDFView::create(m_page.get());
 #endif
         return 0;
@@ -576,7 +591,7 @@ void WebPage::linkClicked(const String& url, const WebMouseEvent& event)
         coreEvent = MouseEvent::create(eventNames().clickEvent, frame->document()->defaultView(), platform(event), 0, 0);
 
     frame->loader()->loadFrameRequest(FrameLoadRequest(frame->document()->securityOrigin(), ResourceRequest(url)), 
-        false, false, coreEvent.get(), 0, SendReferrer);
+        false, false, coreEvent.get(), 0, MaybeSendReferrer);
 }
 
 void WebPage::stopLoadingFrame(uint64_t frameID)
@@ -664,25 +679,25 @@ void WebPage::layoutIfNeeded()
 
 void WebPage::setSize(const WebCore::IntSize& viewSize)
 {
-#if ENABLE(TILED_BACKING_STORE)
+    FrameView* view = m_page->mainFrame()->view();
+
+#if USE(TILED_BACKING_STORE)
     // If we are resizing to content ignore external attempts.
-    if (!m_resizesToContentsLayoutSize.isEmpty())
+    if (view->useFixedLayout())
         return;
 #endif
 
     if (m_viewSize == viewSize)
         return;
 
-    Frame* frame = m_page->mainFrame();
-    
-    frame->view()->resize(viewSize);
-    frame->view()->setNeedsLayout();
+    view->resize(viewSize);
+    view->setNeedsLayout();
     m_drawingArea->setNeedsDisplay(IntRect(IntPoint(0, 0), viewSize));
     
     m_viewSize = viewSize;
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void WebPage::setFixedVisibleContentRect(const IntRect& rect)
 {
     Frame* frame = m_page->mainFrame();
@@ -692,40 +707,60 @@ void WebPage::setFixedVisibleContentRect(const IntRect& rect)
 
 void WebPage::setResizesToContentsUsingLayoutSize(const IntSize& targetLayoutSize)
 {
-    if (m_resizesToContentsLayoutSize == targetLayoutSize)
+    FrameView* view = m_page->mainFrame()->view();
+
+    m_useFixedLayout = !targetLayoutSize.isEmpty();
+
+    // Set view attributes based on whether fixed layout is used.
+    view->setDelegatesScrolling(m_useFixedLayout);
+    view->setUseFixedLayout(m_useFixedLayout);
+    view->setPaintsEntireContents(m_useFixedLayout);
+
+    if (view->fixedLayoutSize() == targetLayoutSize)
         return;
 
-    m_resizesToContentsLayoutSize = targetLayoutSize;
+    // Always reset even when empty.
+    view->setFixedLayoutSize(targetLayoutSize);
 
-    Frame* frame = m_page->mainFrame();
-    if (m_resizesToContentsLayoutSize.isEmpty()) {
-        frame->view()->setDelegatesScrolling(false);
-        frame->view()->setUseFixedLayout(false);
-        frame->view()->setPaintsEntireContents(false);
-    } else {
-        frame->view()->setDelegatesScrolling(true);
-        frame->view()->setUseFixedLayout(true);
-        frame->view()->setPaintsEntireContents(true);
-        frame->view()->setFixedLayoutSize(m_resizesToContentsLayoutSize);
+    // Schedule a layout to use the new target size.
+    if (!view->layoutPending()) {
+        view->setNeedsLayout();
+        view->scheduleRelayout();
     }
-    frame->view()->forceLayout();
 }
 
 void WebPage::resizeToContentsIfNeeded()
 {
-    if (m_resizesToContentsLayoutSize.isEmpty())
+    FrameView* view = m_page->mainFrame()->view();
+
+    if (!view->useFixedLayout())
         return;
 
-    Frame* frame = m_page->mainFrame();
-
-    IntSize contentSize = frame->view()->contentsSize();
+    IntSize contentSize = view->contentsSize();
     if (contentSize == m_viewSize)
         return;
 
     m_viewSize = contentSize;
-    frame->view()->resize(m_viewSize);
-    frame->view()->setNeedsLayout();
+    view->resize(m_viewSize);
+    view->setNeedsLayout();
 }
+
+void WebPage::setViewportSize(const IntSize& size)
+{
+    if (m_viewportSize == size)
+        return;
+
+     m_viewportSize = size;
+
+    // Recalculate the recommended layout size, when the available size (device pixel) changes.
+    Settings* settings = m_page->settings();
+
+    int minimumLayoutFallbackWidth = std::max(settings->layoutFallbackWidth(), size.width());
+
+    IntSize targetLayoutSize = computeViewportAttributes(m_page->viewportArguments(), minimumLayoutFallbackWidth, settings->deviceWidth(), settings->deviceHeight(), settings->deviceDPI(), size).layoutSize;
+    setResizesToContentsUsingLayoutSize(targetLayoutSize);
+}
+
 #endif
 
 void WebPage::scrollMainFrameIfNotAtMaxScrollPosition(const IntSize& scrollOffset)
@@ -815,6 +850,11 @@ void WebPage::setPageAndTextZoomFactors(double pageZoomFactor, double textZoomFa
     return frame->setPageAndTextZoomFactors(static_cast<float>(pageZoomFactor), static_cast<float>(textZoomFactor));
 }
 
+void WebPage::windowScreenDidChange(uint64_t displayID)
+{
+    m_page->windowScreenDidChange(static_cast<PlatformDisplayID>(displayID));
+}
+
 void WebPage::scalePage(double scale, const IntPoint& origin)
 {
     m_page->setPageScaleFactor(scale, origin);
@@ -829,11 +869,33 @@ double WebPage::pageScaleFactor() const
 
 void WebPage::setDeviceScaleFactor(float scaleFactor)
 {
+    if (scaleFactor == m_page->deviceScaleFactor())
+        return;
+
     m_page->setDeviceScaleFactor(scaleFactor);
+
+    // Tell all our plug-in views that the device scale factor changed.
+#if PLATFORM(MAC)
+    for (HashSet<PluginView*>::const_iterator it = m_pluginViews.begin(), end = m_pluginViews.end(); it != end; ++it)
+        (*it)->setDeviceScaleFactor(scaleFactor);
+#endif
+
+    if (m_findController.isShowingOverlay()) {
+        // We must have updated layout to get the selection rects right.
+        layoutIfNeeded();
+        m_findController.deviceScaleFactorDidChange();
+    }
+}
+
+float WebPage::deviceScaleFactor() const
+{
+    return m_page->deviceScaleFactor();
 }
 
 void WebPage::setUseFixedLayout(bool fixed)
 {
+    m_useFixedLayout = fixed;
+
     Frame* frame = m_mainFrame->coreFrame();
     if (!frame)
         return;
@@ -859,6 +921,20 @@ void WebPage::setFixedLayoutSize(const IntSize& size)
 
     view->setFixedLayoutSize(size);
     view->forceLayout();
+}
+
+void WebPage::setPaginationMode(uint32_t mode)
+{
+    Page::Pagination pagination = m_page->pagination();
+    pagination.mode = static_cast<Page::Pagination::Mode>(mode);
+    m_page->setPagination(pagination);
+}
+
+void WebPage::setGapBetweenPages(double gap)
+{
+    Page::Pagination pagination = m_page->pagination();
+    pagination.gap = gap;
+    m_page->setPagination(pagination);
 }
 
 void WebPage::installPageOverlay(PassRefPtr<PageOverlay> pageOverlay)
@@ -914,11 +990,16 @@ PassRefPtr<WebImage> WebPage::snapshotInViewCoordinates(const IntRect& rect, Ima
     if (!frameView)
         return 0;
 
-    RefPtr<WebImage> snapshot = WebImage::create(rect.size(), options);
+    IntSize bitmapSize = rect.size();
+    float deviceScaleFactor = corePage()->deviceScaleFactor();
+    bitmapSize.scale(deviceScaleFactor);
+
+    RefPtr<WebImage> snapshot = WebImage::create(bitmapSize, options);
     if (!snapshot->bitmap())
         return 0;
     
     OwnPtr<WebCore::GraphicsContext> graphicsContext = snapshot->bitmap()->createGraphicsContext();
+    graphicsContext->applyDeviceScaleFactor(deviceScaleFactor);
     graphicsContext->translate(-rect.x(), -rect.y());
 
     frameView->updateLayoutAndStyleIfNeededRecursive();
@@ -937,13 +1018,14 @@ PassRefPtr<WebImage> WebPage::scaledSnapshotInDocumentCoordinates(const IntRect&
     if (!frameView)
         return 0;
 
-    IntSize size(ceil(rect.width() * scaleFactor), ceil(rect.height() * scaleFactor));
+    float combinedScaleFactor = scaleFactor * corePage()->deviceScaleFactor();
+    IntSize size(ceil(rect.width() * combinedScaleFactor), ceil(rect.height() * combinedScaleFactor));
     RefPtr<WebImage> snapshot = WebImage::create(size, options);
     if (!snapshot->bitmap())
         return 0;
 
     OwnPtr<WebCore::GraphicsContext> graphicsContext = snapshot->bitmap()->createGraphicsContext();
-    graphicsContext->scale(FloatSize(scaleFactor, scaleFactor));
+    graphicsContext->applyDeviceScaleFactor(combinedScaleFactor);
     graphicsContext->translate(-rect.x(), -rect.y());
 
     frameView->updateLayoutAndStyleIfNeededRecursive();
@@ -971,7 +1053,7 @@ void WebPage::pageDidScroll()
     send(Messages::WebPageProxy::PageDidScroll());
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void WebPage::pageDidRequestScroll(const IntPoint& point)
 {
     send(Messages::WebPageProxy::PageDidRequestScroll(point));
@@ -1044,7 +1126,7 @@ static bool handleContextMenuEvent(const PlatformMouseEvent& platformMouseEvent,
     return handled;
 }
 
-static bool handleMouseEvent(const WebMouseEvent& mouseEvent, Page* page)
+static bool handleMouseEvent(const WebMouseEvent& mouseEvent, Page* page, bool onlyUpdateScrollbars)
 {
     Frame* frame = page->mainFrame();
     if (!frame->view())
@@ -1067,7 +1149,7 @@ static bool handleMouseEvent(const WebMouseEvent& mouseEvent, Page* page)
         case WebCore::MouseEventReleased:
             return frame->eventHandler()->handleMouseReleaseEvent(platformMouseEvent);
         case WebCore::MouseEventMoved:
-            return frame->eventHandler()->mouseMoved(platformMouseEvent);
+            return frame->eventHandler()->mouseMoved(platformMouseEvent, onlyUpdateScrollbars);
 
         default:
             ASSERT_NOT_REACHED();
@@ -1093,7 +1175,7 @@ void WebPage::mouseEvent(const WebMouseEvent& mouseEvent)
     if (!handled) {
         CurrentEvent currentEvent(mouseEvent);
 
-        handled = handleMouseEvent(mouseEvent, m_page.get());
+        handled = handleMouseEvent(mouseEvent, m_page.get(), !windowIsFocused());
     }
 
     send(Messages::WebPageProxy::DidReceiveEvent(static_cast<uint32_t>(mouseEvent.type()), handled));
@@ -1111,7 +1193,7 @@ void WebPage::mouseEventSyncForTesting(const WebMouseEvent& mouseEvent, bool& ha
 
     if (!handled) {
         CurrentEvent currentEvent(mouseEvent);
-        handled = handleMouseEvent(mouseEvent, m_page.get());
+        handled = handleMouseEvent(mouseEvent, m_page.get(), !windowIsFocused());
     }
 }
 
@@ -1271,6 +1353,12 @@ void WebPage::touchEvent(const WebTouchEvent& touchEvent)
     bool handled = handleTouchEvent(touchEvent, m_page.get());
 
     send(Messages::WebPageProxy::DidReceiveEvent(static_cast<uint32_t>(touchEvent.type()), handled));
+}
+
+void WebPage::touchEventSyncForTesting(const WebTouchEvent& touchEvent, bool& handled)
+{
+    CurrentEvent currentEvent(touchEvent);
+    handled = handleTouchEvent(touchEvent, m_page.get());
 }
 #endif
 
@@ -1622,7 +1710,7 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 
 #undef INITIALIZE_SETTINGS
 
-    settings->setJavaScriptEnabled(store.getBoolValueForKey(WebPreferencesKey::javaScriptEnabledKey()));
+    settings->setScriptEnabled(store.getBoolValueForKey(WebPreferencesKey::javaScriptEnabledKey()));
     settings->setLoadsImagesAutomatically(store.getBoolValueForKey(WebPreferencesKey::loadsImagesAutomaticallyKey()));
     settings->setLoadsSiteIconsIgnoringImageLoadingSetting(store.getBoolValueForKey(WebPreferencesKey::loadsSiteIconsIgnoringImageLoadingPreferenceKey()));
     settings->setPluginsEnabled(store.getBoolValueForKey(WebPreferencesKey::pluginsEnabledKey()));
@@ -1681,9 +1769,7 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
     settings->setFullScreenEnabled(store.getBoolValueForKey(WebPreferencesKey::fullScreenEnabledKey()));
 #endif
 
-#if ENABLE(DOM_STORAGE)
     settings->setLocalStorageDatabasePath(WebProcess::shared().localStorageDirectory());
-#endif
 
 #if USE(AVFOUNDATION)
     settings->setAVFoundationEnabled(store.getBoolValueForKey(WebPreferencesKey::isAVFoundationEnabledKey()));
@@ -1699,6 +1785,8 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 
     settings->setApplicationChromeMode(store.getBoolValueForKey(WebPreferencesKey::applicationChromeModeKey()));    
     settings->setSuppressIncrementalRendering(store.getBoolValueForKey(WebPreferencesKey::suppressIncrementalRenderingKey()));
+    settings->setBackspaceKeyNavigationEnabled(store.getBoolValueForKey(WebPreferencesKey::backspaceKeyNavigationEnabledKey()));
+    settings->setCaretBrowsingEnabled(store.getBoolValueForKey(WebPreferencesKey::caretBrowsingEnabledKey()));
 
     platformPreferencesDidChange(store);
 }
@@ -1759,7 +1847,7 @@ bool WebPage::handleEditingKeyboardEvent(KeyboardEvent* evt)
 void WebPage::performDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, const WebCore::DragDataMap& dataMap, uint32_t flags)
 {
     if (!m_page) {
-        send(Messages::WebPageProxy::DidPerformDragControllerAction(DragOperationNone));
+        send(Messages::WebPageProxy::DidPerformDragControllerAction(WebCore::DragSession()));
         return;
     }
 
@@ -1786,12 +1874,16 @@ void WebPage::performDragControllerAction(uint64_t action, WebCore::IntPoint cli
     }
 }
 
-#elif PLATFORM(QT)
+#elif PLATFORM(QT) || PLATFORM(GTK)
 void WebPage::performDragControllerAction(uint64_t action, WebCore::DragData dragData)
 {
     if (!m_page) {
-        send(Messages::WebPageProxy::DidPerformDragControllerAction(DragOperationNone));
+        send(Messages::WebPageProxy::DidPerformDragControllerAction(WebCore::DragSession()));
+#if PLATFORM(QT)
         QMimeData* data = const_cast<QMimeData*>(dragData.platformData());
+#elif PLATFORM(GTK)
+        DataObjectGtk* data = const_cast<DataObjectGtk*>(dragData.platformData());
+#endif
         delete data;
         return;
     }
@@ -1818,7 +1910,11 @@ void WebPage::performDragControllerAction(uint64_t action, WebCore::DragData dra
         ASSERT_NOT_REACHED();
     }
     // DragData does not delete its platformData so we need to do that here.
+#if PLATFORM(QT)
     QMimeData* data = const_cast<QMimeData*>(dragData.platformData());
+#elif PLATFORM(GTK)
+    DataObjectGtk* data = const_cast<DataObjectGtk*>(dragData.platformData());
+#endif
     delete data;
 }
 
@@ -1826,7 +1922,7 @@ void WebPage::performDragControllerAction(uint64_t action, WebCore::DragData dra
 void WebPage::performDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, const String& dragStorageName, uint32_t flags, const SandboxExtension::Handle& sandboxExtensionHandle)
 {
     if (!m_page) {
-        send(Messages::WebPageProxy::DidPerformDragControllerAction(DragOperationNone));
+        send(Messages::WebPageProxy::DidPerformDragControllerAction(WebCore::DragSession()));
         return;
     }
 
@@ -2045,7 +2141,9 @@ void WebPage::setTextForActivePopupMenu(int32_t index)
 
 void WebPage::didSelectItemFromActiveContextMenu(const WebContextMenuItemData& item)
 {
-    ASSERT(m_contextMenu);
+    if (!m_contextMenu)
+        return;
+
     m_contextMenu->itemSelected(item);
     m_contextMenu = 0;
 }
@@ -2088,6 +2186,15 @@ void WebPage::didChangeScrollOffsetForMainFrame()
         
         m_cachedMainFrameIsPinnedToLeftSide = isPinnedToLeftSide;
         m_cachedMainFrameIsPinnedToRightSide = isPinnedToRightSide;
+    }
+}
+
+void WebPage::mainFrameDidLayout()
+{
+    unsigned pageCount = m_page->pageCount();
+    if (pageCount != m_cachedPageCount) {
+        send(Messages::WebPageProxy::DidChangePageCount(pageCount));
+        m_cachedPageCount = pageCount;
     }
 }
 
@@ -2145,6 +2252,14 @@ void WebPage::didReceiveMessage(CoreIPC::Connection* connection, CoreIPC::Messag
             m_drawingArea->didReceiveDrawingAreaMessage(connection, messageID, arguments);
         return;
     }
+
+#if USE(TILED_BACKING_STORE) && USE(ACCELERATED_COMPOSITING)
+    if (messageID.is<CoreIPC::MessageClassLayerTreeHost>()) {
+        if (m_drawingArea)
+            m_drawingArea->didReceiveLayerTreeHostMessage(connection, messageID, arguments);
+        return;
+    }
+#endif
     
 #if ENABLE(INSPECTOR)
     if (messageID.is<CoreIPC::MessageClassWebInspector>()) {
@@ -2543,6 +2658,8 @@ String WebPage::viewportConfigurationAsText(int deviceDPI, int deviceWidth, int 
 {
     ViewportArguments arguments = mainFrame()->document()->viewportArguments();
     ViewportAttributes attrs = WebCore::computeViewportAttributes(arguments, /* default layout width for non-mobile pages */ 980, deviceWidth, deviceHeight, deviceDPI, IntSize(availableWidth, availableHeight));
+    WebCore::restrictMinimumScaleFactorToViewportSize(attrs, IntSize(availableWidth, availableHeight));
+    WebCore::restrictScaleFactorToInitialScaleIfNotUserScalable(attrs);
     return String::format("viewport size %dx%d scale %f with limits [%f, %f] and userScalable %f\n", attrs.layoutSize.width(), attrs.layoutSize.height(), attrs.initialScale, attrs.minimumScale, attrs.maximumScale, attrs.userScalable);
 }
 

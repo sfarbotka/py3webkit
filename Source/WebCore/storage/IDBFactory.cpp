@@ -39,8 +39,10 @@
 #include "IDBDatabase.h"
 #include "IDBDatabaseException.h"
 #include "IDBFactoryBackendInterface.h"
+#include "IDBKey.h"
 #include "IDBKeyRange.h"
 #include "IDBRequest.h"
+#include "IDBVersionChangeRequest.h"
 #include "Page.h"
 #include "PageGroup.h"
 #include "SecurityOrigin.h"
@@ -48,7 +50,7 @@
 namespace WebCore {
 
 IDBFactory::IDBFactory(IDBFactoryBackendInterface* factory)
-    : m_factoryBackend(factory)
+    : m_backend(factory)
 {
     // We pass a reference to this object before it can be adopted.
     relaxAdoptionRequirement();
@@ -71,7 +73,7 @@ PassRefPtr<IDBRequest> IDBFactory::getDatabaseNames(ScriptExecutionContext* cont
 
     RefPtr<IDBRequest> request = IDBRequest::create(document, IDBAny::create(this), 0);
     GroupSettings* groupSettings = document->page()->group().groupSettings();
-    m_factoryBackend->getDatabaseNames(request, document->securityOrigin(), document->frame(), groupSettings->indexedDBDatabasePath(), groupSettings->indexedDBQuotaBytes(), IDBFactoryBackendInterface::DefaultBackingStore);
+    m_backend->getDatabaseNames(request, document->securityOrigin(), document->frame(), groupSettings->indexedDBDatabasePath());
     return request;
 }
 
@@ -93,8 +95,43 @@ PassRefPtr<IDBRequest> IDBFactory::open(ScriptExecutionContext* context, const S
 
     RefPtr<IDBRequest> request = IDBRequest::create(document, IDBAny::create(this), 0);
     GroupSettings* groupSettings = document->page()->group().groupSettings();
-    m_factoryBackend->open(name, request, document->securityOrigin(), document->frame(), groupSettings->indexedDBDatabasePath(), groupSettings->indexedDBQuotaBytes(), IDBFactoryBackendInterface::DefaultBackingStore);
+    m_backend->open(name, request, document->securityOrigin(), document->frame(), groupSettings->indexedDBDatabasePath());
     return request;
+}
+
+PassRefPtr<IDBVersionChangeRequest> IDBFactory::deleteDatabase(ScriptExecutionContext* context, const String& name, ExceptionCode& ec)
+{
+    if (!context->isDocument()) {
+        // FIXME: make this work with workers.
+        return 0;
+    }
+
+    Document* document = static_cast<Document*>(context);
+    if (!document->frame() || !document->page())
+        return 0;
+
+    if (name.isNull()) {
+        ec = IDBDatabaseException::NON_TRANSIENT_ERR;
+        return 0;
+    }
+
+    RefPtr<IDBVersionChangeRequest> request = IDBVersionChangeRequest::create(document, IDBAny::createNull(), "");
+    GroupSettings* groupSettings = document->page()->group().groupSettings();
+    m_backend->deleteDatabase(name, request, document->securityOrigin(), document->frame(), groupSettings->indexedDBDatabasePath());
+    return request;
+}
+
+short IDBFactory::cmp(PassRefPtr<IDBKey> first, PassRefPtr<IDBKey> second, ExceptionCode& ec)
+{
+    ASSERT(first);
+    ASSERT(second);
+
+    if (first->type() == IDBKey::InvalidType || second->type() == IDBKey::InvalidType) {
+        ec = IDBDatabaseException::DATA_ERR;
+        return 0;
+    }    
+    
+    return static_cast<short>(first->compare(second.get()));
 }
 
 } // namespace WebCore

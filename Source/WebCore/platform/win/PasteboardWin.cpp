@@ -35,6 +35,7 @@
 #include "HitTestResult.h"
 #include "Image.h"
 #include "KURL.h"
+#include "NotImplemented.h"
 #include "Page.h"
 #include "Range.h"
 #include "RenderImage.h"
@@ -217,7 +218,7 @@ void Pasteboard::writeImage(Node* node, const KURL&, const String&)
     CachedImage* cachedImage = renderer->cachedImage();
     if (!cachedImage || cachedImage->errorOccurred())
         return;
-    Image* image = cachedImage->image();
+    Image* image = cachedImage->imageForRenderer(renderer);
     ASSERT(image);
 
     clear();
@@ -248,6 +249,11 @@ void Pasteboard::writeImage(Node* node, const KURL&, const String&)
         ::SetClipboardData(CF_BITMAP, resultBitmap.leakPtr());
         ::CloseClipboard();
     }
+}
+
+void Pasteboard::writeClipboard(Clipboard*)
+{
+    notImplemented();
 }
 
 bool Pasteboard::canSmartReplace()

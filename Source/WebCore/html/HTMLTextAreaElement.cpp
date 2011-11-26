@@ -173,7 +173,11 @@ bool HTMLTextAreaElement::appendFormData(FormDataList& encoding, bool)
 
     const String& text = (m_wrap == HardWrap) ? valueWithHardLineBreaks() : value();
     encoding.appendData(name(), text);
-    return true;
+
+    const AtomicString& dirnameAttrValue = fastGetAttribute(dirnameAttr);
+    if (!dirnameAttrValue.isNull())
+        encoding.appendData(dirnameAttrValue, directionForFormData());
+    return true;    
 }
 
 void HTMLTextAreaElement::reset()
@@ -198,17 +202,10 @@ void HTMLTextAreaElement::updateFocusAppearance(bool restorePreviousSelection)
     ASSERT(!document()->childNeedsAndNotInStyleRecalc());
 
     if (!restorePreviousSelection || !hasCachedSelection()) {
-#if ENABLE(ON_FIRST_TEXTAREA_FOCUS_SELECT_ALL)
-        // Devices with trackballs or d-pads may focus on a textarea in route
-        // to another focusable node. By selecting all text, the next movement
-        // can more readily be interpreted as moving to the next node.
-        select();
-#else
         // If this is the first focus, set a caret at the beginning of the text.  
         // This matches some browsers' behavior; see bug 11746 Comment #15.
         // http://bugs.webkit.org/show_bug.cgi?id=11746#c15
         setSelectionRange(0, 0);
-#endif
     } else
         restoreCachedSelection();
 
@@ -218,7 +215,7 @@ void HTMLTextAreaElement::updateFocusAppearance(bool restorePreviousSelection)
 
 void HTMLTextAreaElement::defaultEventHandler(Event* event)
 {
-    if (renderer() && (event->isMouseEvent() || event->isDragEvent() || event->isWheelEvent() || event->type() == eventNames().blurEvent))
+    if (renderer() && (event->isMouseEvent() || event->isDragEvent() || event->hasInterface(eventNames().interfaceForWheelEvent) || event->type() == eventNames().blurEvent))
         forwardEvent(event);
     else if (renderer() && event->isBeforeTextInsertedEvent())
         handleBeforeTextInsertedEvent(static_cast<BeforeTextInsertedEvent*>(event));
@@ -272,7 +269,7 @@ HTMLElement* HTMLTextAreaElement::innerTextElement() const
 {
     Node* node = shadowRoot()->firstChild();
     ASSERT(!node || node->hasTagName(divTag));
-    return static_cast<HTMLElement*>(node);
+    return toHTMLElement(node);
 }
 
 void HTMLTextAreaElement::rendererWillBeDestroyed()

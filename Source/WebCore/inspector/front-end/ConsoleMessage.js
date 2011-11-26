@@ -31,21 +31,30 @@
 /**
  * @constructor
  * @extends {WebInspector.ConsoleMessage}
+ *
+ * @param {string} source
+ * @param {string} level
+ * @param {string} message
  * @param {WebInspector.DebuggerPresentationModel.Linkifier} linkifier
+ * @param {string=} type
+ * @param {string=} url
+ * @param {number=} line
+ * @param {number=} repeatCount
  * @param {Array.<RuntimeAgent.RemoteObject>=} parameters
  * @param {ConsoleAgent.StackTrace=} stackTrace
  * @param {WebInspector.Resource=} request
  */
-WebInspector.ConsoleMessageImpl = function(source, type, level, line, url, repeatCount, message, linkifier, parameters, stackTrace, request)
+WebInspector.ConsoleMessageImpl = function(source, level, message, linkifier, type, url, line, repeatCount, parameters, stackTrace, request)
 {
     WebInspector.ConsoleMessage.call();
 
     this._linkifier = linkifier;
     this.source = source;
-    this.type = type;
+    this.type = type || WebInspector.ConsoleMessage.MessageType.Log;
     this.level = level;
-    this.line = line;
-    this.url = url;
+    this.line = line || 0;
+    this.url = url || null;
+    repeatCount = repeatCount || 1;
     this.repeatCount = repeatCount;
     this.repeatDelta = repeatCount;
     this.totalRepeatCount = repeatCount;
@@ -53,14 +62,6 @@ WebInspector.ConsoleMessageImpl = function(source, type, level, line, url, repea
     this._parameters = parameters;
     this._stackTrace = stackTrace;
     this._request = request;
-
-    if (stackTrace && stackTrace.length) {
-        var topCallFrame = stackTrace[0];
-        if (!this.url)
-            this.url = topCallFrame.url;
-        if (!this.line)
-            this.line = topCallFrame.lineNumber;
-    }
 
     this._customFormatters = {
         "object": this._formatParameterAsObject,
@@ -99,8 +100,8 @@ WebInspector.ConsoleMessageImpl.prototype = {
             }
         } else if (this.source === WebInspector.ConsoleMessage.MessageSource.Network) {
             if (this._request) {
+                this._stackTrace = this._request.stackTrace;
                 if (this.level === WebInspector.ConsoleMessage.MessageLevel.Error) {
-                    this._stackTrace = this._request.stackTrace;
                     messageText = document.createElement("span");
                     messageText.appendChild(document.createTextNode(this._request.requestMethod + " "));
                     var anchor = WebInspector.linkifyURLAsNode(this._request.url);
@@ -129,9 +130,11 @@ WebInspector.ConsoleMessageImpl.prototype = {
                     messageText.appendChild(fragment);
                 }
             } else {
-                var isExternal = !WebInspector.resourceForURL(this.url);
-                var anchor = WebInspector.linkifyURLAsNode(this.url, this.url, "console-message-url", isExternal);
-                this._formattedMessage.appendChild(anchor);
+                if (this.url) {
+                    var isExternal = !WebInspector.resourceForURL(this.url);
+                    var anchor = WebInspector.linkifyURLAsNode(this.url, this.url, "console-message-url", isExternal);
+                    this._formattedMessage.appendChild(anchor);
+                }
                 messageText = this._format([this._messageText]);
             }
         } else {
@@ -152,7 +155,7 @@ WebInspector.ConsoleMessageImpl.prototype = {
 
         this._formattedMessage.appendChild(messageText);
 
-        var dumpStackTrace = !!this._stackTrace && (this.level === WebInspector.ConsoleMessage.MessageLevel.Error || this.type === WebInspector.ConsoleMessage.MessageType.Trace);
+        var dumpStackTrace = !!this._stackTrace && (this.source === WebInspector.ConsoleMessage.MessageSource.Network || this.level === WebInspector.ConsoleMessage.MessageLevel.Error || this.type === WebInspector.ConsoleMessage.MessageType.Trace);
         if (dumpStackTrace) {
             var ol = document.createElement("ol");
             ol.className = "outline-disclosure";
@@ -183,7 +186,7 @@ WebInspector.ConsoleMessageImpl.prototype = {
     _linkifyLocation: function(url, lineNumber, columnNumber)
     {
         // FIXME(62725): stack trace line/column numbers are one-based.
-        lineNumber = lineNumber ? lineNumber - 1 : undefined;
+        lineNumber = lineNumber ? lineNumber - 1 : 0;
         columnNumber = columnNumber ? columnNumber - 1 : 0;
         return this._linkifier.linkifyLocation(url, lineNumber, columnNumber, "console-message-url");
     },
@@ -289,6 +292,7 @@ WebInspector.ConsoleMessageImpl.prototype = {
                 return;
             }
             var treeOutline = new WebInspector.ElementsTreeOutline(false, false, true);
+            treeOutline.setVisible(true);
             treeOutline.rootDOMNode = WebInspector.domAgent.nodeForId(nodeId);
             treeOutline.element.addStyleClass("outline-disclosure");
             if (!treeOutline.children[0].hasChildren)

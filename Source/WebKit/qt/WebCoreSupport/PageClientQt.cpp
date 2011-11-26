@@ -85,6 +85,8 @@ void PageClientQWidget::setRootGraphicsLayer(GraphicsLayer* layer)
 
 void PageClientQWidget::markForSync(bool scheduleSync)
 {
+    if (syncTimer.isActive())
+        return;
     syncTimer.startOneShot(0);
 }
 
@@ -95,7 +97,7 @@ void PageClientQWidget::syncLayers(Timer<PageClientQWidget>*)
     QWebFramePrivate::core(page->mainFrame())->view()->syncCompositingStateIncludingSubframes();
     if (!textureMapperNodeClient)
         return;
-    if (textureMapperNodeClient->rootNode()->descendantsOrSelfHaveRunningAnimations())
+    if (textureMapperNodeClient->rootNode()->descendantsOrSelfHaveRunningAnimations() && !syncTimer.isActive())
         syncTimer.startOneShot(1.0 / 60.0);
     update(view->rect());
 }
@@ -219,7 +221,7 @@ void PageClientQGraphicsWidget::createOrDeleteOverlay()
 #if USE(ACCELERATED_COMPOSITING)
         useOverlay = useOverlay || rootGraphicsLayer;
 #endif
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
         useOverlay = useOverlay || QWebFramePrivate::core(page->mainFrame())->tiledBackingStore();
 #endif
     }
@@ -251,12 +253,9 @@ void PageClientQGraphicsWidget::syncLayers()
     if (!textureMapperNodeClient)
         return;
 
-    if (textureMapperNodeClient->rootNode()->descendantsOrSelfHaveRunningAnimations())
+    if (textureMapperNodeClient->rootNode()->descendantsOrSelfHaveRunningAnimations() && !syncTimer.isActive())
         syncTimer.startOneShot(1.0 / 60.0);
     update(view->boundingRect().toAlignedRect());
-    if (!shouldSync)
-        return;
-    shouldSync = false;
 #endif
 }
 
@@ -298,13 +297,14 @@ void PageClientQGraphicsWidget::setRootGraphicsLayer(GraphicsLayer* layer)
 
 void PageClientQGraphicsWidget::markForSync(bool scheduleSync)
 {
-    shouldSync = true;
+    if (syncTimer.isActive())
+        return;
     syncTimer.startOneShot(0);
 }
 
 #endif
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void PageClientQGraphicsWidget::updateTiledBackingStoreScale()
 {
     WebCore::TiledBackingStore* backingStore = QWebFramePrivate::core(page->mainFrame())->tiledBackingStore();
@@ -382,7 +382,7 @@ QRect PageClientQGraphicsWidget::geometryRelativeToOwnerWidget() const
     return graphicsView->mapFromScene(view->boundingRect()).boundingRect();
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 QRectF PageClientQGraphicsWidget::graphicsItemVisibleRect() const
 {
     if (!view->scene())

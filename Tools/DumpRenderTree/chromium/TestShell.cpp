@@ -103,7 +103,7 @@ TestShell::TestShell(bool testShellMode)
     , m_testShellMode(testShellMode)
     , m_devTools(0)
     , m_allowExternalPages(false)
-    , m_acceleratedCompositingEnabled(false)
+    , m_acceleratedCompositingForVideoEnabled(false)
     , m_threadedCompositingEnabled(false)
     , m_compositeToTexture(false)
     , m_forceCompositingMode(false)
@@ -116,19 +116,25 @@ TestShell::TestShell(bool testShellMode)
 {
     WebRuntimeFeatures::enableDataTransferItems(true);
     WebRuntimeFeatures::enableGeolocation(true);
+    WebRuntimeFeatures::enablePointerLock(true);
     WebRuntimeFeatures::enableIndexedDatabase(true);
     WebRuntimeFeatures::enableFileSystem(true);
     WebRuntimeFeatures::enableJavaScriptI18NAPI(true);
     WebRuntimeFeatures::enableMediaStream(true);
     WebRuntimeFeatures::enableWebAudio(true); 
+    WebRuntimeFeatures::enableVideoTrack(true);
+    WebRuntimeFeatures::enableGamepad(true);
 
     m_webPermissions = adoptPtr(new WebPermissions(this));
     m_accessibilityController = adoptPtr(new AccessibilityController(this));
+    m_gamepadController = adoptPtr(new GamepadController(this));
     m_layoutTestController = adoptPtr(new LayoutTestController(this));
     m_eventSender = adoptPtr(new EventSender(this));
     m_plainTextController = adoptPtr(new PlainTextController());
     m_textInputController = adoptPtr(new TextInputController(this));
+#if ENABLE(NOTIFICATIONS)
     m_notificationPresenter = adoptPtr(new NotificationPresenter(this));
+#endif
     m_printer = m_testShellMode ? TestEventPrinter::createTestShellPrinter() : TestEventPrinter::createDRTPrinter();
 
     // 30 second is the same as the value in Mac DRT.
@@ -172,6 +178,7 @@ void TestShell::showDevTools()
         }
         m_devTools = createNewWindow(url);
         m_devTools->webView()->settings()->setMemoryInfoEnabled(true);
+        m_devTools->setLogConsoleOutput(false);
         ASSERT(m_devTools);
         createDRTDevToolsClient(m_drtDevToolsAgent.get());
     }
@@ -192,7 +199,8 @@ void TestShell::closeDevTools()
 void TestShell::resetWebSettings(WebView& webView)
 {
     m_prefs.reset();
-    m_prefs.acceleratedCompositingEnabled = m_acceleratedCompositingEnabled;
+    m_prefs.acceleratedCompositingEnabled = true;
+    m_prefs.acceleratedCompositingForVideoEnabled = m_acceleratedCompositingForVideoEnabled;
     m_prefs.threadedCompositingEnabled = m_threadedCompositingEnabled;
     m_prefs.compositeToTexture = m_compositeToTexture;
     m_prefs.forceCompositingMode = m_forceCompositingMode;
@@ -212,6 +220,12 @@ void TestShell::runFileTest(const TestParams& params)
     if (testUrl.find("loading/") != string::npos
         || testUrl.find("loading\\") != string::npos)
         m_layoutTestController->setShouldDumpFrameLoadCallbacks(true);
+
+    if (testUrl.find("compositing/") != string::npos || testUrl.find("compositing\\") != string::npos) {
+        m_prefs.acceleratedCompositingForVideoEnabled = true;
+        m_prefs.accelerated2dCanvasEnabled = true;
+        m_prefs.applyTo(m_webView);
+    }
 
     if (testUrl.find("/dumpAsText/") != string::npos
         || testUrl.find("\\dumpAsText\\") != string::npos) {
@@ -257,14 +271,17 @@ void TestShell::resetTestController()
     resetWebSettings(*webView());
     m_webPermissions->reset();
     m_accessibilityController->reset();
+    m_gamepadController->reset();
     m_layoutTestController->reset();
     m_eventSender->reset();
     m_webViewHost->reset();
+#if ENABLE(NOTIFICATIONS)
     m_notificationPresenter->reset();
+#endif
     m_drtDevToolsAgent->reset();
     if (m_drtDevToolsClient)
         m_drtDevToolsClient->reset();
-    webView()->scalePage(1, WebPoint(0, 0));
+    webView()->setPageScaleFactor(1, WebPoint(0, 0));
     webView()->enableFixedLayoutMode(false);
     webView()->setFixedLayoutSize(WebSize(0, 0));
     webView()->mainFrame()->clearOpener();
@@ -360,6 +377,32 @@ static string dumpFramesAsText(WebFrame* frame, bool recursive)
     if (recursive) {
         for (WebFrame* child = frame->firstChild(); child; child = child->nextSibling())
             result.append(dumpFramesAsText(child, recursive));
+    }
+
+    return result;
+}
+
+static string dumpFramesAsPrintedText(WebFrame* frame, bool recursive)
+{
+    string result;
+
+    // Cannot do printed format for anything other than HTML
+    if (!frame->document().isHTMLDocument())
+        return string();
+
+    // Add header for all but the main frame. Skip empty frames.
+    if (frame->parent() && !frame->document().documentElement().isNull()) {
+        result.append("\n--------\nFrame: '");
+        result.append(frame->name().utf8().data());
+        result.append("'\n--------\n");
+    }
+
+    result.append(frame->renderTreeAsText(WebFrame::RenderAsTextPrinting).utf8());
+    result.append("\n");
+
+    if (recursive) {
+        for (WebFrame* child = frame->firstChild(); child; child = child->nextSibling())
+            result.append(dumpFramesAsPrintedText(child, recursive));
     }
 
     return result;
@@ -482,18 +525,19 @@ void TestShell::dump()
     bool shouldDumpAsText = m_layoutTestController->shouldDumpAsText();
     bool shouldDumpAsAudio = m_layoutTestController->shouldDumpAsAudio();
     bool shouldGeneratePixelResults = m_layoutTestController->shouldGeneratePixelResults();
+    bool shouldDumpAsPrinted = m_layoutTestController->isPrinting();
     bool dumpedAnything = false;
 
     if (shouldDumpAsAudio) {
         m_printer->handleAudioHeader();
-        
+
         const WebKit::WebArrayBufferView& webArrayBufferView = m_layoutTestController->audioData();
         printf("Content-Length: %d\n", webArrayBufferView.byteLength());
-        
+
         if (fwrite(webArrayBufferView.baseAddress(), 1, webArrayBufferView.byteLength(), stdout) != webArrayBufferView.byteLength())
             FATAL("Short write to stdout, disk full?\n");
         printf("\n");
-        
+
         m_printer->handleTestFooter(true);
 
         fflush(stdout);
@@ -516,11 +560,16 @@ void TestShell::dump()
         }
         if (shouldDumpAsText) {
             bool recursive = m_layoutTestController->shouldDumpChildFramesAsText();
-            string dataUtf8 = dumpFramesAsText(frame, recursive);
+            string dataUtf8 = shouldDumpAsPrinted ? dumpFramesAsPrintedText(frame, recursive) : dumpFramesAsText(frame, recursive);
             if (fwrite(dataUtf8.c_str(), 1, dataUtf8.size(), stdout) != dataUtf8.size())
                 FATAL("Short write to stdout, disk full?\n");
         } else {
-            printf("%s", frame->renderTreeAsText(m_params.debugRenderTree).utf8().data());
+          WebFrame::RenderAsTextControls renderTextBehavior = WebFrame::RenderAsTextNormal;
+            if (shouldDumpAsPrinted)
+                renderTextBehavior |= WebFrame::RenderAsTextPrinting;
+            if (m_params.debugRenderTree)
+                renderTextBehavior |= WebFrame::RenderAsTextDebug;
+            printf("%s", frame->renderTreeAsText(renderTextBehavior).utf8().data());
             bool recursive = m_layoutTestController->shouldDumpChildFrameScrollPositions();
             dumpFrameScrollPosition(frame, recursive);
         }
@@ -547,7 +596,9 @@ void TestShell::dump()
                 for (WebRect line(0, 0, width, 1); line.y < height; line.y++)
                     m_webViewHost->paintRect(line);
             }
-        } else
+        } else if (m_layoutTestController->isPrinting())
+            m_webViewHost->paintPagesWithBoundaries();
+        else
             m_webViewHost->paintInvalidatedRegion();
 
         // See if we need to draw the selection bounds rect. Selection bounds
@@ -624,6 +675,7 @@ void TestShell::bindJSObjectsToWindow(WebFrame* frame)
 {
     WebTestingSupport::injectInternalsObject(frame);
     m_accessibilityController->bindToJavascript(frame, WebString::fromUTF8("accessibilityController"));
+    m_gamepadController->bindToJavascript(frame, WebString::fromUTF8("gamepadController"));
     m_layoutTestController->bindToJavascript(frame, WebString::fromUTF8("layoutTestController"));
     m_eventSender->bindToJavascript(frame, WebString::fromUTF8("eventSender"));
     m_plainTextController->bindToJavascript(frame, WebString::fromUTF8("plainText"));

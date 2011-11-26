@@ -85,8 +85,9 @@ LayoutState::LayoutState(LayoutState* prev, RenderBox* renderer, const LayoutSiz
     // We can compare this later on to figure out what part of the page we're actually on,
     if (pageLogicalHeight || m_columnInfo) {
         m_pageLogicalHeight = pageLogicalHeight;
-        m_pageOffset = LayoutSize(m_layoutOffset.width() + renderer->borderLeft() + renderer->paddingLeft(),
-                               m_layoutOffset.height() + renderer->borderTop() + renderer->paddingTop());
+        bool isFlipped = renderer->style()->isFlippedBlocksWritingMode();
+        m_pageOffset = LayoutSize(m_layoutOffset.width() + (!isFlipped ? renderer->borderLeft() + renderer->paddingLeft() : renderer->borderRight() + renderer->paddingRight()),
+                               m_layoutOffset.height() + (!isFlipped ? renderer->borderTop() + renderer->paddingTop() : renderer->borderBottom() + renderer->paddingBottom()));
         m_pageLogicalHeightChanged = pageLogicalHeightChanged;
     } else {
         // If we don't establish a new page height, then propagate the old page height and offset down.
@@ -94,8 +95,9 @@ LayoutState::LayoutState(LayoutState* prev, RenderBox* renderer, const LayoutSiz
         m_pageLogicalHeightChanged = m_next->m_pageLogicalHeightChanged;
         m_pageOffset = m_next->m_pageOffset;
         
-        // Disable pagination for objects we don't support.  For now this includes overflow:scroll/auto and inline blocks.
-        if (renderer->isReplaced() || renderer->hasUnsplittableScrollingOverflow())
+        // Disable pagination for objects we don't support. For now this includes overflow:scroll/auto, inline blocks and
+        // writing mode roots.
+        if (renderer->isUnsplittableForPagination())
             m_pageLogicalHeight = 0;
     }
     

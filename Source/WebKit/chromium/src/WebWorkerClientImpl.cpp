@@ -85,9 +85,9 @@ WorkerContextProxy* WebWorkerClientImpl::createWorkerContextProxy(Worker* worker
     return 0;
 }
 
-void WebWorkerClientImpl::startWorkerContext(const KURL& scriptURL, const String& userAgent, const String& sourceCode)
+void WebWorkerClientImpl::startWorkerContext(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode)
 {
-    RefPtr<DedicatedWorkerThread> thread = DedicatedWorkerThread::create(scriptURL, userAgent, sourceCode, *this, *this);
+    RefPtr<DedicatedWorkerThread> thread = DedicatedWorkerThread::create(scriptURL, userAgent, sourceCode, *this, *this, startMode);
     m_proxy->workerThreadCreated(thread);
     thread->start();
 }
@@ -118,13 +118,10 @@ void WebWorkerClientImpl::workerObjectDestroyed()
 void WebWorkerClientImpl::connectToInspector(PageInspector* inspector)
 {
     m_proxy->connectToInspector(inspector);
-    ASSERT(!m_pageInspector);
-    m_pageInspector = inspector;
 }
 
 void WebWorkerClientImpl::disconnectFromInspector()
 {
-    m_pageInspector = 0;
     m_proxy->disconnectFromInspector();
 }
 
@@ -138,8 +135,9 @@ void WebWorkerClientImpl::postMessageToPageInspector(const String& message)
     m_proxy->postMessageToPageInspector(message);
 }
 
-void WebWorkerClientImpl::updateInspectorStateCookie(const String&)
+void WebWorkerClientImpl::updateInspectorStateCookie(const String& cookie)
 {
+    m_proxy->updateInspectorStateCookie(cookie);
 }
 #endif // ENABLE(INSPECTOR)
 
@@ -192,6 +190,8 @@ void WebWorkerClientImpl::workerContextDestroyed()
 bool WebWorkerClientImpl::allowFileSystem() 
 {
     WebKit::WebViewImpl* webView = m_webFrame->viewImpl();
+    if (!webView)
+        return false;
     return !webView->permissionClient() || webView->permissionClient()->allowFileSystem(m_webFrame);
 }
 
@@ -203,16 +203,12 @@ void WebWorkerClientImpl::openFileSystem(WebFileSystem::Type type, long long siz
 
 bool WebWorkerClientImpl::allowDatabase(WebFrame*, const WebString& name, const WebString& displayName, unsigned long estimatedSize) 
 {
-     WebKit::WebViewImpl* webView = m_webFrame->viewImpl();
-     return !webView->permissionClient() || webView->permissionClient()->allowDatabase(m_webFrame, name, displayName, estimatedSize);
+    WebKit::WebViewImpl* webView = m_webFrame->viewImpl();
+    if (!webView)
+        return false;
+    return !webView->permissionClient() || webView->permissionClient()->allowDatabase(m_webFrame, name, displayName, estimatedSize);
 }
  
-void WebWorkerClientImpl::dispatchDevToolsMessage(const WebString& message)
-{
-    if (m_pageInspector)
-        m_pageInspector->dispatchMessageFromWorker(message);
-}
-
 WebView* WebWorkerClientImpl::view() const 
 {   
     return m_webFrame->view(); 
@@ -222,8 +218,6 @@ WebWorkerClientImpl::WebWorkerClientImpl(Worker* worker, WebFrameImpl* webFrame)
     : m_proxy(new WorkerMessagingProxy(worker))
     , m_scriptExecutionContext(worker->scriptExecutionContext())
     , m_webFrame(webFrame)    
-    , m_pageInspector(0)
-
 {
 }
 

@@ -33,9 +33,9 @@
 
 #include "WebDragOperation.h"
 #include "WebPageVisibilityState.h"
-#include "WebString.h"
-#include "WebVector.h"
 #include "WebWidget.h"
+#include "platform/WebString.h"
+#include "platform/WebVector.h"
 
 namespace WebKit {
 
@@ -61,6 +61,8 @@ public:
     WEBKIT_EXPORT static const double textSizeMultiplierRatio;
     WEBKIT_EXPORT static const double minTextSizeMultiplier;
     WEBKIT_EXPORT static const double maxTextSizeMultiplier;
+    WEBKIT_EXPORT static const float minPageScaleFactor;
+    WEBKIT_EXPORT static const float maxPageScaleFactor;
 
     // Controls the time that user scripts injected into the document run.
     enum UserScriptInjectAt {
@@ -211,10 +213,28 @@ public:
     // is scaled up, < 1.0 is scaled down.
     virtual float pageScaleFactor() const = 0;
 
+    // Scales the page and the scroll offset by a given factor, while ensuring
+    // that the new scroll position does not go beyond the edge of the page.
+    virtual void setPageScaleFactorPreservingScrollOffset(float) = 0;
+
     // Scales a page by a factor of scaleFactor and then sets a scroll position to (x, y).
-    // scalePage() magnifies and shrinks a page without affecting layout.
+    // setPageScaleFactor() magnifies and shrinks a page without affecting layout.
     // On the other hand, zooming affects layout of the page.
-    virtual void scalePage(float scaleFactor, WebPoint origin) = 0;
+    virtual void setPageScaleFactor(float scaleFactor, const WebPoint& origin) = 0;
+
+    // PageScaleFactor will be force-clamped between minPageScale and maxPageScale
+    // (and these values will persist until setPageScaleFactorLimits is called
+    // again).
+    virtual void setPageScaleFactorLimits(float minPageScale, float maxPageScale) = 0;
+
+    virtual float minimumPageScaleFactor() const = 0;
+    virtual float maximumPageScaleFactor() const = 0;
+
+    // The ratio of the current device's screen DPI to the target device's screen DPI.
+    virtual float deviceScaleFactor() const = 0;
+
+    // Sets the ratio as computed by computeViewportAttributes.
+    virtual void setDeviceScaleFactor(float) = 0;
 
 
     // Fixed Layout --------------------------------------------------------
@@ -389,10 +409,6 @@ public:
     virtual void setVisibilityState(WebPageVisibilityState visibilityState,
                                     bool isInitialState) { }
 
-
-    // Fullscreen -----------------------------------------------------------
-
-    virtual void exitFullscreen() = 0;
 
     // Testing functionality for LayoutTestController -----------------------
 

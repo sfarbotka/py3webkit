@@ -85,6 +85,7 @@ public:
     virtual void setPreserves3D(bool);
     virtual void setMasksToBounds(bool);
     virtual void setDrawsContent(bool);
+    virtual void setContentsVisible(bool);
     virtual void setAcceleratesDrawing(bool);
 
     virtual void setBackgroundColor(const Color&);
@@ -197,7 +198,6 @@ private:
     void swapFromOrToTiledLayer(bool useTiledLayer, float pageScaleFactor, const FloatPoint& positionRelativeToBase);
 
     CompositingCoordinatesOrientation defaultContentsOrientation() const;
-    void updateContentsTransform();
     
     void setupContentsLayer(PlatformCALayer*);
     PlatformCALayer* contentsLayer() const { return m_contentsLayer.get(); }
@@ -278,6 +278,7 @@ private:
     void updateTransform();
     void updateChildrenTransform();
     void updateMasksToBounds();
+    void updateContentsVisibility();
     void updateContentsOpaque();
     void updateBackfaceVisibility();
     void updateStructuralLayer(float pixelAlignmentScale, const FloatPoint& positionRelativeToBase);
@@ -312,6 +313,8 @@ private:
     static void moveOrCopyLayerAnimation(MoveOrCopy, const String& animationIdentifier, PlatformCALayer *fromLayer, PlatformCALayer *toLayer);
     void moveOrCopyAnimationsForProperty(MoveOrCopy, AnimatedPropertyID, PlatformCALayer * fromLayer, PlatformCALayer * toLayer);
     
+    bool appendToUncommittedAnimations(const KeyframeValueList&, const TransformOperationList&, const Animation*, const String& animationName, const IntSize& boxSize, int animationIndex, double timeOffset, bool isMatrixAnimation);
+    
     enum LayerChange {
         NoChange = 0,
         NameChanged = 1 << 1,
@@ -321,7 +324,7 @@ private:
         ChildrenTransformChanged = 1 << 5,
         Preserves3DChanged = 1 << 6,
         MasksToBoundsChanged = 1 << 7,
-        DrawsContentChanged = 1 << 8, // need this?
+        DrawsContentChanged = 1 << 8,
         BackgroundColorChanged = 1 << 9,
         ContentsOpaqueChanged = 1 << 10,
         BackfaceVisibilityChanged = 1 << 11,
@@ -336,7 +339,8 @@ private:
         ReplicatedLayerChanged = 1 << 20,
         ContentsNeedsDisplay = 1 << 21,
         AcceleratesDrawingChanged = 1 << 22,
-        ContentsScaleChanged = 1 << 23
+        ContentsScaleChanged = 1 << 23,
+        ContentsVisibilityChanged = 1 << 24,
     };
     typedef unsigned LayerChangeFlags;
     void noteLayerPropertyChanged(LayerChangeFlags flags);

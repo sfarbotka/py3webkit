@@ -35,8 +35,10 @@
 #include "EventSender.h"
 
 #include "DumpRenderTree.h"
+#include "DumpRenderTreeChrome.h"
 #include "JSStringUtils.h"
 #include "NotImplemented.h"
+#include "WebCoreSupport/DumpRenderTreeSupportEfl.h"
 #include "ewk_private.h"
 #include <EWebKit.h>
 #include <JavaScriptCore/JSObjectRef.h>
@@ -126,6 +128,8 @@ static EvasMouseButton translateMouseButtonNumber(int eventSenderButtonNumber)
 static bool sendMouseEvent(Evas* evas, EvasMouseEvent event, int buttonNumber, EvasKeyModifier modifiers)
 {
     unsigned timeStamp = 0;
+
+    DumpRenderTreeSupportEfl::layoutFrame(browser->mainFrame());
 
     setEvasModifiers(evas, modifiers);
     if (event & EvasMouseEventMove)
@@ -327,10 +331,7 @@ static const char* keyPadNameFromJSValue(JSStringRef character)
     if (equals(character, "delete"))
         return "KP_Delete";
 
-    // If we get some other key specified with the numpad location,
-    // crash here, so we add it sooner rather than later.
-    fprintf(stderr, "numeric pad key not handled: %s\n", character->ustring().utf8().data());
-    abort();
+    return 0;
 }
 
 static const char* keyNameFromJSValue(JSStringRef character)
@@ -392,10 +393,7 @@ static const char* keyNameFromJSValue(JSStringRef character)
     if (charCode == '\x8')
         return "BackSpace";
 
-    // FIXME: See other implementations and obtain the key name by
-    // the Unicode character code.
-    fprintf(stderr, "key not handled: %s\n", character->ustring().utf8().data());
-    abort();
+    return 0;
 }
 
 static JSValueRef keyDownCallback(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception)
@@ -421,9 +419,15 @@ static JSValueRef keyDownCallback(JSContextRef context, JSObjectRef function, JS
     if (argumentCount >= 2)
         setEvasModifiers(evas, modifiersFromJSValue(context, arguments[1]));
 
+    const CString cCharacter = character.get()->ustring().utf8();
     const char* keyName = (location == DomKeyLocationNumpad) ? keyPadNameFromJSValue(character.get()) : keyNameFromJSValue(character.get());
-    evas_event_feed_key_down(evas, keyName, keyName, 0, 0, 0, 0);
-    evas_event_feed_key_up(evas, keyName, keyName, 0, 0, 1, 0);
+
+    if (!keyName)
+        keyName = cCharacter.data();
+
+    DumpRenderTreeSupportEfl::layoutFrame(browser->mainFrame());
+    evas_event_feed_key_down(evas, keyName, keyName, keyName, 0, 0, 0);
+    evas_event_feed_key_up(evas, keyName, keyName, keyName, 0, 1, 0);
 
     setEvasModifiers(evas, EvasKeyModifierNone);
 
@@ -442,7 +446,7 @@ static JSValueRef scalePageByCallback(JSContextRef context, JSObjectRef function
     float scaleFactor = JSValueToNumber(context, arguments[0], exception);
     float x = JSValueToNumber(context, arguments[1], exception);
     float y = JSValueToNumber(context, arguments[2], exception);
-    ewk_view_page_scale(view, scaleFactor, x, y);
+    ewk_view_scale_set(view, scaleFactor, x, y);
 
     return JSValueMakeUndefined(context);
 }

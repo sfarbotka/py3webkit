@@ -22,6 +22,14 @@ LIST(APPEND WebKit_INCLUDE_DIRECTORIES
     ${SQLITE_INCLUDE_DIR}
 )
 
+IF (ENABLE_SVG)
+  LIST(APPEND WebKit_INCLUDE_DIRECTORIES
+    "${WEBCORE_DIR}/svg"
+    "${WEBCORE_DIR}/svg/animation"
+    "${WEBCORE_DIR}/rendering/svg"
+  )
+ENDIF ()
+
 IF (ENABLE_VIDEO)
 LIST(APPEND WebKit_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/platform/graphics/gstreamer"
@@ -59,6 +67,7 @@ LIST(APPEND WebKit_SOURCES
     efl/WebCoreSupport/DeviceOrientationClientEfl.cpp
     efl/WebCoreSupport/DeviceMotionClientEfl.cpp
     efl/WebCoreSupport/DragClientEfl.cpp
+    efl/WebCoreSupport/DumpRenderTreeSupportEfl.cpp
     efl/WebCoreSupport/EditorClientEfl.cpp
     efl/WebCoreSupport/FrameLoaderClientEfl.cpp
     efl/WebCoreSupport/FullscreenVideoControllerEfl.cpp
@@ -125,16 +134,13 @@ IF (WTF_USE_CURL)
   LIST(APPEND WebKit_LIBRARIES ${CURL_LIBRARIES} ${ZLIB_LIBRARIES})
 ENDIF ()
 
-SET(BUILD_DATA_DIR ${CMAKE_BINARY_DIR}/WebKit/efl/DefaultTheme)
-SET(BUILD_DATA_DIR ${BUILD_DATA_DIR} PARENT_SCOPE)
-FILE(MAKE_DIRECTORY ${BUILD_DATA_DIR})
-
 SET(WebKit_THEME_DEFINITION "")
 IF (ENABLE_PROGRESS_TAG)
   LIST(APPEND WebKit_THEME_DEFINITION "-DENABLE_PROGRESS_TAG")
 ENDIF ()
 
-SET(WebKit_THEME ${BUILD_DATA_DIR}/default.edj)
+FILE(MAKE_DIRECTORY ${THEME_BINARY_DIR})
+SET(WebKit_THEME ${THEME_BINARY_DIR}/default.edj)
 ADD_CUSTOM_COMMAND(
   OUTPUT ${WebKit_THEME}
   COMMAND ${EDJE_CC_EXECUTABLE} -v -id ${WEBKIT_DIR}/efl/DefaultTheme ${WebKit_THEME_DEFINITION} ${WEBKIT_DIR}/efl/DefaultTheme/default.edc ${WebKit_THEME}
@@ -251,4 +257,4 @@ INSTALL(FILES ${EWebKit_HEADERS}
         DESTINATION include/${WebKit_LIBRARY_NAME}-${PROJECT_VERSION_MAJOR})
 
 INSTALL(FILES ${WebKit_THEME}
-        DESTINATION share/${WebKit_LIBRARY_NAME}-${PROJECT_VERSION_MAJOR}/themes)
+        DESTINATION ${DATA_INSTALL_DIR}/themes)

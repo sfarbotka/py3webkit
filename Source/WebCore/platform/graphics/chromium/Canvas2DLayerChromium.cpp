@@ -36,6 +36,7 @@
 
 #include "Extensions3DChromium.h"
 #include "GraphicsContext3D.h"
+#include "cc/CCLayerTreeHost.h"
 
 #if USE(SKIA)
 #include "GrContext.h"
@@ -64,7 +65,7 @@ bool Canvas2DLayerChromium::drawsContent() const
             && (m_context->getExtensions()->getGraphicsResetStatusARB() == GraphicsContext3D::NO_ERROR));
 }
 
-void Canvas2DLayerChromium::updateCompositorResources(GraphicsContext3D*, TextureAllocator*)
+void Canvas2DLayerChromium::updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&)
 {
     if (m_dirtyRect.isEmpty() || !drawsContent())
         return;
@@ -79,7 +80,15 @@ void Canvas2DLayerChromium::updateCompositorResources(GraphicsContext3D*, Textur
 #endif
         m_context->flush();
     }
+
+    m_updateRect = FloatRect(FloatPoint(), bounds());
     resetNeedsDisplay();
+}
+
+void Canvas2DLayerChromium::contentChanged()
+{
+    if (layerTreeHost())
+        layerTreeHost()->startRateLimiter(m_context);
 }
 
 }

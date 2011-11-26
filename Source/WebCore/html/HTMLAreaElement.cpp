@@ -120,7 +120,7 @@ Path HTMLAreaElement::computePath(RenderObject* obj) const
     
 LayoutRect HTMLAreaElement::computeRect(RenderObject* obj) const
 {
-    return enclosingLayoutRect(computePath(obj).boundingRect());
+    return enclosingLayoutRect(computePath(obj).fastBoundingRect());
 }
 
 Path HTMLAreaElement::getRegion(const LayoutSize& size) const
@@ -245,5 +245,17 @@ String HTMLAreaElement::target() const
 {
     return getAttribute(targetAttr);
 }
+
+#if ENABLE(MICRODATA)
+String HTMLAreaElement::itemValueText() const
+{
+    return getURLAttribute(hrefAttr);
+}
+
+void HTMLAreaElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setAttribute(hrefAttr, value, ec);
+}
+#endif
 
 }

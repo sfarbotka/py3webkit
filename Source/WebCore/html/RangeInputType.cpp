@@ -266,13 +266,13 @@ String RangeInputType::serialize(double value) const
 }
 
 // FIXME: Could share this with BaseButtonInputType and BaseCheckableInputType if we had a common base class.
-void RangeInputType::accessKeyAction(bool sendToAnyElement)
+void RangeInputType::accessKeyAction(bool sendMouseEvents)
 {
-    InputType::accessKeyAction(sendToAnyElement);
+    InputType::accessKeyAction(sendMouseEvents);
 
-    // Send mouse button events if the caller specified sendToAnyElement.
+    // Send mouse button events if the caller specified sendMouseEvents.
     // FIXME: The comment above is no good. It says what we do, but not why.
-    element()->dispatchSimulatedClick(0, sendToAnyElement);
+    element()->dispatchSimulatedClick(0, sendMouseEvents);
 }
 
 void RangeInputType::minOrMaxAttributeChanged()
@@ -295,19 +295,13 @@ void RangeInputType::setValue(const String& value, bool valueChanged, bool sendC
     sliderThumbElementOf(element())->setPositionFromValue();
 }
 
-String RangeInputType::fallbackValue()
+String RangeInputType::fallbackValue() const
 {
     return serializeForNumberType(StepRange(element()).defaultValue());
 }
 
-String RangeInputType::sanitizeValue(const String& proposedValue)
+String RangeInputType::sanitizeValue(const String& proposedValue) const
 {
-    // If the proposedValue is null than this is a reset scenario and we
-    // want the range input's value attribute to take priority over the
-    // calculated default (middle) value.
-    if (proposedValue.isNull())
-        return proposedValue;
-
     return serializeForNumberType(StepRange(element()).clampValue(proposedValue));
 }
 

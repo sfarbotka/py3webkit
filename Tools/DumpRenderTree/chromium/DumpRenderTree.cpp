@@ -53,12 +53,12 @@ static const char optionStartupDialog[] = "--testshell-startup-dialog";
 static const char optionCheckLayoutTestSystemDeps[] = "--check-layout-test-sys-deps";
 
 static const char optionHardwareAcceleratedGL[] = "--enable-hardware-gpu";
-static const char optionEnableAcceleratedCompositing[] = "--enable-accelerated-compositing";
 static const char optionEnableThreadedCompositing[] = "--enable-threaded-compositing";
 static const char optionForceCompositingMode[] = "--force-compositing-mode";
 static const char optionEnableAccelerated2DCanvas[] = "--enable-accelerated-2d-canvas";
 static const char optionEnableLegacyAccelerated2DCanvas[] = "--enable-legacy-accelerated-2d-canvas";
 static const char optionEnableAcceleratedDrawing[] = "--enable-accelerated-drawing";
+static const char optionEnableAcceleratedCompositingForVideo[] = "--enable-accelerated-video";
 static const char optionEnableCompositeToTexture[] = "--enable-composite-to-texture";
 static const char optionUseGraphicsContext3DImplementation[] = "--use-graphics-context-3d-implementation=";
 
@@ -66,6 +66,7 @@ static const char optionStressOpt[] = "--stress-opt";
 static const char optionStressDeopt[] = "--stress-deopt";
 static const char optionJavaScriptFlags[] = "--js-flags=";
 static const char optionNoTimeout[] = "--no-timeout";
+static const char optionWebCoreLogChannels[] = "--webcore-log-channels=";
 
 class WebKitSupportTestEnvironment {
 public:
@@ -137,7 +138,7 @@ int main(int argc, char* argv[])
     bool testShellMode = false;
     bool allowExternalPages = false;
     bool startupDialog = false;
-    bool acceleratedCompositingEnabled = false;
+    bool acceleratedCompositingForVideoEnabled = false;
     bool threadedCompositingEnabled = false;
     bool compositeToTexture = false;
     bool forceCompositingMode = false;
@@ -175,8 +176,8 @@ int main(int argc, char* argv[])
             return checkLayoutTestSystemDependencies() ? EXIT_SUCCESS : EXIT_FAILURE;
         else if (argument == optionHardwareAcceleratedGL)
             hardwareAcceleratedGL = true;
-        else if (argument == optionEnableAcceleratedCompositing)
-            acceleratedCompositingEnabled = true;
+        else if (argument == optionEnableAcceleratedCompositingForVideo)
+            acceleratedCompositingForVideoEnabled = true;
         else if (argument == optionEnableThreadedCompositing)
             threadedCompositingEnabled = true;
         else if (argument == optionEnableCompositeToTexture)
@@ -205,7 +206,10 @@ int main(int argc, char* argv[])
             javaScriptFlags = argument.substr(strlen(optionJavaScriptFlags));
         else if (argument == optionNoTimeout)
             noTimeout = true;
-        else if (argument.size() && argument[0] == '-')
+        else if (!argument.find(optionWebCoreLogChannels)) {
+            string channels = argument.substr(strlen(optionWebCoreLogChannels));
+            webkit_support::EnableWebCoreLogChannels(channels);
+        } else if (argument.size() && argument[0] == '-')
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
         else
             tests.append(argument);
@@ -227,7 +231,7 @@ int main(int argc, char* argv[])
     { // Explicit scope for the TestShell instance.
         TestShell shell(testShellMode);
         shell.setAllowExternalPages(allowExternalPages);
-        shell.setAcceleratedCompositingEnabled(acceleratedCompositingEnabled);
+        shell.setAcceleratedCompositingForVideoEnabled(acceleratedCompositingForVideoEnabled);
         shell.setThreadedCompositingEnabled(threadedCompositingEnabled);
         shell.setCompositeToTexture(compositeToTexture);
         shell.setForceCompositingMode(forceCompositingMode);

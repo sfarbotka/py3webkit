@@ -57,6 +57,8 @@
 #include <WebCore/ResourceLoadScheduler.h>
 #include <WebCore/ScriptValue.h>
 #include <WebCore/ScrollView.h>
+#include <WebCore/SecurityOrigin.h>
+#include <WebCore/SecurityPolicy.h>
 #include <WebCore/Settings.h>
 #include <WebCore/UserGestureIndicator.h>
 
@@ -199,7 +201,7 @@ void PluginView::Stream::didReceiveResponse(NetscapePlugInStreamLoader*, const R
     if (expectedContentLength > 0)
         streamLength = expectedContentLength;
 
-    m_pluginView->m_plugin->streamDidReceiveResponse(m_streamID, responseURL, streamLength, response.lastModifiedDate(), mimeType, headers);
+    m_pluginView->m_plugin->streamDidReceiveResponse(m_streamID, responseURL, streamLength, response.lastModifiedDate(), mimeType, headers, response.suggestedFilename());
 }
 
 void PluginView::Stream::didReceiveData(NetscapePlugInStreamLoader*, const char* bytes, int length)
@@ -330,7 +332,7 @@ void PluginView::manualLoadDidReceiveResponse(const ResourceResponse& response)
     if (expectedContentLength > 0)
         streamLength = expectedContentLength;
 
-    m_plugin->manualStreamDidReceiveResponse(responseURL, streamLength, response.lastModifiedDate(), mimeType, headers);
+    m_plugin->manualStreamDidReceiveResponse(responseURL, streamLength, response.lastModifiedDate(), mimeType, headers, response.suggestedFilename());
 }
 
 void PluginView::manualLoadDidReceiveData(const char* bytes, int length)
@@ -382,6 +384,11 @@ void PluginView::manualLoadDidFail(const ResourceError& error)
     m_plugin->manualStreamDidFail(error.isCancellation());
 }
 
+RenderBoxModelObject* PluginView::renderer() const
+{
+    return toRenderBoxModelObject(m_pluginElement->renderer());
+}
+
 #if PLATFORM(MAC)    
 void PluginView::setWindowIsVisible(bool windowIsVisible)
 {
@@ -397,6 +404,14 @@ void PluginView::setWindowIsFocused(bool windowIsFocused)
         return;
 
     m_plugin->windowFocusChanged(windowIsFocused);    
+}
+
+void PluginView::setDeviceScaleFactor(float scaleFactor)
+{
+    if (!m_isInitialized || !m_plugin)
+        return;
+
+    m_plugin->contentsScaleFactorChanged(scaleFactor);
 }
 
 void PluginView::windowAndViewFramesChanged(const IntRect& windowFrameInScreenCoordinates, const IntRect& viewFrameInWindowCoordinates)
@@ -456,6 +471,10 @@ void PluginView::initializePlugin()
     
     m_isInitialized = true;
 
+#if PLATFORM(MAC)
+    windowAndViewFramesChanged(m_webPage->windowFrameInScreenCoordinates(), m_webPage->viewFrameInWindowCoordinates());
+#endif
+
     viewGeometryDidChange();
 
     redeliverManualStream();
@@ -468,7 +487,6 @@ void PluginView::initializePlugin()
         }
     }
 
-    windowAndViewFramesChanged(m_webPage->windowFrameInScreenCoordinates(), m_webPage->viewFrameInWindowCoordinates());
     setWindowIsVisible(m_webPage->windowIsVisible());
     setWindowIsFocused(m_webPage->windowIsFocused());
 #endif
@@ -554,30 +572,32 @@ void PluginView::setFrameRect(const WebCore::IntRect& rect)
 
 void PluginView::paint(GraphicsContext* context, const IntRect& dirtyRect)
 {
-    if (m_plugin && context->updatingControlTints())
-        m_plugin->updateControlTints(context);
-
-    if (context->paintingDisabled() || !m_plugin || !m_isInitialized)
+    if (!m_plugin || !m_isInitialized)
         return;
 
-    IntRect dirtyRectInWindowCoordinates = parent()->contentsToWindow(dirtyRect);
-    IntRect paintRectInWindowCoordinates = intersection(dirtyRectInWindowCoordinates, clipRectInWindowCoordinates());
-    if (paintRectInWindowCoordinates.isEmpty())
+    if (context->paintingDisabled()) {
+        if (context->updatingControlTints())
+            m_plugin->updateControlTints(context);
         return;
-
-    if (m_snapshot)
-        m_snapshot->paint(*context, frameRect().location(), m_snapshot->bounds());
-    else {
-        // The plugin is given a frame rect which is parent()->contentsToWindow(frameRect()),
-        // and un-translates by the its origin when painting. The current CTM reflects
-        // this widget's frame is its parent (the document), so we have to offset the CTM by
-        // the document's window coordinates.
-        IntPoint documentOriginInWindowCoordinates = parent()->contentsToWindow(IntPoint());
-        
-        GraphicsContextStateSaver stateSaver(*context);
-        context->translate(-documentOriginInWindowCoordinates.x(), -documentOriginInWindowCoordinates.y());
-        m_plugin->paint(context, paintRectInWindowCoordinates);
     }
+
+    // FIXME: We should try to intersect the dirty rect with the plug-in's clip rect here.
+    IntRect paintRect = IntRect(IntPoint(), frameRect().size());
+
+    if (paintRect.isEmpty())
+        return;
+
+    if (m_snapshot) {
+        m_snapshot->paint(*context, contentsScaleFactor(), frameRect().location(), m_snapshot->bounds());
+        return;
+    }
+    
+    GraphicsContextStateSaver stateSaver(*context);
+
+    // Translate the coordinate system so that the origin is in the top-left corner of the plug-in.
+    context->translate(frameRect().location().x(), frameRect().location().y());
+
+    m_plugin->paint(context, paintRect);
 }
 
 void PluginView::frameRectsChanged()
@@ -626,6 +646,9 @@ void PluginView::handleEvent(Event* event)
     } else if (event->type() == eventNames().mouseoutEvent && currentEvent->type() == WebEvent::MouseMove) {
         // We have a mouse leave event.
         didHandleEvent = m_plugin->handleMouseLeaveEvent(static_cast<const WebMouseEvent&>(*currentEvent));
+    } else if (event->type() == eventNames().contextmenuEvent && currentEvent->type() == WebEvent::MouseDown) {
+        // We have a context menu event.
+        didHandleEvent = m_plugin->handleContextMenuEvent(static_cast<const WebMouseEvent&>(*currentEvent));
     } else if ((event->type() == eventNames().keydownEvent && currentEvent->type() == WebEvent::KeyDown)
                || (event->type() == eventNames().keyupEvent && currentEvent->type() == WebEvent::KeyUp)) {
         // We have a keyboard event.
@@ -673,17 +696,23 @@ void PluginView::hide()
     Widget::hide();
 }
 
+bool PluginView::transformsAffectFrameRect()
+{
+    return false;
+}
+
 void PluginView::viewGeometryDidChange()
 {
     if (!m_isInitialized || !m_plugin || !parent())
         return;
 
-    // Get the frame rect in window coordinates.
-    IntRect frameRectInWindowCoordinates = parent()->contentsToWindow(frameRect());
-    
-    // Adjust bounds to account for frameScaleFactor
-    frameRectInWindowCoordinates.scale(1 / frame()->frameScaleFactor());
-    m_plugin->geometryDidChange(frameRectInWindowCoordinates, clipRectInWindowCoordinates());
+    // FIXME: Just passing a translation matrix isn't good enough.
+    IntPoint locationInWindowCoordinates = parent()->contentsToRootView(frameRect().location());
+    AffineTransform transform = AffineTransform::translation(locationInWindowCoordinates.x(), locationInWindowCoordinates.y());
+
+    // FIXME: The clip rect isn't correct.
+    IntRect clipRect = boundsRect();
+    m_plugin->geometryDidChange(size(), clipRect, transform);
 }
 
 void PluginView::viewVisibilityDidChange()
@@ -708,7 +737,6 @@ IntRect PluginView::clipRectInWindowCoordinates() const
     // Intersect the two rects to get the view clip rect in window coordinates.
     frameRectInWindowCoordinates.intersect(windowClipRect);
 
-    frameRectInWindowCoordinates.scale(1 / frame->frameScaleFactor());
     return frameRectInWindowCoordinates;
 }
 
@@ -957,8 +985,9 @@ void PluginView::loadURL(uint64_t requestID, const String& method, const String&
     frameLoadRequest.resourceRequest().setHTTPBody(FormData::create(httpBody.data(), httpBody.size()));
     frameLoadRequest.setFrameName(target);
 
-    if (!SecurityOrigin::shouldHideReferrer(frameLoadRequest.resourceRequest().url(), frame()->loader()->outgoingReferrer()))
-        frameLoadRequest.resourceRequest().setHTTPReferrer(frame()->loader()->outgoingReferrer());
+    String referrer = SecurityPolicy::generateReferrerHeader(frame()->document()->referrerPolicy(), frameLoadRequest.resourceRequest().url(), frame()->loader()->outgoingReferrer());
+    if (!referrer.isEmpty())
+        frameLoadRequest.resourceRequest().setHTTPReferrer(referrer);
 
     m_pendingURLRequests.append(URLRequest::create(requestID, frameLoadRequest, allowPopups));
     m_pendingURLRequestsTimer.startOneShot(0);
@@ -1107,6 +1136,14 @@ mach_port_t PluginView::compositingRenderServerPort()
     return WebProcess::shared().compositingRenderServerPort();
 }
 #endif
+
+float PluginView::contentsScaleFactor()
+{
+    if (Page* page = frame() ? frame()->page() : 0)
+        return page->deviceScaleFactor();
+        
+    return 1;
+}
     
 String PluginView::proxiesForURL(const String& urlString)
 {

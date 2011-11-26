@@ -64,7 +64,7 @@ public:
 
     static void visitChildren(JSCell* cell, SlotVisitor& visitor)
     {
-        QtRuntimeObject* thisObject = static_cast<QtRuntimeObject*>(cell);
+        QtRuntimeObject* thisObject = jsCast<QtRuntimeObject*>(cell);
         RuntimeObject::visitChildren(thisObject, visitor);
         QtInstance* instance = static_cast<QtInstance*>(thisObject->getInternalInstance());
         if (instance)
@@ -98,8 +98,6 @@ QtInstance::QtInstance(QObject* o, PassRefPtr<RootObject> rootObject, QScriptEng
     , m_hashkey(o)
     , m_ownership(ownership)
 {
-    // This is a good place to register Qt metatypes that are in the QtWebKit module, as this is class will initialize if we have a QObject bridge.
-    qRegisterMetaType<QWebElement>();
 }
 
 QtInstance::~QtInstance()
@@ -153,12 +151,12 @@ PassRefPtr<QtInstance> QtInstance::getQtInstance(QObject* o, PassRefPtr<RootObje
 
 bool QtInstance::getOwnPropertySlot(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
-    return object->JSObject::getOwnPropertySlot(exec, propertyName, slot);
+    return JSObject::getOwnPropertySlot(object, exec, propertyName, slot);
 }
 
 void QtInstance::put(JSObject* object, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    object->JSObject::put(exec, propertyName, value, slot);
+    JSObject::put(object, exec, propertyName, value, slot);
 }
 
 void QtInstance::removeCachedMethod(JSObject* method)

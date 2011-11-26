@@ -51,7 +51,7 @@ public:
     bool scrollToRevealElementAtListIndex(int index);
     bool listIndexIsVisible(int index);
 
-    int scrollToward(const LayoutPoint&); // Returns the new index or -1 if no scroll occurred
+    int scrollToward(const IntPoint&); // Returns the new index or -1 if no scroll occurred
 
     int size() const;
 
@@ -88,13 +88,13 @@ private:
     virtual bool shouldPanScroll() const { return true; }
     virtual void panScroll(const IntPoint&);
 
-    virtual LayoutUnit verticalScrollbarWidth() const;
-    virtual LayoutUnit scrollLeft() const;
-    virtual LayoutUnit scrollTop() const;
-    virtual LayoutUnit scrollWidth() const;
-    virtual LayoutUnit scrollHeight() const;
-    virtual void setScrollLeft(LayoutUnit);
-    virtual void setScrollTop(LayoutUnit);
+    virtual int verticalScrollbarWidth() const;
+    virtual int scrollLeft() const;
+    virtual int scrollTop() const;
+    virtual int scrollWidth() const;
+    virtual int scrollHeight() const;
+    virtual void setScrollLeft(int);
+    virtual void setScrollTop(int);
 
     virtual bool nodeAtPoint(const HitTestRequest&, HitTestResult&, const LayoutPoint& pointInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
 
@@ -102,20 +102,20 @@ private:
     virtual LayoutUnit scrollSize(ScrollbarOrientation) const;
     virtual LayoutUnit scrollPosition(Scrollbar*) const;
     virtual void setScrollOffset(const LayoutPoint&);
-    virtual void invalidateScrollbarRect(Scrollbar*, const LayoutRect&);
+    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&);
     virtual bool isActive() const;
     virtual bool isScrollCornerVisible() const { return false; } // We don't support resize on list boxes yet. If we did these would have to change.
-    virtual LayoutRect scrollCornerRect() const { return LayoutRect(); }
-    virtual void invalidateScrollCornerRect(const LayoutRect&) { }
-    virtual LayoutRect convertFromScrollbarToContainingView(const Scrollbar*, const LayoutRect&) const;
-    virtual LayoutRect convertFromContainingViewToScrollbar(const Scrollbar*, const LayoutRect&) const;
-    virtual LayoutPoint convertFromScrollbarToContainingView(const Scrollbar*, const LayoutPoint&) const;
-    virtual LayoutPoint convertFromContainingViewToScrollbar(const Scrollbar*, const LayoutPoint&) const;
+    virtual IntRect scrollCornerRect() const { return IntRect(); }
+    virtual void invalidateScrollCornerRect(const IntRect&) { }
+    virtual IntRect convertFromScrollbarToContainingView(const Scrollbar*, const IntRect&) const;
+    virtual IntRect convertFromContainingViewToScrollbar(const Scrollbar*, const IntRect&) const;
+    virtual IntPoint convertFromScrollbarToContainingView(const Scrollbar*, const IntPoint&) const;
+    virtual IntPoint convertFromContainingViewToScrollbar(const Scrollbar*, const IntPoint&) const;
     virtual Scrollbar* verticalScrollbar() const { return m_vBar.get(); }
-    virtual LayoutSize contentsSize() const;
-    virtual LayoutUnit visibleHeight() const;
-    virtual LayoutUnit visibleWidth() const;
-    virtual LayoutPoint currentMousePosition() const;
+    virtual IntSize contentsSize() const;
+    virtual int visibleHeight() const;
+    virtual int visibleWidth() const;
+    virtual IntPoint currentMousePosition() const;
     virtual bool shouldSuspendScrollAnimations() const;
     virtual bool isOnActivePage() const;
 

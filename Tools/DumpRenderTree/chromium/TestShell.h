@@ -33,6 +33,7 @@
 
 #include "AccessibilityController.h"
 #include "EventSender.h"
+#include "GamepadController.h"
 #include "LayoutTestController.h"
 #include "NotificationPresenter.h"
 #include "PlainTextController.h"
@@ -91,6 +92,7 @@ public:
     LayoutTestController* layoutTestController() const { return m_layoutTestController.get(); }
     EventSender* eventSender() const { return m_eventSender.get(); }
     AccessibilityController* accessibilityController() const { return m_accessibilityController.get(); }
+    GamepadController* gamepadController() const { return m_gamepadController.get(); }
     NotificationPresenter* notificationPresenter() const { return m_notificationPresenter.get(); }
     TestEventPrinter* printer() const { return m_printer.get(); }
 
@@ -128,7 +130,7 @@ public:
     bool allowExternalPages() const { return m_allowExternalPages; }
     void setAllowExternalPages(bool allowExternalPages) { m_allowExternalPages = allowExternalPages; }
 
-    void setAcceleratedCompositingEnabled(bool enabled) { m_acceleratedCompositingEnabled = enabled; }
+    void setAcceleratedCompositingForVideoEnabled(bool enabled) { m_acceleratedCompositingForVideoEnabled = enabled; }
     void setThreadedCompositingEnabled(bool enabled) { m_threadedCompositingEnabled = enabled; }
     void setCompositeToTexture(bool enabled) { m_compositeToTexture = enabled; }
     void setForceCompositingMode(bool enabled) { m_forceCompositingMode = enabled; }
@@ -205,6 +207,7 @@ private:
     OwnPtr<DRTDevToolsAgent> m_drtDevToolsAgent;
     OwnPtr<DRTDevToolsClient> m_drtDevToolsClient;
     OwnPtr<AccessibilityController> m_accessibilityController;
+    OwnPtr<GamepadController> m_gamepadController;
     OwnPtr<EventSender> m_eventSender;
     OwnPtr<LayoutTestController> m_layoutTestController;
     OwnPtr<PlainTextController> m_plainTextController;
@@ -215,7 +218,7 @@ private:
     TestParams m_params;
     int m_timeout; // timeout value in millisecond
     bool m_allowExternalPages;
-    bool m_acceleratedCompositingEnabled;
+    bool m_acceleratedCompositingForVideoEnabled;
     bool m_threadedCompositingEnabled;
     bool m_compositeToTexture;
     bool m_forceCompositingMode;

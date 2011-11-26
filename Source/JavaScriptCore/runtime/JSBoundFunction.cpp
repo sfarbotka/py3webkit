@@ -87,45 +87,14 @@ JSBoundFunction* JSBoundFunction::create(ExecState* exec, JSGlobalObject* global
     return function;
 }
 
-bool JSBoundFunction::hasInstance(ExecState* exec, JSValue value, JSValue)
+bool JSBoundFunction::hasInstance(JSObject* object, ExecState* exec, JSValue value, JSValue)
 {
+    JSBoundFunction* thisObject = jsCast<JSBoundFunction*>(object);
     // FIXME: our instanceof implementation will have already (incorrectly) performed
     // a [[Get]] of .prototype from the bound function object, which is incorrect!
     // https://bugs.webkit.org/show_bug.cgi?id=68656
-    JSValue proto = m_targetFunction->get(exec, exec->propertyNames().prototype);
-    return m_targetFunction->hasInstance(exec, value, proto);
-}
-
-bool JSBoundFunction::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
-{
-    if (propertyName == exec->propertyNames().arguments) {
-        throwTypeError(exec, StrictModeArgumentsAccessError);
-        slot.setValue(jsNull());
-        return true;
-    }
-
-    if (propertyName == exec->propertyNames().caller) {
-        throwTypeError(exec, StrictModeCallerAccessError);
-        slot.setValue(jsNull());
-        return true;
-    }
-
-    return Base::getOwnPropertySlot(exec, propertyName, slot);
-}
-
-bool JSBoundFunction::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
-{
-    if (propertyName == exec->propertyNames().arguments) {
-        createDescriptorForThrowingProperty(exec, descriptor, StrictModeArgumentsAccessError);
-        return true;
-    }
-    
-    if (propertyName == exec->propertyNames().caller) {
-        createDescriptorForThrowingProperty(exec, descriptor, StrictModeCallerAccessError);
-        return true;
-    }
-    
-    return Base::getOwnPropertyDescriptor(exec, propertyName, descriptor);
+    JSValue proto = thisObject->m_targetFunction->get(exec, exec->propertyNames().prototype);
+    return thisObject->m_targetFunction->methodTable()->hasInstance(thisObject->m_targetFunction.get(), exec, value, proto);
 }
 
 JSBoundFunction::JSBoundFunction(ExecState* exec, JSGlobalObject* globalObject, Structure* structure, JSObject* targetFunction, JSValue boundThis, JSValue boundArgs)
@@ -140,11 +109,14 @@ void JSBoundFunction::finishCreation(ExecState* exec, NativeExecutable* executab
 {
     Base::finishCreation(exec, executable, length, name);
     ASSERT(inherits(&s_info));
+
+    initializeGetterSetterProperty(exec, exec->propertyNames().arguments, globalObject()->throwTypeErrorGetterSetter(exec), DontDelete | DontEnum | Getter | Setter);
+    initializeGetterSetterProperty(exec, exec->propertyNames().caller, globalObject()->throwTypeErrorGetterSetter(exec), DontDelete | DontEnum | Getter | Setter);
 }
 
 void JSBoundFunction::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSBoundFunction* thisObject = static_cast<JSBoundFunction*>(cell);
+    JSBoundFunction* thisObject = jsCast<JSBoundFunction*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());

@@ -29,7 +29,7 @@
 
 #include "IntegralTypedArrayBase.h"
 
-namespace WebCore {
+namespace WTF {
 
 class Int32Array : public IntegralTypedArrayBase<int> {
 public:
@@ -38,7 +38,7 @@ public:
     static PassRefPtr<Int32Array> create(PassRefPtr<ArrayBuffer> buffer, unsigned byteOffset, unsigned length);
 
     // Can’t use "using" here due to a bug in the RVCT compiler.
-    void set(TypedArrayBase<int>* array, unsigned offset, ExceptionCode& ec) { TypedArrayBase<int>::set(array, offset, ec); }
+    bool set(TypedArrayBase<int>* array, unsigned offset) { return TypedArrayBase<int>::set(array, offset); }
     void set(unsigned index, double value) { IntegralTypedArrayBase<int>::set(index, value); }
 
     PassRefPtr<Int32Array> subarray(int start) const;
@@ -55,6 +55,8 @@ private:
     virtual bool isIntArray() const { return true; }
 };
 
-} // namespace WebCore
+} // namespace WTF
+
+using WTF::Int32Array;
 
 #endif // Int32Array_h

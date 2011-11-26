@@ -58,6 +58,7 @@ public:
     String name() const;
     String keyPath() const;
     PassRefPtr<DOMStringList> indexNames() const;
+    IDBTransaction* transaction() const;
 
     // FIXME: Try to modify the code generator so this is unneeded.
     PassRefPtr<IDBRequest> add(ScriptExecutionContext* context, PassRefPtr<SerializedScriptValue> value, ExceptionCode& ec) { return add(context, value, 0, ec);  }
@@ -82,7 +83,7 @@ private:
     IDBObjectStore(PassRefPtr<IDBObjectStoreBackendInterface>, IDBTransaction*);
     void removeTransactionFromPendingList();
 
-    RefPtr<IDBObjectStoreBackendInterface> m_objectStore;
+    RefPtr<IDBObjectStoreBackendInterface> m_backend;
     RefPtr<IDBTransaction> m_transaction;
 };
 

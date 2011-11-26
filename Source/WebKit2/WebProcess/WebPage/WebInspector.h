@@ -35,6 +35,7 @@
 
 namespace WebKit {
 
+class WebInspectorFrontendClient;
 class WebPage;
 struct WebPageCreationParameters;
 
@@ -59,6 +60,10 @@ public:
     void setJavaScriptProfilingEnabled(bool);
     void startPageProfiling();
     void stopPageProfiling();
+
+#if PLATFORM(MAC)
+    static void setLocalizedStringsPath(const String&);
+#endif
 
 private:
     friend class WebInspectorClient;
@@ -95,6 +100,7 @@ private:
 
     WebPage* m_page;
     WebPage* m_inspectorPage;
+    WebInspectorFrontendClient* m_frontendClient;
 };
 
 } // namespace WebKit

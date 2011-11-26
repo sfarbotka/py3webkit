@@ -30,11 +30,11 @@
 
 #include "config.h"
 
+#include "ArrayBuffer.h"
 #include "ExceptionCode.h"
 #include "MessagePort.h"
 #include "SerializedScriptValue.h"
 #include "V8Binding.h"
-#include "V8MessagePortCustom.h"
 #include "V8MessagePort.h"
 #include "V8Proxy.h"
 #include "V8Utilities.h"
@@ -42,18 +42,23 @@
 
 namespace WebCore {
 
-static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args)
+static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args, bool doTransfer)
 {
     MessagePort* messagePort = V8MessagePort::toNative(args.Holder());
-    bool didThrow = false;
-    RefPtr<SerializedScriptValue> message = SerializedScriptValue::create(args[0], didThrow);
-    if (didThrow)
-        return v8::Undefined();
     MessagePortArray portArray;
+    ArrayBufferArray arrayBufferArray;
     if (args.Length() > 1) {
-        if (!getMessagePortArray(args[1], portArray))
+        if (!extractTransferables(args[1], portArray, arrayBufferArray))
             return v8::Undefined();
     }
+    bool didThrow = false;
+    RefPtr<SerializedScriptValue> message =
+        SerializedScriptValue::create(args[0],
+                                      doTransfer ? &portArray : 0,
+                                      doTransfer ? &arrayBufferArray : 0,
+                                      didThrow);
+    if (didThrow)
+        return v8::Undefined();
     ExceptionCode ec = 0;
     messagePort->postMessage(message.release(), &portArray, ec);
     return throwError(ec);
@@ -62,58 +67,13 @@ static v8::Handle<v8::Value> handlePostMessageCallback(const v8::Arguments& args
 v8::Handle<v8::Value> V8MessagePort::postMessageCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.MessagePort.postMessage");
-    return handlePostMessageCallback(args);
+    return handlePostMessageCallback(args, false);
 }
 
 v8::Handle<v8::Value> V8MessagePort::webkitPostMessageCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.MessagePort.webkitPostMessage");
-    return handlePostMessageCallback(args);
-}
-
-bool getMessagePortArray(v8::Local<v8::Value> value, MessagePortArray& portArray)
-{
-    if (isUndefinedOrNull(value)) {
-        portArray.resize(0);
-        return true;
-    }
-
-    if (!value->IsObject()) {
-        throwError("MessagePortArray argument must be an object");
-        return false;
-    }
-    uint32_t length = 0;
-    v8::Local<v8::Object> ports = v8::Local<v8::Object>::Cast(value);
-
-    if (value->IsArray()) {
-        v8::Local<v8::Array> array = v8::Local<v8::Array>::Cast(value);
-        length = array->Length();
-    } else {
-        // Sequence-type object - get the length attribute
-        v8::Local<v8::Value> sequenceLength = ports->Get(v8::String::New("length"));
-        if (!sequenceLength->IsNumber()) {
-            throwError("MessagePortArray argument has no length attribute");
-            return false;
-        }
-        length = sequenceLength->Uint32Value();
-    }
-
-    // Validate the passed array of ports.
-    for (unsigned int i = 0; i < length; ++i) {
-        v8::Local<v8::Value> port = ports->Get(i);
-        // Validation of non-null objects, per HTML5 spec 10.3.3.
-        if (isUndefinedOrNull(port)) {
-            throwError(DATA_CLONE_ERR);
-            return false;
-        }
-        // Validation of Objects implementing an interface, per WebIDL spec 4.1.15.
-        if (!V8MessagePort::HasInstance(port)) {
-            throwError("MessagePortArray argument must contain only MessagePorts");
-            return false;
-        }
-        portArray.append(V8MessagePort::toNative(v8::Handle<v8::Object>::Cast(port)));
-    }
-    return true;
+    return handlePostMessageCallback(args, true);
 }
 
 } // namespace WebCore

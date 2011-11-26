@@ -52,7 +52,7 @@ JSPropertyNameIterator* JSPropertyNameIterator::create(ExecState* exec, JSObject
             o->structure()->enumerationCache()->cachedPrototypeChain() != o->structure()->prototypeChain(exec));
 
     PropertyNameArray propertyNames(exec);
-    o->getPropertyNames(exec, propertyNames);
+    o->methodTable()->getPropertyNames(o, exec, propertyNames, ExcludeDontEnumProperties);
     size_t numCacheableSlots = 0;
     if (!o->structure()->hasNonEnumerableProperties() && !o->structure()->hasGetterSetterProperties()
         && !o->structure()->isUncacheableDictionary() && !o->structure()->typeInfo().overridesGetPropertyNames())
@@ -94,7 +94,7 @@ JSValue JSPropertyNameIterator::get(ExecState* exec, JSObject* base, size_t i)
 
 void JSPropertyNameIterator::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSPropertyNameIterator* thisObject = static_cast<JSPropertyNameIterator*>(cell);
+    JSPropertyNameIterator* thisObject = jsCast<JSPropertyNameIterator*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
     visitor.appendValues(thisObject->m_jsStrings.get(), thisObject->m_jsStringsSize);

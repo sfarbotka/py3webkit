@@ -29,6 +29,7 @@
 #include "JavaScriptTest.h"
 #include "PlatformUtilities.h"
 #include "SyntheticBackingScaleFactorWindow.h"
+#include <WebKit2/WKViewPrivate.h>
 #include <wtf/RetainPtr.h>
 
 namespace TestWebKitAPI {
@@ -40,7 +41,7 @@ public:
     template <typename View> void runTest(View);
 
     // WebKitAgnosticTest
-    virtual NSURL *url() const { return [[NSBundle mainBundle] URLForResource:@"devicePixelRatio" withExtension:@"html"]; }
+    virtual NSURL *url() const { return [[NSBundle mainBundle] URLForResource:@"devicePixelRatio" withExtension:@"html" subdirectory:@"TestWebKitAPI.resources"]; }
     virtual void didLoadURL(WebView *webView) { runTest(webView); }
     virtual void didLoadURL(WKView *wkView) { runTest(wkView); }
     virtual void initializeView(WebView *);

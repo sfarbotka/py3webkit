@@ -71,6 +71,8 @@ void RenderFileUploadControl::updateFromElement()
         // updateFromElement() eventually.
         if (button->disabled() != newDisabled)
             button->setDisabled(newDisabled);
+        
+        button->setActive(input->canReceiveDroppedFiles());
     }
 
     // This only supports clearing out the files, but that's OK because for
@@ -228,7 +230,7 @@ String RenderFileUploadControl::fileTextValue() const
 {
     HTMLInputElement* input = static_cast<HTMLInputElement*>(node());
     ASSERT(input->files());
-    return theme()->fileListNameForWidth(input->files()->paths(), style()->font(), maxFilenameWidth());
+    return theme()->fileListNameForWidth(input->files()->paths(), style()->font(), maxFilenameWidth(), input->multiple());
 }
     
 } // namespace WebCore

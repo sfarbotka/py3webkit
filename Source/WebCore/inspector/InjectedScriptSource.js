@@ -194,6 +194,15 @@ InjectedScript.prototype = {
         return descriptors;
     },
 
+    getFunctionLocation: function(functionId)
+    {
+        var parsedFunctionId = this._parseObjectId(functionId);
+        var func = this._objectForId(parsedFunctionId);
+        if (typeof func !== "function")
+            return "Cannot resolve function by id.";
+        return InjectedScriptHost.functionLocation(func);
+    },
+
     releaseObject: function(objectId)
     {
         var parsedObjectId = this._parseObjectId(objectId);
@@ -430,6 +439,9 @@ InjectedScript.prototype = {
         if (subtype === "regexp")
             return this._toString(obj);
 
+        if (subtype === "date")
+            return this._toString(obj);
+
         var className = InjectedScriptHost.internalConstructorName(obj);
         if (subtype === "array") {
             if (typeof obj.length === "number")
@@ -580,16 +592,22 @@ CommandLineAPIImpl.prototype = {
 
     $x: function(xpath, context)
     {
-        var nodes = [];
-        try {
-            var doc = (context && context.ownerDocument) || inspectedWindow.document;
-            var results = doc.evaluate(xpath, context || doc, null, XPathResult.ANY_TYPE, null);
+        var doc = (context && context.ownerDocument) || inspectedWindow.document;
+        var result = doc.evaluate(xpath, context || doc, null, XPathResult.ANY_TYPE, null);
+        switch (result.resultType) {
+        case XPathResult.NUMBER_TYPE:
+            return result.numberValue;
+        case XPathResult.STRING_TYPE:
+            return result.stringValue;
+        case XPathResult.BOOLEAN_TYPE:
+            return result.booleanValue;
+        default:
+            var nodes = [];
             var node;
-            while (node = results.iterateNext())
+            while (node = result.iterateNext())
                 nodes.push(node);
-        } catch (e) {
+            return nodes;
         }
-        return nodes;
     },
 
     dir: function()

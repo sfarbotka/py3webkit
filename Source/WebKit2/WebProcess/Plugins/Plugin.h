@@ -40,8 +40,10 @@ namespace CoreIPC {
 }
 
 namespace WebCore {
+    class AffineTransform;
     class GraphicsContext;
     class IntRect;
+    class IntSize;
     class Scrollbar;
 }
 
@@ -115,8 +117,9 @@ public:
     // Returns whether the plug-in is transparent or not.
     virtual bool isTransparent() = 0;
 
-    // Tells the plug-in that either the plug-ins frame rect or its clip rect has changed. Both rects are in window coordinates.
-    virtual void geometryDidChange(const WebCore::IntRect& frameRect, const WebCore::IntRect& clipRect) = 0;
+    // Tells the plug-in that its geometry has changed. The clip rect is in plug-in coordinates, and the affine transform can be used
+    // to convert from root view coordinates to plug-in coordinates.
+    virtual void geometryDidChange(const WebCore::IntSize& pluginSize, const WebCore::IntRect& clipRect, const WebCore::AffineTransform& pluginToRootViewTransform) = 0;
 
     // Tells the plug-in that it has been explicitly hidden or shown. (Note that this is not called when the plug-in becomes obscured from view on screen.)
     virtual void visibilityDidChange() = 0;
@@ -133,7 +136,7 @@ public:
 
     // Tells the plug-in that a stream has received its HTTP response.
     virtual void streamDidReceiveResponse(uint64_t streamID, const WebCore::KURL& responseURL, uint32_t streamLength, 
-                                          uint32_t lastModifiedTime, const String& mimeType, const String& headers) = 0;
+                                          uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFileName) = 0;
 
     // Tells the plug-in that a stream did receive data.
     virtual void streamDidReceiveData(uint64_t streamID, const char* bytes, int length) = 0;
@@ -146,7 +149,7 @@ public:
 
     // Tells the plug-in that the manual stream has received its HTTP response.
     virtual void manualStreamDidReceiveResponse(const WebCore::KURL& responseURL, uint32_t streamLength, 
-                                                uint32_t lastModifiedTime, const String& mimeType, const String& headers) = 0;
+                                                uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFileName) = 0;
 
     // Tells the plug-in that the manual stream did receive data.
     virtual void manualStreamDidReceiveData(const char* bytes, int length) = 0;
@@ -168,6 +171,9 @@ public:
     
     // Tells the plug-in to handle the passed in mouse leave event. The plug-in should return true if it processed the event.
     virtual bool handleMouseLeaveEvent(const WebMouseEvent&) = 0;
+
+    // Tells the plug-in to handle the passed in context menu event. The plug-in should return true if it processed the event.
+    virtual bool handleContextMenuEvent(const WebMouseEvent&) = 0;
 
     // Tells the plug-in to handle the passed in keyboard event. The plug-in should return true if it processed the event.
     virtual bool handleKeyboardEvent(const WebKeyboardEvent&) = 0;
@@ -194,6 +200,9 @@ public:
     // Send the complex text input to the plug-in.
     virtual void sendComplexTextInput(const String& textInput) = 0;
 #endif
+
+    // Tells the plug-in about scale factor changes.
+    virtual void contentsScaleFactorChanged(float) = 0;
 
     // Called when the private browsing state for this plug-in changes.
     virtual void privateBrowsingStateChanged(bool) = 0;

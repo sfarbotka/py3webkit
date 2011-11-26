@@ -27,27 +27,25 @@
 
 module('ui.failures');
 
-test('Configuration', 8, function() {
+test('Builder', 7, function() {
     raises(function() {
-        new ui.failures.Configuration();
+        new ui.failures.Builder();
     });
 
     var configuration;
-    configuration = new ui.failures.Configuration({});
+    configuration = new ui.failures.Builder("Webkit Linux");
     deepEqual(Object.getOwnPropertyNames(configuration.__proto__).sort(), [
         '_addSpan',
         'equals',
         'init',
     ]);
-    equal(configuration.outerHTML, '<a target="_blank"></a>');
-    configuration = new ui.failures.Configuration({is64bit: true, version: 'lucid'});
-    equal(configuration.outerHTML, '<a target="_blank"><span class="version">lucid</span><span class="architecture">64-bit</span></a>');
-    configuration = new ui.failures.Configuration({version: 'xp'});
-    equal(configuration.outerHTML, '<a target="_blank"><span class="version">xp</span></a>');
+    equal(configuration.outerHTML, '<a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux"><span class="version">lucid</span><span class="architecture">64-bit</span></a>');
+    configuration = new ui.failures.Builder("Webkit Win");
+    equal(configuration.outerHTML, '<a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Win"><span class="version">xp</span></a>');
     configuration._addSpan('foo', 'bar');
-    equal(configuration.outerHTML, '<a target="_blank"><span class="version">xp</span><span class="foo">bar</span></a>');
+    equal(configuration.outerHTML, '<a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Win"><span class="version">xp</span><span class="foo">bar</span></a>');
     ok(configuration.equals({version: 'xp'}));
-    ok(!configuration.equals({version: 'lucid',is64bit: true}));
+    ok(!configuration.equals({version: 'lucid', is64bit: true}));
 });
 
 test('FailureGrid', 10, function() {
@@ -61,27 +59,27 @@ test('FailureGrid', 10, function() {
     ]);
     equal(grid.outerHTML, '<table class="failures">' +
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
-        '<tbody><tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr></tbody>' +
+        '<tbody><tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr></tbody>' +
     '</table>');
     var row = grid._rowByResult('TEXT');
     equal(grid.outerHTML, '<table class="failures">' +
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td><td></td><td></td>' +
+                '<td><span>TEXT</span></td><td></td><td></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
-    equal(row.outerHTML, '<tr class="TEXT"><td>TEXT</td><td></td><td></td></tr>');
+    equal(row.outerHTML, '<tr class="TEXT"><td><span>TEXT</span></td><td></td><td></td></tr>');
     grid.update({});
     equal(grid.outerHTML, '<table class="failures">' +
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td><td></td><td></td>' +
+                '<td><span>TEXT</span></td><td></td><td></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
     raises(function() {
@@ -92,11 +90,11 @@ test('FailureGrid', 10, function() {
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td>' +
+                '<td><span>TEXT</span></td>' +
                 '<td></td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
     grid.update({'Webkit Mac10.5 (CG)': { actual: 'IMAGE+TEXT'}});
@@ -104,16 +102,16 @@ test('FailureGrid', 10, function() {
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="IMAGE+TEXT">' +
-                '<td>IMAGE+TEXT</td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Mac10.5+(CG)"><span class="version">leopard</span><span class="graphics">CG</span></a></td>' +
+                '<td><span>IMAGE+TEXT</span></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Mac10.5+(CG)"><span class="version">leopard</span><span class="graphics">CG</span></a></td>' +
                 '<td></td>' +
             '</tr>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td>' +
+                '<td><span>TEXT</span></td>' +
                 '<td></td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
     grid.update({'Webkit Mac10.5 (CG)': { actual: 'IMAGE+TEXT'}});
@@ -121,16 +119,16 @@ test('FailureGrid', 10, function() {
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="IMAGE+TEXT">' +
-                '<td>IMAGE+TEXT</td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Mac10.5+(CG)"><span class="version">leopard</span><span class="graphics">CG</span></a></td>' +
+                '<td><span>IMAGE+TEXT</span></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Mac10.5+(CG)"><span class="version">leopard</span><span class="graphics">CG</span></a></td>' +
                 '<td></td>' +
             '</tr>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td>' +
+                '<td><span>TEXT</span></td>' +
                 '<td></td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
     grid.purge();
@@ -139,11 +137,11 @@ test('FailureGrid', 10, function() {
         '<thead><tr><td>type</td><td>release</td><td>debug</td></tr></thead>' +
         '<tbody>' +
             '<tr class="TEXT">' +
-                '<td>TEXT</td>' +
+                '<td><span>TEXT</span></td>' +
                 '<td></td>' +
-                '<td><a target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
+                '<td><a class="failing-builder" target="_blank" href="http://build.chromium.org/p/chromium.webkit/waterfall?builder=Webkit+Linux+(dbg)(1)"><span class="version">lucid</span><span class="architecture">64-bit</span></a></td>' +
             '</tr>' +
-            '<tr class="BUILDING" style="display: none; "><td>BUILDING</td><td></td><td></td></tr>' +
+            '<tr class="BUILDING" style="display: none; "><td><span>BUILDING</span></td><td></td><td></td></tr>' +
         '</tbody>' +
     '</table>');
 });

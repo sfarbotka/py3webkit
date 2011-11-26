@@ -38,8 +38,8 @@ webcore_cppflags += \
 	-I$(srcdir)/Source/WebCore/loader/cache \
 	-I$(srcdir)/Source/WebCore/loader/icon \
 	-I$(srcdir)/Source/WebCore/mathml \
+	-I$(srcdir)/Source/WebCore/mediastream \
 	-I$(srcdir)/Source/WebCore/notifications \
-	-I$(srcdir)/Source/WebCore/p2p \
 	-I$(srcdir)/Source/WebCore/page \
 	-I$(srcdir)/Source/WebCore/page/animation \
 	-I$(srcdir)/Source/WebCore/platform \
@@ -99,6 +99,7 @@ webcoregtk_cppflags += \
 	-I$(srcdir)/Source/WebCore/loader/gtk \
 	-I$(srcdir)/Source/WebCore/page/gtk \
 	-I$(srcdir)/Source/WebCore/platform/cairo \
+	-I$(srcdir)/Source/WebCore/platform/audio/gstreamer \
 	-I$(srcdir)/Source/WebCore/platform/graphics/cairo \
 	-I$(srcdir)/Source/WebCore/platform/graphics/gstreamer \
 	-I$(srcdir)/Source/WebCore/platform/graphics/gtk \
@@ -235,14 +236,6 @@ if ENABLE_MUTATION_OBSERVERS
 FEATURE_DEFINES += ENABLE_MUTATION_OBSERVERS=1
 webcore_cppflags += -DENABLE_MUTATION_OBSERVERS=1
 endif # END ENABLE_MUTATION_OBSERVERS
-
-# ----
-# HTML5 client-side session and persistent storage
-# ----
-if ENABLE_DOM_STORAGE
-FEATURE_DEFINES += ENABLE_DOM_STORAGE=1
-webcore_cppflags += -DENABLE_DOM_STORAGE=1
-endif # END ENABLE_DOM_STORAGE
 
 # ----
 # FileSystem API support
@@ -384,21 +377,6 @@ else
 webcore_cppflags += -DENABLE_MEDIA_STREAM=0
 endif # END ENABLE_MEDIA_STREAM
 
-# ----
-# XHTML-MP Support
-# ----
-if ENABLE_XHTMLMP
-FEATURE_DEFINES += ENABLE_XHTMLMP=1
-webcore_cppflags += -DENABLE_XHTMLMP=1
-endif # END ENABLE_XHTMLMP
-
-# ----
-# XPath Support
-# ----
-if ENABLE_XPATH
-FEATURE_DEFINES += ENABLE_XPATH=1
-webcore_cppflags += -DENABLE_XPATH=1
-
 # XPath grammar
 # NOTE: older versions of bison do not inject an inclusion guard, so we do it
 $(GENSOURCES_WEBCORE)/XPathGrammar.h: $(GENSOURCES_WEBCORE)/XPathGrammar.cpp
@@ -411,7 +389,6 @@ $(GENSOURCES_WEBCORE)/XPathGrammar.cpp: $(WebCore)/xml/XPathGrammar.y
 	cat $(GENSOURCES_WEBCORE)/XPathGrammar.cpp.h $(GENSOURCES_WEBCORE)/XPathGrammar.hpp >> $(GENSOURCES_WEBCORE)/XPathGrammar.h
 	echo '#endif' >> $(GENSOURCES_WEBCORE)/XPathGrammar.h
 	rm -f $(GENSOURCES_WEBCORE)/XPathGrammar.cpp.h $(GENSOURCES_WEBCORE)/XPathGrammar.hpp
-endif # END ENABLE_XPATH
 
 # ----
 # XSLT Support
@@ -454,8 +431,8 @@ endif # END ENABLE_FILTERS
 # ----
 if ENABLE_GEOLOCATION
 
-FEATURE_DEFINES += ENABLE_GEOLOCATION=1
-webcore_cppflags += -DENABLE_GEOLOCATION=1
+FEATURE_DEFINES += ENABLE_GEOLOCATION=1 ENABLE_CLIENT_BASED_GEOLOCATION=1
+webcore_cppflags += -DENABLE_GEOLOCATION=1 -DENABLE_CLIENT_BASED_GEOLOCATION=1
 endif # END ENABLE_GEOLOCATION
 
 # ----
@@ -524,6 +501,14 @@ DerivedSources/WebCore/XLinkNames.cpp : $(WebCore)/dom/make_names.pl $(WebCore)/
 if ENABLE_WEB_AUDIO
 FEATURE_DEFINES += ENABLE_WEB_AUDIO=1
 webcore_cppflags += -DENABLE_WEB_AUDIO=1
+
+if USE_WEBAUDIO_FFTW
+FEATURE_DEFINES += WTF_USE_WEBAUDIO_FFTW=1
+webcore_cppflags += -DWTF_USE_WEBAUDIO_FFTW=1
+webcore_sources += \
+	Source/WebCore/platform/audio/fftw/FFTFrameFFTW.cpp
+endif
+
 endif
 
 # ----
@@ -583,6 +568,14 @@ if ENABLE_MHTML
 FEATURE_DEFINES += ENABLE_MHTML=1
 webcore_cppflags += -DENABLE_MHTML=1
 endif  # END ENABLE_MHTML
+
+# ---
+# HTML5 Microdata support
+# ---
+if ENABLE_MICRODATA
+FEATURE_DEFINES += ENABLE_MICRODATA=1
+webcore_cppflags += -DENABLE_MICRODATA=1
+endif  # END ENABLE_MICRODATA
 
 # ---
 # Register Protocol Handler support
@@ -664,6 +657,7 @@ SCRIPTS_BINDINGS = \
 	$(WebCore)/bindings/scripts/CodeGenerator.pm \
 	$(WebCore)/bindings/scripts/IDLParser.pm \
 	$(WebCore)/bindings/scripts/IDLStructure.pm \
+	$(WebCore)/bindings/scripts/InFilesCompiler.pm \
 	$(WebCore)/bindings/scripts/InFilesParser.pm \
 	$(WebCore)/bindings/scripts/generate-bindings.pl \
 	$(WebCore)/bindings/scripts/preprocessor.pm
@@ -697,15 +691,21 @@ DerivedSources/WebCore/XMLNSNames.cpp DerivedSources/WebCore/XMLNSNames.h: $(Web
 DerivedSources/WebCore/XMLNames.cpp DerivedSources/WebCore/XMLNames.h: $(WebCore)/dom/make_names.pl $(WebCore)/xml/xmlattrs.in
 	$(AM_V_GEN)$(PERL) -I$(WebCore)/bindings/scripts $< --attrs $(WebCore)/xml/xmlattrs.in --outputDir "$(GENSOURCES_WEBCORE)"
 
-# All Web Inspector generated files are created with this one call to CodeGeneratorInspector.pm
+DerivedSources/WebCore/EventFactory.cpp DerivedSources/WebCore/EventHeaders.h DerivedSources/WebCore/EventInterfaces.h: $(WebCore)/dom/make_event_factory.pl $(WebCore)/dom/EventFactory.in
+	$(AM_V_GEN)$(PERL) -I$(WebCore)/bindings/scripts $< --input $(WebCore)/dom/EventFactory.in --outputDir "$(GENSOURCES_WEBCORE)"
+
+DerivedSources/WebCore/EventTargetHeaders.h DerivedSources/WebCore/EventTargetInterfaces.h: $(WebCore)/dom/make_event_factory.pl $(WebCore)/dom/EventTargetFactory.in
+	$(AM_V_GEN)$(PERL) -I$(WebCore)/bindings/scripts $< --input $(WebCore)/dom/EventTargetFactory.in --outputDir "$(GENSOURCES_WEBCORE)"
+
+DerivedSources/WebCore/ExceptionCodeDescription.cpp DerivedSources/WebCore/ExceptionCodeDescription.h DerivedSources/WebCore/ExceptionHeaders.h DerivedSources/WebCore/ExceptionInterfaces.h: $(WebCore)/dom/make_dom_exceptions.pl $(WebCore)/dom/DOMExceptions.in
+	$(AM_V_GEN)$(PERL) -I$(WebCore)/bindings/scripts $< --input $(WebCore)/dom/DOMExceptions.in --outputDir "$(GENSOURCES_WEBCORE)"
+
+# All Web Inspector generated files are created with this one call to CodeGeneratorInspector.py
 DerivedSources/WebCore/InspectorProtocolVersion.h : $(WebCore)/inspector/Inspector.json $(WebCore)/inspector/generate-inspector-protocol-version
 	$(PYTHON) $(WebCore)/inspector/generate-inspector-protocol-version -o $(GENSOURCES_WEBCORE)/InspectorProtocolVersion.h $(WebCore)/inspector/Inspector.json
 
-DerivedSources/WebCore/Inspector.idl : $(WebCore)/inspector/Inspector.json $(WebCore)/inspector/generate-inspector-idl
-	$(PYTHON) $(WebCore)/inspector/generate-inspector-idl -o $(GENSOURCES_WEBCORE)/Inspector.idl $(WebCore)/inspector/Inspector.json
-
-DerivedSources/WebCore/InspectorBackendDispatcher.cpp: DerivedSources/WebCore/Inspector.idl $(SCRIPTS_BINDINGS) $(WebCore)/inspector/CodeGeneratorInspector.pm
-	$(AM_V_GEN)$(PERL) -I$(WebCore)/bindings/scripts -I$(WebCore)/inspector $(WebCore)/bindings/scripts/generate-bindings.pl $(IDL_PATH:%=--include "%") --outputDir "$(GENSOURCES_WEBCORE)" --defines "LANGUAGE_JAVASCRIPT=1 $(FEATURE_DEFINES)" --generator Inspector $<
+DerivedSources/WebCore/InspectorBackendDispatcher.cpp: $(WebCore)/inspector/Inspector.json $(WebCore)/inspector/CodeGeneratorInspector.py
+	$(PYTHON) $(WebCore)/inspector/CodeGeneratorInspector.py $< --output_h_dir $(GENSOURCES_WEBCORE) --output_cpp_dir $(GENSOURCES_WEBCORE) --defines "LANGUAGE_JAVASCRIPT=1 $(FEATURE_DEFINES)"
 DerivedSources/WebCore/InspectorFrontend.h: DerivedSources/WebCore/InspectorFrontend.cpp
 DerivedSources/WebCore/InspectorFrontend.cpp: DerivedSources/WebCore/InspectorBackendStub.js
 DerivedSources/WebCore/InspectorBackendStub.js: DerivedSources/WebCore/InspectorBackendDispatcher.h
@@ -728,10 +728,11 @@ IDL_PATH := \
     $(WebCore)/fileapi \
     $(WebCore)/html \
     $(WebCore)/html/canvas \
+    $(WebCore)/html/track \
     $(WebCore)/inspector \
     $(WebCore)/loader/appcache \
+    $(WebCore)/mediastream \
     $(WebCore)/notifications \
-    $(WebCore)/p2p \
     $(WebCore)/page \
     $(WebCore)/plugins \
     $(WebCore)/storage \
@@ -828,6 +829,7 @@ libWebCoreGtk_la_CPPFLAGS = \
 	$(GSTREAMER_CFLAGS) \
 	$(GTK_CFLAGS) \
 	$(HILDON_CFLAGS) \
+	$(LIBFFTW_CFLAGS) \
 	$(LIBSOUP_CFLAGS) \
 	$(LIBXML_CFLAGS) \
 	$(LIBXSLT_CFLAGS) \
@@ -841,11 +843,12 @@ EXTRA_DIST += \
 	$(shell ls $(srcdir)/Source/WebCore/dom/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/fileapi/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/html/canvas/*.idl) \
+	$(shell ls $(srcdir)/Source/WebCore/html/track/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/html/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/inspector/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/loader/appcache/*.idl) \
+	$(shell ls $(srcdir)/Source/WebCore/mediastream/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/notifications/*.idl) \
-	$(shell ls $(srcdir)/Source/WebCore/p2p/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/page/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/plugins/*.idl) \
 	$(shell ls $(srcdir)/Source/WebCore/storage/*.idl) \
@@ -857,24 +860,21 @@ EXTRA_DIST += \
 	$(shell ls $(srcdir)/Source/WebCore/xml/*.idl) \
 	Source/ThirdParty/ANGLE/src/compiler/glslang.l \
 	Source/ThirdParty/ANGLE/src/compiler/glslang.y \
-	Source/WebCore/bindings/scripts/CodeGenerator.pm \
-	Source/WebCore/bindings/scripts/IDLParser.pm \
-	Source/WebCore/bindings/scripts/IDLStructure.pm \
-	Source/WebCore/bindings/scripts/InFilesParser.pm \
-	Source/WebCore/bindings/scripts/generate-bindings.pl \
-	Source/WebCore/bindings/scripts/preprocessor.pm \
 	Source/WebCore/bindings/scripts/CodeGeneratorGObject.pm \
 	Source/WebCore/bindings/scripts/CodeGeneratorJS.pm \
 	Source/WebCore/bindings/scripts/CodeGenerator.pm \
-	Source/WebCore/bindings/scripts/generate-bindings.pl \
-	Source/WebCore/bindings/scripts/gobject-generate-headers.pl \
 	Source/WebCore/bindings/scripts/IDLParser.pm \
 	Source/WebCore/bindings/scripts/IDLStructure.pm \
+	Source/WebCore/bindings/scripts/InFilesCompiler.pm \
 	Source/WebCore/bindings/scripts/InFilesParser.pm \
+	Source/WebCore/bindings/scripts/generate-bindings.pl \
+	Source/WebCore/bindings/scripts/gobject-generate-headers.pl \
+	Source/WebCore/bindings/scripts/preprocessor.pm \
 	Source/WebCore/ChangeLog \
 	Source/WebCore/css/CSSGrammar.y \
 	Source/WebCore/css/CSSPropertyNames.in \
 	Source/WebCore/css/CSSValueKeywords.in \
+	Source/WebCore/dom/DOMExceptions.in \
 	Source/WebCore/css/fullscreen.css \
 	Source/WebCore/css/fullscreenQuickTime.css \
 	Source/WebCore/css/html.css \
@@ -893,17 +893,20 @@ EXTRA_DIST += \
 	Source/WebCore/css/tokenizer.flex \
 	Source/WebCore/css/view-source.css \
 	Source/WebCore/css/WebKitFontFamilyNames.in \
+	Source/WebCore/dom/EventFactory.in \
+	Source/WebCore/dom/EventTargetFactory.in \
+	Source/WebCore/dom/make_dom_exceptions.pl \
+	Source/WebCore/dom/make_event_factory.pl \
 	Source/WebCore/dom/make_names.pl \
 	Source/WebCore/html/HTMLAttributeNames.in \
 	Source/WebCore/html/HTMLTagNames.in \
 	Source/WebCore/html/parser/create-html-entity-table \
 	Source/WebCore/html/parser/HTMLEntityNames.in \
 	Source/WebCore/icu/LICENSE \
-	Source/WebCore/inspector/CodeGeneratorInspector.pm \
+	Source/WebCore/inspector/CodeGeneratorInspector.py \
 	Source/WebCore/inspector/InjectedScriptSource.js \
 	Source/WebCore/inspector/Inspector.json \
 	Source/WebCore/inspector/Inspector-0.1.json \
-	Source/WebCore/inspector/generate-inspector-idl \
 	Source/WebCore/inspector/generate-inspector-protocol-version \
 	Source/WebCore/inspector/xxd.pl \
 	Source/WebCore/LICENSE-APPLE \

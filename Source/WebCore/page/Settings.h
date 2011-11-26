@@ -113,11 +113,11 @@ namespace WebCore {
         void setLoadsSiteIconsIgnoringImageLoadingSetting(bool);
         bool loadsSiteIconsIgnoringImageLoadingSetting() const { return m_loadsSiteIconsIgnoringImageLoadingSetting; }
 
-        void setJavaScriptEnabled(bool);
-        // Instead of calling isJavaScriptEnabled directly, please consider calling
+        void setScriptEnabled(bool);
+        // Instead of calling isScriptEnabled directly, please consider calling
         // ScriptController::canExecuteScripts, which takes things like the
         // HTML sandbox attribute into account.
-        bool isJavaScriptEnabled() const { return m_isJavaScriptEnabled; }
+        bool isScriptEnabled() const { return m_isScriptEnabled; }
 
         void setWebSecurityEnabled(bool);
         bool isWebSecurityEnabled() const { return m_isWebSecurityEnabled; }
@@ -152,13 +152,11 @@ namespace WebCore {
         void setLocalStorageEnabled(bool);
         bool localStorageEnabled() const { return m_localStorageEnabled; }
 
-#if ENABLE(DOM_STORAGE)
         // Allow clients concerned with memory consumption to set a quota on session storage
         // since the memory used won't be released until the Page is destroyed.
         // Default is noQuota.
         void setSessionStorageQuota(unsigned);
         unsigned sessionStorageQuota() const { return m_sessionStorageQuota; }
-#endif
 
         // When this option is set, WebCore will avoid storing any record of browsing activity
         // that may persist on disk or remain displayed when the option is reset.
@@ -300,9 +298,9 @@ namespace WebCore {
         void setCanvasUsesAcceleratedDrawing(bool);
         bool canvasUsesAcceleratedDrawing() const { return m_canvasUsesAcceleratedDrawing; }
 
-        void setAcceleratedDrawingEnabled(bool);
+        void setAcceleratedDrawingEnabled(bool enabled) { m_acceleratedDrawingEnabled = enabled; }
         bool acceleratedDrawingEnabled() const { return m_acceleratedDrawingEnabled; }
-        
+
         void setAcceleratedCompositingEnabled(bool);
         bool acceleratedCompositingEnabled() const { return m_acceleratedCompositingEnabled; }
 
@@ -320,6 +318,12 @@ namespace WebCore {
 
         void setAcceleratedCompositingForAnimationEnabled(bool);
         bool acceleratedCompositingForAnimationEnabled() const { return m_acceleratedCompositingForAnimationEnabled; }
+
+        void setAcceleratedCompositingForFixedPositionEnabled(bool enabled) { m_acceleratedCompositingForFixedPositionEnabled = enabled; }
+        bool acceleratedCompositingForFixedPositionEnabled() const { return m_acceleratedCompositingForFixedPositionEnabled; }
+
+        void setAcceleratedCompositingForScrollableFramesEnabled(bool enabled) { m_acceleratedCompositingForScrollableFramesEnabled = enabled; }
+        bool acceleratedCompositingForScrollableFramesEnabled() const { return m_acceleratedCompositingForScrollableFramesEnabled; }
 
         void setShowDebugBorders(bool);
         bool showDebugBorders() const { return m_showDebugBorders; }
@@ -343,6 +347,9 @@ namespace WebCore {
 
         void setOpenGLMultisamplingEnabled(bool);
         bool openGLMultisamplingEnabled() const { return m_openGLMultisamplingEnabled; }
+
+        void setPrivilegedWebGLExtensionsEnabled(bool);
+        bool privilegedWebGLExtensionsEnabled() const { return m_privilegedWebGLExtensionsEnabled; }
 
         void setAccelerated2dCanvasEnabled(bool);
         bool accelerated2dCanvasEnabled() const { return m_acceleratedCanvas2dEnabled; }
@@ -382,6 +389,9 @@ namespace WebCore {
 
         void setAsynchronousSpellCheckingEnabled(bool flag) { m_asynchronousSpellCheckingEnabled = flag; }
         bool asynchronousSpellCheckingEnabled() const  { return m_asynchronousSpellCheckingEnabled; }
+
+        void setUnifiedTextCheckerEnabled(bool flag) { m_unifiedTextCheckerEnabled = flag; }
+        bool unifiedTextCheckerEnabled() const { return m_unifiedTextCheckerEnabled; }
 
         void setMemoryInfoEnabled(bool flag) { m_memoryInfoEnabled = flag; }
         bool memoryInfoEnabled() const { return m_memoryInfoEnabled; }
@@ -429,13 +439,6 @@ namespace WebCore {
         void setForceCompositingMode(bool flag) { m_forceCompositingMode = flag; }
         bool forceCompositingMode() { return m_forceCompositingMode; }
 
-        void setZoomAnimatorScale(float scale) { m_zoomAnimatorScale = scale; }
-        float zoomAnimatorScale() { return m_zoomAnimatorScale; }
-
-        void setZoomAnimatorPosition(float x, float y) { m_zoomAnimatorPosX = x; m_zoomAnimatorPosY = y; }
-        float zoomAnimatorPosX() { return m_zoomAnimatorPosX; }
-        float zoomAnimatorPosY() { return m_zoomAnimatorPosY; }
-
         void setShouldInjectUserScriptsInInitialEmptyDocument(bool flag) { m_shouldInjectUserScriptsInInitialEmptyDocument = flag; }
         bool shouldInjectUserScriptsInInitialEmptyDocument() { return m_shouldInjectUserScriptsInInitialEmptyDocument; }
 
@@ -464,7 +467,10 @@ namespace WebCore {
 
         void setSuppressIncrementalRendering(bool flag) { m_suppressIncrementalRendering = flag; }
         bool suppressIncrementalRendering() const { return m_suppressIncrementalRendering; }
-
+        
+        void setBackspaceKeyNavigationEnabled(bool flag) { m_backspaceKeyNavigationEnabled = flag; }
+        bool backspaceKeyNavigationEnabled() const { return m_backspaceKeyNavigationEnabled; }
+        
         void setPasswordEchoDurationInSeconds(double durationInSeconds) { m_passwordEchoDurationInSeconds = durationInSeconds; }
         double passwordEchoDurationInSeconds() const { return m_passwordEchoDurationInSeconds; }
 
@@ -476,6 +482,9 @@ namespace WebCore {
 
         static void setMockScrollbarsEnabled(bool flag);
         static bool mockScrollbarsEnabled();
+
+        void setVisualWordMovementEnabled(bool enabled) { m_visualWordMovementEnabled = enabled; }
+        bool visualWordMovementEnabled() const { return m_visualWordMovementEnabled; }
 
     private:
         Page* m_page;
@@ -505,9 +514,7 @@ namespace WebCore {
         size_t m_maximumDecodedImageSize;
         int m_deviceWidth;
         int m_deviceHeight;
-#if ENABLE(DOM_STORAGE)
         unsigned m_sessionStorageQuota;
-#endif
         unsigned m_editingBehaviorType;
         unsigned m_maximumHTMLParserDOMTreeDepth;
         bool m_isSpatialNavigationEnabled : 1;
@@ -520,7 +527,7 @@ namespace WebCore {
         bool m_isMediaEnabled : 1;
         bool m_arePluginsEnabled : 1;
         bool m_localStorageEnabled : 1;
-        bool m_isJavaScriptEnabled : 1;
+        bool m_isScriptEnabled : 1;
         bool m_isWebSecurityEnabled : 1;
         bool m_allowUniversalAccessFromFileURLs: 1;
         bool m_allowFileAccessFromFileURLs: 1;
@@ -563,11 +570,14 @@ namespace WebCore {
         bool m_acceleratedCompositingForPluginsEnabled : 1;
         bool m_acceleratedCompositingForCanvasEnabled : 1;
         bool m_acceleratedCompositingForAnimationEnabled : 1;
+        bool m_acceleratedCompositingForFixedPositionEnabled : 1;
+        bool m_acceleratedCompositingForScrollableFramesEnabled : 1; // Works only in conjunction with forceCompositingMode
         bool m_showDebugBorders : 1;
         bool m_showRepaintCounter : 1;
         bool m_experimentalNotificationsEnabled : 1;
         bool m_webGLEnabled : 1;
         bool m_openGLMultisamplingEnabled : 1;
+        bool m_privilegedWebGLExtensionsEnabled : 1;
         bool m_webAudioEnabled : 1;
         bool m_acceleratedCanvas2dEnabled : 1;
         bool m_legacyAcceleratedCanvas2dEnabled : 1;
@@ -579,6 +589,7 @@ namespace WebCore {
         bool m_fullScreenAPIEnabled : 1;
 #endif
         bool m_asynchronousSpellCheckingEnabled: 1;
+        bool m_unifiedTextCheckerEnabled: 1;
         bool m_memoryInfoEnabled: 1;
         bool m_interactiveFormValidation: 1;
         bool m_usePreHTML5ParserQuirks: 1;
@@ -598,6 +609,8 @@ namespace WebCore {
         bool m_mediaPlaybackAllowsInline : 1;
         bool m_passwordEchoEnabled : 1;
         bool m_suppressIncrementalRendering : 1;
+        bool m_backspaceKeyNavigationEnabled : 1;
+        bool m_visualWordMovementEnabled : 1;
 
         Timer<Settings> m_loadsImagesAutomaticallyTimer;
         void loadsImagesAutomaticallyTimerFired(Timer<Settings>*);
@@ -606,10 +619,6 @@ namespace WebCore {
         static bool gAVFoundationEnabled;
 #endif
         static bool gMockScrollbarsEnabled;
-
-        float m_zoomAnimatorScale;
-        float m_zoomAnimatorPosX;
-        float m_zoomAnimatorPosY;
 
 #if USE(SAFARI_THEME)
         static bool gShouldPaintNativeControls;

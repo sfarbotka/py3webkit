@@ -31,12 +31,11 @@
 
 #if ENABLE(SQL_DATABASE)
 
-#include "ExceptionCode.h"
 #include "PlatformString.h"
 #include "SQLiteDatabase.h"
 #include <wtf/Forward.h>
 #include <wtf/ThreadSafeRefCounted.h>
-#if !LOG_DISABLED
+#if !LOG_DISABLED || !ERROR_DISABLED
 #include "SecurityOrigin.h"
 #endif
 
@@ -45,6 +44,8 @@ namespace WebCore {
 class DatabaseAuthorizer;
 class ScriptExecutionContext;
 class SecurityOrigin;
+
+typedef int ExceptionCode;
 
 class AbstractDatabase : public ThreadSafeRefCounted<AbstractDatabase> {
 public:
@@ -94,7 +95,7 @@ protected:
 
     void closeDatabase();
 
-    virtual bool performOpenAndVerify(bool shouldSetVersionInNewDatabase, ExceptionCode& ec);
+    virtual bool performOpenAndVerify(bool shouldSetVersionInNewDatabase, ExceptionCode&, String& errorMessage);
 
     bool getVersionFromDatabase(String& version, bool shouldCacheVersion = true);
     bool setVersionInDatabase(const String& version, bool shouldCacheVersion = true);
@@ -103,6 +104,8 @@ protected:
     String getCachedVersion()const;
     void setCachedVersion(const String&);
     bool getActualVersionForTransaction(String& version);
+
+    void logErrorMessage(const String& message);
 
     static const char* databaseInfoTableName();
 
@@ -115,7 +118,7 @@ protected:
     unsigned long m_estimatedSize;
     String m_filename;
 
-#if !LOG_DISABLED
+#if !LOG_DISABLED || !ERROR_DISABLED
     String databaseDebugName() const { return m_contextThreadSecurityOrigin->toString() + "::" + m_name; }
 #endif
 

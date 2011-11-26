@@ -91,6 +91,7 @@
 #include "WebWindowFeatures.h"
 #include "WindowFeatures.h"
 #include "WrappedResourceRequest.h"
+#include <wtf/text/StringBuilder.h>
 #include <wtf/text/StringConcatenate.h>
 #include <wtf/unicode/CharacterNames.h>
 
@@ -115,41 +116,8 @@ static WebPopupType convertPopupType(PopupContainer::PopupType type)
 // Converts a WebCore::AXObjectCache::AXNotification to a WebKit::WebAccessibilityNotification
 static WebAccessibilityNotification toWebAccessibilityNotification(AXObjectCache::AXNotification notification)
 {
-    switch (notification) {
-    case AXObjectCache::AXActiveDescendantChanged:
-        return WebAccessibilityNotificationActiveDescendantChanged;
-    case AXObjectCache::AXCheckedStateChanged:
-        return WebAccessibilityNotificationCheckedStateChanged;
-    case AXObjectCache::AXChildrenChanged:
-        return WebAccessibilityNotificationChildrenChanged;
-    case AXObjectCache::AXFocusedUIElementChanged:
-        return WebAccessibilityNotificationFocusedUIElementChanged;
-    case AXObjectCache::AXLayoutComplete:
-        return WebAccessibilityNotificationLayoutComplete;
-    case AXObjectCache::AXLoadComplete:
-        return WebAccessibilityNotificationLoadComplete;
-    case AXObjectCache::AXSelectedChildrenChanged:
-        return WebAccessibilityNotificationSelectedChildrenChanged;
-    case AXObjectCache::AXSelectedTextChanged:
-        return WebAccessibilityNotificationSelectedTextChanged;
-    case AXObjectCache::AXValueChanged:
-        return WebAccessibilityNotificationValueChanged;
-    case AXObjectCache::AXScrolledToAnchor:
-        return WebAccessibilityNotificationScrolledToAnchor;
-    case AXObjectCache::AXLiveRegionChanged:
-        return WebAccessibilityNotificationLiveRegionChanged;
-    case AXObjectCache::AXMenuListValueChanged:
-        return WebAccessibilityNotificationMenuListValueChanged;
-    case AXObjectCache::AXRowCountChanged:
-        return WebAccessibilityNotificationRowCountChanged;
-    case AXObjectCache::AXRowCollapsed:
-        return WebAccessibilityNotificationRowCollapsed;
-    case AXObjectCache::AXRowExpanded:
-        return WebAccessibilityNotificationRowExpanded;
-    default:
-        ASSERT_NOT_REACHED();
-        return WebAccessibilityNotificationInvalid;
-    }
+    // These enums have the same values; enforced in AssertMatchingEnums.cpp.
+    return static_cast<WebAccessibilityNotification>(notification);
 }
 
 ChromeClientImpl::ChromeClientImpl(WebViewImpl* webView)
@@ -256,7 +224,7 @@ void ChromeClientImpl::focusedFrameChanged(Frame*)
 }
 
 Page* ChromeClientImpl::createWindow(
-    Frame* frame, const FrameLoadRequest& r, const WindowFeatures& features, const NavigationAction&)
+    Frame* frame, const FrameLoadRequest& r, const WindowFeatures& features, const NavigationAction& action)
 {
     if (!m_webView->client())
         return 0;
@@ -264,6 +232,8 @@ Page* ChromeClientImpl::createWindow(
     WrappedResourceRequest request;
     if (!r.resourceRequest().isEmpty())
         request.bind(r.resourceRequest());
+    else if (!action.resourceRequest().isEmpty())
+        request.bind(action.resourceRequest());
     WebViewImpl* newView = static_cast<WebViewImpl*>(
         m_webView->client()->createView(WebFrameImpl::fromFrame(frame), request, features, r.frameName()));
     if (!newView)
@@ -503,12 +473,12 @@ void ChromeClientImpl::registerProtocolHandler(const String& scheme, const Strin
 }
 #endif
 
-void ChromeClientImpl::invalidateWindow(const IntRect&, bool)
+void ChromeClientImpl::invalidateRootView(const IntRect&, bool)
 {
     notImplemented();
 }
 
-void ChromeClientImpl::invalidateContentsAndWindow(const IntRect& updateRect, bool /*immediate*/)
+void ChromeClientImpl::invalidateContentsAndRootView(const IntRect& updateRect, bool /*immediate*/)
 {
     if (updateRect.isEmpty())
         return;
@@ -526,13 +496,13 @@ void ChromeClientImpl::invalidateContentsAndWindow(const IntRect& updateRect, bo
 void ChromeClientImpl::invalidateContentsForSlowScroll(const IntRect& updateRect, bool immediate)
 {
     m_webView->hidePopups();
-    invalidateContentsAndWindow(updateRect, immediate);
+    invalidateContentsAndRootView(updateRect, immediate);
 }
 
 #if ENABLE(REQUEST_ANIMATION_FRAME)
 void ChromeClientImpl::scheduleAnimation()
 {
-    m_webView->client()->scheduleAnimation();
+    m_webView->scheduleAnimation();
 }
 #endif
 
@@ -555,7 +525,7 @@ void ChromeClientImpl::scroll(
 #endif
 }
 
-IntPoint ChromeClientImpl::screenToWindow(const IntPoint& point) const
+IntPoint ChromeClientImpl::screenToRootView(const IntPoint& point) const
 {
     IntPoint windowPoint(point);
 
@@ -567,7 +537,7 @@ IntPoint ChromeClientImpl::screenToWindow(const IntPoint& point) const
     return windowPoint;
 }
 
-IntRect ChromeClientImpl::windowToScreen(const IntRect& rect) const
+IntRect ChromeClientImpl::rootViewToScreen(const IntRect& rect) const
 {
     IntRect screenRect(rect);
 
@@ -668,7 +638,7 @@ void ChromeClientImpl::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> fileCh
 #else
     params.directory = false;
 #endif
-    params.acceptTypes = fileChooser->settings().acceptTypes;
+    params.acceptMIMETypes = fileChooser->settings().acceptMIMETypes;
     params.selectedFiles = fileChooser->settings().selectedFiles;
     if (params.selectedFiles.size() > 0)
         params.initialValue = params.selectedFiles[0];
@@ -879,48 +849,35 @@ ChromeClient::CompositingTriggerFlags ChromeClientImpl::allowedCompositingTrigge
 }
 #endif
 
-bool ChromeClientImpl::supportsFullscreenForNode(const WebCore::Node* node)
+bool ChromeClientImpl::supportsFullscreenForNode(const Node* node)
 {
-    if (m_webView->client() && node->hasTagName(WebCore::HTMLNames::videoTag))
-        return m_webView->client()->supportsFullscreen();
     return false;
 }
 
-void ChromeClientImpl::enterFullscreenForNode(WebCore::Node* node)
+void ChromeClientImpl::enterFullscreenForNode(Node* node)
 {
-    if (m_webView->client())
-        m_webView->client()->enterFullscreenForNode(WebNode(node));
+    ASSERT_NOT_REACHED();
 }
 
-void ChromeClientImpl::exitFullscreenForNode(WebCore::Node* node)
+void ChromeClientImpl::exitFullscreenForNode(Node* node)
 {
-    if (m_webView->client())
-        m_webView->client()->exitFullscreenForNode(WebNode(node));
+    ASSERT_NOT_REACHED();
 }
 
 #if ENABLE(FULLSCREEN_API)
-bool ChromeClientImpl::supportsFullScreenForElement(const WebCore::Element* element, bool withKeyboard)
+bool ChromeClientImpl::supportsFullScreenForElement(const Element* element, bool withKeyboard)
 {
-    return m_webView->page()->settings()->fullScreenEnabled();
+    return true;
 }
 
-void ChromeClientImpl::enterFullScreenForElement(WebCore::Element* element)
+void ChromeClientImpl::enterFullScreenForElement(Element* element)
 {
-    // FIXME: Make this code support asynchronous embedder implementations of
-    // enterFullscreenForElement() by restructuring this code to wait for an
-    // ACK.
-    // FIXME: We may need to call these someplace else when window resizes.
-    element->document()->webkitWillEnterFullScreenForElement(element);
-    m_webView->client()->enterFullscreen();
-    element->document()->webkitDidEnterFullScreenForElement(element);
+    m_webView->enterFullScreenForElement(element);
 }
 
-void ChromeClientImpl::exitFullScreenForElement(WebCore::Element* element)
+void ChromeClientImpl::exitFullScreenForElement(Element* element)
 {
-    // FIXME: We may need to call these someplace else when window resizes.
-    element->document()->webkitWillExitFullScreenForElement(element);
-    m_webView->client()->exitFullscreen();
-    element->document()->webkitDidExitFullScreenForElement(element);
+    m_webView->exitFullScreenForElement(element);
 }
 
 void ChromeClientImpl::fullScreenRendererChanged(RenderBox*)
@@ -987,8 +944,7 @@ bool ChromeClientImpl::shouldRubberBandInDirection(WebCore::ScrollDirection dire
 
 void ChromeClientImpl::numWheelEventHandlersChanged(unsigned numberOfWheelHandlers)
 {
-    if (m_webView->client())
-        m_webView->client()->numberOfWheelEventHandlersChanged(numberOfWheelHandlers);
+    m_webView->numberOfWheelEventHandlersChanged(numberOfWheelHandlers);
 }
 
 } // namespace WebKit

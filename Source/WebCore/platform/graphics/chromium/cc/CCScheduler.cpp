@@ -25,45 +25,126 @@
 #include "config.h"
 
 #include "cc/CCScheduler.h"
+#include "TraceEvent.h"
 
 namespace WebCore {
 
-CCScheduler::CCScheduler(CCSchedulerClient* client)
+CCScheduler::CCScheduler(CCSchedulerClient* client, PassOwnPtr<CCFrameRateController> frameRateController)
     : m_client(client)
-    , m_commitPending(false)
-    , m_redrawPending(false)
+    , m_frameRateController(frameRateController)
+    , m_updateMoreResourcesPending(false)
 {
     ASSERT(m_client);
+    m_frameRateController->setClient(this);
+
+    // FIXME: make the CCSchedulerStateMachine turn off FrameRateController it isn't needed.
+    m_frameRateController->setActive(true);
 }
 
-void CCScheduler::requestCommit()
+CCScheduler::~CCScheduler()
 {
-    if (m_commitPending)
+    m_frameRateController->setActive(false);
+}
+
+void CCScheduler::setVisible(bool visible)
+{
+    m_stateMachine.setVisible(visible);
+}
+void CCScheduler::setNeedsCommit()
+{
+    m_stateMachine.setNeedsCommit();
+    processScheduledActions();
+}
+
+void CCScheduler::setNeedsRedraw()
+{
+    m_stateMachine.setNeedsRedraw();
+    processScheduledActions();
+}
+
+void CCScheduler::setNeedsForcedRedraw()
+{
+    m_stateMachine.setNeedsForcedRedraw();
+    processScheduledActions();
+}
+
+void CCScheduler::beginFrameComplete()
+{
+    TRACE_EVENT("CCScheduler::beginFrameComplete", this, 0);
+    m_stateMachine.beginFrameComplete();
+    processScheduledActions();
+}
+
+void CCScheduler::setMaxFramesPending(int maxFramesPending)
+{
+    m_frameRateController->setMaxFramesPending(maxFramesPending);
+}
+
+void CCScheduler::didSwapBuffersComplete()
+{
+    TRACE_EVENT("CCScheduler::didSwapBuffersComplete", this, 0);
+    m_frameRateController->didFinishFrame();
+}
+
+void CCScheduler::didSwapBuffersAbort()
+{
+    TRACE_EVENT("CCScheduler::didSwapBuffersAbort", this, 0);
+    m_frameRateController->didAbortAllPendingFrames();
+}
+
+void CCScheduler::beginFrame()
+{
+    if (m_updateMoreResourcesPending) {
+        m_updateMoreResourcesPending = false;
+        m_stateMachine.beginUpdateMoreResourcesComplete(m_client->hasMoreResourceUpdates());
+    }
+    TRACE_EVENT("CCScheduler::beginFrame", this, 0);
+
+    m_stateMachine.didEnterVSync();
+    processScheduledActions();
+    m_stateMachine.didLeaveVSync();
+}
+
+void CCScheduler::processScheduledActions()
+{
+    // Early out so we don't spam TRACE_EVENTS with useless processScheduledActions.
+    if (m_stateMachine.nextAction() == CCSchedulerStateMachine::ACTION_NONE)
         return;
 
-    m_commitPending = true;
-    m_client->scheduleBeginFrameAndCommit();
+    // This function can re-enter itself. For example, draw may call
+    // setNeedsCommit. Proceeed with caution.
+    CCSchedulerStateMachine::Action action;
+    do {
+        action = m_stateMachine.nextAction();
+        m_stateMachine.updateState(action);
+
+        switch (action) {
+        case CCSchedulerStateMachine::ACTION_NONE:
+            break;
+        case CCSchedulerStateMachine::ACTION_BEGIN_FRAME:
+            m_client->scheduledActionBeginFrame();
+            break;
+        case CCSchedulerStateMachine::ACTION_BEGIN_UPDATE_MORE_RESOURCES:
+            m_client->scheduledActionUpdateMoreResources();
+            if (!m_client->hasMoreResourceUpdates()) {
+                // If we were just told to update resources, but there are no
+                // more pending, then tell the state machine that the
+                // beginUpdateMoreResources completed. If more are pending,
+                // then we will ack the update at the next draw.
+                m_updateMoreResourcesPending = false;
+                m_stateMachine.beginUpdateMoreResourcesComplete(false);
+            } else
+                m_updateMoreResourcesPending = true;
+            break;
+        case CCSchedulerStateMachine::ACTION_COMMIT:
+            m_client->scheduledActionCommit();
+            break;
+        case CCSchedulerStateMachine::ACTION_DRAW:
+            m_client->scheduledActionDrawAndSwap();
+            m_frameRateController->didBeginFrame();
+            break;
+        }
+    } while (action != CCSchedulerStateMachine::ACTION_NONE);
 }
 
-void CCScheduler::requestRedraw()
-{
-    if (m_redrawPending)
-        return;
-
-    m_redrawPending = true;
-
-    m_client->scheduleDrawAndPresent();
 }
-
-void CCScheduler::didCommit()
-{
-    m_commitPending = false;
-}
-
-void CCScheduler::didDraw()
-{
-    m_redrawPending = false;
-}
-
-}
-

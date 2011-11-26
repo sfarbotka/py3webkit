@@ -39,6 +39,7 @@
 #include "RenderSVGResourceMasker.h"
 #include "RenderSVGRoot.h"
 #include "SVGResources.h"
+#include "SVGResourcesCache.h"
 #include "SVGStyledElement.h"
 #include "TransformState.h"
 #include <wtf/UnusedParam.h>
@@ -303,6 +304,20 @@ void SVGRenderSupport::intersectRepaintRectWithResources(const RenderObject* obj
         shadow->adjustRectForShadow(repaintRect);
 }
 
+bool SVGRenderSupport::filtersForceContainerLayout(RenderObject* object)
+{
+    // If any of this container's children need to be laid out, and a filter is applied
+    // to the container, we need to repaint the entire container.
+    if (!object->normalChildNeedsLayout())
+        return false;
+
+    SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(object);
+    if (!resources || !resources->filter())
+        return false;
+
+    return true;
+}
+
 bool SVGRenderSupport::pointInClippingArea(RenderObject* object, const FloatPoint& point)
 {
     ASSERT(object);
@@ -330,7 +345,7 @@ void SVGRenderSupport::applyStrokeStyleToContext(GraphicsContext* context, const
     const SVGRenderStyle* svgStyle = style->svgStyle();
     ASSERT(svgStyle);
 
-    SVGElement* lengthContext = static_cast<SVGElement*>(object->node());
+    SVGLengthContext lengthContext(static_cast<SVGElement*>(object->node()));
     context->setStrokeThickness(svgStyle->strokeWidth().value(lengthContext));
     context->setLineCap(svgStyle->capStyle());
     context->setLineJoin(svgStyle->joinStyle());

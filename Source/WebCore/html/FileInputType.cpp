@@ -37,6 +37,7 @@
 #include "ScriptController.h"
 #include "ShadowRoot.h"
 #include <wtf/PassOwnPtr.h>
+#include <wtf/text/StringBuilder.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
@@ -153,7 +154,7 @@ void FileInputType::handleDOMActivateEvent(Event* event)
 #else
         settings.allowsMultipleFiles = input->fastHasAttribute(multipleAttr);
 #endif
-        settings.acceptTypes = input->accept();
+        settings.acceptMIMETypes = input->acceptMIMETypes();
         settings.selectedFiles = m_fileList->paths();
         chrome->runOpenPanel(input->document()->frame(), newFileChooser(settings));
     }
@@ -324,10 +325,11 @@ void FileInputType::receiveDropForDirectoryUpload(const Vector<String>& paths)
 {
     if (Chrome* chrome = this->chrome()) {
         FileChooserSettings settings;
+        HTMLInputElement* input = element();
         settings.allowsDirectoryUpload = true;
         settings.allowsMultipleFiles = true;
         settings.selectedFiles.append(paths[0]);
-        settings.acceptTypes = element()->accept();
+        settings.acceptMIMETypes = input->acceptMIMETypes();
         chrome->enumerateChosenDirectory(newFileChooser(settings));
     }
 }
@@ -365,6 +367,25 @@ void FileInputType::receiveDroppedFiles(const Vector<String>& paths)
 Icon* FileInputType::icon() const
 {
     return m_icon.get();
+}
+
+String FileInputType::defaultToolTip() const
+{
+    FileList* fileList = m_fileList.get();
+    unsigned listSize = fileList->length();
+    if (!listSize) {
+        if (element()->multiple())
+            return fileButtonNoFilesSelectedLabel();
+        return fileButtonNoFileSelectedLabel();
+    }
+
+    StringBuilder names;
+    for (size_t i = 0; i < listSize; ++i) {
+        names.append(fileList->item(i)->fileName());
+        if (i != listSize - 1)
+            names.append('\n');
+    }
+    return names.toString();
 }
 
 } // namespace WebCore

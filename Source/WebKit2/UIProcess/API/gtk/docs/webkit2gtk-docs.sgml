@@ -11,14 +11,19 @@
 
   <chapter>
     <title>Class Overview</title>
+    <xi:include href="xml/WebKitWebContext.xml"/>
     <xi:include href="xml/WebKitWebView.xml"/>
     <xi:include href="xml/WebKitWebViewBase.xml"/>
-    <xi:include href="xml/WebKitWebContext.xml"/>
     <xi:include href="xml/WebKitWebLoaderClient.xml"/>
+    <xi:include href="xml/WebKitBackForwardList.xml"/>
+    <xi:include href="xml/WebKitBackForwardListItem.xml"/>
+    <xi:include href="xml/WebKitSettings.xml"/>
+    <xi:include href="xml/WebKitNetworkRequest.xml"/>
     <xi:include href="xml/WebKitError.xml"/>
   </chapter>
 
   <index id="index-all">
     <title>Index</title>
   </index>
+  <xi:include href="xml/annotation-glossary.xml"><xi:fallback /></xi:include>
 </book>

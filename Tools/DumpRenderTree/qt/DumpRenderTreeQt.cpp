@@ -210,6 +210,7 @@ void WebPage::resetSettings()
     settings()->setUserStyleSheetUrl(QUrl()); // reset to default
 
     DumpRenderTreeSupportQt::setMinimumTimerInterval(this, DumpRenderTreeSupportQt::defaultMinimumTimerInterval());
+    DumpRenderTreeSupportQt::setHixie76WebSocketProtocolEnabled(this, DumpRenderTreeSupportQt::defaultHixie76WebSocketProtocolEnabled());
 
     DumpRenderTreeSupportQt::resetInternalsObject(mainFrame());
 
@@ -397,6 +398,8 @@ DumpRenderTree::DumpRenderTree()
     QByteArray viewMode = getenv("QT_DRT_WEBVIEW_MODE");
     if (viewMode == "graphics")
         setGraphicsBased(true);
+
+    DumpRenderTreeSupportQt::initialize();
 
     // Set running in DRT mode for qwebpage to create testable objects.
     DumpRenderTreeSupportQt::setDumpRenderTreeModeEnabled(true);
@@ -624,7 +627,7 @@ void DumpRenderTree::open(const QUrl& url)
     m_page->event(&ev);
 
     QWebSettings::clearMemoryCaches();
-#if !(defined(Q_OS_SYMBIAN) && QT_VERSION <= QT_VERSION_CHECK(4, 6, 2))
+#if !(QT_VERSION <= QT_VERSION_CHECK(4, 6, 2))
     QFontDatabase::removeAllApplicationFonts();
 #endif
 #if defined(Q_WS_X11)

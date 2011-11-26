@@ -34,12 +34,12 @@ namespace JSC {
 
 ASSERT_CLASS_FITS_IN_CELL(FunctionPrototype);
 
+const ClassInfo FunctionPrototype::s_info = { "Function", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(FunctionPrototype) };
+
 static EncodedJSValue JSC_HOST_CALL functionProtoFuncToString(ExecState*);
 static EncodedJSValue JSC_HOST_CALL functionProtoFuncApply(ExecState*);
 static EncodedJSValue JSC_HOST_CALL functionProtoFuncCall(ExecState*);
 static EncodedJSValue JSC_HOST_CALL functionProtoFuncBind(ExecState*);
-
-const ClassInfo FunctionPrototype::s_info = { "Function", &Base::s_info, 0, 0, CREATE_METHOD_TABLE(FunctionPrototype) };
 
 FunctionPrototype::FunctionPrototype(JSGlobalObject* globalObject, Structure* structure)
     : InternalFunction(globalObject, structure)
@@ -72,11 +72,6 @@ static EncodedJSValue JSC_HOST_CALL callFunctionPrototype(ExecState*)
     return JSValue::encode(jsUndefined());
 }
 
-CallType FunctionPrototype::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 // ECMA 15.3.4
 CallType FunctionPrototype::getCallData(JSCell*, CallData& callData)
 {
@@ -94,7 +89,7 @@ static inline void insertSemicolonIfNeeded(UString& functionBody)
 
     for (size_t i = functionBody.length() - 2; i > 0; --i) {
         UChar ch = functionBody[i];
-        if (!Lexer::isWhiteSpace(ch) && !Lexer::isLineTerminator(ch)) {
+        if (!Lexer<UChar>::isWhiteSpace(ch) && !Lexer<UChar>::isLineTerminator(ch)) {
             if (ch != ';' && ch != '}')
                 functionBody = makeUString(functionBody.substringSharingImpl(0, i + 1), ";", functionBody.substringSharingImpl(i + 1, functionBody.length() - (i + 1)));
             return;
@@ -137,17 +132,24 @@ EncodedJSValue JSC_HOST_CALL functionProtoFuncApply(ExecState* exec)
     if (!array.isUndefinedOrNull()) {
         if (!array.isObject())
             return throwVMTypeError(exec);
-        if (asObject(array)->classInfo() == &Arguments::s_info)
+        if (asObject(array)->classInfo() == &Arguments::s_info) {
+            if (asArguments(array)->length(exec) > Arguments::MaxArguments)
+                return JSValue::encode(throwStackOverflowError(exec));
             asArguments(array)->fillArgList(exec, applyArgs);
-        else if (isJSArray(&exec->globalData(), array))
+        } else if (isJSArray(&exec->globalData(), array)) {
+            if (asArray(array)->length() > Arguments::MaxArguments)
+                return JSValue::encode(throwStackOverflowError(exec));
             asArray(array)->fillArgList(exec, applyArgs);
-        else {
+        } else {
             unsigned length = asObject(array)->get(exec, exec->propertyNames().length).toUInt32(exec);
+            if (length > Arguments::MaxArguments)
+                return JSValue::encode(throwStackOverflowError(exec));
+
             for (unsigned i = 0; i < length; ++i)
-                applyArgs.append(asArray(array)->get(exec, i));
+                applyArgs.append(asObject(array)->get(exec, i));
         }
     }
-
+    
     return JSValue::encode(call(exec, thisValue, callType, callData, exec->argument(0), applyArgs));
 }
 

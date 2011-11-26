@@ -64,14 +64,14 @@ public:
 
     virtual ~InspectorDebuggerAgent();
 
+    void getCapabilities(ErrorString*, RefPtr<InspectorArray>*);
     void enable(ErrorString*);
     void disable(ErrorString*);
-    bool enabled();
     void restore();
     void setFrontend(InspectorFrontend*);
     void clearFrontend();
 
-    void inspectedURLChanged(const String& url);
+    void didClearMainFrameWindowObject();
 
     // Part of the protocol.
     void setBreakpointsActive(ErrorString*, bool active);
@@ -81,9 +81,10 @@ public:
     void removeBreakpoint(ErrorString*, const String& breakpointId);
     void continueToLocation(ErrorString*, PassRefPtr<InspectorObject> location);
 
-    void searchInContent(ErrorString*, const String& scriptId, const String& query, RefPtr<InspectorArray>*);
+    void searchInContent(ErrorString*, const String& scriptId, const String& query, const bool* const optionalCaseSensitive, const bool* const optionalIsRegex, RefPtr<InspectorArray>*);
     void setScriptSource(ErrorString*, const String& scriptId, const String& newContent, const bool* const preview, RefPtr<InspectorArray>* newCallFrames, RefPtr<InspectorObject>* result);
     void getScriptSource(ErrorString*, const String& scriptId, String* scriptSource);
+    void getFunctionLocation(ErrorString*, const String& functionId, RefPtr<InspectorObject>* location);
     void schedulePauseOnNextStatement(const String& breakReason, PassRefPtr<InspectorObject> data);
     void cancelPauseOnNextStatement();
     void breakProgram(const String& breakReason, PassRefPtr<InspectorObject> data);
@@ -121,6 +122,7 @@ protected:
 private:
     void enable();
     void disable();
+    bool enabled();
 
     PassRefPtr<InspectorArray> currentCallFrames();
 

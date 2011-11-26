@@ -146,15 +146,15 @@ namespace WebCore {
         virtual IntRect windowResizerRect() const = 0;
 
         // Methods used by HostWindow.
-        virtual void invalidateWindow(const IntRect&, bool) = 0;
-        virtual void invalidateContentsAndWindow(const IntRect&, bool) = 0;
+        virtual void invalidateRootView(const IntRect&, bool) = 0;
+        virtual void invalidateContentsAndRootView(const IntRect&, bool) = 0;
         virtual void invalidateContentsForSlowScroll(const IntRect&, bool) = 0;
         virtual void scroll(const IntSize&, const IntRect&, const IntRect&) = 0;
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
         virtual void delegatedScrollRequested(const IntPoint&) = 0;
 #endif
-        virtual IntPoint screenToWindow(const IntPoint&) const = 0;
-        virtual IntRect windowToScreen(const IntRect&) const = 0;
+        virtual IntPoint screenToRootView(const IntPoint&) const = 0;
+        virtual IntRect rootViewToScreen(const IntRect&) const = 0;
         virtual PlatformPageClient platformPageClient() const = 0;
         virtual void scrollbarsModeDidChange() const = 0;
         virtual void setCursor(const Cursor&) = 0;
@@ -164,7 +164,7 @@ namespace WebCore {
 #endif
         // End methods used by HostWindow.
 
-        virtual void dispatchViewportDataDidChange(const ViewportArguments&) const { }
+        virtual void dispatchViewportPropertiesDidChange(const ViewportArguments&) const { }
 
         virtual void contentsSizeChanged(Frame*, const IntSize&) const = 0;
         virtual void layoutUpdated(Frame*) const { }
@@ -228,8 +228,8 @@ namespace WebCore {
 
 #if ENABLE(INPUT_COLOR)
         virtual void openColorChooser(ColorChooser*, const Color&) = 0;
-        virtual void cleanupColorChooser() = 0;
-        virtual void setSelectedColorInColorChooser(const Color&) = 0;
+        virtual void cleanupColorChooser(ColorChooser*) = 0;
+        virtual void setSelectedColorInColorChooser(ColorChooser*, const Color&) = 0;
 #endif
 
         virtual void runOpenPanel(Frame*, PassRefPtr<FileChooser>) = 0;
@@ -288,7 +288,7 @@ namespace WebCore {
         virtual void setRootFullScreenLayer(GraphicsLayer*) { }
 #endif
         
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
         virtual IntRect visibleRectForTiledBackingStore() const { return IntRect(); }
 #endif
 
@@ -336,6 +336,8 @@ namespace WebCore {
 
         virtual void numWheelEventHandlersChanged(unsigned) = 0;
         
+        virtual bool isSVGImageChromeClient() const { return false; }
+
     protected:
         virtual ~ChromeClient() { }
     };

@@ -34,19 +34,21 @@ import StringIO
 import sys
 import unittest
 
-from webkitpy.common.system import filesystem_mock
+from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.system import outputcapture
 from webkitpy.thirdparty.mock import Mock
 from webkitpy import layout_tests
-from webkitpy.layout_tests import port
 from webkitpy.layout_tests.port import port_testcase
 
 from webkitpy import layout_tests
 from webkitpy.layout_tests import run_webkit_tests
-from webkitpy.layout_tests.controllers.manager import Manager, natural_sort_key, test_key, TestRunInterruptedException, TestShard
+from webkitpy.layout_tests.controllers.manager import interpret_test_failures,  Manager, natural_sort_key, test_key, TestRunInterruptedException, TestShard
+from webkitpy.layout_tests.models import test_failures
 from webkitpy.layout_tests.models.result_summary import ResultSummary
 from webkitpy.layout_tests.views import printing
 from webkitpy.tool.mocktool import MockOptions
+from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.host_mock import MockHost
 
 
 class ManagerWrapper(Manager):
@@ -69,8 +71,10 @@ class ShardingTests(unittest.TestCase):
 
     def get_shards(self, num_workers, fully_parallel, test_list=None):
         test_list = test_list or self.test_list
-        port = layout_tests.port.get(port_name='test')
-        port._filesystem = filesystem_mock.MockFileSystem()
+        host = MockHost()
+        port = host.port_factory.get(port_name='test')
+        port._filesystem = MockFileSystem()
+        # FIXME: This should use MockOptions() instead of Mock()
         self.manager = ManagerWrapper(port=port, options=Mock(), printer=Mock())
         return self.manager._shard_tests(test_list, num_workers, fully_parallel)
 
@@ -156,8 +160,8 @@ class ManagerTest(unittest.TestCase):
 
     def test_fallback_path_in_config(self):
         options = self.get_options()
-
-        port = layout_tests.port.get('test-mac-leopard', options=options)
+        host = MockHost()
+        port = host.port_factory.get('test-mac-leopard', options=options)
         printer = self.get_printer()
         manager = Manager(port, port.options, printer)
         manager.print_config()
@@ -183,10 +187,10 @@ class ManagerTest(unittest.TestCase):
                     self._finished_list_called = True
 
         options, args = run_webkit_tests.parse_args(['--platform=test', '--print=nothing', 'http/tests/passes', 'passes'])
-        port = layout_tests.port.get(port_name=options.platform, options=options)
+        host = MockHost()
+        port = host.port_factory.get(port_name=options.platform, options=options)
         run_webkit_tests._set_up_derived_options(port, options)
-        printer = printing.Printer(port, options, StringIO.StringIO(), StringIO.StringIO(),
-                                   configure_logging=True)
+        printer = printing.Printer(port, options, StringIO.StringIO(), StringIO.StringIO(), configure_logging=True)
         manager = LockCheckingManager(port, options, printer)
         manager.collect_tests(args)
         manager.parse_expectations()
@@ -197,9 +201,9 @@ class ManagerTest(unittest.TestCase):
         tester.assertEquals(num_unexpected_results, 0)
 
     def test_interrupt_if_at_failure_limits(self):
-        port = Mock()
+        port = Mock()  # FIXME: This should be a tighter mock.
         port.TEST_PATH_SEPARATOR = '/'
-        port._filesystem = filesystem_mock.MockFileSystem()
+        port._filesystem = MockFileSystem()
         manager = Manager(port=port, options=MockOptions(), printer=Mock())
 
         manager._options = MockOptions(exit_after_n_failures=None, exit_after_n_crashes_or_timeouts=None)
@@ -225,7 +229,7 @@ class ManagerTest(unittest.TestCase):
 
     def test_needs_servers(self):
         def get_manager_with_tests(test_names):
-            port = Mock()
+            port = Mock()  # FIXME: Use a tighter mock.
             port.TEST_PATH_SEPARATOR = '/'
             manager = Manager(port, options=MockOptions(http=True), printer=Mock())
             manager._test_files = set(test_names)
@@ -240,7 +244,8 @@ class ManagerTest(unittest.TestCase):
 
     def integration_test_needs_servers(self):
         def get_manager_with_tests(test_names):
-            port = layout_tests.port.get()
+            host = MockHost()
+            port = host.port_factory.get()
             manager = Manager(port, options=MockOptions(test_list=None, http=True), printer=Mock())
             manager.collect_tests(test_names)
             return manager
@@ -283,7 +288,8 @@ class NaturalCompareTest(unittest.TestCase):
 
 class KeyCompareTest(unittest.TestCase):
     def setUp(self):
-        self.port = layout_tests.port.get('test')
+        host = MockHost()
+        self.port = host.port_factory.get('test')
 
     def assert_cmp(self, x, y, result):
         self.assertEquals(cmp(test_key(self.port, x), test_key(self.port, y)), result)
@@ -297,6 +303,38 @@ class KeyCompareTest(unittest.TestCase):
         self.assert_cmp('/ab', '/a/a/b', -1)
         self.assert_cmp('/a/a/b', '/ab', 1)
         self.assert_cmp('/foo-bar/baz', '/foo/baz', -1)
+
+
+class ResultSummaryTest(unittest.TestCase):
+
+    def setUp(self):
+        host = MockHost()
+        self.port = host.port_factory.get(port_name='test')
+
+    def test_interpret_test_failures(self):
+        test_dict = interpret_test_failures(self.port, 'foo/reftest.html',
+            [test_failures.FailureReftestMismatch(self.port.abspath_for_test('foo/reftest-expected.html'))])
+        self.assertTrue('is_reftest' in test_dict)
+        self.assertFalse('is_mismatch_reftest' in test_dict)
+        self.assertFalse('ref_file' in test_dict)
+
+        test_dict = interpret_test_failures(self.port, 'foo/reftest.html',
+            [test_failures.FailureReftestMismatch(self.port.abspath_for_test('foo/common.html'))])
+        self.assertTrue('is_reftest' in test_dict)
+        self.assertFalse('is_mismatch_reftest' in test_dict)
+        self.assertEqual(test_dict['ref_file'], 'foo/common.html')
+
+        test_dict = interpret_test_failures(self.port, 'foo/reftest.html',
+            [test_failures.FailureReftestMismatchDidNotOccur(self.port.abspath_for_test('foo/reftest-expected-mismatch.html'))])
+        self.assertFalse('is_reftest' in test_dict)
+        self.assertTrue(test_dict['is_mismatch_reftest'])
+        self.assertFalse('ref_file' in test_dict)
+
+        test_dict = interpret_test_failures(self.port, 'foo/reftest.html',
+            [test_failures.FailureReftestMismatchDidNotOccur(self.port.abspath_for_test('foo/common.html'))])
+        self.assertFalse('is_reftest' in test_dict)
+        self.assertTrue(test_dict['is_mismatch_reftest'])
+        self.assertEqual(test_dict['ref_file'], 'foo/common.html')
 
 
 if __name__ == '__main__':

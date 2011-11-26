@@ -25,6 +25,7 @@
 #include "FindOptions.h"
 #include "LayoutTypes.h"
 #include "PageVisibilityState.h"
+#include "PlatformScreen.h"
 #include "PlatformString.h"
 #include "ViewportArguments.h"
 #include <wtf/Forward.h>
@@ -70,8 +71,6 @@ namespace WebCore {
     class InspectorClient;
     class InspectorController;
     class MediaCanStartListener;
-    class MediaStreamClient;
-    class MediaStreamController;
     class Node;
     class PageGroup;
     class PluginData;
@@ -83,9 +82,8 @@ namespace WebCore {
     class Settings;
     class SpeechInput;
     class SpeechInputClient;
-#if ENABLE(DOM_STORAGE)
+    class UserMediaClient;
     class StorageNamespace;
-#endif
 #if ENABLE(NOTIFICATIONS)
     class NotificationPresenter;
 #endif
@@ -119,7 +117,7 @@ namespace WebCore {
             DeviceOrientationClient* deviceOrientationClient;
             RefPtr<BackForwardList> backForwardClient;
             SpeechInputClient* speechInputClient;
-            MediaStreamClient* mediaStreamClient;
+            UserMediaClient* userMediaClient;
         };
 
         Page(PageClients&);
@@ -185,11 +183,11 @@ namespace WebCore {
         DeviceMotionController* deviceMotionController() const { return m_deviceMotionController.get(); }
         DeviceOrientationController* deviceOrientationController() const { return m_deviceOrientationController.get(); }
 #endif
-#if ENABLE(MEDIA_STREAM)
-        MediaStreamController* mediaStreamController() const { return m_mediaStreamController.get(); }
-#endif
 #if ENABLE(INPUT_SPEECH)
         SpeechInput* speechInput();
+#endif
+#if ENABLE(MEDIA_STREAM)
+        UserMediaClient* userMediaClient() const { return m_userMediaClient; }
 #endif
         Settings* settings() const { return m_settings.get(); }
         ProgressTracker* progress() const { return m_progress.get(); }
@@ -246,16 +244,39 @@ namespace WebCore {
         float mediaVolume() const { return m_mediaVolume; }
         void setMediaVolume(float volume);
 
-        void setPageScaleFactor(float scale, const LayoutPoint& origin);
+        void setPageScaleFactor(float scale, const IntPoint& origin);
         float pageScaleFactor() const { return m_pageScaleFactor; }
 
         float deviceScaleFactor() const { return m_deviceScaleFactor; }
         void setDeviceScaleFactor(float);
 
+        struct Pagination {
+            enum Mode { Unpaginated, HorizontallyPaginated, VerticallyPaginated };
+
+            Pagination()
+                : mode(Unpaginated)
+                , gap(0)
+            {
+            };
+
+            Mode mode;
+            unsigned gap;
+        };
+
+        const Pagination& pagination() const { return m_pagination; }
+        void setPagination(const Pagination&);
+
+        unsigned pageCount() const;
+
         // Notifications when the Page starts and stops being presented via a native window.
         void didMoveOnscreen();
         void willMoveOffscreen();
 
+        void windowScreenDidChange(PlatformDisplayID);
+        
+        void suspendScriptedAnimations();
+        void resumeScriptedAnimations();
+        
         void userStyleSheetLocationChanged();
         const String& userStyleSheet() const;
 
@@ -271,10 +292,8 @@ namespace WebCore {
         static void allVisitedStateChanged(PageGroup*);
         static void visitedStateChanged(PageGroup*, LinkHash visitedHash);
 
-#if ENABLE(DOM_STORAGE)
         StorageNamespace* sessionStorage(bool optionalCreate = true);
         void setSessionStorage(PassRefPtr<StorageNamespace>);
-#endif
 
         void setCustomHTMLTokenizerTimeDelay(double);
         bool hasCustomHTMLTokenizerTimeDelay() const { return m_customHTMLTokenizerTimeDelay != -1; }
@@ -310,6 +329,8 @@ namespace WebCore {
         void setVisibilityState(PageVisibilityState, bool);
 #endif
 
+        PlatformDisplayID displayID() const { return m_displayID; }
+        
     private:
         void initGroup();
 
@@ -344,12 +365,12 @@ namespace WebCore {
         OwnPtr<DeviceMotionController> m_deviceMotionController;
         OwnPtr<DeviceOrientationController> m_deviceOrientationController;
 #endif
-#if ENABLE(MEDIA_STREAM)
-        OwnPtr<MediaStreamController> m_mediaStreamController;
-#endif
 #if ENABLE(INPUT_SPEECH)
         SpeechInputClient* m_speechInputClient;
         OwnPtr<SpeechInput> m_speechInput;
+#endif
+#if ENABLE(MEDIA_STREAM)
+        UserMediaClient* m_userMediaClient;
 #endif
         OwnPtr<Settings> m_settings;
         OwnPtr<ProgressTracker> m_progress;
@@ -378,6 +399,8 @@ namespace WebCore {
         float m_pageScaleFactor;
         float m_deviceScaleFactor;
 
+        Pagination m_pagination;
+
         bool m_javaScriptURLsAreAllowed;
 
         String m_userStyleSheetPath;
@@ -395,9 +418,7 @@ namespace WebCore {
 
         bool m_canStartMedia;
 
-#if ENABLE(DOM_STORAGE)
         RefPtr<StorageNamespace> m_sessionStorage;
-#endif
 
 #if ENABLE(NOTIFICATIONS)
         NotificationPresenter* m_notificationPresenter;
@@ -416,6 +437,7 @@ namespace WebCore {
 #if ENABLE(PAGE_VISIBILITY_API)
         PageVisibilityState m_visibilityState;
 #endif
+        PlatformDisplayID m_displayID;
     };
 
 } // namespace WebCore

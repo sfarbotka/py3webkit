@@ -30,6 +30,8 @@
 #include "ShareableBitmap.h"
 #include "WebEvent.h"
 #include "WebEventConversion.h"
+#include <WebCore/ArchiveResource.h>
+#include <WebCore/DocumentLoader.h>
 #include <WebCore/FocusController.h>
 #include <WebCore/Frame.h>
 #include <WebCore/FrameView.h>
@@ -38,6 +40,7 @@
 #include <WebCore/LocalizedStrings.h>
 #include <WebCore/Page.h>
 #include <WebCore/PluginData.h>
+#include <WebCore/RenderBoxModelObject.h>
 #include <WebCore/ScrollAnimator.h>
 #include <WebCore/ScrollbarTheme.h>
 
@@ -48,6 +51,11 @@ namespace WebKit {
 
 const uint64_t pdfDocumentRequestID = 1; // PluginController supports loading multiple streams, but we only need one for PDF.
 
+const int gutterHeight = 10;
+const int shadowOffsetX = 0;
+const int shadowOffsetY = -2;
+const int shadowSize = 7;
+
 PassRefPtr<BuiltInPDFView> BuiltInPDFView::create(Page* page)
 {
     return adoptRef(new BuiltInPDFView(page));
@@ -56,18 +64,10 @@ PassRefPtr<BuiltInPDFView> BuiltInPDFView::create(Page* page)
 BuiltInPDFView::BuiltInPDFView(Page* page)
     : m_page(page)
 {
-    m_page->addScrollableArea(this);
 }
 
 BuiltInPDFView::~BuiltInPDFView()
 {
-    if (m_page)
-        m_page->removeScrollableArea(this);
-
-    if (m_horizontalScrollbar)
-        willRemoveHorizontalScrollbar(m_horizontalScrollbar.get());
-    if (m_verticalScrollbar)
-        willRemoveVerticalScrollbar(m_verticalScrollbar.get());
 }
 
 PluginInfo BuiltInPDFView::pluginInfo()
@@ -94,51 +94,37 @@ const PluginView* BuiltInPDFView::pluginView() const
     return static_cast<const PluginView*>(controller());
 }
 
-void BuiltInPDFView::calculateDocumentSize()
-{
-    CGPDFPageRef pdfPage = CGPDFDocumentGetPage(m_pdfDocument.get(), 1); // FIXME: Draw all pages of a document.
-    if (!pdfPage)
-        return;
-
-    CGRect box = CGPDFPageGetBoxRect(pdfPage, kCGPDFCropBox);
-    if (CGRectIsEmpty(box))
-        box = CGPDFPageGetBoxRect(pdfPage, kCGPDFMediaBox);
-    m_pdfDocumentSize = IntSize(box.size);
-}
-
 void BuiltInPDFView::updateScrollbars()
 {
     if (m_horizontalScrollbar) {
-        if (m_frameRect.width() >= m_pdfDocumentSize.width())
+        if (m_pluginSize.width() >= m_pdfDocumentSize.width())
             destroyScrollbar(HorizontalScrollbar);
-    } else if (m_frameRect.width() < m_pdfDocumentSize.width())
+    } else if (m_pluginSize.width() < m_pdfDocumentSize.width())
         m_horizontalScrollbar = createScrollbar(HorizontalScrollbar);
 
     if (m_verticalScrollbar) {
-        if (m_frameRect.height() >= m_pdfDocumentSize.height())
+        if (m_pluginSize.height() >= m_pdfDocumentSize.height())
             destroyScrollbar(VerticalScrollbar);
-    } else if (m_frameRect.height() < m_pdfDocumentSize.height())
+    } else if (m_pluginSize.height() < m_pdfDocumentSize.height())
         m_verticalScrollbar = createScrollbar(VerticalScrollbar);
 
     int horizontalScrollbarHeight = (m_horizontalScrollbar && !m_horizontalScrollbar->isOverlayScrollbar()) ? m_horizontalScrollbar->height() : 0;
     int verticalScrollbarWidth = (m_verticalScrollbar && !m_verticalScrollbar->isOverlayScrollbar()) ? m_verticalScrollbar->width() : 0;
 
-    // FIXME: Use document page size for PageDown step.
-    int clientHeight = m_pdfDocumentSize.height();
-    int pageStep = max(max<int>(clientHeight * Scrollbar::minFractionToStepWhenPaging(), clientHeight - Scrollbar::maxOverlapBetweenPages()), 1);
+    int pageStep = m_pageBoxes.isEmpty() ? 0 : m_pageBoxes[0].height();
 
     if (m_horizontalScrollbar) {
         m_horizontalScrollbar->setSteps(Scrollbar::pixelsPerLineStep(), pageStep);
-        m_horizontalScrollbar->setProportion(m_frameRect.width() - verticalScrollbarWidth, m_pdfDocumentSize.width());
-        IntRect scrollbarRect(pluginView()->x(), pluginView()->y() + m_frameRect.height() - m_horizontalScrollbar->height(), m_frameRect.width(), m_horizontalScrollbar->height());
+        m_horizontalScrollbar->setProportion(m_pluginSize.width() - verticalScrollbarWidth, m_pdfDocumentSize.width());
+        IntRect scrollbarRect(pluginView()->x(), pluginView()->y() + m_pluginSize.height() - m_horizontalScrollbar->height(), m_pluginSize.width(), m_horizontalScrollbar->height());
         if (m_verticalScrollbar)
             scrollbarRect.contract(m_verticalScrollbar->width(), 0);
         m_horizontalScrollbar->setFrameRect(scrollbarRect);
     }
     if (m_verticalScrollbar) {
         m_verticalScrollbar->setSteps(Scrollbar::pixelsPerLineStep(), pageStep);
-        m_verticalScrollbar->setProportion(m_frameRect.height() - horizontalScrollbarHeight, m_pdfDocumentSize.height());
-        IntRect scrollbarRect(IntRect(pluginView()->x() + m_frameRect.width() - m_verticalScrollbar->width(), pluginView()->y(), m_verticalScrollbar->width(), m_frameRect.height()));
+        m_verticalScrollbar->setProportion(m_pluginSize.height() - horizontalScrollbarHeight, m_pdfDocumentSize.height());
+        IntRect scrollbarRect(IntRect(pluginView()->x() + m_pluginSize.width() - m_verticalScrollbar->width(), pluginView()->y(), m_verticalScrollbar->width(), m_pluginSize.height()));
         if (m_horizontalScrollbar)
             scrollbarRect.contract(0, m_horizontalScrollbar->height());
         m_verticalScrollbar->setFrameRect(scrollbarRect);
@@ -159,14 +145,27 @@ void BuiltInPDFView::willRemoveHorizontalScrollbar(Scrollbar* scrollbar)
         pluginView->frame()->document()->didRemoveWheelEventHandler();
 }
 
+void BuiltInPDFView::didAddVerticalScrollbar(Scrollbar* scrollbar)
+{
+    pluginView()->frame()->document()->didAddWheelEventHandler();
+    ScrollableArea::didAddVerticalScrollbar(scrollbar);
+}
+
+void BuiltInPDFView::willRemoveVerticalScrollbar(Scrollbar* scrollbar)
+{
+    ScrollableArea::willRemoveVerticalScrollbar(scrollbar);
+    // FIXME: Maybe need a separate ScrollableArea::didRemoveHorizontalScrollbar callback?
+    if (PluginView* pluginView = this->pluginView())
+        pluginView->frame()->document()->didRemoveWheelEventHandler();
+}
+
 PassRefPtr<Scrollbar> BuiltInPDFView::createScrollbar(ScrollbarOrientation orientation)
 {
-    // FIXME: Support custom scrollbar styles.
     RefPtr<Scrollbar> widget = Scrollbar::createNativeScrollbar(this, orientation, RegularScrollbar);
     if (orientation == HorizontalScrollbar)
-        scrollAnimator()->didAddHorizontalScrollbar(widget.get());
+        didAddHorizontalScrollbar(widget.get());
     else 
-        scrollAnimator()->didAddVerticalScrollbar(widget.get());
+        didAddVerticalScrollbar(widget.get());
     pluginView()->frame()->view()->addChild(widget.get());
     return widget.release();
 }
@@ -178,26 +177,65 @@ void BuiltInPDFView::destroyScrollbar(ScrollbarOrientation orientation)
         return;
 
     if (orientation == HorizontalScrollbar)
-        scrollAnimator()->willRemoveHorizontalScrollbar(scrollbar.get());
+        willRemoveHorizontalScrollbar(scrollbar.get());
     else
-        scrollAnimator()->willRemoveVerticalScrollbar(scrollbar.get());
+        willRemoveVerticalScrollbar(scrollbar.get());
 
     scrollbar->removeFromParent();
     scrollbar->disconnectFromScrollableArea();
     scrollbar = 0;
 }
 
+void BuiltInPDFView::addArchiveResource()
+{
+    // FIXME: It's a hack to force add a resource to DocumentLoader. PDF documents should just be fetched as CachedResources.
+
+    // Add just enough data for context menu handling and web archives to work.
+    ResourceResponse synthesizedResponse;
+    synthesizedResponse.setSuggestedFilename(m_suggestedFilename);
+    synthesizedResponse.setURL(m_sourceURL); // Needs to match the HitTestResult::absolutePDFURL.
+    synthesizedResponse.setMimeType("application/pdf");
+
+    RefPtr<ArchiveResource> resource = ArchiveResource::create(SharedBuffer::wrapCFData(m_dataBuffer.get()), m_sourceURL, "application/pdf", String(), String(), synthesizedResponse);
+    pluginView()->frame()->document()->loader()->addArchiveResource(resource.release());
+}
+
 void BuiltInPDFView::pdfDocumentDidLoad()
 {
-    calculateDocumentSize();
+    addArchiveResource();
+
+    RetainPtr<CGDataProviderRef> pdfDataProvider(AdoptCF, CGDataProviderCreateWithCFData(m_dataBuffer.get()));
+    m_pdfDocument.adoptCF(CGPDFDocumentCreateWithProvider(pdfDataProvider.get()));
+
+    calculateSizes();
     updateScrollbars();
 
-    controller()->invalidate(IntRect(0, 0, m_frameRect.width(), m_frameRect.height()));
+    controller()->invalidate(IntRect(0, 0, m_pluginSize.width(), m_pluginSize.height()));
+}
+
+void BuiltInPDFView::calculateSizes()
+{
+    size_t pageCount = CGPDFDocumentGetNumberOfPages(m_pdfDocument.get());
+    for (size_t i = 0; i < pageCount; ++i) {
+        CGPDFPageRef pdfPage = CGPDFDocumentGetPage(m_pdfDocument.get(), i + 1);
+        ASSERT(pdfPage);
+
+        CGRect box = CGPDFPageGetBoxRect(pdfPage, kCGPDFCropBox);
+        if (CGRectIsEmpty(box))
+            box = CGPDFPageGetBoxRect(pdfPage, kCGPDFMediaBox);
+        m_pageBoxes.append(IntRect(box));
+        m_pdfDocumentSize.setWidth(max(m_pdfDocumentSize.width(), static_cast<int>(box.size.width)));
+        m_pdfDocumentSize.expand(0, box.size.height);
+    }
+    m_pdfDocumentSize.expand(0, gutterHeight * (m_pageBoxes.size() - 1));
 }
 
 bool BuiltInPDFView::initialize(const Parameters& parameters)
 {
+    m_page->addScrollableArea(this);
+
     // Load the src URL if needed.
+    m_sourceURL = parameters.url;
     if (!parameters.loadManually && !parameters.url.isEmpty())
         controller()->loadURL(pdfDocumentRequestID, "GET", parameters.url.string(), String(), HTTPHeaderMap(), Vector<uint8_t>(), false);
 
@@ -206,52 +244,95 @@ bool BuiltInPDFView::initialize(const Parameters& parameters)
 
 void BuiltInPDFView::destroy()
 {
+    if (m_page)
+        m_page->removeScrollableArea(this);
+
+    destroyScrollbar(HorizontalScrollbar);
+    destroyScrollbar(VerticalScrollbar);
 }
 
-void BuiltInPDFView::paint(GraphicsContext* graphicsContext, const IntRect& dirtyRectInWindowCoordinates)
+void BuiltInPDFView::paint(GraphicsContext* graphicsContext, const IntRect& dirtyRect)
 {
-    if (!m_pdfDocument) // FIXME: Draw background and loading progress.
-        return;
-
-    // FIXME: This function just draws the fist page of a document at top left corner.
-    // We should show the whole document, centering small ones.
-    CGPDFPageRef pdfPage = CGPDFDocumentGetPage(m_pdfDocument.get(), 1);
-    if (!pdfPage)
-        return;
-
     scrollAnimator()->contentAreaWillPaint();
 
-    CGContextRef context = graphicsContext->platformContext();
+    paintBackground(graphicsContext, dirtyRect);
+
+    if (!m_pdfDocument) // FIXME: Draw loading progress.
+        return;
+
+    paintContent(graphicsContext, dirtyRect);
+    paintControls(graphicsContext, dirtyRect);
+}
+
+void BuiltInPDFView::paintBackground(GraphicsContext* graphicsContext, const IntRect& dirtyRect)
+{
     GraphicsContextStateSaver stateSaver(*graphicsContext);
-    graphicsContext->clip(dirtyRectInWindowCoordinates);
+    graphicsContext->setFillColor(Color::gray, ColorSpaceDeviceRGB);
+    graphicsContext->fillRect(dirtyRect);
+}
+
+void BuiltInPDFView::paintContent(GraphicsContext* graphicsContext, const IntRect& dirtyRect)
+{
+    GraphicsContextStateSaver stateSaver(*graphicsContext);
+    CGContextRef context = graphicsContext->platformContext();
+
     graphicsContext->setImageInterpolationQuality(InterpolationHigh);
     graphicsContext->setShouldAntialias(true);
     graphicsContext->setShouldSmoothFonts(true);
+    graphicsContext->setFillColor(Color::white, ColorSpaceDeviceRGB);
 
-    CGRect pageBox = CGPDFPageGetBoxRect(pdfPage, kCGPDFCropBox);
-    if (CGRectIsEmpty(pageBox))
-        pageBox = CGPDFPageGetBoxRect(pdfPage, kCGPDFMediaBox);
-
-    CGContextClipToRect(context, CGRectMake(m_frameRect.x(), m_frameRect.y(), m_pdfDocumentSize.width() - m_scrollOffset.width(), m_pdfDocumentSize.height() - m_scrollOffset.height()));
-    CGContextTranslateCTM(context, m_frameRect.x() - pageBox.origin.x - m_scrollOffset.width(), m_frameRect.y() + pageBox.origin.y + m_pdfDocumentSize.height() - m_scrollOffset.height());
+    graphicsContext->clip(dirtyRect);
+    IntRect contentRect(dirtyRect);
+    contentRect.moveBy(IntPoint(m_scrollOffset));
+    graphicsContext->translate(-m_scrollOffset.width(), -m_scrollOffset.height());
 
     CGContextScaleCTM(context, 1, -1);
-    CGContextDrawPDFPage(context, pdfPage);
 
-    stateSaver.restore();
+    int pageTop = 0;
+    for (size_t i = 0; i < m_pageBoxes.size(); ++i) {
+        IntRect pageBox = m_pageBoxes[i];
+        float extraOffsetForCenteringX = max(roundf((m_pluginSize.width() - pageBox.width()) / 2.0f), 0.0f);
+        float extraOffsetForCenteringY = (m_pageBoxes.size() == 1) ? max(roundf((m_pluginSize.height() - pageBox.height() + shadowOffsetY) / 2.0f), 0.0f) : 0;
 
-    stateSaver.save();
-    // Undo translation to window coordinates performed by PluginView::paint().
-    IntRect dirtyRect = pluginView()->parent()->windowToContents(dirtyRectInWindowCoordinates);
-    IntPoint documentOriginInWindowCoordinates = pluginView()->parent()->windowToContents(IntPoint());
-    graphicsContext->translate(-documentOriginInWindowCoordinates.x(), -documentOriginInWindowCoordinates.y());
-    if (m_horizontalScrollbar)
-        m_horizontalScrollbar->paint(graphicsContext, dirtyRect);
-    if (m_verticalScrollbar)
-        m_verticalScrollbar->paint(graphicsContext, dirtyRect);
+        if (pageTop > contentRect.maxY())
+            break;
+        if (pageTop + pageBox.height() + extraOffsetForCenteringY + gutterHeight >= contentRect.y()) {
+            CGPDFPageRef pdfPage = CGPDFDocumentGetPage(m_pdfDocument.get(), i + 1);
+
+            graphicsContext->save();
+            graphicsContext->translate(extraOffsetForCenteringX - pageBox.x(), -extraOffsetForCenteringY - pageBox.y() - pageBox.height());
+
+            graphicsContext->setShadow(FloatSize(shadowOffsetX, shadowOffsetY), shadowSize, Color::black, ColorSpaceDeviceRGB);
+            graphicsContext->fillRect(pageBox);
+            graphicsContext->clearShadow();
+
+            graphicsContext->clip(pageBox);
+
+            CGContextDrawPDFPage(context, pdfPage);
+            graphicsContext->restore();
+        }
+        pageTop += pageBox.height() + gutterHeight;
+        CGContextTranslateCTM(context, 0, -pageBox.height() - gutterHeight);
+    }
+}
+
+void BuiltInPDFView::paintControls(GraphicsContext* graphicsContext, const IntRect& dirtyRect)
+{
+    {
+        GraphicsContextStateSaver stateSaver(*graphicsContext);
+        IntRect scrollbarDirtyRect = dirtyRect;
+        scrollbarDirtyRect.moveBy(pluginView()->frameRect().location());
+        graphicsContext->translate(-pluginView()->frameRect().x(), -pluginView()->frameRect().y());
+
+        if (m_horizontalScrollbar)
+            m_horizontalScrollbar->paint(graphicsContext, scrollbarDirtyRect);
+
+        if (m_verticalScrollbar)
+            m_verticalScrollbar->paint(graphicsContext, scrollbarDirtyRect);
+    }
 
     IntRect dirtyCornerRect = intersection(scrollCornerRect(), dirtyRect);
-    ScrollbarTheme::nativeTheme()->paintScrollCorner(0, graphicsContext, dirtyCornerRect);
+    ScrollbarTheme::theme()->paintScrollCorner(0, graphicsContext, dirtyCornerRect);
 }
 
 void BuiltInPDFView::updateControlTints(GraphicsContext* graphicsContext)
@@ -285,14 +366,14 @@ bool BuiltInPDFView::isTransparent()
     return false;
 }
 
-void BuiltInPDFView::geometryDidChange(const IntRect& frameRect, const IntRect& clipRect)
+void BuiltInPDFView::geometryDidChange(const IntSize& pluginSize, const IntRect& clipRect, const AffineTransform& pluginToRootViewTransform)
 {
-    if (m_frameRect == frameRect) {
+    if (m_pluginSize == pluginSize) {
         // Nothing to do.
         return;
     }
 
-    m_frameRect = frameRect;
+    m_pluginSize = pluginSize;
     updateScrollbars();
 }
 
@@ -315,9 +396,11 @@ void BuiltInPDFView::didEvaluateJavaScript(uint64_t, const WTF::String&)
     ASSERT_NOT_REACHED();
 }
 
-void BuiltInPDFView::streamDidReceiveResponse(uint64_t streamID, const KURL&, uint32_t, uint32_t, const WTF::String&, const WTF::String&)
+void BuiltInPDFView::streamDidReceiveResponse(uint64_t streamID, const KURL&, uint32_t, uint32_t, const String&, const String&, const String& suggestedFilename)
 {
     ASSERT_UNUSED(streamID, streamID == pdfDocumentRequestID);
+
+    m_suggestedFilename = suggestedFilename;
 }
                                            
 void BuiltInPDFView::streamDidReceiveData(uint64_t streamID, const char* bytes, int length)
@@ -334,9 +417,6 @@ void BuiltInPDFView::streamDidFinishLoading(uint64_t streamID)
 {
     ASSERT_UNUSED(streamID, streamID == pdfDocumentRequestID);
 
-    RetainPtr<CGDataProviderRef> pdfDataProvider(AdoptCF, CGDataProviderCreateWithCFData(m_dataBuffer.get()));
-    m_pdfDocument.adoptCF(CGPDFDocumentCreateWithProvider(pdfDataProvider.get()));
-
     pdfDocumentDidLoad();
 }
 
@@ -347,8 +427,9 @@ void BuiltInPDFView::streamDidFail(uint64_t streamID, bool wasCancelled)
     m_dataBuffer.clear();
 }
 
-void BuiltInPDFView::manualStreamDidReceiveResponse(const KURL& responseURL, uint32_t streamLength,  uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers)
+void BuiltInPDFView::manualStreamDidReceiveResponse(const KURL& responseURL, uint32_t streamLength,  uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFilename)
 {
+    m_suggestedFilename = suggestedFilename;
 }
 
 void BuiltInPDFView::manualStreamDidReceiveData(const char* bytes, int length)
@@ -361,9 +442,6 @@ void BuiltInPDFView::manualStreamDidReceiveData(const char* bytes, int length)
 
 void BuiltInPDFView::manualStreamDidFinishLoading()
 {
-    RetainPtr<CGDataProviderRef> pdfDataProvider(AdoptCF, CGDataProviderCreateWithCFData(m_dataBuffer.get()));
-    m_pdfDocument.adoptCF(CGPDFDocumentCreateWithProvider(pdfDataProvider.get()));
-
     pdfDocumentDidLoad();
 }
 
@@ -385,12 +463,14 @@ bool BuiltInPDFView::handleMouseEvent(const WebMouseEvent& event)
         // When support for PDF forms is added, we'll need to actually focus the plug-in when clicking in a form.
         break;
     }
-    case WebEvent::MouseUp:
+    case WebEvent::MouseUp: {
+        PlatformMouseEvent platformEvent = platform(event);
         if (m_horizontalScrollbar)
-            m_horizontalScrollbar->mouseUp();
+            m_horizontalScrollbar->mouseUp(platformEvent);
         if (m_verticalScrollbar)
-            m_verticalScrollbar->mouseUp();
+            m_verticalScrollbar->mouseUp(platformEvent);
         break;
+    }
     default:
         break;
     }
@@ -413,6 +493,12 @@ bool BuiltInPDFView::handleMouseEnterEvent(const WebMouseEvent&)
 bool BuiltInPDFView::handleMouseLeaveEvent(const WebMouseEvent&)
 {
     scrollAnimator()->mouseExitedContentArea();
+    return false;
+}
+
+bool BuiltInPDFView::handleContextMenuEvent(const WebMouseEvent&)
+{
+    // Use default WebKit context menu.
     return false;
 }
 
@@ -441,6 +527,10 @@ void BuiltInPDFView::windowAndViewFramesChanged(const WebCore::IntRect& windowFr
 }
 
 void BuiltInPDFView::windowVisibilityChanged(bool)
+{
+}
+
+void BuiltInPDFView::contentsScaleFactorChanged(float)
 {
 }
 
@@ -500,7 +590,7 @@ void BuiltInPDFView::setScrollOffset(const IntPoint& offset)
 {
     m_scrollOffset = IntSize(offset.x(), offset.y());
     // FIXME: It would be better for performance to blit parts that remain visible.
-    controller()->invalidate(IntRect(0, 0, m_frameRect.width(), m_frameRect.height()));
+    controller()->invalidate(IntRect(0, 0, m_pluginSize.width(), m_pluginSize.height()));
 }
 
 int BuiltInPDFView::scrollSize(ScrollbarOrientation orientation) const
@@ -516,7 +606,7 @@ bool BuiltInPDFView::isActive() const
 
 void BuiltInPDFView::invalidateScrollbarRect(Scrollbar* scrollbar, const LayoutRect& rect)
 {
-    LayoutRect dirtyRect = rect;
+    IntRect dirtyRect = rect;
     dirtyRect.moveBy(scrollbar->location());
     dirtyRect.moveBy(-pluginView()->location());
     controller()->invalidate(dirtyRect);
@@ -557,19 +647,19 @@ IntPoint BuiltInPDFView::maximumScrollPosition() const
     int horizontalScrollbarHeight = (m_horizontalScrollbar && !m_horizontalScrollbar->isOverlayScrollbar()) ? m_horizontalScrollbar->height() : 0;
     int verticalScrollbarWidth = (m_verticalScrollbar && !m_verticalScrollbar->isOverlayScrollbar()) ? m_verticalScrollbar->width() : 0;
 
-    IntPoint maximumOffset(m_pdfDocumentSize.width() - m_frameRect.width() + verticalScrollbarWidth, m_pdfDocumentSize.height() - m_frameRect.height() + horizontalScrollbarHeight);
+    IntPoint maximumOffset(m_pdfDocumentSize.width() - m_pluginSize.width() + verticalScrollbarWidth, m_pdfDocumentSize.height() - m_pluginSize.height() + horizontalScrollbarHeight);
     maximumOffset.clampNegativeToZero();
     return maximumOffset;
 }
 
-LayoutUnit BuiltInPDFView::visibleHeight() const
+int BuiltInPDFView::visibleHeight() const
 {
-    return m_frameRect.height();
+    return m_pluginSize.height();
 }
 
-LayoutUnit BuiltInPDFView::visibleWidth() const
+int BuiltInPDFView::visibleWidth() const
 {
-    return m_frameRect.width();
+    return m_pluginSize.width();
 }
 
 IntSize BuiltInPDFView::contentsSize() const
@@ -592,6 +682,14 @@ void BuiltInPDFView::scrollbarStyleChanged()
     updateScrollbars();
 
     scrollAnimator()->contentsResized();
+}
+
+IntPoint BuiltInPDFView::convertFromContainingViewToScrollbar(const Scrollbar* scrollbar, const IntPoint& parentPoint) const
+{
+    IntPoint point = pluginView()->frame()->view()->convertToRenderer(pluginView()->renderer(), parentPoint);
+    point.move(pluginView()->location() - scrollbar->location());
+
+    return point;
 }
 
 } // namespace WebKit

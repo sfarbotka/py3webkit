@@ -141,25 +141,6 @@ webkit_dom_test_obj_obj_method_with_args(WebKitDOMTestObj* self, glong int_arg, 
 }
 
 WebKitDOMTestObj*
-webkit_dom_test_obj_method_that_requires_all_args(WebKitDOMTestObj* self, const gchar* str_arg, WebKitDOMTestObj* obj_arg)
-{
-    g_return_val_if_fail(self, 0);
-    WebCore::JSMainThreadNullState state;
-    WebCore::TestObj * item = WebKit::core(self);
-    g_return_val_if_fail(str_arg, 0);
-    g_return_val_if_fail(obj_arg, 0);
-    WTF::String converted_str_arg = WTF::String::fromUTF8(str_arg);
-    WebCore::TestObj * converted_obj_arg = NULL;
-    if (obj_arg != NULL) {
-        converted_obj_arg = WebKit::core(obj_arg);
-        g_return_val_if_fail(converted_obj_arg, 0);
-    }
-    PassRefPtr<WebCore::TestObj> g_res = WTF::getPtr(item->methodThatRequiresAllArgs(converted_str_arg, converted_obj_arg));
-    WebKitDOMTestObj* res = WebKit::kit(g_res.get());
-    return res;
-}
-
-WebKitDOMTestObj*
 webkit_dom_test_obj_method_that_requires_all_args_and_throws(WebKitDOMTestObj* self, const gchar* str_arg, WebKitDOMTestObj* obj_arg, GError **error)
 {
     g_return_val_if_fail(self, 0);
@@ -176,8 +157,7 @@ webkit_dom_test_obj_method_that_requires_all_args_and_throws(WebKitDOMTestObj* s
     WebCore::ExceptionCode ec = 0;
     PassRefPtr<WebCore::TestObj> g_res = WTF::getPtr(item->methodThatRequiresAllArgsAndThrows(converted_str_arg, converted_obj_arg, ec));
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
     WebKitDOMTestObj* res = WebKit::kit(g_res.get());
@@ -244,8 +224,7 @@ webkit_dom_test_obj_method_with_exception(WebKitDOMTestObj* self, GError **error
     WebCore::ExceptionCode ec = 0;
     item->methodWithException(ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -324,8 +303,7 @@ webkit_dom_test_obj_with_script_state_void_exception(WebKitDOMTestObj* self, GEr
     WebCore::ExceptionCode ec = 0;
     item->withScriptStateVoidException(ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -339,8 +317,7 @@ webkit_dom_test_obj_with_script_state_obj_exception(WebKitDOMTestObj* self, GErr
     WebCore::ExceptionCode ec = 0;
     PassRefPtr<WebCore::TestObj> g_res = WTF::getPtr(item->withScriptStateObjException(ec));
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
     WebKitDOMTestObj* res = WebKit::kit(g_res.get());
@@ -886,8 +863,7 @@ webkit_dom_test_obj_get_attr_with_getter_exception(WebKitDOMTestObj* self, GErro
     WebCore::ExceptionCode ec = 0;
     glong res = item->attrWithGetterException(ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
     return res;
@@ -902,8 +878,7 @@ webkit_dom_test_obj_set_attr_with_getter_exception(WebKitDOMTestObj* self, glong
     WebCore::ExceptionCode ec = 0;
     item->setAttrWithGetterException(value, ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -927,8 +902,7 @@ webkit_dom_test_obj_set_attr_with_setter_exception(WebKitDOMTestObj* self, glong
     WebCore::ExceptionCode ec = 0;
     item->setAttrWithSetterException(value, ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -955,8 +929,7 @@ webkit_dom_test_obj_set_string_attr_with_getter_exception(WebKitDOMTestObj* self
     WebCore::ExceptionCode ec = 0;
     item->setStringAttrWithGetterException(converted_value, ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -982,8 +955,7 @@ webkit_dom_test_obj_set_string_attr_with_setter_exception(WebKitDOMTestObj* self
     WebCore::ExceptionCode ec = 0;
     item->setStringAttrWithSetterException(converted_value, ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 }
@@ -1198,7 +1170,7 @@ static void webkit_dom_test_obj_set_property(GObject* object, guint prop_id, con
     switch (prop_id) {
     case PROP_UNSIGNED_SHORT_ATTR:
     {
-        coreSelf->setUnsignedShortAttr((g_value_get_ushort(value)));
+        coreSelf->setUnsignedShortAttr((g_value_get_uint(value)));
         break;
     }
     case PROP_INT_ATTR:
@@ -1580,7 +1552,7 @@ G_MAXINT, /* max */
                                                            "test_obj_unsigned-short-attr", /* short description */
                                                            "read-write  gushort TestObj.unsigned-short-attr", /* longer - could do with some extra doc stuff here */
                                                            0, /* min */
-G_MAXUINT16, /* max */
+G_MAXUINT, /* max */
 0, /* default */
                                                            WEBKIT_PARAM_READWRITE));
     g_object_class_install_property(gobjectClass,

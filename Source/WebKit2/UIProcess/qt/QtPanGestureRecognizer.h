@@ -39,10 +39,10 @@ namespace WebKit {
 
 const qreal panningInitialTriggerDistanceThreshold = 5.;
 
-class QtPanGestureRecognizer : private QtGestureRecognizer {
+class QtPanGestureRecognizer : public QtGestureRecognizer {
 public:
-    QtPanGestureRecognizer(ViewportInteractionEngine*);
-    bool recognize(const QTouchEvent*);
+    QtPanGestureRecognizer(QtWebPageEventHandler*);
+    bool recognize(const QTouchEvent*, qint64 eventTimestampMillis);
     void reset();
 
 private:

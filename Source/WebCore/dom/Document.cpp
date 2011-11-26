@@ -31,7 +31,6 @@
 #include "AnimationController.h"
 #include "Attr.h"
 #include "Attribute.h"
-#include "BeforeLoadEvent.h"
 #include "CDATASection.h"
 #include "CSSPrimitiveValueCache.h"
 #include "CSSStyleSelector.h"
@@ -42,16 +41,17 @@
 #include "Chrome.h"
 #include "ChromeClient.h"
 #include "Comment.h"
-#include "CompositionEvent.h"
 #include "Console.h"
 #include "ContentSecurityPolicy.h"
 #include "CookieJar.h"
-#include "CustomEvent.h"
 #include "DOMImplementation.h"
 #include "DOMWindow.h"
 #include "DateComponents.h"
+#include "DeviceMotionController.h"
 #include "DeviceMotionEvent.h"
+#include "DeviceOrientationController.h"
 #include "DeviceOrientationEvent.h"
+#include "DocumentEventQueue.h"
 #include "DocumentFragment.h"
 #include "DocumentLoader.h"
 #include "DocumentMarkerController.h"
@@ -60,12 +60,11 @@
 #include "Editor.h"
 #include "Element.h"
 #include "EntityReference.h"
-#include "ErrorEvent.h"
 #include "Event.h"
+#include "EventFactory.h"
 #include "EventHandler.h"
 #include "EventListener.h"
 #include "EventNames.h"
-#include "EventQueue.h"
 #include "ExceptionCode.h"
 #include "FocusController.h"
 #include "FormAssociatedElement.h"
@@ -75,6 +74,8 @@
 #include "FrameSelection.h"
 #include "FrameTree.h"
 #include "FrameView.h"
+#include "GeolocationController.h"
+#include "HashChangeEvent.h"
 #include "HTMLAllCollection.h"
 #include "HTMLAnchorElement.h"
 #include "HTMLBodyElement.h"
@@ -94,33 +95,26 @@
 #include "HTMLStyleElement.h"
 #include "HTMLTitleElement.h"
 #include "HTTPParsers.h"
-#include "HashChangeEvent.h"
 #include "HitTestRequest.h"
 #include "HitTestResult.h"
 #include "ImageLoader.h"
 #include "InspectorInstrumentation.h"
-#include "KeyboardEvent.h"
 #include "Logging.h"
 #include "MediaQueryList.h"
 #include "MediaQueryMatcher.h"
-#include "MessageEvent.h"
-#include "MouseEvent.h"
 #include "MouseEventWithHitTestResults.h"
-#include "MutationEvent.h"
 #include "NameNodeList.h"
 #include "NestingLevelIncrementer.h"
 #include "NewXMLDocumentParser.h"
 #include "NodeFilter.h"
 #include "NodeIterator.h"
 #include "NodeWithIndex.h"
-#include "OverflowEvent.h"
 #include "Page.h"
 #include "PageGroup.h"
 #include "PageTransitionEvent.h"
 #include "PlatformKeyboardEvent.h"
 #include "PopStateEvent.h"
 #include "ProcessingInstruction.h"
-#include "ProgressEvent.h"
 #include "RegisteredEventListener.h"
 #include "RenderArena.h"
 #include "RenderLayer.h"
@@ -128,6 +122,7 @@
 #include "RenderTextControl.h"
 #include "RenderView.h"
 #include "RenderWidget.h"
+#include "SchemeRegistry.h"
 #include "ScopedEventQueue.h"
 #include "ScriptCallStack.h"
 #include "ScriptController.h"
@@ -135,26 +130,25 @@
 #include "ScriptEventListener.h"
 #include "ScriptRunner.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "SegmentedString.h"
 #include "Settings.h"
 #include "ShadowRoot.h"
 #include "StaticHashSetNodeList.h"
 #include "StyleSheetList.h"
-#include "TextEvent.h"
 #include "TextResourceDecoder.h"
 #include "Timer.h"
 #include "TransformSource.h"
 #include "TreeWalker.h"
-#include "UIEvent.h"
 #include "UserContentURLPattern.h"
-#include "WebKitAnimationEvent.h"
-#include "WebKitTransitionEvent.h"
-#include "WheelEvent.h"
 #include "XMLDocumentParser.h"
 #include "XMLHttpRequest.h"
-#include "XMLHttpRequestProgressEvent.h"
 #include "XMLNSNames.h"
 #include "XMLNames.h"
+#include "XPathEvaluator.h"
+#include "XPathExpression.h"
+#include "XPathNSResolver.h"
+#include "XPathResult.h"
 #include "htmlediting.h"
 #include <wtf/CurrentTime.h>
 #include <wtf/HashFunctions.h>
@@ -163,19 +157,12 @@
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/StringBuffer.h>
 
+#if PLATFORM(CHROMIUM)
+#include "PlatformSupport.h"
+#endif
+
 #if ENABLE(SHARED_WORKERS)
 #include "SharedWorkerRepository.h"
-#endif
-
-#if ENABLE(DOM_STORAGE)
-#include "StorageEvent.h"
-#endif
-
-#if ENABLE(XPATH)
-#include "XPathEvaluator.h"
-#include "XPathExpression.h"
-#include "XPathNSResolver.h"
-#include "XPathResult.h"
 #endif
 
 #if ENABLE(XSLT)
@@ -187,14 +174,9 @@
 #include "SVGElementFactory.h"
 #include "SVGNames.h"
 #include "SVGStyleElement.h"
-#include "SVGZoomEvent.h"
 #endif
 
 #if ENABLE(TOUCH_EVENTS)
-#if USE(V8)
-#include "RuntimeEnabledFeatures.h"
-#endif
-#include "TouchEvent.h"
 #include "TouchList.h"
 #endif
 
@@ -202,10 +184,6 @@
 #include "MathMLElement.h"
 #include "MathMLElementFactory.h"
 #include "MathMLNames.h"
-#endif
-
-#if ENABLE(XHTMLMP)
-#include "HTMLNoScriptElement.h"
 #endif
 
 #if ENABLE(FULLSCREEN_API)
@@ -217,25 +195,9 @@
 #include "ScriptedAnimationController.h"
 #endif
 
-#if ENABLE(WEB_AUDIO)
-#include "AudioProcessingEvent.h"
-#include "OfflineAudioCompletionEvent.h"
-#endif
-
-#if ENABLE(MEDIA_STREAM)
-#include "MediaStreamEvent.h"
-#endif
-
-#if ENABLE(INPUT_SPEECH)
-#include "SpeechInputEvent.h"
-#endif
-
-#if ENABLE(WEB_SOCKETS)
-#include "CloseEvent.h"
-#endif
-
-#if ENABLE(WEBGL)
-#include "WebGLContextEvent.h"
+#if ENABLE(MICRODATA)
+#include "MicroDataItemList.h"
+#include "NodeRareData.h"
 #endif
 
 using namespace std;
@@ -328,6 +290,19 @@ static inline bool isValidNamePart(UChar32 c)
     return true;
 }
 
+static bool shouldInheritSecurityOriginFromOwner(const KURL& url)
+{
+    // http://www.whatwg.org/specs/web-apps/current-work/#origin-0
+    //
+    // If a Document has the address "about:blank"
+    //     The origin of the Document is the origin it was assigned when its browsing context was created.
+    //
+    // Note: We generalize this to all "about" URLs and invalid URLs because we
+    // treat all of these URLs as about:blank.
+    //
+    return !url.isValid() || url.protocolIs("about");
+}
+
 static Widget* widgetForNode(Node* focusedNode)
 {
     if (!focusedNode)
@@ -403,6 +378,9 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
     , m_compatibilityMode(NoQuirksMode)
     , m_compatibilityModeLocked(false)
     , m_domTreeVersion(++s_globalTreeVersion)
+#if ENABLE(MUTATION_OBSERVERS)
+    , m_subtreeMutationObserverTypes(0)
+#endif
     , m_styleSheets(StyleSheetList::create(this))
     , m_readyState(Complete)
     , m_styleRecalcTimer(this, &Document::styleRecalcTimerFired)
@@ -434,7 +412,7 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
     , m_isViewSource(false)
     , m_sawElementsInKnownNamespaces(false)
     , m_usingGeolocation(false)
-    , m_eventQueue(EventQueue::create(this))
+    , m_eventQueue(DocumentEventQueue::create(this))
     , m_weakReference(DocumentWeakReference::create(this))
     , m_idAttributeName(idAttr)
 #if ENABLE(FULLSCREEN_API)
@@ -445,6 +423,7 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
 #endif
     , m_loadEventDelayCount(0)
     , m_loadEventDelayTimer(this, &Document::loadEventDelayTimerFired)
+    , m_referrerPolicy(SecurityPolicy::ReferrerPolicyDefault)
     , m_directionSetOnDocumentElement(false)
     , m_writingModeSetOnDocumentElement(false)
     , m_writeRecursionIsTooDeep(false)
@@ -517,10 +496,19 @@ Document::Document(Frame* frame, const KURL& url, bool isXHTML, bool isHTML)
 
     static int docID = 0;
     m_docID = docID++;
-#if ENABLE(XHTMLMP)
-    m_shouldProcessNoScriptElement = !(m_frame && m_frame->script()->canExecuteScripts(NotAboutToExecuteScript));
-#endif
 }
+
+#if PLATFORM(CHROMIUM)
+static void histogramMutationEventUsage(const unsigned short& listenerTypes)
+{
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMSubtreeModified", static_cast<bool>(listenerTypes & Document::DOMSUBTREEMODIFIED_LISTENER), 2);
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMNodeInserted", static_cast<bool>(listenerTypes & Document::DOMNODEINSERTED_LISTENER), 2);
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMNodeRemoved", static_cast<bool>(listenerTypes & Document::DOMNODEREMOVED_LISTENER), 2);
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMNodeRemovedFromDocument", static_cast<bool>(listenerTypes & Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER), 2);
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMNodeInsertedIntoDocument", static_cast<bool>(listenerTypes & Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER), 2);
+    PlatformSupport::histogramEnumeration("DOMAPI.PerDocumentMutationEventUsage.DOMCharacterDataModified", static_cast<bool>(listenerTypes & Document::DOMCHARACTERDATAMODIFIED_LISTENER), 2);
+}
+#endif
 
 Document::~Document()
 {
@@ -533,6 +521,10 @@ Document::~Document()
     ASSERT(!m_guardRefCount);
 
     m_scriptRunner.clear();
+
+#if PLATFORM(CHROMIUM)
+    histogramMutationEventUsage(m_listenerTypes);
+#endif
 
     removeAllEventListeners();
 
@@ -574,7 +566,7 @@ Document::~Document()
             (*m_userSheets)[i]->clearOwnerNode();
     }
 
-    deleteRetiredCustomFonts();
+    deleteCustomFonts();
 
     m_weakReference->clear();
 
@@ -1268,7 +1260,7 @@ static inline StringWithDirection canonicalizedTitle(Document* document, const S
     unsigned length = title.length();
     unsigned i;
 
-    StringBuffer buffer(length);
+    StringBuffer<UChar> buffer(length);
     unsigned builderIndex = 0;
 
     // Skip leading spaces and leading characters that would convert to spaces
@@ -1564,15 +1556,6 @@ void Document::recalcStyle(StyleChange change)
             element->recalcStyle(change);
     }
 
-    // FIXME: Disabling the deletion of retired custom font data until
-    // we fix all the stale style bugs (68804, 68624, etc). These bugs
-    // indicate problems where some styles were not updated in recalcStyle,
-    // thereby retaining stale copy of font data. To prevent that, we
-    // disable this code for now and only delete retired custom font data
-    // in Document destructor.
-    // Now that all RenderStyles that pointed to retired fonts have been updated, the fonts can safely be deleted.
-    // deleteRetiredCustomFonts();
-
 #if USE(ACCELERATED_COMPOSITING)
     if (view()) {
         bool layoutPending = view()->layoutPending() || renderer()->needsLayout();
@@ -1709,18 +1692,18 @@ PassRefPtr<RenderStyle> Document::styleForPage(int pageIndex)
     return style.release();
 }
 
-void Document::retireCustomFont(FontData* fontData)
+void Document::registerCustomFont(FontData* fontData)
 {
-    m_retiredCustomFonts.append(adoptPtr(fontData));
+    m_customFonts.append(adoptPtr(fontData));
 }
 
-void Document::deleteRetiredCustomFonts()
+void Document::deleteCustomFonts()
 {
-    size_t size = m_retiredCustomFonts.size();
+    size_t size = m_customFonts.size();
     for (size_t i = 0; i < size; ++i)
-        GlyphPageTreeNode::pruneTreeCustomFontData(m_retiredCustomFonts[i].get());
+        GlyphPageTreeNode::pruneTreeCustomFontData(m_customFonts[i].get());
 
-    m_retiredCustomFonts.clear();
+    m_customFonts.clear();
 }
 
 bool Document::isPageBoxVisible(int pageIndex)
@@ -1780,7 +1763,7 @@ void Document::setIsViewSource(bool isViewSource)
     if (!m_isViewSource)
         return;
 
-    ScriptExecutionContext::setSecurityOrigin(SecurityOrigin::create(url(), SandboxOrigin));
+    setSecurityOrigin(SecurityOrigin::createUnique());
 }
 
 void Document::createStyleSelector()
@@ -1896,6 +1879,36 @@ void Document::removeAllEventListeners()
         node->removeAllEventListeners();
 }
 
+void Document::suspendActiveDOMObjects(ActiveDOMObject::ReasonForSuspension why)
+{
+    ScriptExecutionContext::suspendActiveDOMObjects(why);
+
+#if ENABLE(DEVICE_ORIENTATION)
+    if (!page())
+        return;
+
+    if (page()->deviceMotionController())
+        page()->deviceMotionController()->suspendEventsForAllListeners(domWindow());
+    if (page()->deviceOrientationController())
+        page()->deviceOrientationController()->suspendEventsForAllListeners(domWindow());
+#endif
+}
+
+void Document::resumeActiveDOMObjects()
+{
+    ScriptExecutionContext::resumeActiveDOMObjects();
+
+#if ENABLE(DEVICE_ORIENTATION)
+    if (!page())
+        return;
+
+    if (page()->deviceMotionController())
+        page()->deviceMotionController()->resumeEventsForAllListeners(domWindow());
+    if (page()->deviceOrientationController())
+        page()->deviceOrientationController()->resumeEventsForAllListeners(domWindow());
+#endif
+}
+
 RenderView* Document::renderView() const
 {
     return toRenderView(renderer());
@@ -1995,7 +2008,7 @@ void Document::open(Document* ownerDocument)
     if (ownerDocument) {
         setURL(ownerDocument->url());
         m_cookieURL = ownerDocument->cookieURL();
-        ScriptExecutionContext::setSecurityOrigin(ownerDocument->securityOrigin());
+        setSecurityOrigin(ownerDocument->securityOrigin());
     }
 
     if (m_frame) {
@@ -2240,13 +2253,27 @@ void Document::implicitClose()
     }
 
 #if PLATFORM(MAC) || PLATFORM(CHROMIUM)
-    if (f && renderObject && this == topDocument() && AXObjectCache::accessibilityEnabled()) {
+    if (f && renderObject && AXObjectCache::accessibilityEnabled()) {
         // The AX cache may have been cleared at this point, but we need to make sure it contains an
         // AX object to send the notification to. getOrCreate will make sure that an valid AX object
         // exists in the cache (we ignore the return value because we don't need it here). This is 
         // only safe to call when a layout is not in progress, so it can not be used in postNotification.    
         axObjectCache()->getOrCreate(renderObject);
-        axObjectCache()->postNotification(renderObject, AXObjectCache::AXLoadComplete, true);
+        if (this == topDocument())
+            axObjectCache()->postNotification(renderObject, AXObjectCache::AXLoadComplete, true);
+        else {
+            // AXLoadComplete can only be posted on the top document, so if it's a document
+            // in an iframe that just finished loading, post a notification on the iframe
+            // element instead.
+            ScrollView* scrollView = frame()->view();
+            if (scrollView && scrollView->isFrameView()) {
+                HTMLFrameOwnerElement* owner = static_cast<FrameView*>(scrollView)->frame()->ownerElement();
+                if (owner && owner->renderer()) {
+                    AccessibilityObject* axIFrame = axObjectCache()->getOrCreate(owner->renderer());
+                    axObjectCache()->postNotification(axIFrame, axIFrame->document(), AXObjectCache::AXLayoutComplete, true);
+                }
+            }
+        }
     }
 #endif
 
@@ -2391,12 +2418,16 @@ void Document::updateBaseURL()
     // DOM 3 Core: When the Document supports the feature "HTML" [DOM Level 2 HTML], the base URI is computed using
     // first the value of the href attribute of the HTML BASE element if any, and the value of the documentURI attribute
     // from the Document interface otherwise.
-    if (m_baseElementURL.isEmpty()) {
+    if (!m_baseElementURL.isEmpty())
+        m_baseURL = m_baseElementURL;
+    else if (!m_baseURLOverride.isEmpty())
+        m_baseURL = m_baseURLOverride;
+    else {
         // The documentURI attribute is an arbitrary string. DOM 3 Core does not specify how it should be resolved,
         // so we use a null base URL.
         m_baseURL = KURL(KURL(), documentURI());
-    } else
-        m_baseURL = m_baseElementURL;
+    }
+
     if (!m_baseURL.isValid())
         m_baseURL = KURL();
 
@@ -2404,6 +2435,12 @@ void Document::updateBaseURL()
         m_elemSheet->setFinalURL(m_baseURL);
     if (m_mappedElementSheet)
         m_mappedElementSheet->setFinalURL(m_baseURL);
+}
+
+void Document::setBaseURLOverride(const KURL& url)
+{
+    m_baseURLOverride = url;
+    updateBaseURL();
 }
 
 void Document::processBaseElement()
@@ -2626,7 +2663,7 @@ void Document::processHttpEquiv(const String& equiv, const String& content)
                 frame->navigationScheduler()->scheduleLocationChange(securityOrigin(), blankURL(), String());
 
                 DEFINE_STATIC_LOCAL(String, consoleMessage, ("Refused to display document because display forbidden by X-Frame-Options.\n"));
-                frame->domWindow()->console()->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, consoleMessage, 1, String());
+                addConsoleMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, consoleMessage);
             }
         }
     } else if (equalIgnoringCase(equiv, "x-webkit-csp"))
@@ -2696,7 +2733,7 @@ void Document::processViewport(const String& features)
 {
     ASSERT(!features.isNull());
 
-    m_viewportArguments = ViewportArguments();
+    m_viewportArguments = ViewportArguments(ViewportArguments::ViewportMeta);
     processArguments(features, (void*)&m_viewportArguments, &setViewportFeature);
 
     Frame* frame = this->frame();
@@ -2704,6 +2741,20 @@ void Document::processViewport(const String& features)
         return;
 
     frame->page()->updateViewportArguments();
+}
+
+void Document::processReferrerPolicy(const String& policy)
+{
+    ASSERT(!policy.isNull());
+
+    m_referrerPolicy = SecurityPolicy::ReferrerPolicyDefault;
+
+    if (equalIgnoringCase(policy, "never"))
+        m_referrerPolicy = SecurityPolicy::ReferrerPolicyNever;
+    else if (equalIgnoringCase(policy, "always"))
+        m_referrerPolicy = SecurityPolicy::ReferrerPolicyAlways;
+    else if (equalIgnoringCase(policy, "origin"))
+        m_referrerPolicy = SecurityPolicy::ReferrerPolicyOrigin;
 }
 
 MouseEventWithHitTestResults Document::prepareMouseEvent(const HitTestRequest& request, const LayoutPoint& documentPoint, const PlatformMouseEvent& event)
@@ -3504,97 +3555,7 @@ void Document::enqueueDocumentEvent(PassRefPtr<Event> event)
 
 PassRefPtr<Event> Document::createEvent(const String& eventType, ExceptionCode& ec)
 {
-    RefPtr<Event> event;
-    if (eventType == "Event" || eventType == "Events" || eventType == "HTMLEvents")
-        event = Event::create();
-    else if (eventType == "BeforeLoadEvent")
-        event = BeforeLoadEvent::create();
-    else if (eventType == "CompositionEvent")
-        event = CompositionEvent::create();
-    else if (eventType == "CustomEvent")
-        event = CustomEvent::create();
-    else if (eventType == "ErrorEvent")
-        event = ErrorEvent::create();
-    else if (eventType == "HashChangeEvent")
-        event = HashChangeEvent::create();
-    else if (eventType == "KeyboardEvent" || eventType == "KeyboardEvents")
-        event = KeyboardEvent::create();
-    else if (eventType == "MessageEvent")
-        event = MessageEvent::create();
-    else if (eventType == "MouseEvent" || eventType == "MouseEvents")
-        event = MouseEvent::create();
-    else if (eventType == "MutationEvent" || eventType == "MutationEvents")
-        event = MutationEvent::create();
-    else if (eventType == "OverflowEvent")
-        event = OverflowEvent::create();
-    else if (eventType == "PageTransitionEvent")
-        event = PageTransitionEvent::create();
-    else if (eventType == "PopStateEvent")
-        event = PopStateEvent::create(); 
-    else if (eventType == "ProgressEvent")
-        event = ProgressEvent::create();
-    else if (eventType == "TextEvent")
-        event = TextEvent::create();
-    else if (eventType == "UIEvent" || eventType == "UIEvents")
-        event = UIEvent::create();
-    else if (eventType == "WebKitAnimationEvent")
-        event = WebKitAnimationEvent::create();
-    else if (eventType == "WebKitTransitionEvent")
-        event = WebKitTransitionEvent::create();
-    else if (eventType == "WheelEvent")
-        event = WheelEvent::create();
-    else if (eventType == "XMLHttpRequestProgressEvent")
-        event = XMLHttpRequestProgressEvent::create();
-#if ENABLE(WEB_AUDIO)
-    else if (eventType == "AudioProcessingEvent")
-        event = AudioProcessingEvent::create();
-    else if (eventType == "OfflineAudioCompletionEvent")
-        event = OfflineAudioCompletionEvent::create();
-#endif
-#if ENABLE(MEDIA_STREAM)
-    else if (eventType == "MediaStreamEvent")
-        event = MediaStreamEvent::create();
-#endif
-#if ENABLE(INPUT_SPEECH)
-    else if (eventType == "SpeechInputEvent")
-        event = SpeechInputEvent::create();
-#endif
-#if ENABLE(WEB_SOCKETS)
-    else if (eventType == "CloseEvent")
-        event = CloseEvent::create();
-#endif
-#if ENABLE(WEBGL)
-    else if (eventType == "WebGLContextEvent")
-        event = WebGLContextEvent::create();
-#endif
-#if ENABLE(DOM_STORAGE)
-    else if (eventType == "StorageEvent")
-        event = StorageEvent::create();
-#endif
-#if ENABLE(SVG)
-    else if (eventType == "SVGEvents")
-        event = Event::create();
-    else if (eventType == "SVGZoomEvent" || eventType == "SVGZoomEvents")
-        event = SVGZoomEvent::create();
-#endif
-#if ENABLE(TOUCH_EVENTS)
-#if USE(V8)
-    else if (eventType == "TouchEvent" && RuntimeEnabledFeatures::touchEnabled())
-#else
-    else if (eventType == "TouchEvent")
-#endif
-        event = TouchEvent::create();
-#endif
-#if ENABLE(DEVICE_ORIENTATION)
-    else if (eventType == "DeviceMotionEvent")
-        event = DeviceMotionEvent::create();
-    else if (eventType == "DeviceOrientationEvent")
-        event = DeviceOrientationEvent::create();
-#endif
-#if ENABLE(ORIENTATION_EVENTS)
-    else if (eventType == "OrientationEvent")
-        event = Event::create();
-#endif
+    RefPtr<Event> event = EventFactory::create(eventType);
     if (event)
         return event.release();
 
@@ -3712,7 +3673,7 @@ String Document::domain() const
 
 void Document::setDomain(const String& newDomain, ExceptionCode& ec)
 {
-    if (SecurityOrigin::isDomainRelaxationForbiddenForURLScheme(securityOrigin()->protocol())) {
+    if (SchemeRegistry::isDomainRelaxationForbiddenForURLScheme(securityOrigin()->protocol())) {
         ec = SECURITY_ERR;
         return;
     }
@@ -4084,7 +4045,7 @@ KURL Document::openSearchDescriptionURL()
 
     RefPtr<HTMLCollection> children = head()->children();
     for (Node* child = children->firstItem(); child; child = children->nextItem()) {
-        if (!child->isHTMLElement() || !static_cast<HTMLElement*>(child)->hasTagName(linkTag))
+        if (!child->hasTagName(linkTag))
             continue;
         HTMLLinkElement* linkElement = static_cast<HTMLLinkElement*>(child);
         if (!equalIgnoringCase(linkElement->type(), openSearchMIMEType) || !equalIgnoringCase(linkElement->rel(), openSearchRelation))
@@ -4329,8 +4290,6 @@ Vector<String> Document::formElementsState() const
     return stateVector;
 }
 
-#if ENABLE(XPATH)
-
 PassRefPtr<XPathExpression> Document::createExpression(const String& expression,
                                                        XPathNSResolver* resolver,
                                                        ExceptionCode& ec)
@@ -4358,8 +4317,6 @@ PassRefPtr<XPathResult> Document::evaluate(const String& expression,
         m_xpathEvaluator = XPathEvaluator::create();
     return m_xpathEvaluator->evaluate(expression, contextNode, resolver, type, result, ec);
 }
-
-#endif // ENABLE(XPATH)
 
 void Document::setStateForNewFormElements(const Vector<String>& stateVector)
 {
@@ -4507,25 +4464,28 @@ bool Document::useSecureKeyboardEntryWhenActive() const
 
 void Document::initSecurityContext()
 {
-    if (securityOrigin() && !securityOrigin()->isEmpty())
-        return; // m_securityOrigin has already been initialized.
+    if (haveInitializedSecurityOrigin()) {
+        ASSERT(securityOrigin());
+        return;
+    }
 
     if (!m_frame) {
         // No source for a security context.
         // This can occur via document.implementation.createDocument().
         m_cookieURL = KURL(ParsedURLString, "");
-        ScriptExecutionContext::setSecurityOrigin(SecurityOrigin::createEmpty());
-        ScriptExecutionContext::setContentSecurityPolicy(ContentSecurityPolicy::create(this));
+        setSecurityOrigin(SecurityOrigin::createUnique());
+        setContentSecurityPolicy(ContentSecurityPolicy::create(this));
         return;
     }
 
     // In the common case, create the security context from the currently
     // loading URL with a fresh content security policy.
     m_cookieURL = m_url;
-    ScriptExecutionContext::setSecurityOrigin(SecurityOrigin::create(m_url, m_frame->loader()->sandboxFlags()));
-    ScriptExecutionContext::setContentSecurityPolicy(ContentSecurityPolicy::create(this));
+    enforceSandboxFlags(m_frame->loader()->effectiveSandboxFlags());
+    setSecurityOrigin(isSandboxed(SandboxOrigin) ? SecurityOrigin::createUnique() : SecurityOrigin::create(m_url));
+    setContentSecurityPolicy(ContentSecurityPolicy::create(this));
 
-    if (SecurityOrigin::allowSubstituteDataAccessToLocal()) {
+    if (SecurityPolicy::allowSubstituteDataAccessToLocal()) {
         // If this document was loaded with substituteData, then the document can
         // load local resources.  See https://bugs.webkit.org/show_bug.cgi?id=16756
         // and https://bugs.webkit.org/show_bug.cgi?id=19760 for further
@@ -4554,7 +4514,7 @@ void Document::initSecurityContext()
         }
     }
 
-    if (!securityOrigin()->isEmpty())
+    if (!shouldInheritSecurityOriginFromOwner(m_url))
         return;
 
     // If we do not obtain a meaningful origin from the URL, then we try to
@@ -4564,29 +4524,28 @@ void Document::initSecurityContext()
     if (!ownerFrame)
         ownerFrame = m_frame->loader()->opener();
 
-    if (ownerFrame) {
-        m_cookieURL = ownerFrame->document()->cookieURL();
-        // We alias the SecurityOrigins to match Firefox, see Bug 15313
-        // https://bugs.webkit.org/show_bug.cgi?id=15313
-        ScriptExecutionContext::setSecurityOrigin(ownerFrame->document()->securityOrigin());
-        // FIXME: Consider moving m_contentSecurityPolicy into SecurityOrigin.
-        ScriptExecutionContext::setContentSecurityPolicy(ownerFrame->document()->contentSecurityPolicy());
+    if (!ownerFrame) {
+        didFailToInitializeSecurityOrigin();
+        return;
     }
+
+    m_cookieURL = ownerFrame->document()->cookieURL();
+    // We alias the SecurityOrigins to match Firefox, see Bug 15313
+    // https://bugs.webkit.org/show_bug.cgi?id=15313
+    setSecurityOrigin(ownerFrame->document()->securityOrigin());
+    setContentSecurityPolicy(ownerFrame->document()->contentSecurityPolicy());
 }
 
-void Document::setSecurityOrigin(SecurityOrigin* securityOrigin)
+void Document::setSecurityOrigin(PassRefPtr<SecurityOrigin> origin)
 {
-    ScriptExecutionContext::setSecurityOrigin(securityOrigin);
-    // FIXME: Find a better place to enable DNS prefetch, which is a loader concept,
-    // not applicable to arbitrary documents.
-    initDNSPrefetch();
+    SecurityContext::setSecurityOrigin(origin);
 }
 
 #if ENABLE(SQL_DATABASE)
 
 bool Document::allowDatabaseAccess() const
 {
-    if (!page() || page()->settings()->privateBrowsingEnabled())
+    if (!page() || (page()->settings()->privateBrowsingEnabled() && !SchemeRegistry::allowsDatabaseAccessInPrivateBrowsing(securityOrigin()->protocol())))
         return false;
     return true;
 }
@@ -4723,6 +4682,11 @@ void Document::parseDNSPrefetchControlHeader(const String& dnsPrefetchControl)
 
 void Document::addMessage(MessageSource source, MessageType type, MessageLevel level, const String& message, unsigned lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack> callStack)
 {
+    if (!isContextThread()) {
+        postTask(AddConsoleMessageTask::create(source, type, level, message));
+        return;
+    }
+
     if (DOMWindow* window = domWindow())
         window->console()->addMessage(source, type, level, message, lineNumber, sourceURL, callStack);
 }
@@ -4773,6 +4737,15 @@ void Document::resumeScriptedAnimationControllerCallbacks()
         m_scriptedAnimationController->resume();
 #endif
 }
+
+void Document::windowScreenDidChange(PlatformDisplayID displayID)
+{
+#if ENABLE(REQUEST_ANIMATION_FRAME)
+    if (m_scriptedAnimationController)
+        m_scriptedAnimationController->windowScreenDidChange(displayID);
+#endif
+}
+
 
 String Document::displayStringModifiedByEncoding(const String& str) const
 {
@@ -4832,19 +4805,6 @@ MediaCanStartListener* Document::takeAnyMediaCanStartListener()
     m_mediaCanStartListeners.remove(slot);
     return listener;
 }
-
-#if ENABLE(XHTMLMP)
-bool Document::isXHTMLMPDocument() const
-{
-    if (!frame() || !frame()->loader())
-        return false;
-    // As per section 7.2 of OMA-WAP-XHTMLMP-V1_1-20061020-A.pdf, a conforming user agent
-    // MUST accept XHTMLMP document identified as "application/vnd.wap.xhtml+xml"
-    // and SHOULD accept it identified as "application/xhtml+xml" , "application/xhtml+xml" is a 
-    // general MIME type for all XHTML documents, not only for XHTMLMP
-    return loader()->writer()->mimeType() == "application/vnd.wap.xhtml+xml";
-}
-#endif
 
 #if ENABLE(FULLSCREEN_API)
 bool Document::fullScreenIsAllowedForElement(Element* element) const
@@ -5116,7 +5076,7 @@ void Document::loadEventDelayTimerFired(Timer<Document>*)
 int Document::webkitRequestAnimationFrame(PassRefPtr<RequestAnimationFrameCallback> callback, Element* animationElement)
 {
     if (!m_scriptedAnimationController)
-        m_scriptedAnimationController = ScriptedAnimationController::create(this);
+        m_scriptedAnimationController = ScriptedAnimationController::create(this, page()->displayID());
 
     return m_scriptedAnimationController->registerCallback(callback, animationElement);
 }
@@ -5183,7 +5143,7 @@ DocumentLoader* Document::loader() const
     if (!m_frame)
         return 0;
     
-    DocumentLoader* loader = m_frame->loader()->activeDocumentLoader();
+    DocumentLoader* loader = m_frame->loader()->documentLoader();
     if (!loader)
         return 0;
     
@@ -5192,5 +5152,41 @@ DocumentLoader* Document::loader() const
     
     return loader;
 }
+
+#if ENABLE(MICRODATA)
+PassRefPtr<NodeList> Document::getItems(const String& typeNames)
+{
+    NodeRareData* data = ensureRareData();
+    if (!data->nodeLists()) {
+        data->setNodeLists(NodeListsNodeData::create());
+        treeScope()->addNodeListCache();
+    }
+
+    // Since documet.getItem() is allowed for microdata, typeNames will be null string.
+    // In this case we need to create an unique string identifier to map such request in the cache.
+    String localTypeNames = typeNames.isNull() ? String("http://webkit.org/microdata/undefinedItemType") : typeNames;
+
+    pair<NodeListsNodeData::MicroDataItemListCache::iterator, bool> result = data->nodeLists()->m_microDataItemListCache.add(localTypeNames, 0);
+    if (!result.second)
+        return PassRefPtr<NodeList>(result.first->second);
+
+    RefPtr<MicroDataItemList> list = MicroDataItemList::create(this, typeNames);
+    result.first->second = list.get();
+    return list.release();
+}
+
+void Document::removeCachedMicroDataItemList(MicroDataItemList* list, const String& typeNames)
+{
+    ASSERT(rareData());
+    ASSERT(rareData()->nodeLists());
+    ASSERT_UNUSED(list, list->hasOwnCaches());
+
+    NodeListsNodeData* data = rareData()->nodeLists();
+
+    String localTypeNames = typeNames.isNull() ? String("http://webkit.org/microdata/undefinedItemType") : typeNames;
+    ASSERT_UNUSED(list, list == data->m_microDataItemListCache.get(localTypeNames));
+    data->m_microDataItemListCache.remove(localTypeNames);
+}
+#endif
 
 } // namespace WebCore

@@ -415,12 +415,13 @@ PlatformLayer* GraphicsContext3D::platformLayer() const
 }
 #endif
 
-void GraphicsContext3D::makeContextCurrent()
+bool GraphicsContext3D::makeContextCurrent()
 {
     m_private->m_glWidget->makeCurrent();
+    return true;
 }
 
-void GraphicsContext3D::paintRenderingResultsToCanvas(CanvasRenderingContext* context)
+void GraphicsContext3D::paintRenderingResultsToCanvas(CanvasRenderingContext* context, DrawingBuffer*)
 {
     m_private->m_glWidget->makeCurrent();
     HTMLCanvasElement* canvas = context->canvas();
@@ -430,7 +431,7 @@ void GraphicsContext3D::paintRenderingResultsToCanvas(CanvasRenderingContext* co
 }
 
 #if defined(QT_OPENGL_ES_2)
-PassRefPtr<ImageData> GraphicsContext3D::paintRenderingResultsToImageData()
+PassRefPtr<ImageData> GraphicsContext3D::paintRenderingResultsToImageData(DrawingBuffer*)
 {
     // FIXME: This needs to be implemented for proper non-premultiplied-alpha
     // support.

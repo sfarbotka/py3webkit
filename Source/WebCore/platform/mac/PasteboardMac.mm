@@ -27,6 +27,7 @@
 #import "Pasteboard.h"
 
 #import "CachedResource.h"
+#import "ClipboardMac.h"
 #import "DOMRangeInternal.h"
 #import "Document.h"
 #import "DocumentFragment.h"
@@ -309,7 +310,7 @@ void Pasteboard::writeImage(Node* node, const KURL& url, const String& title)
     [m_pasteboard.get() declareTypes:types owner:nil];
     writeURL(m_pasteboard.get(), types, cocoaURL, nsStringNilIfEmpty(title), frame);
     
-    Image* image = cachedImage->image();
+    Image* image = cachedImage->imageForRenderer(renderer);
     ASSERT(image);
     
     [m_pasteboard.get() setData:[image->getNSImage() TIFFRepresentation] forType:NSTIFFPboardType];
@@ -318,6 +319,18 @@ void Pasteboard::writeImage(Node* node, const KURL& url, const String& title)
     ASSERT(MIMETypeRegistry::isSupportedImageResourceMIMEType(MIMEType));
 
     writeFileWrapperAsRTFDAttachment(fileWrapperForImage(cachedImage, cocoaURL));
+}
+
+void Pasteboard::writeClipboard(Clipboard* clipboard)
+{
+    NSPasteboard* pasteboard = static_cast<ClipboardMac*>(clipboard)->pasteboard();
+    NSArray* types = [pasteboard types];
+
+    [m_pasteboard.get() addTypes:types owner:nil];
+    for (NSUInteger i = 0; i < [types count]; i++) {
+        NSString* type = [types objectAtIndex:i];
+        [m_pasteboard.get() setData:[pasteboard dataForType:type] forType:type];
+    }
 }
 
 bool Pasteboard::canSmartReplace()

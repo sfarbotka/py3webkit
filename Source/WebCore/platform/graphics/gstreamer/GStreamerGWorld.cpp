@@ -21,7 +21,7 @@
 #include "GStreamerGWorld.h"
 #if ENABLE(VIDEO) && USE(GSTREAMER)
 
-#include "GOwnPtrGStreamer.h"
+#include "GRefPtrGStreamer.h"
 #include <gst/gst.h>
 #include <gst/interfaces/xoverlay.h>
 #include <gst/pbutils/pbutils.h>
@@ -57,7 +57,6 @@ PassRefPtr<GStreamerGWorld> GStreamerGWorld::createGWorld(GstElement* pipeline)
 
 GStreamerGWorld::GStreamerGWorld(GstElement* pipeline)
     : m_pipeline(pipeline)
-    , m_dynamicPadName(0)
 {
     // XOverlay messages need to be handled synchronously.
     GstBus* bus = gst_pipeline_get_bus(GST_PIPELINE(m_pipeline));
@@ -87,9 +86,13 @@ bool GStreamerGWorld::enterFullscreen()
     GstElement* videoScale = gst_element_factory_make("videoscale", "videoScale");
 
     // Get video sink bin and the tee inside.
-    GOwnPtr<GstElement> videoSink;
-    g_object_get(m_pipeline, "video-sink", &videoSink.outPtr(), NULL);
-    GstElement* tee = gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoTee");
+    GRefPtr<GstElement> videoSink;
+    GstElement* sinkPtr = 0;
+
+    g_object_get(m_pipeline, "video-sink", &sinkPtr, NULL);
+    videoSink = adoptGRef(sinkPtr);
+
+    GRefPtr<GstElement> tee = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoTee"));
 
     // Add and link a queue, ffmpegcolorspace, videoscale and sink in the bin.
     gst_bin_add_many(GST_BIN(videoSink.get()), platformVideoSink, videoScale, colorspace, queue, NULL);
@@ -100,12 +103,11 @@ bool GStreamerGWorld::enterFullscreen()
     gst_element_link_pads_full(videoScale, "src", platformVideoSink, "sink", GST_PAD_LINK_CHECK_NOTHING);
 
     // Link a new src pad from tee to queue.
-    GstPad* srcPad = gst_element_get_request_pad(tee, "src%d");
-    GstPad* sinkPad = gst_element_get_static_pad(queue, "sink");
-    gst_pad_link(srcPad, sinkPad);
-    gst_object_unref(GST_OBJECT(sinkPad));
+    GRefPtr<GstPad> srcPad = adoptGRef(gst_element_get_request_pad(tee.get(), "src%d"));
+    GRefPtr<GstPad> sinkPad = adoptGRef(gst_element_get_static_pad(queue, "sink"));
+    gst_pad_link(srcPad.get(), sinkPad.get());
 
-    m_dynamicPadName = gst_pad_get_name(srcPad);
+    m_dynamicPadName.set(gst_pad_get_name(srcPad.get()));
 
     // Synchronize the new elements with pipeline state. If it's
     // paused limit the state change to pre-rolling.
@@ -118,7 +120,6 @@ bool GStreamerGWorld::enterFullscreen()
     gst_element_set_state(videoScale, state);
     gst_element_set_state(colorspace, state);
     gst_element_set_state(queue, state);
-    gst_object_unref(tee);
 
     // Query the current media segment informations and send them towards
     // the new tee branch downstream.
@@ -128,7 +129,6 @@ bool GStreamerGWorld::enterFullscreen()
 
     if (!queryResult) {
         gst_query_unref(query);
-        gst_object_unref(GST_OBJECT(srcPad));
         return true;
     }
 
@@ -142,10 +142,9 @@ bool GStreamerGWorld::enterFullscreen()
     gst_query_parse_segment(query, &rate, &format, &startValue, &stopValue);
 
     GstEvent* event = gst_event_new_new_segment(FALSE, rate, format, startValue, stopValue, position);
-    gst_pad_push_event(srcPad, event);
+    gst_pad_push_event(srcPad.get(), event);
 
     gst_query_unref(query);
-    gst_object_unref(GST_OBJECT(srcPad));
     return true;
 }
 
@@ -155,47 +154,42 @@ void GStreamerGWorld::exitFullscreen()
         return;
 
     // Get video sink bin and the elements to remove.
-    GOwnPtr<GstElement> videoSink;
-    g_object_get(m_pipeline, "video-sink", &videoSink.outPtr(), NULL);
-    GstElement* tee = gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoTee");
-    GstElement* platformVideoSink = gst_bin_get_by_name(GST_BIN(videoSink.get()), "platformVideoSink");
-    GstElement* queue = gst_bin_get_by_name(GST_BIN(videoSink.get()), "queue");
-    GstElement* colorspace = gst_bin_get_by_name(GST_BIN(videoSink.get()), "colorspace");
-    GstElement* videoScale = gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoScale");
+    GRefPtr<GstElement> videoSink;
+    GstElement* sinkPtr = 0;
+
+    g_object_get(m_pipeline, "video-sink", &sinkPtr, NULL);
+    videoSink = adoptGRef(sinkPtr);
+
+    GRefPtr<GstElement> tee = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoTee"));
+    GRefPtr<GstElement> platformVideoSink = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "platformVideoSink"));
+    GRefPtr<GstElement> queue = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "queue"));
+    GRefPtr<GstElement> colorspace = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "colorspace"));
+    GRefPtr<GstElement> videoScale = adoptGRef(gst_bin_get_by_name(GST_BIN(videoSink.get()), "videoScale"));
 
     // Get pads to unlink and remove.
-    GstPad* srcPad = gst_element_get_static_pad(tee, m_dynamicPadName);
-    GstPad* sinkPad = gst_element_get_static_pad(queue, "sink");
+    GRefPtr<GstPad> srcPad = adoptGRef(gst_element_get_static_pad(tee.get(), m_dynamicPadName.get()));
+    GRefPtr<GstPad> sinkPad = adoptGRef(gst_element_get_static_pad(queue.get(), "sink"));
 
     // Block data flow towards the pipeline branch to remove. No need
     // for pad blocking if the pipeline is paused.
     GstState state;
     gst_element_get_state(m_pipeline, &state, 0, 0);
-    if (state < GST_STATE_PLAYING || gst_pad_set_blocked(srcPad, true)) {
+    if (state < GST_STATE_PLAYING || gst_pad_set_blocked(srcPad.get(), true)) {
 
         // Unlink and release request pad.
-        gst_pad_unlink(srcPad, sinkPad);
-        gst_element_release_request_pad(tee, srcPad);
+        gst_pad_unlink(srcPad.get(), sinkPad.get());
+        gst_element_release_request_pad(tee.get(), srcPad.get());
 
         // Unlink, remove and cleanup queue, ffmpegcolorspace, videoScale and sink.
-        gst_element_unlink_many(queue, colorspace, videoScale, platformVideoSink, NULL);
-        gst_bin_remove_many(GST_BIN(videoSink.get()), queue, colorspace, videoScale, platformVideoSink, NULL);
-        gst_element_set_state(platformVideoSink, GST_STATE_NULL);
-        gst_element_set_state(videoScale, GST_STATE_NULL);
-        gst_element_set_state(colorspace, GST_STATE_NULL);
-        gst_element_set_state(queue, GST_STATE_NULL);
+        gst_element_unlink_many(queue.get(), colorspace.get(), videoScale.get(), platformVideoSink.get(), NULL);
+        gst_bin_remove_many(GST_BIN(videoSink.get()), queue.get(), colorspace.get(), videoScale.get(), platformVideoSink.get(), NULL);
+        gst_element_set_state(platformVideoSink.get(), GST_STATE_NULL);
+        gst_element_set_state(videoScale.get(), GST_STATE_NULL);
+        gst_element_set_state(colorspace.get(), GST_STATE_NULL);
+        gst_element_set_state(queue.get(), GST_STATE_NULL);
     }
 
-    gst_object_unref(GST_OBJECT(srcPad));
-    gst_object_unref(GST_OBJECT(sinkPad));
-
-    gst_object_unref(queue);
-    gst_object_unref(colorspace);
-    gst_object_unref(videoScale);
-    gst_object_unref(platformVideoSink);
-
-    gst_object_unref(tee);
-    m_dynamicPadName = 0;
+    m_dynamicPadName.clear();
 }
 
 void GStreamerGWorld::setWindowOverlay(GstMessage* message)

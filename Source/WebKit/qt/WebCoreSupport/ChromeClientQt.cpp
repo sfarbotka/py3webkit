@@ -53,11 +53,7 @@
 #include "Page.h"
 #include "PageClientQt.h"
 #include "PopupMenuQt.h"
-#if defined(Q_WS_MAEMO_5)
-#include "QtMaemoWebPopup.h"
-#else
 #include "QtFallbackWebPopup.h"
-#endif
 #include "QWebPageClient.h"
 #include "ScrollbarTheme.h"
 #include "SearchPopupMenuQt.h"
@@ -384,7 +380,7 @@ IntRect ChromeClientQt::windowResizerRect() const
 
     // There's no API in Qt to query for the size of the resizer, so we assume
     // it has the same width and height as the scrollbar thickness.
-    int scollbarThickness = ScrollbarTheme::nativeTheme()->scrollbarThickness();
+    int scollbarThickness = ScrollbarTheme::theme()->scrollbarThickness();
 
     // There's no API in Qt to query for the position of the resizer. Sometimes
     // it's drawn by the system, and sometimes it's a QSizeGrip. For RTL locales
@@ -402,9 +398,9 @@ IntRect ChromeClientQt::windowResizerRect() const
 #endif
 }
 
-void ChromeClientQt::invalidateWindow(const IntRect& windowRect, bool)
+void ChromeClientQt::invalidateRootView(const IntRect& windowRect, bool)
 {
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     if (platformPageClient()) {
         WebCore::TiledBackingStore* backingStore = QWebFramePrivate::core(m_webPage->mainFrame())->tiledBackingStore();
         if (!backingStore)
@@ -416,7 +412,7 @@ void ChromeClientQt::invalidateWindow(const IntRect& windowRect, bool)
 #endif
 }
 
-void ChromeClientQt::invalidateContentsAndWindow(const IntRect& windowRect, bool immediate)
+void ChromeClientQt::invalidateContentsAndRootView(const IntRect& windowRect, bool immediate)
 {
     // No double buffer, so only update the QWidget if content changed.
     if (platformPageClient()) {
@@ -433,7 +429,7 @@ void ChromeClientQt::invalidateContentsAndWindow(const IntRect& windowRect, bool
 
 void ChromeClientQt::invalidateContentsForSlowScroll(const IntRect& windowRect, bool immediate)
 {
-    invalidateContentsAndWindow(windowRect, immediate);
+    invalidateContentsAndRootView(windowRect, immediate);
 }
 
 void ChromeClientQt::scroll(const IntSize& delta, const IntRect& scrollViewRect, const IntRect&)
@@ -443,7 +439,7 @@ void ChromeClientQt::scroll(const IntSize& delta, const IntRect& scrollViewRect,
     emit m_webPage->scrollRequested(delta.width(), delta.height(), scrollViewRect);
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void ChromeClientQt::delegatedScrollRequested(const IntPoint& point)
 {
     QPoint currentPosition(m_webPage->mainFrame()->scrollPosition());
@@ -451,7 +447,7 @@ void ChromeClientQt::delegatedScrollRequested(const IntPoint& point)
 }
 #endif
 
-IntRect ChromeClientQt::windowToScreen(const IntRect& rect) const
+IntRect ChromeClientQt::rootViewToScreen(const IntRect& rect) const
 {
     QWebPageClient* pageClient = platformPageClient();
     if (!pageClient)
@@ -467,7 +463,7 @@ IntRect ChromeClientQt::windowToScreen(const IntRect& rect) const
     return screenRect;
 }
 
-IntPoint ChromeClientQt::screenToWindow(const IntPoint& point) const
+IntPoint ChromeClientQt::screenToRootView(const IntPoint& point) const
 {
     QWebPageClient* pageClient = platformPageClient();
     if (!pageClient)
@@ -649,7 +645,7 @@ ChromeClient::CompositingTriggerFlags ChromeClientQt::allowedCompositingTriggers
 
 #endif
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 IntRect ChromeClientQt::visibleRectForTiledBackingStore() const
 {
     if (!platformPageClient() || !m_webPage)
@@ -702,16 +698,14 @@ PassOwnPtr<QWebSelectMethod> ChromeClientQt::createSelectPopup() const
     if (result)
         return result.release();
 
-#if defined(Q_WS_MAEMO_5)
-    return adoptPtr(new QtMaemoWebPopup);
-#elif !defined(QT_NO_COMBOBOX)
+#if !defined(QT_NO_COMBOBOX)
     return adoptPtr(new QtFallbackWebPopup(this));
 #else
     return nullptr;
 #endif
 }
 
-void ChromeClientQt::dispatchViewportDataDidChange(const ViewportArguments&) const
+void ChromeClientQt::dispatchViewportPropertiesDidChange(const ViewportArguments&) const
 {
     emit m_webPage->viewportChangeRequested();
 }

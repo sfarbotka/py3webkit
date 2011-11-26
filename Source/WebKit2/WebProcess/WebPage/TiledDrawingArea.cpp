@@ -26,7 +26,7 @@
 #include "config.h"
 #include "TiledDrawingArea.h"
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 
 #include "DrawingAreaProxyMessages.h"
 #include "MessageID.h"
@@ -177,6 +177,11 @@ void TiledDrawingArea::removeTile(int tileID)
     m_webPage->send(Messages::DrawingAreaProxy::RemoveTile(tileID));
 }
 
+#if USE(ACCELERATED_COMPOSITING) && USE(TEXTURE_MAPPER)
+void TiledDrawingArea::didReceiveLayerTreeHostMessage(CoreIPC::Connection* connection, CoreIPC::MessageID, CoreIPC::ArgumentDecoder* arguments)
+{
+}
+#endif
 } // namespace WebKit
 
-#endif // TILED_BACKING_STORE
+#endif // USE(TILED_BACKING_STORE)

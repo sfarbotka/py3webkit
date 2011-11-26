@@ -26,7 +26,7 @@
 #ifndef TiledDrawingAreaProxy_h
 #define TiledDrawingAreaProxy_h
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 
 #include "DrawingAreaProxy.h"
 #include <WebCore/GraphicsContext.h>
@@ -48,6 +48,11 @@ namespace WebCore {
 class GraphicsContext;
 }
 
+#if PLATFORM(QT)
+class QQuickWebPage;
+typedef QQuickWebPage PlatformWebView;
+#endif
+
 namespace WebKit {
 
 class ShareableBitmap;
@@ -59,9 +64,6 @@ typedef WKView PlatformWebView;
 #elif PLATFORM(WIN)
 class WebView;
 typedef WebView PlatformWebView;
-#elif PLATFORM(QT)
-class TouchViewInterface;
-typedef TouchViewInterface PlatformWebView;
 #endif
 
 class TiledDrawingAreaProxy : public DrawingAreaProxy {
@@ -87,7 +89,6 @@ private:
     // DrawingAreaProxy
     virtual void sizeDidChange();
     virtual void deviceScaleFactorDidChange();
-    virtual void setPageIsVisible(bool isVisible);
 
     virtual void createTile(int tileID, const UpdateInfo&);
     virtual void updateTile(int tileID, const UpdateInfo&);
@@ -97,7 +98,6 @@ private:
 
 private:
     bool m_isWaitingForDidSetFrameNotification;
-    bool m_isVisible;
 
     PlatformWebView* m_webView;
 #if PLATFORM(QT)
@@ -108,6 +108,6 @@ private:
 
 } // namespace WebKit
 
-#endif // TILED_BACKING_STORE
+#endif // USE(TILED_BACKING_STORE)
 
 #endif // TiledDrawingAreaProxy_h

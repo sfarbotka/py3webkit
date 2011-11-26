@@ -34,6 +34,7 @@ using namespace WebCore;
 namespace WebKit {
 
 typedef uint32_t WebLayerID;
+enum { InvalidWebLayerID = 0 };
 
 struct WebLayerUpdateInfo {
     WebLayerUpdateInfo() { }
@@ -48,12 +49,32 @@ struct WebLayerUpdateInfo {
     static bool decode(CoreIPC::ArgumentDecoder*, WebLayerUpdateInfo&);
 };
 
+struct WebLayerAnimation {
+    WebLayerAnimation() : keyframeList(AnimatedPropertyInvalid) { }
+    WebLayerAnimation(const KeyframeValueList& valueList) 
+        : keyframeList(valueList) { }
+    String name;
+    enum Operation {
+        AddAnimation,
+        RemoveAnimation,
+        PauseAnimation
+    } operation;
+    IntSize boxSize;
+    RefPtr<Animation> animation;
+    KeyframeValueList keyframeList;
+    double startTime;
+
+    void encode(CoreIPC::ArgumentEncoder*) const;
+    static bool decode(CoreIPC::ArgumentDecoder*, WebLayerAnimation&);
+};
+
 struct WebLayerInfo {
     String name;
     WebLayerID id;
     WebLayerID parent;
     WebLayerID replica;
     WebLayerID mask;
+    int64_t imageBackingStoreID;
 
     FloatPoint pos;
     FloatPoint3D anchorPoint;
@@ -71,10 +92,13 @@ struct WebLayerInfo {
             bool masksToBounds : 1;
             bool preserves3D : 1;
             bool contentNeedsDisplay : 1;
+            bool imageIsUpdated: 1;
+            bool isRootLayer: 1;
         };
         unsigned int flags;
     };
     Vector<WebLayerID> children;
+    Vector<WebLayerAnimation> animations;
     RefPtr<ShareableBitmap> imageBackingStore;
 
     void encode(CoreIPC::ArgumentEncoder*) const;

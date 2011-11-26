@@ -26,14 +26,19 @@
 #ifndef OptionsObject_h
 #define OptionsObject_h
 
+#include "MessagePort.h"
 #include "PlatformString.h"
 #include "ScriptValue.h"
 #include <v8.h>
+#include <wtf/HashSet.h>
+#include <wtf/text/AtomicString.h>
 
 namespace WebCore {
 
 class DOMStringList;
+class DOMWindow;
 class IDBKeyRange;
+class TrackBase;
 
 class OptionsObject {
 public:
@@ -44,42 +49,23 @@ public:
     OptionsObject& operator=(const OptionsObject&);
 
     bool isUndefinedOrNull() const;
-    bool getKeyBool(const String& key, bool& value) const;
-    bool getKeyInt32(const String& key, int32_t& value) const;
-    bool getKeyDouble(const String& key, double& value) const;
-    bool getKeyString(const String& key, String& value) const;
-    bool getKeyStringWithUndefinedOrNullCheck(const String& key, String& value) const;
-    PassRefPtr<DOMStringList> getKeyDOMStringList(const String& key) const;
-    PassRefPtr<IDBKeyRange> getKeyKeyRange(const String& key) const;
 
-    bool getKeyValue(const String& key, bool& value) const
-    {
-        return getKeyBool(key, value);
-    }
-    bool getKeyValue(const String& key, int32_t& value) const
-    {
-        return getKeyInt32(key, value);
-    }
-    bool getKeyValue(const String& key, double& value) const
-    {
-        return getKeyDouble(key, value);
-    }
-    bool getKeyValue(const String& key, String& value) const
-    {
-        return getKeyString(key, value);
-    }
-    bool getKeyValue(const String& key, ScriptValue& value) const
-    {
-        v8::Local<v8::Value> v8Value;
-        if (!getKey(key, v8Value))
-            return false;
+    bool get(const String&, bool&) const;
+    bool get(const String&, int32_t&) const;
+    bool get(const String&, double&) const;
+    bool get(const String&, String&) const;
+    bool get(const String&, ScriptValue&) const;
+    bool get(const String&, unsigned short&) const;
+    bool get(const String&, unsigned&) const;
+    bool get(const String&, unsigned long long&) const;
+    bool get(const String&, RefPtr<DOMWindow>&) const;
+    bool get(const String&, MessagePortArray&) const;
+#if ENABLE(VIDEO_TRACK)
+    bool get(const String&, RefPtr<TrackBase>&) const;
+#endif
+    bool get(const String&, HashSet<AtomicString>&) const;
 
-        value = ScriptValue(v8Value);
-        return true;
-    }
-    bool getKeyValue(const String&, unsigned short&) const;
-    bool getKeyValue(const String&, unsigned&) const;
-    bool getKeyValue(const String&, unsigned long long&) const;
+    bool getWithUndefinedOrNullCheck(const String&, String&) const;
 
 private:
     bool getKey(const String& key, v8::Local<v8::Value>&) const;

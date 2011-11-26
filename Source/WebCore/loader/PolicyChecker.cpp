@@ -59,7 +59,7 @@ void PolicyChecker::checkNavigationPolicy(const ResourceRequest& request, Docume
 {
     NavigationAction action = loader->triggeringAction();
     if (action.isEmpty()) {
-        action = NavigationAction(request.url(), NavigationTypeOther);
+        action = NavigationAction(request, NavigationTypeOther);
         loader->setTriggeringAction(action);
     }
 
@@ -93,7 +93,7 @@ void PolicyChecker::checkNavigationPolicy(const ResourceRequest& request, Docume
 void PolicyChecker::checkNewWindowPolicy(const NavigationAction& action, NewWindowPolicyDecisionFunction function,
     const ResourceRequest& request, PassRefPtr<FormState> formState, const String& frameName, void* argument)
 {
-    if (m_frame->document() && m_frame->document()->securityOrigin()->isSandboxed(SandboxNavigation))
+    if (m_frame->document() && m_frame->document()->isSandboxed(SandboxPopups))
         return continueAfterNavigationPolicy(PolicyIgnore);
 
     m_callback.set(request, formState, frameName, action, function, argument);

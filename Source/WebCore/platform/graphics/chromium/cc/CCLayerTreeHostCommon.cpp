@@ -61,21 +61,6 @@ IntRect CCLayerTreeHostCommon::calculateVisibleRect(const IntRect& targetSurface
     return layerRect;
 }
 
-IntRect CCLayerTreeHostCommon::calculateVisibleLayerRect(const IntRect& targetSurfaceRect, const IntSize& bounds, const IntSize& contentBounds, const TransformationMatrix& tilingTransform)
-{
-    if (targetSurfaceRect.isEmpty() || contentBounds.isEmpty())
-        return targetSurfaceRect;
-
-    const IntRect layerBoundRect = IntRect(IntPoint(), contentBounds);
-    TransformationMatrix transform = tilingTransform;
-
-    transform.scaleNonUniform(bounds.width() / static_cast<double>(contentBounds.width()),
-                              bounds.height() / static_cast<double>(contentBounds.height()));
-    transform.translate(-contentBounds.width() / 2.0, -contentBounds.height() / 2.0);
-
-    return calculateVisibleRect(targetSurfaceRect, layerBoundRect, transform);
-}
-
 static bool isScaleOrTranslation(const TransformationMatrix& m)
 {
     return !m.m12() && !m.m13() && !m.m14()
@@ -85,30 +70,133 @@ static bool isScaleOrTranslation(const TransformationMatrix& m)
 
 }
 
+template<typename LayerType>
+bool layerShouldBeSkipped(LayerType* layer)
+{
+    // Layers can be skipped if any of these conditions are met.
+    //   - does not draw content.
+    //   - is transparent
+    //   - has empty bounds
+    //   - the layer is not double-sided, but its back face is visible.
+    //
+    // Some additional conditions need to be computed at a later point after the recursion is finished.
+    //   - the intersection of render surface content and layer clipRect is empty
+    //   - the visibleLayerRect is empty
+
+    if (!layer->drawsContent() || !layer->opacity() || layer->bounds().isEmpty())
+        return true;
+
+    // The layer should not be drawn if (1) it is not double-sided and (2) the back of the layer is facing the screen.
+    // This second condition is checked by computing the transformed normal of the layer.
+    if (!layer->doubleSided()) {
+        FloatRect layerRect(FloatPoint(0, 0), FloatSize(layer->bounds()));
+        FloatQuad mappedLayer = layer->screenSpaceTransform().mapQuad(FloatQuad(layerRect));
+        FloatSize horizontalDir = mappedLayer.p2() - mappedLayer.p1();
+        FloatSize verticalDir = mappedLayer.p4() - mappedLayer.p1();
+        FloatPoint3D xAxis(horizontalDir.width(), horizontalDir.height(), 0);
+        FloatPoint3D yAxis(verticalDir.width(), verticalDir.height(), 0);
+        FloatPoint3D zAxis = xAxis.cross(yAxis);
+        if (zAxis.z() < 0)
+            return true;
+    }
+
+    return false;
+}
+
 // Recursively walks the layer tree starting at the given node and computes all the
-// necessary transformations, scissor rectangles, render surfaces, etc.
+// necessary transformations, clipRects, render surfaces, etc.
 template<typename LayerType, typename RenderSurfaceType, typename LayerSorter>
 static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, LayerType* rootLayer, const TransformationMatrix& parentMatrix, const TransformationMatrix& fullHierarchyMatrix, Vector<RefPtr<LayerType> >& renderSurfaceLayerList, Vector<RefPtr<LayerType> >& layerList, LayerSorter* layerSorter, int maxTextureSize)
 {
     typedef Vector<RefPtr<LayerType> > LayerList;
-    // Compute the new matrix transformation that will be applied to this layer and
-    // all its children. It's important to remember that the layer's position
-    // is the position of the layer's anchor point. Also, the coordinate system used
-    // assumes that the origin is at the lower left even though the coordinates the browser
-    // gives us for the layers are for the upper left corner. The Y flip happens via
-    // the orthographic projection applied at render time.
-    // The transformation chain for the layer is (using the Matrix x Vector order):
-    // M = M[p] * Tr[l] * M[l] * Tr[c]
-    // Where M[p] is the parent matrix passed down to the function
-    //       Tr[l] is the translation matrix locating the layer's anchor point
-    //       Tr[c] is the translation offset between the anchor point and the center of the layer
-    //       M[l] is the layer's matrix (applied at the anchor point)
-    // This transform creates a coordinate system whose origin is the center of the layer.
-    // Note that the final matrix used by the shader for the layer is P * M * S . This final product
-    // is computed in drawTexturedQuad().
-    // Where: P is the projection matrix
-    //        M is the layer's matrix computed above
+
+    // This function computes the new matrix transformations recursively for this
+    // layer and all its descendants. It also computes the appropriate render surfaces.
+    // Some important points to remember:
+    //
+    // 0. Here, transforms are notated in Matrix x Vector order, and in words we describe what
+    //    the transform does from left to right.
+    //
+    // 1. In our terminology, the "layer origin" refers to the top-left corner of a layer, and the
+    //    positive Y-axis points downwards. This interpretation is valid because the orthographic
+    //    projection applied at draw time flips the Y axis appropriately.
+    //
+    // 2. The anchor point, when given as a FloatPoint object, is specified in "unit layer space",
+    //    where the bounds of the layer map to [0, 1]. However, as a TransformationMatrix object,
+    //    the transform to the anchor point is specified in "pixel layer space", where the bounds
+    //    of the layer map to [bounds.width(), bounds.height()].
+    //
+    // 3. The value of layer->position() is actually the position of the anchor point with respect to the position
+    //    of the layer's origin. That is:
+    //        layer->position() = positionOfLayerOrigin + anchorPoint (in pixel units)
+    //
+    //    Or, equivalently,
+    //        positionOfLayerOrigin.x =  layer->position.x - (layer->anchorPoint.x * bounds.width)
+    //        positionOfLayerOrigin.y =  layer->position.y - (layer->anchorPoint.y * bounds.height)
+    //
+    // 4. Definition of various transforms used:
+    //        M[parent] is the parent matrix, with respect to the nearest render surface, passed down recursively.
+    //        M[root] is the full hierarchy, with respect to the root, passed down recursively.
+    //        Tr[origin] is the translation matrix from the parent's origin to this layer's origin.
+    //        Tr[origin2anchor] is the translation from the layer's origin to its anchor point
+    //        Tr[origin2center] is the translation from the layer's origin to its center
+    //        M[layer] is the layer's matrix (applied at the anchor point)
+    //        M[sublayer] is the layer's sublayer transform (applied at the layer's center)
+    //        Tr[anchor2center] is the translation offset from the anchor point and the center of the layer
+    //
+    //    Some shortcuts and substitutions are used in the code to reduce matrix multiplications:
+    //        Translating by the value of layer->position(), Tr[layer->position()] = Tr[origin] * Tr[origin2anchor]
+    //        Tr[anchor2center] = Tr[origin2anchor].inverse() * Tr[origin2center]
+    //
+    //    Some composite transforms can help in understanding the sequence of transforms:
+    //        compositeLayerTransform = Tr[origin2anchor] * M[layer] * Tr[origin2anchor].inverse()
+    //        compositeSublayerTransform = Tr[origin2center] * M[sublayer] * Tr[origin2center].inverse()
+    //
+    //    In words, the layer transform is applied about the anchor point, and the sublayer transform is
+    //    applied about the center of the layer.
+    //
+    // 5. When a layer (or render surface) is drawn, it is drawn into a "target render surface". Therefore the draw
+    //    transform does not necessarily transform from screen space to local layer space. Instead, the draw transform
+    //    is the transform between the "target render surface space" and local layer space. Note that render surfaces,
+    //    except for the root, also draw themselves into a different target render surface, and so their draw
+    //    transform and origin transforms are also described with respect to the target.
+    //
+    // Using these definitions, then:
+    //
+    // The draw transform for the layer is:
+    //        M[draw] = M[parent] * Tr[origin] * compositeLayerTransform * Tr[origin2center]
+    //                = M[parent] * Tr[layer->position()] * M[layer] * Tr[anchor2center]
+    //
+    //        Interpreting the math left-to-right, this transforms from the layer's render surface to the center of the layer.
+    //
+    // The screen space transform is:
+    //        M[screenspace] = M[root] * Tr[origin] * compositeLayerTransform
+    //                       = M[root] * Tr[layer->position()] * M[layer] * Tr[origin2anchor].inverse()
+    //
+    //        Interpreting the math left-to-right, this transforms from the root layer space to the local layer's origin.
+    //
+    // The transform hierarchy that is passed on to children (i.e. the child's parentMatrix) is:
+    //        M[parent]_for_child = M[parent] * Tr[origin] * compositeLayerTransform * compositeSublayerTransform
+    //                            = M[parent] * Tr[layer->position()] * M[layer] * Tr[anchor2center] * M[sublayer] * Tr[origin2center].inverse()
+    //                            = M[draw] * M[sublayer] * Tr[origin2center].inverse()
+    //
+    //        and a similar matrix for the full hierarchy with respect to the root.
+    //
+    // Finally, note that the final matrix used by the shader for the layer is P * M[draw] * S . This final product
+    // is computed in drawTexturedQuad(), where:
+    //        P is the projection matrix
     //        S is the scale adjustment (to scale up to the layer size)
+    //
+
+    float drawOpacity = layer->opacity();
+    if (layer->parent() && layer->parent()->preserves3D())
+        drawOpacity *= layer->parent()->drawOpacity();
+    // The opacity of a layer always applies to its children (either implicitly
+    // via a render surface or explicitly if the parent preserves 3D), so the
+    // entire subtree can be skipped if this layer is fully transparent.
+    if (!drawOpacity)
+        return;
+
     IntSize bounds = layer->bounds();
     FloatPoint anchorPoint = layer->anchorPoint();
     FloatPoint position = layer->position() - layer->scrollDelta();
@@ -118,11 +206,15 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     float centerOffsetY = (0.5 - anchorPoint.y()) * bounds.height();
 
     TransformationMatrix layerLocalTransform;
-    // LT = Tr[l]
+    // LT = Tr[origin] * M[zoomAnimator]
+    layerLocalTransform.multiply(layer->zoomAnimatorTransform());
+    // LT = Tr[origin] * M[zoomAnimator] * S[pageScaleDelta]
+    layerLocalTransform.scale(layer->pageScaleDelta());
+    // LT = Tr[origin] * M[zoomAnimator] * S[pageScaleDelta] * Tr[origin2anchor]
     layerLocalTransform.translate3d(position.x(), position.y(), layer->anchorPointZ());
-    // LT = Tr[l] * M[l]
+    // LT = Tr[origin] * M[zoomAnimator] * S[pageScaleDelta] * Tr[origin2anchor] * M[layer]
     layerLocalTransform.multiply(layer->transform());
-    // LT = Tr[l] * M[l] * Tr[c]
+    // LT = Tr[origin] * M[zoomAnimator] * S[pageScaleDelta] * Tr[origin2anchor] * M[layer] * Tr[anchor2center]
     layerLocalTransform.translate3d(centerOffsetX, centerOffsetY, -layer->anchorPointZ());
 
     TransformationMatrix combinedTransform = parentMatrix;
@@ -136,7 +228,7 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     TransformationMatrix nextHierarchyMatrix = fullHierarchyMatrix;
 
     // FIXME: This seems like the wrong place to set this
-    layer->setUsesLayerScissor(false);
+    layer->setUsesLayerClipping(false);
 
     // The layer and its descendants render on a new RenderSurface if any of
     // these conditions hold:
@@ -156,7 +248,9 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     if (useSurfaceForMasking || useSurfaceForReflection || useSurfaceForFlatDescendants || ((useSurfaceForClipping || useSurfaceForOpacity) && layer->descendantDrawsContent())) {
         if (!layer->renderSurface())
             layer->createRenderSurface();
+
         RenderSurfaceType* renderSurface = layer->renderSurface();
+        renderSurface->clearLayerList();
 
         // The origin of the new surface is the upper left corner of the layer.
         TransformationMatrix drawTransform;
@@ -165,10 +259,6 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
 
         transformedLayerRect = IntRect(0, 0, bounds.width(), bounds.height());
 
-        // Layer's opacity will be applied when drawing the render surface.
-        float drawOpacity = layer->opacity();
-        if (layer->parent() && layer->parent()->preserves3D())
-            drawOpacity *= layer->parent()->drawOpacity();
         renderSurface->setDrawOpacity(drawOpacity);
         layer->setDrawOpacity(1);
 
@@ -179,12 +269,10 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
         // Update the aggregate hierarchy matrix to include the transform of the newly created RenderSurface.
         nextHierarchyMatrix.multiply(layerOriginTransform);
 
-        // The render surface scissor rect is the scissor rect that needs to
+        // The render surface clipRect contributes to the scissor rect that needs to
         // be applied before drawing the render surface onto its containing
         // surface and is therefore expressed in the parent's coordinate system.
-        renderSurface->setScissorRect(layer->parent() ? layer->parent()->scissorRect() : layer->scissorRect());
-
-        renderSurface->clearLayerList();
+        renderSurface->setClipRect(layer->parent() ? layer->parent()->clipRect() : layer->clipRect());
 
         if (layer->maskLayer()) {
             renderSurface->setMaskLayer(layer->maskLayer());
@@ -197,20 +285,16 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
 
         renderSurfaceLayerList.append(layer);
     } else {
-        // DT = M[p] * LT
         layer->setDrawTransform(combinedTransform);
         transformedLayerRect = enclosingIntRect(layer->drawTransform().mapRect(layerRect));
 
-        layer->setDrawOpacity(layer->opacity());
+        layer->setDrawOpacity(drawOpacity);
 
         if (layer->parent()) {
-            if (layer->parent()->preserves3D())
-               layer->setDrawOpacity(layer->drawOpacity() * layer->parent()->drawOpacity());
-
-            // Layers inherit the scissor rect from their parent.
-            layer->setScissorRect(layer->parent()->scissorRect());
-            if (layer->parent()->usesLayerScissor())
-                layer->setUsesLayerScissor(true);
+            // Layers inherit the clip rect from their parent.
+            layer->setClipRect(layer->parent()->clipRect());
+            if (layer->parent()->usesLayerClipping())
+                layer->setUsesLayerClipping(true);
 
             layer->setTargetRenderSurface(layer->parent()->targetRenderSurface());
         }
@@ -219,16 +303,15 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
             layer->clearRenderSurface();
 
         if (layer->masksToBounds()) {
-            IntRect scissor = transformedLayerRect;
-            scissor.intersect(layer->scissorRect());
-            layer->setScissorRect(scissor);
-            layer->setUsesLayerScissor(true);
+            IntRect clipRect = transformedLayerRect;
+            clipRect.intersect(layer->clipRect());
+            layer->setClipRect(clipRect);
+            layer->setUsesLayerClipping(true);
         }
     }
 
     // Note that at this point, layer->drawTransform() is not necessarily the same as local variable drawTransform.
-    // layerScreenSpaceTransform represents the transform between layer space (in pixels) and screen space.
-    // So we do not include projection P or scaling transform S (see comments above that describe P*M*S).
+    // layerScreenSpaceTransform represents the transform between root layer's "screen space" and local layer space.
     TransformationMatrix layerScreenSpaceTransform = nextHierarchyMatrix;
     layerScreenSpaceTransform.multiply(layer->drawTransform());
     layerScreenSpaceTransform.translate3d(-0.5 * bounds.width(), -0.5 * bounds.height(), 0);
@@ -245,8 +328,8 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     // RenderSurface the layer draws into.
     if (layer->drawsContent()) {
         IntRect drawableContentRect = transformedLayerRect;
-        if (layer->usesLayerScissor())
-            drawableContentRect.intersect(layer->scissorRect());
+        if (layer->usesLayerClipping())
+            drawableContentRect.intersect(layer->clipRect());
         layer->setDrawableContentRect(drawableContentRect);
     } else
         layer->setDrawableContentRect(IntRect());
@@ -267,15 +350,16 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     // Apply the sublayer transform at the center of the layer.
     sublayerMatrix.multiply(layer->sublayerTransform());
 
-    // The origin of the children is the top left corner of the layer, not the
-    // center. The matrix passed down to the children is therefore:
-    // M[s] = M * Tr[-center]
+    // The coordinate system given to children is located at the layer's origin, not the center.
     sublayerMatrix.translate3d(-bounds.width() * 0.5, -bounds.height() * 0.5, 0);
 
     LayerList& descendants = (layer->renderSurface() ? layer->renderSurface()->layerList() : layerList);
-    descendants.append(layer);
 
-    unsigned thisLayerIndex = descendants.size() - 1;
+    // Any layers that are appended after this point are in the layer's subtree and should be included in the sorting process.
+    unsigned sortingStartIndex = descendants.size();
+
+    if (!layerShouldBeSkipped(layer))
+        descendants.append(layer);
 
     for (size_t i = 0; i < layer->children().size(); ++i) {
         LayerType* child = layer->children()[i].get();
@@ -294,6 +378,22 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
         }
     }
 
+    if (layer->renderSurface() && !layer->renderSurface()->layerList().size()) {
+        // If a render surface has no layer list, then it and none of its
+        // children needed to get drawn. Therefore, it should be the last layer
+        // in the render surface list and we can trivially remove it.
+        if (layer != rootLayer) {
+            ASSERT(renderSurfaceLayerList.last() == layer);
+            renderSurfaceLayerList.removeLast();
+            layer->clearRenderSurface();
+        }
+        return;
+    }
+
+    // If neither this layer nor any of its children were added, early out.
+    if (sortingStartIndex == descendants.size())
+        return;
+
     if (layer->masksToBounds() || useSurfaceForMasking) {
         IntRect drawableContentRect = layer->drawableContentRect();
         drawableContentRect.intersect(transformedLayerRect);
@@ -311,9 +411,9 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
         // Don't clip if the layer is reflected as the reflection shouldn't be
         // clipped.
         if (!layer->replicaLayer()) {
-            if (!renderSurface->scissorRect().isEmpty() && !clippedContentRect.isEmpty()) {
-                IntRect surfaceScissorRect = CCLayerTreeHostCommon::calculateVisibleRect(renderSurface->scissorRect(), clippedContentRect, renderSurface->originTransform());
-                clippedContentRect.intersect(surfaceScissorRect);
+            if (!renderSurface->clipRect().isEmpty() && !clippedContentRect.isEmpty()) {
+                IntRect surfaceClipRect = CCLayerTreeHostCommon::calculateVisibleRect(renderSurface->clipRect(), clippedContentRect, renderSurface->originTransform());
+                clippedContentRect.intersect(surfaceClipRect);
             }
             FloatPoint clippedSurfaceCenter = FloatRect(clippedContentRect).center();
             centerOffsetDueToClipping = clippedSurfaceCenter - surfaceCenter;
@@ -330,8 +430,8 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
         renderSurface->setContentRect(clippedContentRect);
 
         // Since the layer starts a new render surface we need to adjust its
-        // scissor rect to be expressed in the new surface's coordinate system.
-        layer->setScissorRect(layer->drawableContentRect());
+        // clipRect to be expressed in the new surface's coordinate system.
+        layer->setClipRect(layer->drawableContentRect());
 
         // Adjust the origin of the transform to be the center of the render surface.
         TransformationMatrix drawTransform = renderSurface->originTransform();
@@ -352,18 +452,39 @@ static void calculateDrawTransformsAndVisibilityInternal(LayerType* layer, Layer
     // If preserves-3d then sort all the descendants in 3D so that they can be
     // drawn from back to front. If the preserves-3d property is also set on the parent then
     // skip the sorting as the parent will sort all the descendants anyway.
-    if (layer->preserves3D() && (!layer->parent() || !layer->parent()->preserves3D()))
-        sortLayers(&descendants.at(thisLayerIndex), descendants.end(), layerSorter);
+    if (descendants.size() && layer->preserves3D() && (!layer->parent() || !layer->parent()->preserves3D()))
+        sortLayers(&descendants.at(sortingStartIndex), descendants.end(), layerSorter);
+}
+
+// FIXME: Instead of using the following function to set visibility rects on a second
+// tree pass, revise calculateVisibleLayerRect() so that this can be done in a single
+// pass inside calculateDrawTransformsAndVisibilityInternal<>().
+template<typename LayerType, typename RenderSurfaceType>
+static void walkLayersAndCalculateVisibleLayerRects(const Vector<RefPtr<LayerType> >& renderSurfaceLayerList)
+{
+    for (int surfaceIndex = renderSurfaceLayerList.size() - 1; surfaceIndex >= 0 ; --surfaceIndex) {
+        LayerType* renderSurfaceLayer = renderSurfaceLayerList[surfaceIndex].get();
+        RenderSurfaceType* renderSurface = renderSurfaceLayer->renderSurface();
+
+        Vector<RefPtr<LayerType> >& layerList = renderSurface->layerList();
+        for (unsigned layerIndex = 0; layerIndex < layerList.size(); ++layerIndex) {
+            LayerType* layer = layerList[layerIndex].get();
+            IntRect visibleLayerRect = CCLayerTreeHostCommon::calculateVisibleLayerRect<LayerType>(layer);
+            layer->setVisibleLayerRect(visibleLayerRect);
+        }
+    }
 }
 
 void CCLayerTreeHostCommon::calculateDrawTransformsAndVisibility(LayerChromium* layer, LayerChromium* rootLayer, const TransformationMatrix& parentMatrix, const TransformationMatrix& fullHierarchyMatrix, Vector<RefPtr<LayerChromium> >& renderSurfaceLayerList, Vector<RefPtr<LayerChromium> >& layerList, int maxTextureSize)
 {
-    return WebCore::calculateDrawTransformsAndVisibilityInternal<LayerChromium, RenderSurfaceChromium, void*>(layer, rootLayer, parentMatrix, fullHierarchyMatrix, renderSurfaceLayerList, layerList, 0, maxTextureSize);
+    WebCore::calculateDrawTransformsAndVisibilityInternal<LayerChromium, RenderSurfaceChromium, void*>(layer, rootLayer, parentMatrix, fullHierarchyMatrix, renderSurfaceLayerList, layerList, 0, maxTextureSize);
+    walkLayersAndCalculateVisibleLayerRects<LayerChromium, RenderSurfaceChromium>(renderSurfaceLayerList);
 }
 
 void CCLayerTreeHostCommon::calculateDrawTransformsAndVisibility(CCLayerImpl* layer, CCLayerImpl* rootLayer, const TransformationMatrix& parentMatrix, const TransformationMatrix& fullHierarchyMatrix, Vector<RefPtr<CCLayerImpl> >& renderSurfaceLayerList, Vector<RefPtr<CCLayerImpl> >& layerList, CCLayerSorter* layerSorter, int maxTextureSize)
 {
-    return calculateDrawTransformsAndVisibilityInternal<CCLayerImpl, CCRenderSurface, CCLayerSorter>(layer, rootLayer, parentMatrix, fullHierarchyMatrix, renderSurfaceLayerList, layerList, layerSorter, maxTextureSize);
+    calculateDrawTransformsAndVisibilityInternal<CCLayerImpl, CCRenderSurface, CCLayerSorter>(layer, rootLayer, parentMatrix, fullHierarchyMatrix, renderSurfaceLayerList, layerList, layerSorter, maxTextureSize);
+    walkLayersAndCalculateVisibleLayerRects<CCLayerImpl, CCRenderSurface>(renderSurfaceLayerList);
 }
 
 } // namespace WebCore

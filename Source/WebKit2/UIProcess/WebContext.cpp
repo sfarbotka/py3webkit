@@ -202,6 +202,11 @@ void WebContext::initializeInjectedBundleClient(const WKContextInjectedBundleCli
     m_injectedBundleClient.initialize(client);
 }
 
+void WebContext::initializeConnectionClient(const WKContextConnectionClient* client)
+{
+    m_connectionClient.initialize(client);
+}
+
 void WebContext::initializeHistoryClient(const WKContextHistoryClient* client)
 {
     m_historyClient.initialize(client);
@@ -224,6 +229,11 @@ void WebContext::languageChanged()
     sendToAllProcesses(Messages::WebProcess::LanguageChanged(defaultLanguage()));
 }
 
+void WebContext::fullKeyboardAccessModeChanged(bool fullKeyboardAccessEnabled)
+{
+    sendToAllProcesses(Messages::WebProcess::FullKeyboardAccessModeChanged(fullKeyboardAccessEnabled));
+}
+
 void WebContext::ensureWebProcess()
 {
     if (m_process)
@@ -244,7 +254,10 @@ void WebContext::ensureWebProcess()
     parameters.applicationCacheDirectory = applicationCacheDirectory();
     parameters.databaseDirectory = databaseDirectory();
     parameters.localStorageDirectory = localStorageDirectory();
+    parameters.webInspectorLocalizedStringsPath = m_overrideWebInspectorLocalizedStringsPath;
+
 #if PLATFORM(MAC)
+    parameters.webInspectorBaseDirectory = m_overrideWebInspectorBaseDirectory;
     parameters.presenterApplicationPid = getpid();
 #endif
 
@@ -258,6 +271,8 @@ void WebContext::ensureWebProcess()
     parameters.iconDatabaseEnabled = !iconDatabasePath().isEmpty();
 
     parameters.textCheckerState = TextChecker::state();
+
+    parameters.fullKeyboardAccessEnabled = WebProcessProxy::fullKeyboardAccessEnabled();
 
     parameters.defaultRequestTimeoutInterval = WebURLRequest::defaultTimeoutInterval();
 
@@ -386,8 +401,15 @@ WebProcessProxy* WebContext::relaunchProcessIfNecessary()
 
 DownloadProxy* WebContext::download(WebPageProxy* initiatingPage, const ResourceRequest& request)
 {
+    ensureWebProcess();
+
     DownloadProxy* download = createDownloadProxy();
     uint64_t initiatingPageID = initiatingPage ? initiatingPage->pageID() : 0;
+
+#if PLATFORM(QT)
+    ASSERT(initiatingPage); // Our design does not suppport downloads without a WebPage.
+    initiatingPage->handleDownloadRequest(download);
+#endif
 
     process()->send(Messages::WebProcess::DownloadRequest(download->downloadID(), initiatingPageID, request), 0);
     return download;
@@ -568,7 +590,8 @@ void WebContext::getPlugins(bool refresh, Vector<PluginInfo>& pluginInfos)
 
 #if PLATFORM(MAC)
     // Add built-in PDF last, so that it's not used when a real plug-in is installed.
-    pluginInfos.append(BuiltInPDFView::pluginInfo());
+    if (!omitPDFSupport())
+        pluginInfos.append(BuiltInPDFView::pluginInfo());
 #endif
 }
 

@@ -31,7 +31,7 @@
 #ifndef WebRange_h
 #define WebRange_h
 
-#include "WebCommon.h"
+#include "platform/WebCommon.h"
 
 #if WEBKIT_IMPLEMENTATION
 namespace WebCore { class Range; }
@@ -40,6 +40,7 @@ namespace WTF { template <typename T> class PassRefPtr; }
 
 namespace WebKit {
 
+class WebFrame;
 class WebNode;
 class WebRangePrivate;
 class WebString;
@@ -69,6 +70,8 @@ public:
 
     WEBKIT_EXPORT WebString toHTMLText() const;
     WEBKIT_EXPORT WebString toPlainText() const;
+
+    WEBKIT_EXPORT static WebRange fromDocumentRange(WebFrame*, int start, int length);
 
 #if WEBKIT_IMPLEMENTATION
     WebRange(const WTF::PassRefPtr<WebCore::Range>&);

@@ -25,6 +25,7 @@
 #include "DateConversion.h"
 #include "DateInstance.h"
 #include "DatePrototype.h"
+#include "JSDateMath.h"
 #include "JSFunction.h"
 #include "JSGlobalObject.h"
 #include "JSString.h"
@@ -32,7 +33,6 @@
 #include "ObjectPrototype.h"
 #include <math.h>
 #include <time.h>
-#include <wtf/DateMath.h>
 #include <wtf/MathExtras.h>
 
 #if OS(WINCE) && !PLATFORM(QT)
@@ -85,14 +85,14 @@ void DateConstructor::finishCreation(ExecState* exec, DatePrototype* datePrototy
     putDirectWithoutTransition(exec->globalData(), exec->propertyNames().length, jsNumber(7), ReadOnly | DontEnum | DontDelete);
 }
 
-bool DateConstructor::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
+bool DateConstructor::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
 {
-    return getStaticFunctionSlot<InternalFunction>(exec, ExecState::dateConstructorTable(exec), this, propertyName, slot);
+    return getStaticFunctionSlot<InternalFunction>(exec, ExecState::dateConstructorTable(exec), jsCast<DateConstructor*>(cell), propertyName, slot);
 }
 
-bool DateConstructor::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool DateConstructor::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
-    return getStaticFunctionDescriptor<InternalFunction>(exec, ExecState::dateConstructorTable(exec), this, propertyName, descriptor);
+    return getStaticFunctionDescriptor<InternalFunction>(exec, ExecState::dateConstructorTable(exec), jsCast<DateConstructor*>(object), propertyName, descriptor);
 }
 
 // ECMA 15.9.3
@@ -156,7 +156,7 @@ static EncodedJSValue JSC_HOST_CALL constructWithDateConstructor(ExecState* exec
     return JSValue::encode(constructDate(exec, asInternalFunction(exec->callee())->globalObject(), args));
 }
 
-ConstructType DateConstructor::getConstructData(ConstructData& constructData)
+ConstructType DateConstructor::getConstructData(JSCell*, ConstructData& constructData)
 {
     constructData.native.function = constructWithDateConstructor;
     return ConstructTypeHost;
@@ -174,11 +174,6 @@ static EncodedJSValue JSC_HOST_CALL callDate(ExecState* exec)
     formatDate(ts, date);
     formatTime(ts, time);
     return JSValue::encode(jsMakeNontrivialString(exec, date, " ", time));
-}
-
-CallType DateConstructor::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
 }
 
 CallType DateConstructor::getCallData(JSCell*, CallData& callData)

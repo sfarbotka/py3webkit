@@ -145,14 +145,14 @@ void StringPrototype::finishCreation(ExecState* exec, JSGlobalObject*, JSString*
     putDirectWithoutTransition(exec->globalData(), exec->propertyNames().length, jsNumber(0), DontDelete | ReadOnly | DontEnum);
 }
 
-bool StringPrototype::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
+bool StringPrototype::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
 {
-    return getStaticFunctionSlot<StringObject>(exec, ExecState::stringTable(exec), this, propertyName, slot);
+    return getStaticFunctionSlot<StringObject>(exec, ExecState::stringTable(exec), jsCast<StringPrototype*>(cell), propertyName, slot);
 }
 
-bool StringPrototype::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool StringPrototype::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
-    return getStaticFunctionDescriptor<StringObject>(exec, ExecState::stringTable(exec), this, propertyName, descriptor);
+    return getStaticFunctionDescriptor<StringObject>(exec, ExecState::stringTable(exec), jsCast<StringPrototype*>(object), propertyName, descriptor);
 }
 
 // ------------------------------ Functions --------------------------
@@ -283,7 +283,27 @@ static ALWAYS_INLINE JSValue jsSpliceSubstrings(ExecState* exec, JSString* sourc
     if (!totalLength)
         return jsString(exec, "");
 
+    if (source.is8Bit()) {
+        LChar* buffer;
+        const LChar* sourceData = source.characters8();
+        RefPtr<StringImpl> impl = StringImpl::tryCreateUninitialized(totalLength, buffer);
+        if (!impl)
+            return throwOutOfMemoryError(exec);
+
+        int bufferPos = 0;
+        for (int i = 0; i < rangeCount; i++) {
+            if (int srcLen = substringRanges[i].length) {
+                StringImpl::copyChars(buffer + bufferPos, sourceData + substringRanges[i].position, srcLen);
+                bufferPos += srcLen;
+            }
+        }
+
+        return jsString(exec, impl.release());
+    }
+
     UChar* buffer;
+    const UChar* sourceData = source.characters16();
+
     RefPtr<StringImpl> impl = StringImpl::tryCreateUninitialized(totalLength, buffer);
     if (!impl)
         return throwOutOfMemoryError(exec);
@@ -291,7 +311,7 @@ static ALWAYS_INLINE JSValue jsSpliceSubstrings(ExecState* exec, JSString* sourc
     int bufferPos = 0;
     for (int i = 0; i < rangeCount; i++) {
         if (int srcLen = substringRanges[i].length) {
-            StringImpl::copyChars(buffer + bufferPos, source.characters() + substringRanges[i].position, srcLen);
+            StringImpl::copyChars(buffer + bufferPos, sourceData + substringRanges[i].position, srcLen);
             bufferPos += srcLen;
         }
     }
@@ -312,13 +332,45 @@ static ALWAYS_INLINE JSValue jsSpliceSubstringsWithSeparators(ExecState* exec, J
     }
 
     int totalLength = 0;
+    bool allSeperators8Bit = true;
     for (int i = 0; i < rangeCount; i++)
         totalLength += substringRanges[i].length;
-    for (int i = 0; i < separatorCount; i++)
+    for (int i = 0; i < separatorCount; i++) {
         totalLength += separators[i].length();
+        if (separators[i].length() && !separators[i].is8Bit())
+            allSeperators8Bit = false;
+    }
 
     if (!totalLength)
         return jsString(exec, "");
+
+    if (source.is8Bit() && allSeperators8Bit) {
+        LChar* buffer;
+        const LChar* sourceData = source.characters8();
+
+        RefPtr<StringImpl> impl = StringImpl::tryCreateUninitialized(totalLength, buffer);
+        if (!impl)
+            return throwOutOfMemoryError(exec);
+
+        int maxCount = max(rangeCount, separatorCount);
+        int bufferPos = 0;
+        for (int i = 0; i < maxCount; i++) {
+            if (i < rangeCount) {
+                if (int srcLen = substringRanges[i].length) {
+                    StringImpl::copyChars(buffer + bufferPos, sourceData + substringRanges[i].position, srcLen);
+                    bufferPos += srcLen;
+                }
+            }
+            if (i < separatorCount) {
+                if (int sepLen = separators[i].length()) {
+                    StringImpl::copyChars(buffer + bufferPos, separators[i].characters8(), sepLen);
+                    bufferPos += sepLen;
+                }
+            }
+        }        
+
+        return jsString(exec, impl.release());
+    }
 
     UChar* buffer;
     RefPtr<StringImpl> impl = StringImpl::tryCreateUninitialized(totalLength, buffer);
@@ -355,13 +407,13 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncReplace(ExecState* exec)
     JSValue replacement = exec->argument(1);
     JSGlobalData* globalData = &exec->globalData();
 
-    UString replacementString;
-    CallData callData;
-    CallType callType = getCallData(replacement, callData);
-    if (callType == CallTypeNone)
-        replacementString = replacement.toString(exec);
-
     if (pattern.inherits(&RegExpObject::s_info)) {
+        UString replacementString;
+        CallData callData;
+        CallType callType = getCallData(replacement, callData);
+        if (callType == CallTypeNone)
+            replacementString = replacement.toString(exec);
+
         const UString& source = sourceVal->value(exec);
         unsigned sourceLen = source.length();
         if (exec->hadException())
@@ -423,48 +475,95 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncReplace(ExecState* exec)
             CachedCall cachedCall(exec, func, argCount);
             if (exec->hadException())
                 return JSValue::encode(jsNull());
-            while (true) {
-                int matchIndex;
-                int matchLen = 0;
-                int* ovector;
-                regExpConstructor->performMatch(*globalData, reg, source, startPosition, matchIndex, matchLen, &ovector);
-                if (matchIndex < 0)
-                    break;
-
-                sourceRanges.append(StringRange(lastIndex, matchIndex - lastIndex));
-
-                int completeMatchStart = ovector[0];
-                unsigned i = 0;
-                for (; i < reg->numSubpatterns() + 1; ++i) {
-                    int matchStart = ovector[i * 2];
-                    int matchLen = ovector[i * 2 + 1] - matchStart;
-
-                    if (matchStart < 0)
-                        cachedCall.setArgument(i, jsUndefined());
-                    else
-                        cachedCall.setArgument(i, jsSubstring(exec, source, matchStart, matchLen));
-                }
-
-                cachedCall.setArgument(i++, jsNumber(completeMatchStart));
-                cachedCall.setArgument(i++, sourceVal);
-
-                cachedCall.setThis(jsUndefined());
-                JSValue result = cachedCall.call();
-                if (LIKELY(result.isString()))
-                    replacements.append(asString(result)->value(exec));
-                else
-                    replacements.append(result.toString(cachedCall.newCallFrame(exec)));
-                if (exec->hadException())
-                    break;
-
-                lastIndex = matchIndex + matchLen;
-                startPosition = lastIndex;
-
-                // special case of empty match
-                if (!matchLen) {
-                    startPosition++;
-                    if (startPosition > sourceLen)
+            if (source.is8Bit()) {
+                while (true) {
+                    int matchIndex;
+                    int matchLen = 0;
+                    int* ovector;
+                    regExpConstructor->performMatch(*globalData, reg, source, startPosition, matchIndex, matchLen, &ovector);
+                    if (matchIndex < 0)
                         break;
+
+                    sourceRanges.append(StringRange(lastIndex, matchIndex - lastIndex));
+
+                    int completeMatchStart = ovector[0];
+                    unsigned i = 0;
+                    for (; i < reg->numSubpatterns() + 1; ++i) {
+                        int matchStart = ovector[i * 2];
+                        int matchLen = ovector[i * 2 + 1] - matchStart;
+
+                        if (matchStart < 0)
+                            cachedCall.setArgument(i, jsUndefined());
+                        else
+                            cachedCall.setArgument(i, jsSubstring8(globalData, source, matchStart, matchLen));
+                    }
+
+                    cachedCall.setArgument(i++, jsNumber(completeMatchStart));
+                    cachedCall.setArgument(i++, sourceVal);
+
+                    cachedCall.setThis(jsUndefined());
+                    JSValue result = cachedCall.call();
+                    if (LIKELY(result.isString()))
+                        replacements.append(asString(result)->value(exec));
+                    else
+                        replacements.append(result.toString(cachedCall.newCallFrame(exec)));
+                    if (exec->hadException())
+                        break;
+
+                    lastIndex = matchIndex + matchLen;
+                    startPosition = lastIndex;
+
+                    // special case of empty match
+                    if (!matchLen) {
+                        startPosition++;
+                        if (startPosition > sourceLen)
+                            break;
+                    }
+                }
+            } else {
+                while (true) {
+                    int matchIndex;
+                    int matchLen = 0;
+                    int* ovector;
+                    regExpConstructor->performMatch(*globalData, reg, source, startPosition, matchIndex, matchLen, &ovector);
+                    if (matchIndex < 0)
+                        break;
+
+                    sourceRanges.append(StringRange(lastIndex, matchIndex - lastIndex));
+
+                    int completeMatchStart = ovector[0];
+                    unsigned i = 0;
+                    for (; i < reg->numSubpatterns() + 1; ++i) {
+                        int matchStart = ovector[i * 2];
+                        int matchLen = ovector[i * 2 + 1] - matchStart;
+
+                        if (matchStart < 0)
+                            cachedCall.setArgument(i, jsUndefined());
+                        else
+                            cachedCall.setArgument(i, jsSubstring(globalData, source, matchStart, matchLen));
+                    }
+
+                    cachedCall.setArgument(i++, jsNumber(completeMatchStart));
+                    cachedCall.setArgument(i++, sourceVal);
+
+                    cachedCall.setThis(jsUndefined());
+                    JSValue result = cachedCall.call();
+                    if (LIKELY(result.isString()))
+                        replacements.append(asString(result)->value(exec));
+                    else
+                        replacements.append(result.toString(cachedCall.newCallFrame(exec)));
+                    if (exec->hadException())
+                        break;
+
+                    lastIndex = matchIndex + matchLen;
+                    startPosition = lastIndex;
+
+                    // special case of empty match
+                    if (!matchLen) {
+                        startPosition++;
+                        if (startPosition > sourceLen)
+                            break;
+                    }
                 }
             }
         } else {
@@ -533,7 +632,19 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncReplace(ExecState* exec)
 
     // Not a regular expression, so treat the pattern as a string.
 
+    // 'patternString' (or 'searchValue', as it is referred to in the spec) is converted before the replacement.
     UString patternString = pattern.toString(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
+    UString replacementString;
+    CallData callData;
+    CallType callType = getCallData(replacement, callData);
+    if (callType == CallTypeNone)
+        replacementString = replacement.toString(exec);
+    if (exec->hadException())
+        return JSValue::encode(jsUndefined());
+
     // Special case for single character patterns without back reference replacement
     if (patternString.length() == 1 && callType == CallTypeNone && replacementString.find('$', 0) == notFound)
         return JSValue::encode(sourceVal->replaceCharacter(exec, patternString[0], replacementString));
@@ -603,8 +714,11 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncCharCodeAt(ExecState* exec)
     JSValue a0 = exec->argument(0);
     if (a0.isUInt32()) {
         uint32_t i = a0.asUInt32();
-        if (i < len)
-            return JSValue::encode(jsNumber(s.characters()[i]));
+        if (i < len) {
+            if (s.is8Bit())
+                return JSValue::encode(jsNumber(s.characters8()[i]));
+            return JSValue::encode(jsNumber(s.characters16()[i]));
+        }
         return JSValue::encode(jsNaN());
     }
     double dpos = a0.toInteger(exec);
@@ -620,11 +734,11 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncConcat(ExecState* exec)
         JSValue v = exec->argument(0);
         return JSValue::encode(v.isString()
             ? jsString(exec, asString(thisValue), asString(v))
-            : jsString(exec, asString(thisValue), v.toString(exec)));
+            : jsString(exec, asString(thisValue), jsString(&exec->globalData(), v.toString(exec))));
     }
     if (thisValue.isUndefinedOrNull()) // CheckObjectCoercible
         return throwVMTypeError(exec);
-    return JSValue::encode(jsString(exec, thisValue));
+    return JSValue::encode(jsStringFromArguments(exec, thisValue));
 }
 
 EncodedJSValue JSC_HOST_CALL stringProtoFuncIndexOf(ExecState* exec)
@@ -675,11 +789,6 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncLastIndexOf(ExecState* exec)
         dpos = 0;
     else if (!(dpos <= len)) // true for NaN
         dpos = len;
-#if OS(SYMBIAN)
-    // Work around for broken NaN compare operator
-    else if (isnan(dpos))
-        dpos = len;
-#endif
 
     size_t result = s.reverseFind(u2, static_cast<unsigned>(dpos));
     if (result == notFound)
@@ -705,8 +814,9 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncMatch(ExecState* exec)
          *  ECMA 15.5.4.12 String.prototype.search (regexp)
          *  If regexp is not an object whose [[Class]] property is "RegExp", it is
          *  replaced with the result of the expression new RegExp(regexp).
+         *  Per ECMA 15.10.4.1, if a0 is undefined substitute the empty string.
          */
-        reg = RegExp::create(exec->globalData(), a0.toString(exec), NoFlags);
+        reg = RegExp::create(exec->globalData(), a0.isUndefined() ? UString("") : a0.toString(exec), NoFlags);
     }
     RegExpConstructor* regExpConstructor = exec->lexicalGlobalObject()->regExpConstructor();
     int pos;
@@ -754,8 +864,9 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSearch(ExecState* exec)
          *  ECMA 15.5.4.12 String.prototype.search (regexp)
          *  If regexp is not an object whose [[Class]] property is "RegExp", it is
          *  replaced with the result of the expression new RegExp(regexp).
+         *  Per ECMA 15.10.4.1, if a0 is undefined substitute the empty string.
          */
-        reg = RegExp::create(exec->globalData(), a0.toString(exec), NoFlags);
+        reg = RegExp::create(exec->globalData(), a0.isUndefined() ? UString("") : a0.toString(exec), NoFlags);
     }
     RegExpConstructor* regExpConstructor = exec->lexicalGlobalObject()->regExpConstructor();
     int pos;
@@ -832,7 +943,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
         if (separatorValue.isUndefined()) {
             // a. Call the [[DefineOwnProperty]] internal method of A with arguments "0",
             //    Property Descriptor {[[Value]]: S, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
-            result->put(exec, 0, jsStringWithReuse(exec, thisValue, input));
+            result->methodTable()->putByIndex(result, exec, 0, jsStringWithReuse(exec, thisValue, input));
             // b. Return A.
             return JSValue::encode(result);
         }
@@ -845,7 +956,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
             //    Property Descriptor {[[Value]]: S, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
             // d. Return A.
             if (reg->match(*globalData, input, 0) < 0)
-                result->put(exec, 0, jsStringWithReuse(exec, thisValue, input));
+                result->methodTable()->putByIndex(result, exec, 0, jsStringWithReuse(exec, thisValue, input));
             return JSValue::encode(result);
         }
 
@@ -876,7 +987,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
             //    through q (exclusive).
             // 2. Call the [[DefineOwnProperty]] internal method of A with arguments ToString(lengthA),
             //    Property Descriptor {[[Value]]: T, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
-            result->put(exec, resultLength, jsSubstring(exec, input, position, matchPosition - position));
+            result->methodTable()->putByIndex(result, exec, resultLength, jsSubstring(exec, input, position, matchPosition - position));
             // 3. Increment lengthA by 1.
             // 4. If lengthA == lim, return A.
             if (++resultLength == limit)
@@ -895,7 +1006,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
                 //   ToString(lengthA), Property Descriptor {[[Value]]: cap[i], [[Writable]]:
                 //   true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
                 int sub = ovector[i * 2];
-                result->put(exec, resultLength, sub < 0 ? jsUndefined() : jsSubstring(exec, input, sub, ovector[i * 2 + 1] - sub));
+                result->methodTable()->putByIndex(result, exec, resultLength, sub < 0 ? jsUndefined() : jsSubstring(exec, input, sub, ovector[i * 2 + 1] - sub));
                 // c Increment lengthA by 1.
                 // d If lengthA == lim, return A.
                 if (++resultLength == limit)
@@ -914,7 +1025,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
         if (separatorValue.isUndefined()) {
             // a.  Call the [[DefineOwnProperty]] internal method of A with arguments "0",
             //     Property Descriptor {[[Value]]: S, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
-            result->put(exec, 0, jsStringWithReuse(exec, thisValue, input));
+            result->methodTable()->putByIndex(result, exec, 0, jsStringWithReuse(exec, thisValue, input));
             // b.  Return A.
             return JSValue::encode(result);
         }
@@ -927,7 +1038,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
             //    Property Descriptor {[[Value]]: S, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
             // d. Return A.
             if (!separator.isEmpty())
-                result->put(exec, 0, jsStringWithReuse(exec, thisValue, input));
+                result->methodTable()->putByIndex(result, exec, 0, jsStringWithReuse(exec, thisValue, input));
             return JSValue::encode(result);
         }
 
@@ -938,7 +1049,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
             ASSERT(limit);
 
             do {
-                result->put(exec, position, jsSingleCharacterSubstring(exec, input, position));
+                result->methodTable()->putByIndex(result, exec, position, jsSingleCharacterSubstring(exec, input, position));
             } while (++position < limit);
 
             return JSValue::encode(result);
@@ -955,7 +1066,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
             //    through q (exclusive).
             // 2. Call the [[DefineOwnProperty]] internal method of A with arguments ToString(lengthA),
             //    Property Descriptor {[[Value]]: T, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
-            result->put(exec, resultLength, jsSubstring(exec, input, position, matchPosition - position));
+            result->methodTable()->putByIndex(result, exec, resultLength, jsSubstring(exec, input, position, matchPosition - position));
             // 3. Increment lengthA by 1.
             // 4. If lengthA == lim, return A.
             if (++resultLength == limit)
@@ -971,7 +1082,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncSplit(ExecState* exec)
     //     through s (exclusive).
     // 15. Call the [[DefineOwnProperty]] internal method of A with arguments ToString(lengthA), Property Descriptor
     //     {[[Value]]: T, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false.
-    result->put(exec, resultLength++, jsSubstring(exec, input, position, input.length() - position));
+    result->methodTable()->putByIndex(result, exec, resultLength++, jsSubstring(exec, input, position, input.length() - position));
 
     // 16. Return A.
     return JSValue::encode(result);
@@ -1078,32 +1189,7 @@ EncodedJSValue JSC_HOST_CALL stringProtoFuncToLowerCase(ExecState* exec)
     if (!sSize)
         return JSValue::encode(sVal);
 
-    const UChar* sData = s.characters();
-    Vector<UChar> buffer(sSize);
-
-    UChar ored = 0;
-    for (int i = 0; i < sSize; i++) {
-        UChar c = sData[i];
-        ored |= c;
-        buffer[i] = toASCIILower(c);
-    }
-    if (!(ored & ~0x7f))
-        return JSValue::encode(jsString(exec, UString::adopt(buffer)));
-
-    bool error;
-    int length = Unicode::toLower(buffer.data(), sSize, sData, sSize, &error);
-    if (error) {
-        buffer.resize(length);
-        length = Unicode::toLower(buffer.data(), length, sData, sSize, &error);
-        if (error)
-            return JSValue::encode(sVal);
-    }
-    if (length == sSize) {
-        if (memcmp(buffer.data(), sData, length * sizeof(UChar)) == 0)
-            return JSValue::encode(sVal);
-    } else
-        buffer.resize(length);
-    return JSValue::encode(jsString(exec, UString::adopt(buffer)));
+    return JSValue::encode(jsString(exec, UString(s.impl()->lower())));
 }
 
 EncodedJSValue JSC_HOST_CALL stringProtoFuncToUpperCase(ExecState* exec)

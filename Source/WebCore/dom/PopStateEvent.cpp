@@ -85,14 +85,9 @@ PassRefPtr<PopStateEvent> PopStateEvent::create(const AtomicString& type, const 
     return adoptRef(new PopStateEvent(type, initializer));
 }
 
-void PopStateEvent::initPopStateEvent(const AtomicString& type, bool canBubble, bool cancelable, const ScriptValue& state)
+const AtomicString& PopStateEvent::interfaceName() const
 {
-    if (dispatched())
-        return;
-
-    initEvent(type, canBubble, cancelable);
-
-    m_state = state;
+    return eventNames().interfaceForPopStateEvent;
 }
 
 } // namespace WebCore

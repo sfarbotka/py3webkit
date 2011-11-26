@@ -33,7 +33,7 @@
 #include <QEvent>
 #include <QMouseEvent>
 #include <QTouchEvent>
-#include <QGuiApplication>
+#include <QApplication>
 
 static inline bool isTouchEvent(const QEvent* event)
 {
@@ -61,8 +61,8 @@ static inline bool isMouseEvent(const QEvent* event)
 }
 
 MiniBrowserApplication::MiniBrowserApplication(int& argc, char** argv)
-    : QApplication(argc, argv, QApplication::GuiServer)
-    , m_windowOptions()
+    : QApplication(argc, argv)
+    , m_windowOptions(this)
     , m_realTouchEventReceived(false)
     , m_pendingFakeTouchEventCount(0)
     , m_isRobotized(false)
@@ -93,12 +93,21 @@ bool MiniBrowserApplication::notify(QObject* target, QEvent* event)
     }
 
     QWindow* targetWindow = qobject_cast<QWindow*>(target);
+    if (event->type() == QEvent::KeyRelease && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Control) {
+        foreach (int id, m_heldTouchPoints)
+            if (m_touchPoints.contains(id))
+                m_touchPoints[id].state = Qt::TouchPointReleased;
+        m_heldTouchPoints.clear();
+        sendTouchEvent(targetWindow);
+    }
+
     if (targetWindow && isMouseEvent(event)) {
         const QMouseEvent* const mouseEvent = static_cast<QMouseEvent*>(event);
 
         QWindowSystemInterface::TouchPoint touchPoint;
         touchPoint.area = QRectF(mouseEvent->globalPos(), QSizeF(1, 1));
         touchPoint.pressure = 1;
+        touchPoint.isPrimary = false;
 
         switch (mouseEvent->type()) {
         case QEvent::MouseButtonPress:
@@ -112,20 +121,24 @@ bool MiniBrowserApplication::notify(QObject* target, QEvent* event)
         case QEvent::MouseMove:
             if (!mouseEvent->buttons() || !m_touchPoints.contains(mouseEvent->buttons()))
                 return QApplication::notify(target, event);
-            touchPoint.state = Qt::TouchPointMoved;
             touchPoint.id = mouseEvent->buttons();
+            touchPoint.state = Qt::TouchPointMoved;
             break;
         case QEvent::MouseButtonRelease:
-            if (mouseEvent->modifiers().testFlag(Qt::ControlModifier))
-                return QApplication::notify(target, event);
             touchPoint.state = Qt::TouchPointReleased;
             touchPoint.id = mouseEvent->button();
+            if (mouseEvent->modifiers().testFlag(Qt::ControlModifier)) {
+                m_heldTouchPoints.insert(touchPoint.id);
+                return QApplication::notify(target, event);
+            }
             break;
         default:
             Q_ASSERT_X(false, "multi-touch mocking", "unhandled event type");
         }
 
         // Update current touch-point
+        if (m_touchPoints.isEmpty())
+            touchPoint.isPrimary = true;
         m_touchPoints.insert(touchPoint.id, touchPoint);
 
         // Update states for all other touch-points
@@ -134,73 +147,63 @@ bool MiniBrowserApplication::notify(QObject* target, QEvent* event)
                 it.value().state = Qt::TouchPointStationary;
         }
 
-        QList<QWindowSystemInterface::TouchPoint> touchPoints = m_touchPoints.values();
-        QWindowSystemInterface::TouchPoint& firstPoint = touchPoints.first();
-        firstPoint.isPrimary = true;
-
-        QEvent::Type eventType;
-        switch (touchPoint.state) {
-        case Qt::TouchPointPressed:
-            eventType = QEvent::TouchBegin;
-            break;
-        case Qt::TouchPointReleased:
-            eventType = QEvent::TouchEnd;
-            break;
-        case Qt::TouchPointStationary:
-            // Don't send the event if nothing changed.
-            return QApplication::notify(target, event);
-        default:
-            eventType = QEvent::TouchUpdate;
-            break;
-        }
-
-        m_pendingFakeTouchEventCount++;
-        QWindowSystemInterface::handleTouchEvent(targetWindow, eventType, QTouchEvent::TouchScreen, touchPoints);
-
-        // Get rid of touch-points that are no longer valid
-        foreach (const QWindowSystemInterface::TouchPoint& touchPoint, m_touchPoints) {
-            if (touchPoint.state ==  Qt::TouchPointReleased)
-                m_touchPoints.remove(touchPoint.id);
-        }
-        return true;
+        sendTouchEvent(targetWindow);
     }
 
     return QApplication::notify(target, event);
 }
 
+void MiniBrowserApplication::sendTouchEvent(QWindow* targetWindow)
+{
+    m_pendingFakeTouchEventCount++;
+    QWindowSystemInterface::handleTouchEvent(targetWindow, QEvent::None, QTouchEvent::TouchScreen, m_touchPoints.values());
+
+    // Get rid of touch-points that are no longer valid
+    foreach (const QWindowSystemInterface::TouchPoint& touchPoint, m_touchPoints) {
+    if (touchPoint.state ==  Qt::TouchPointReleased)
+        m_touchPoints.remove(touchPoint.id);
+    }
+}
+
+static void printHelp(const QString& programName)
+{
+    qDebug() << "Usage:" << programName.toLatin1().data()
+         << "[--touch]"
+         << "[--maximize]"
+         << "[--window-size (width)x(height)]"
+         << "[-r list]"
+         << "[--robot-timeout seconds]"
+         << "[--robot-extra-time seconds]"
+         << "[-v]"
+         << "URL";
+}
+
 void MiniBrowserApplication::handleUserOptions()
 {
     QStringList args = arguments();
-    QFileInfo program(args.at(0));
+    QFileInfo program(args.takeAt(0));
     QString programName("MiniBrowser");
     if (program.exists())
         programName = program.baseName();
 
-    if (args.contains("-help")) {
-        qDebug() << "Usage:" << programName.toLatin1().data()
-             << "[-touch]"
-             << "[-maximize]"
-             << "[-r list]"
-             << "[-robot-timeout seconds]"
-             << "[-robot-extra-time seconds]"
-             << "[-chunked-drawing-area]"
-             << "[-print-loaded-urls]"
-#if defined(QT_CONFIGURED_WITH_OPENGL)
-             << "[-gl-viewport]"
-#endif
-             << "URLs";
+    if (takeOptionFlag(&args, "--help")) {
+        printHelp(programName);
         appQuit(0);
     }
 
-    if (args.contains("-touch"))
-        m_windowOptions.useTouchWebView = true;
+    m_windowOptions.setUseTouchWebView(takeOptionFlag(&args, "--touch"));
+    m_windowOptions.setPrintLoadedUrls(takeOptionFlag(&args, "-v"));
+    m_windowOptions.setStartMaximized(takeOptionFlag(&args, "--maximize"));
 
-    if (args.contains("-maximize"))
-        m_windowOptions.startMaximized = true;
+    if (args.contains("--window-size")) {
+        QString value = takeOptionValue(&args, "--window-size");
+        QStringList list = value.split(QRegExp("\\D+"), QString::SkipEmptyParts);
+        if (list.length() == 2)
+            m_windowOptions.setRequestedWindowSize(QSize(list.at(0).toInt(), list.at(1).toInt()));
+    }
 
-    int robotIndex = args.indexOf("-r");
-    if (robotIndex != -1) {
-        QString listFile = takeOptionValue(&args, robotIndex);
+    if (args.contains("-r")) {
+        QString listFile = takeOptionValue(&args, "-r");
         if (listFile.isEmpty())
             appQuit(1, "-r needs a list file to start in robotized mode");
         if (!QFile::exists(listFile))
@@ -208,24 +211,18 @@ void MiniBrowserApplication::handleUserOptions()
 
         m_isRobotized = true;
         m_urls = QStringList(listFile);
+
+        // toInt() returns 0 if it fails parsing.
+        m_robotTimeoutSeconds = takeOptionValue(&args, "--robot-timeout").toInt();
+        m_robotExtraTimeSeconds = takeOptionValue(&args, "--robot-extra-time").toInt();
     } else {
-        int lastArg = args.lastIndexOf(QRegExp("^-.*"));
-        m_urls = (lastArg != -1) ? args.mid(++lastArg) : args.mid(1);
+        int urlArg = args.indexOf(QRegExp("^[^-].*"));
+        if (urlArg != -1)
+            m_urls += args.takeAt(urlArg);
     }
 
-    int robotTimeoutIndex = args.indexOf("-robot-timeout");
-    if (robotTimeoutIndex != -1)
-        m_robotTimeoutSeconds = takeOptionValue(&args, robotTimeoutIndex).toInt();
-
-    int robotExtraTimeIndex = args.indexOf("-robot-extra-time");
-    if (robotExtraTimeIndex != -1)
-        m_robotExtraTimeSeconds = takeOptionValue(&args, robotExtraTimeIndex).toInt();
-
-    if (args.contains("-print-loaded-urls"))
-        m_windowOptions.printLoadedUrls = true;
-
-#if defined(QT_CONFIGURED_WITH_OPENGL)
-    if (args.contains("-gl-viewport"))
-        m_windowOptions.useQGLWidgetViewport = true;
-#endif
+    if (!args.isEmpty()) {
+        printHelp(programName);
+        appQuit(1, QString("Unknown argument(s): %1").arg(args.join(",")));
+    }
 }

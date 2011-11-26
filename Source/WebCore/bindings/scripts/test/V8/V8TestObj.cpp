@@ -46,6 +46,7 @@
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
 #include <wtf/UnusedParam.h>
+#include <wtf/Vector.h>
 
 #if ENABLE(Condition1)
 #include "V8TestObjectA.h"
@@ -86,7 +87,7 @@ static v8::Handle<v8::Value> readOnlyTestObjAttrAttrGetter(v8::Local<v8::String>
     INC_STATS("DOM.TestObj.readOnlyTestObjAttr._get");
     TestObj* imp = V8TestObj::toNative(info.Holder());
     RefPtr<TestObj> result = imp->readOnlyTestObjAttr();
-    v8::Handle<v8::Value> wrapper = result.get() ? getDOMObjectMap().get(result.get()) : v8::Handle<v8::Value>();
+    v8::Handle<v8::Value> wrapper = result.get() ? V8TestObj::existingWrapper(result.get()) : v8::Handle<v8::Object>();
     if (wrapper.IsEmpty()) {
         wrapper = toV8(result.get());
         if (!wrapper.IsEmpty())
@@ -587,7 +588,7 @@ static v8::Handle<v8::Value> cachedAttribute1AttrGetter(v8::Local<v8::String> na
     INC_STATS("DOM.TestObj.cachedAttribute1._get");
     TestObj* imp = V8TestObj::toNative(info.Holder());
     RefPtr<any> result = imp->cachedAttribute1();
-    v8::Handle<v8::Value> wrapper = result.get() ? getDOMObjectMap().get(result.get()) : v8::Handle<v8::Value>();
+    v8::Handle<v8::Value> wrapper = result.get() ? V8any::existingWrapper(result.get()) : v8::Handle<v8::Object>();
     if (wrapper.IsEmpty()) {
         wrapper = toV8(result.get());
         if (!wrapper.IsEmpty())
@@ -601,7 +602,7 @@ static v8::Handle<v8::Value> cachedAttribute2AttrGetter(v8::Local<v8::String> na
     INC_STATS("DOM.TestObj.cachedAttribute2._get");
     TestObj* imp = V8TestObj::toNative(info.Holder());
     RefPtr<any> result = imp->cachedAttribute2();
-    v8::Handle<v8::Value> wrapper = result.get() ? getDOMObjectMap().get(result.get()) : v8::Handle<v8::Value>();
+    v8::Handle<v8::Value> wrapper = result.get() ? V8any::existingWrapper(result.get()) : v8::Handle<v8::Object>();
     if (wrapper.IsEmpty()) {
         wrapper = toV8(result.get());
         if (!wrapper.IsEmpty())
@@ -639,6 +640,38 @@ static void enabledAtRuntimeAttr2AttrSetter(v8::Local<v8::String> name, v8::Loca
     TestObj* imp = V8TestObj::toNative(info.Holder());
     int v = toInt32(value);
     imp->setEnabledAtRuntimeAttr2(v);
+    return;
+}
+
+static v8::Handle<v8::Value> floatArrayAttrGetter(v8::Local<v8::String> name, const v8::AccessorInfo& info)
+{
+    INC_STATS("DOM.TestObj.floatArray._get");
+    TestObj* imp = V8TestObj::toNative(info.Holder());
+    return v8NumberArray(imp->floatArray());
+}
+
+static void floatArrayAttrSetter(v8::Local<v8::String> name, v8::Local<v8::Value> value, const v8::AccessorInfo& info)
+{
+    INC_STATS("DOM.TestObj.floatArray._set");
+    TestObj* imp = V8TestObj::toNative(info.Holder());
+    Vector<float> v = v8NumberArrayToVector<float>(value);
+    imp->setFloatArray(v);
+    return;
+}
+
+static v8::Handle<v8::Value> doubleArrayAttrGetter(v8::Local<v8::String> name, const v8::AccessorInfo& info)
+{
+    INC_STATS("DOM.TestObj.doubleArray._get");
+    TestObj* imp = V8TestObj::toNative(info.Holder());
+    return v8NumberArray(imp->doubleArray());
+}
+
+static void doubleArrayAttrSetter(v8::Local<v8::String> name, v8::Local<v8::Value> value, const v8::AccessorInfo& info)
+{
+    INC_STATS("DOM.TestObj.doubleArray._set");
+    TestObj* imp = V8TestObj::toNative(info.Holder());
+    Vector<double> v = v8NumberArrayToVector<double>(value);
+    imp->setDoubleArray(v);
     return;
 }
 
@@ -691,6 +724,8 @@ static v8::Handle<v8::Value> voidMethodCallback(const v8::Arguments& args)
 static v8::Handle<v8::Value> voidMethodWithArgsCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.voidMethodWithArgs");
+    if (args.Length() < 3)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined));
@@ -709,6 +744,8 @@ static v8::Handle<v8::Value> intMethodCallback(const v8::Arguments& args)
 static v8::Handle<v8::Value> intMethodWithArgsCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.intMethodWithArgs");
+    if (args.Length() < 3)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined));
@@ -726,22 +763,13 @@ static v8::Handle<v8::Value> objMethodCallback(const v8::Arguments& args)
 static v8::Handle<v8::Value> objMethodWithArgsCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.objMethodWithArgs");
+    if (args.Length() < 3)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined));
     EXCEPTION_BLOCK(TestObj*, objArg, V8TestObj::HasInstance(MAYBE_MISSING_PARAMETER(args, 2, MissingIsUndefined)) ? V8TestObj::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 2, MissingIsUndefined))) : 0);
     return toV8(imp->objMethodWithArgs(intArg, strArg, objArg));
-}
-
-static v8::Handle<v8::Value> methodThatRequiresAllArgsCallback(const v8::Arguments& args)
-{
-    INC_STATS("DOM.TestObj.methodThatRequiresAllArgs");
-    if (args.Length() < 2)
-        return v8::Handle<v8::Value>();
-    TestObj* imp = V8TestObj::toNative(args.Holder());
-    STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined));
-    EXCEPTION_BLOCK(TestObj*, objArg, V8TestObj::HasInstance(MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined)) ? V8TestObj::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined))) : 0);
-    return toV8(imp->methodThatRequiresAllArgs(strArg, objArg));
 }
 
 static v8::Handle<v8::Value> methodThatRequiresAllArgsAndThrowsCallback(const v8::Arguments& args)
@@ -767,9 +795,11 @@ static v8::Handle<v8::Value> methodThatRequiresAllArgsAndThrowsCallback(const v8
 static v8::Handle<v8::Value> serializedValueCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.serializedValue");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     bool serializedArgDidThrow = false;
-    RefPtr<SerializedScriptValue> serializedArg = SerializedScriptValue::create(args[0], serializedArgDidThrow);
+    RefPtr<SerializedScriptValue> serializedArg = SerializedScriptValue::create(args[0], 0, 0, serializedArgDidThrow);
     if (serializedArgDidThrow)
         return v8::Undefined();
     imp->serializedValue(serializedArg);
@@ -779,25 +809,19 @@ static v8::Handle<v8::Value> serializedValueCallback(const v8::Arguments& args)
 static v8::Handle<v8::Value> idbKeyCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.idbKey");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
-    ExceptionCode ec = 0;
-    {
-    RefPtr<IDBKey> key = createIDBKeyFromValue(args[0]);
-    if (UNLIKELY(!key)) {
-        ec = TYPE_MISMATCH_ERR;
-        goto fail;
-    }
+    EXCEPTION_BLOCK(RefPtr<IDBKey>, key, createIDBKeyFromValue(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     imp->idbKey(key);
-    return v8::Handle<v8::Value>();
-    }
-    fail:
-    V8Proxy::setDOMException(ec);
     return v8::Handle<v8::Value>();
 }
 
 static v8::Handle<v8::Value> optionsObjectCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.optionsObject");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(OptionsObject, oo, MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined));
     if (args.Length() <= 1) {
@@ -828,6 +852,8 @@ static v8::Handle<v8::Value> methodWithExceptionCallback(const v8::Arguments& ar
 static v8::Handle<v8::Value> customArgsAndExceptionCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.customArgsAndException");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     ExceptionCode ec = 0;
     {
@@ -883,6 +909,8 @@ static v8::Handle<v8::Value> withDynamicFrameCallback(const v8::Arguments& args)
 static v8::Handle<v8::Value> withDynamicFrameAndArgCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.withDynamicFrameAndArg");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     Frame* enteredFrame = V8Proxy::retrieveFrameForEnteredContext();
@@ -895,6 +923,8 @@ static v8::Handle<v8::Value> withDynamicFrameAndArgCallback(const v8::Arguments&
 static v8::Handle<v8::Value> withDynamicFrameAndOptionalArgCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.withDynamicFrameAndOptionalArg");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     if (args.Length() <= 1) {
@@ -915,6 +945,8 @@ static v8::Handle<v8::Value> withDynamicFrameAndOptionalArgCallback(const v8::Ar
 static v8::Handle<v8::Value> withDynamicFrameAndUserGestureCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.withDynamicFrameAndUserGesture");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     Frame* enteredFrame = V8Proxy::retrieveFrameForEnteredContext();
@@ -927,6 +959,8 @@ static v8::Handle<v8::Value> withDynamicFrameAndUserGestureCallback(const v8::Ar
 static v8::Handle<v8::Value> withDynamicFrameAndUserGestureASADCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.withDynamicFrameAndUserGestureASAD");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     if (args.Length() <= 1) {
@@ -1031,6 +1065,8 @@ static v8::Handle<v8::Value> methodWithOptionalArgCallback(const v8::Arguments& 
 static v8::Handle<v8::Value> methodWithNonOptionalArgAndOptionalArgCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.methodWithNonOptionalArgAndOptionalArg");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, nonOpt, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     if (args.Length() <= 1) {
@@ -1045,6 +1081,8 @@ static v8::Handle<v8::Value> methodWithNonOptionalArgAndOptionalArgCallback(cons
 static v8::Handle<v8::Value> methodWithNonOptionalArgAndTwoOptionalArgsCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.methodWithNonOptionalArgAndTwoOptionalArgs");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, nonOpt, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     if (args.Length() <= 1) {
@@ -1052,6 +1090,10 @@ static v8::Handle<v8::Value> methodWithNonOptionalArgAndTwoOptionalArgsCallback(
         return v8::Handle<v8::Value>();
     }
     EXCEPTION_BLOCK(int, opt1, toInt32(MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined)));
+    if (args.Length() <= 2) {
+        imp->methodWithNonOptionalArgAndTwoOptionalArgs(nonOpt, opt1);
+        return v8::Handle<v8::Value>();
+    }
     EXCEPTION_BLOCK(int, opt2, toInt32(MAYBE_MISSING_PARAMETER(args, 2, MissingIsUndefined)));
     imp->methodWithNonOptionalArgAndTwoOptionalArgs(nonOpt, opt1, opt2);
     return v8::Handle<v8::Value>();
@@ -1060,6 +1102,8 @@ static v8::Handle<v8::Value> methodWithNonOptionalArgAndTwoOptionalArgsCallback(
 static v8::Handle<v8::Value> methodWithCallbackArgCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.methodWithCallbackArg");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     if (args.Length() <= 0 || !args[0]->IsObject())
         return throwError(TYPE_MISMATCH_ERR);
@@ -1071,6 +1115,8 @@ static v8::Handle<v8::Value> methodWithCallbackArgCallback(const v8::Arguments& 
 static v8::Handle<v8::Value> methodWithNonCallbackArgAndCallbackArgCallback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.methodWithNonCallbackArgAndCallbackArg");
+    if (args.Length() < 2)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, nonCallback, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     if (args.Length() <= 1 || !args[1]->IsObject())
@@ -1120,6 +1166,8 @@ static v8::Handle<v8::Value> conditionalMethod3Callback(const v8::Arguments& arg
 static v8::Handle<v8::Value> overloadedMethod1Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.overloadedMethod1");
+    if (args.Length() < 2)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(TestObj*, objArg, V8TestObj::HasInstance(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)) ? V8TestObj::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined))) : 0);
     STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 1, MissingIsUndefined));
@@ -1130,6 +1178,8 @@ static v8::Handle<v8::Value> overloadedMethod1Callback(const v8::Arguments& args
 static v8::Handle<v8::Value> overloadedMethod2Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.overloadedMethod2");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(TestObj*, objArg, V8TestObj::HasInstance(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)) ? V8TestObj::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined))) : 0);
     if (args.Length() <= 1) {
@@ -1144,6 +1194,8 @@ static v8::Handle<v8::Value> overloadedMethod2Callback(const v8::Arguments& args
 static v8::Handle<v8::Value> overloadedMethod3Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.overloadedMethod3");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     STRING_TO_V8PARAMETER_EXCEPTION_BLOCK(V8Parameter<>, strArg, MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined));
     imp->overloadedMethod(strArg);
@@ -1153,6 +1205,8 @@ static v8::Handle<v8::Value> overloadedMethod3Callback(const v8::Arguments& args
 static v8::Handle<v8::Value> overloadedMethod4Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.overloadedMethod4");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, toInt32(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
     imp->overloadedMethod(intArg);
@@ -1162,11 +1216,35 @@ static v8::Handle<v8::Value> overloadedMethod4Callback(const v8::Arguments& args
 static v8::Handle<v8::Value> overloadedMethod5Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.overloadedMethod5");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     if (args.Length() <= 0 || !args[0]->IsObject())
         return throwError(TYPE_MISMATCH_ERR);
     RefPtr<TestCallback> callback = V8TestCallback::create(args[0], getScriptExecutionContext());
     imp->overloadedMethod(callback);
+    return v8::Handle<v8::Value>();
+}
+
+static v8::Handle<v8::Value> overloadedMethod6Callback(const v8::Arguments& args)
+{
+    INC_STATS("DOM.TestObj.overloadedMethod6");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
+    TestObj* imp = V8TestObj::toNative(args.Holder());
+    EXCEPTION_BLOCK(RefPtr<DOMStringList>, listArg, v8ValueToWebCoreDOMStringList(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
+    imp->overloadedMethod(listArg);
+    return v8::Handle<v8::Value>();
+}
+
+static v8::Handle<v8::Value> overloadedMethod7Callback(const v8::Arguments& args)
+{
+    INC_STATS("DOM.TestObj.overloadedMethod7");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
+    TestObj* imp = V8TestObj::toNative(args.Holder());
+    EXCEPTION_BLOCK(RefPtr<DOMStringList>, arrayArg, v8ValueToWebCoreDOMStringList(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)));
+    imp->overloadedMethod(arrayArg);
     return v8::Handle<v8::Value>();
 }
 
@@ -1183,6 +1261,10 @@ static v8::Handle<v8::Value> overloadedMethodCallback(const v8::Arguments& args)
         return overloadedMethod4Callback(args);
     if ((args.Length() == 1 && (args[0]->IsNull() || args[0]->IsObject())))
         return overloadedMethod5Callback(args);
+    if ((args.Length() == 1 && (args[0]->IsNull() || V8DOMStringList::HasInstance(args[0]))))
+        return overloadedMethod6Callback(args);
+    if ((args.Length() == 1 && (args[0]->IsNull() || args[0]->IsArray())))
+        return overloadedMethod7Callback(args);
     V8Proxy::throwTypeError();
     return notHandledByInterceptor();
 }
@@ -1207,6 +1289,8 @@ static v8::Handle<v8::Value> classMethodWithOptionalCallback(const v8::Arguments
 static v8::Handle<v8::Value> enabledAtRuntimeMethod1Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.enabledAtRuntimeMethod1");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, V8int::HasInstance(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)) ? V8int::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined))) : 0);
     imp->enabledAtRuntimeMethod1(intArg);
@@ -1216,6 +1300,8 @@ static v8::Handle<v8::Value> enabledAtRuntimeMethod1Callback(const v8::Arguments
 static v8::Handle<v8::Value> enabledAtRuntimeMethod2Callback(const v8::Arguments& args)
 {
     INC_STATS("DOM.TestObj.enabledAtRuntimeMethod2");
+    if (args.Length() < 1)
+        return throwError("Not enough arguments", V8Proxy::TypeError);
     TestObj* imp = V8TestObj::toNative(args.Holder());
     EXCEPTION_BLOCK(int, intArg, V8int::HasInstance(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined)) ? V8int::toNative(v8::Handle<v8::Object>::Cast(MAYBE_MISSING_PARAMETER(args, 0, MissingIsUndefined))) : 0);
     imp->enabledAtRuntimeMethod2(intArg);
@@ -1311,6 +1397,10 @@ static const BatchedAttribute TestObjAttrs[] = {
     {"cachedAttribute1", TestObjInternal::cachedAttribute1AttrGetter, 0, 0 /* no data */, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     // Attribute 'cachedAttribute2' (Type: 'readonly attribute' ExtAttr: 'CachedAttribute')
     {"cachedAttribute2", TestObjInternal::cachedAttribute2AttrGetter, 0, 0 /* no data */, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    // Attribute 'floatArray' (Type: 'attribute' ExtAttr: '')
+    {"floatArray", TestObjInternal::floatArrayAttrGetter, TestObjInternal::floatArrayAttrSetter, 0 /* no data */, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
+    // Attribute 'doubleArray' (Type: 'attribute' ExtAttr: '')
+    {"doubleArray", TestObjInternal::doubleArrayAttrGetter, TestObjInternal::doubleArrayAttrSetter, 0 /* no data */, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     // Attribute 'description' (Type: 'readonly attribute' ExtAttr: '')
     {"description", TestObjInternal::descriptionAttrGetter, 0, 0 /* no data */, static_cast<v8::AccessControl>(v8::DEFAULT), static_cast<v8::PropertyAttribute>(v8::None), 0 /* on instance */},
     // Attribute 'id' (Type: 'attribute' ExtAttr: '')
@@ -1360,6 +1450,9 @@ static const BatchedCallback TestObjCallbacks[] = {
 };
 
 static const BatchedConstant TestObjConsts[] = {
+#if ENABLE(Condition1)
+    {"CONDITIONAL_CONST", static_cast<signed int>(0)},
+#endif
     {"CONST_VALUE_0", static_cast<signed int>(0)},
     {"CONST_VALUE_1", static_cast<signed int>(1)},
     {"CONST_VALUE_2", static_cast<signed int>(2)},
@@ -1371,9 +1464,13 @@ static const BatchedConstant TestObjConsts[] = {
     {"CONST_VALUE_12", static_cast<signed int>(0x01)},
     {"CONST_VALUE_13", static_cast<signed int>(0X20)},
     {"CONST_VALUE_14", static_cast<signed int>(0x1abc)},
+    {"CONST_JAVASCRIPT", static_cast<signed int>(15)},
 };
 
 
+#if ENABLE(Condition1)
+COMPILE_ASSERT(0 == TestObj::CONDITIONAL_CONST, TestObjEnumCONDITIONAL_CONSTIsWrongUseDontCheckEnums);
+#endif
 COMPILE_ASSERT(0 == TestObj::CONST_VALUE_0, TestObjEnumCONST_VALUE_0IsWrongUseDontCheckEnums);
 COMPILE_ASSERT(1 == TestObj::CONST_VALUE_1, TestObjEnumCONST_VALUE_1IsWrongUseDontCheckEnums);
 COMPILE_ASSERT(2 == TestObj::CONST_VALUE_2, TestObjEnumCONST_VALUE_2IsWrongUseDontCheckEnums);
@@ -1385,6 +1482,7 @@ COMPILE_ASSERT(0xffffffff == TestObj::CONST_VALUE_11, TestObjEnumCONST_VALUE_11I
 COMPILE_ASSERT(0x01 == TestObj::CONST_VALUE_12, TestObjEnumCONST_VALUE_12IsWrongUseDontCheckEnums);
 COMPILE_ASSERT(0X20 == TestObj::CONST_VALUE_13, TestObjEnumCONST_VALUE_13IsWrongUseDontCheckEnums);
 COMPILE_ASSERT(0x1abc == TestObj::CONST_VALUE_14, TestObjEnumCONST_VALUE_14IsWrongUseDontCheckEnums);
+COMPILE_ASSERT(15 == TestObj::CONST_IMPL, TestObjEnumCONST_IMPLIsWrongUseDontCheckEnums);
 
 v8::Handle<v8::Value> V8TestObj::constructorCallback(const v8::Arguments& args)
 {
@@ -1393,6 +1491,8 @@ v8::Handle<v8::Value> V8TestObj::constructorCallback(const v8::Arguments& args)
     if (!args.IsConstructCall())
         return throwError("DOM object constructor cannot be called as a function.", V8Proxy::TypeError);
 
+    if (ConstructorMode::current() == ConstructorMode::WrapExistingObject)
+        return args.Holder();
 
     RefPtr<TestObj> obj = TestObj::create();
 
@@ -1411,6 +1511,7 @@ static v8::Persistent<v8::FunctionTemplate> ConfigureV8TestObjTemplate(v8::Persi
         TestObjAttrs, WTF_ARRAY_LENGTH(TestObjAttrs),
         TestObjCallbacks, WTF_ARRAY_LENGTH(TestObjCallbacks));
     UNUSED_PARAM(defaultSignature); // In some cases, it will not be used.
+    desc->SetCallHandler(V8TestObj::constructorCallback);
     v8::Local<v8::ObjectTemplate> instance = desc->InstanceTemplate();
     v8::Local<v8::ObjectTemplate> proto = desc->PrototypeTemplate();
     UNUSED_PARAM(instance); // In some cases, it will not be used.
@@ -1446,12 +1547,6 @@ static v8::Persistent<v8::FunctionTemplate> ConfigureV8TestObjTemplate(v8::Persi
     v8::Handle<v8::FunctionTemplate> objMethodWithArgsArgv[objMethodWithArgsArgc] = { v8::Handle<v8::FunctionTemplate>(), v8::Handle<v8::FunctionTemplate>(), V8TestObj::GetRawTemplate() };
     v8::Handle<v8::Signature> objMethodWithArgsSignature = v8::Signature::New(desc, objMethodWithArgsArgc, objMethodWithArgsArgv);
     proto->Set(v8::String::New("objMethodWithArgs"), v8::FunctionTemplate::New(TestObjInternal::objMethodWithArgsCallback, v8::Handle<v8::Value>(), objMethodWithArgsSignature));
-
-    // Custom Signature 'methodThatRequiresAllArgs'
-    const int methodThatRequiresAllArgsArgc = 2;
-    v8::Handle<v8::FunctionTemplate> methodThatRequiresAllArgsArgv[methodThatRequiresAllArgsArgc] = { v8::Handle<v8::FunctionTemplate>(), V8TestObj::GetRawTemplate() };
-    v8::Handle<v8::Signature> methodThatRequiresAllArgsSignature = v8::Signature::New(desc, methodThatRequiresAllArgsArgc, methodThatRequiresAllArgsArgv);
-    proto->Set(v8::String::New("methodThatRequiresAllArgs"), v8::FunctionTemplate::New(TestObjInternal::methodThatRequiresAllArgsCallback, v8::Handle<v8::Value>(), methodThatRequiresAllArgsSignature));
 
     // Custom Signature 'methodThatRequiresAllArgsAndThrows'
     const int methodThatRequiresAllArgsAndThrowsArgc = 2;

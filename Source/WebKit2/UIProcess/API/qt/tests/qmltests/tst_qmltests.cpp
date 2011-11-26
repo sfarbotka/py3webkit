@@ -17,5 +17,30 @@
     Boston, MA 02110-1301, USA.
 */
 
+#include "config.h"
+#include "../util.h"
+
+#include <QVarLengthArray>
 #include <QtQuickTest/quicktest.h>
-QUICK_TEST_MAIN(qmltests)
+#include <QtWidgets/QApplication>
+
+int main(int argc, char** argv)
+{
+    QVarLengthArray<char*, 8> arguments;
+    for (int i = 0; i < argc; ++i)
+        arguments.append(argv[i]);
+
+    arguments.append(const_cast<char*>("-import"));
+    arguments.append(const_cast<char*>(IMPORT_DIR));
+
+    argc = arguments.count();
+    argv = arguments.data();
+
+    suppressDebugOutput();
+    addQtWebProcessToPath();
+
+    // Instantiate QApplication to prevent quick_test_main to instantiate a QGuiApplication.
+    // This can be removed as soon as we do not use QtWidgets any more.
+    QApplication app(argc, argv);
+    return quick_test_main(argc, argv, "qmltests", 0, QUICK_TEST_SOURCE_DIR);
+}

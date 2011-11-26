@@ -31,9 +31,9 @@
 #ifndef WebGraphicsContext3D_h
 #define WebGraphicsContext3D_h
 
-#include "WebCommon.h"
 #include "WebNonCopyable.h"
-#include "WebString.h"
+#include "platform/WebCommon.h"
+#include "platform/WebString.h"
 
 #define USE_WGC3D_TYPES
 
@@ -140,6 +140,9 @@ public:
     // Resizes the region into which this WebGraphicsContext3D is drawing.
     virtual void reshape(int width, int height) = 0;
 
+    // GL_CHROMIUM_setVisibility - Changes the visibility of the backbuffer
+    virtual void setVisibilityCHROMIUM(bool visible) = 0;
+
     // Query whether it is built on top of compliant GLES2 implementation.
     virtual bool isGLES2Compliant() = 0;
 
@@ -159,6 +162,9 @@ public:
     // Copies the contents of the off-screen render target used by the WebGL
     // context to the corresponding texture used by the compositor.
     virtual void prepareTexture() = 0;
+
+    // GL_CHROMIUM_post_sub_buffer - Copies part of the back buffer to the front buffer.
+    virtual void postSubBufferCHROMIUM(int x, int y, int width, int height) = 0;
 
     // Synthesizes an OpenGL error which will be returned from a
     // later call to getError. This is used to emulate OpenGL ES
@@ -364,6 +370,13 @@ public:
     // the GL_ARB_robustness extension; specifically, the lost context
     // state is sticky, rather than reported only once.
     virtual WGC3Denum getGraphicsResetStatusARB() { return 0; /* GL_NO_ERROR */ }
+
+    // FIXME: make this function pure virtual once it is implemented in
+    // both command buffer port and in-process port.
+    virtual WebString getTranslatedShaderSourceANGLE(WebGLId shader) { return WebString(); }
+
+    // GL_CHROMIUM_iosurface
+    virtual void texImageIOSurface2DCHROMIUM(WGC3Denum target, WGC3Dint width, WGC3Dint height, WGC3Duint ioSurfaceId, WGC3Duint plane) { }
 
 #if WEBKIT_USING_SKIA
     GrGLInterface* createGrGLInterface();

@@ -49,8 +49,8 @@ _log = logging.getLogger(__name__)
 
 
 class WebKitPort(Port):
-    def __init__(self, **kwargs):
-        Port.__init__(self, **kwargs)
+    def __init__(self, host, **kwargs):
+        Port.__init__(self, host, **kwargs)
 
         # FIXME: Disable pixel tests until they are run by default on build.webkit.org.
         self.set_option_default("pixel_tests", False)
@@ -110,8 +110,15 @@ class WebKitPort(Port):
         return self._executive.run_command(run_script_command, cwd=self._config.webkit_base_dir(), decode_output=decode_output)
 
     def _build_driver(self):
+        # FIXME: We build both DumpRenderTree and WebKitTestRunner for
+        # WebKitTestRunner runs because DumpRenderTree still includes
+        # the DumpRenderTreeSupport module and the TestNetscapePlugin.
+        # These two projects should be factored out into their own
+        # projects.
         try:
-            self._run_script(self._driver_build_script_name())
+            self._run_script("build-dumprendertree")
+            if self.get_option('webkit_test_runner'):
+                self._run_script("build-webkittestrunner")
         except ScriptError:
             _log.error("Failed to build %s" % self.driver_name())
             return False
@@ -125,7 +132,8 @@ class WebKitPort(Port):
         return True
 
     def check_build(self, needs_http):
-        if self.get_option('build') and not self._build_driver():
+        # If we're using a pre-built copy of WebKit (--root), we assume it also includes a build of DRT.
+        if not self.get_option('root') and self.get_option('build') and not self._build_driver():
             return False
         if not self._check_driver():
             return False
@@ -177,44 +185,53 @@ class WebKitPort(Port):
         return process
 
     def _read_image_diff(self, sp):
-        timeout = 2.0
-        deadline = time.time() + timeout
-        output = sp.read_line(timeout)
+        deadline = time.time() + 2.0
+        output = None
         output_image = ""
-        diff_percent = 0
-        while not sp.timed_out and not sp.crashed and output:
+
+        while True:
+            output = sp.read_stdout_line(deadline)
+            if sp.timed_out or sp.crashed or not output:
+                break
+
+            if output.startswith('diff'):  # This is the last line ImageDiff prints.
+                break
+
             if output.startswith('Content-Length'):
                 m = re.match('Content-Length: (\d+)', output)
                 content_length = int(m.group(1))
-                timeout = deadline - time.time()
-                output_image = sp.read(timeout, content_length)
-                output = sp.read_line(timeout)
+                output_image = sp.read_stdout(deadline, content_length)
+                output = sp.read_stdout_line(deadline)
                 break
-            elif output.startswith('diff'):
-                break
-            else:
-                timeout = deadline - time.time()
-                output = sp.read_line(deadline)
 
         if sp.timed_out:
             _log.error("ImageDiff timed out")
         if sp.crashed:
             _log.error("ImageDiff crashed")
+        # FIXME: There is no need to shut down the ImageDiff server after every diff.
         sp.stop()
-        if output.startswith('diff'):
+
+        diff_percent = 0
+        if output and output.startswith('diff'):
             m = re.match('diff: (.+)% (passed|failed)', output)
             if m.group(2) == 'passed':
                 return [None, 0]
             diff_percent = float(m.group(1))
+
         return (output_image, diff_percent)
+
+    def setup_environ_for_server(self, server_name=None):
+        clean_env = super(WebKitPort, self).setup_environ_for_server(server_name)
+        self._copy_value_from_environ_if_set(clean_env, 'WEBKIT_TESTFONTS')
+        return clean_env
 
     def default_results_directory(self):
         # Results are store relative to the built products to make it easy
         # to have multiple copies of webkit checked out and built.
         return self._build_path('layout-test-results')
 
-    def create_driver(self, worker_number):
-        return WebKitDriver(self, worker_number)
+    def _driver_class(self):
+        return WebKitDriver
 
     def _tests_for_other_platforms(self):
         # By default we will skip any directory under LayoutTests/platform
@@ -236,69 +253,77 @@ class WebKitPort(Port):
         try:
             output = self._executive.run_command(supported_features_command, error_handler=Executive.ignore_error)
         except OSError, e:
-            _log.warn("Exception runnig driver: %s, %s.  Driver must be built before calling WebKitPort.test_expectations()." % (supported_features_command, e))
-            return []
+            _log.warn("Exception running driver: %s, %s.  Driver must be built before calling WebKitPort.test_expectations()." % (supported_features_command, e))
+            return None
 
         # Note: win/DumpRenderTree.cpp does not print a leading space before the features_string.
         match_object = re.match("SupportedFeatures:\s*(?P<features_string>.*)\s*", output)
         if not match_object:
-            return []
+            return None
         return match_object.group('features_string').split(' ')
 
-    def _supported_symbol_list(self):
-        """Return the supported symbols of WebCore."""
+    def _webcore_symbols_string(self):
         webcore_library_path = self._path_to_webcore_library()
         if not webcore_library_path:
-            return []
-        symbol_list = ' '.join(os.popen("nm " + webcore_library_path).readlines())
-        return symbol_list
+            return None
+        try:
+            return self._executive.run_command(['nm', webcore_library_path], error_handler=Executive.ignore_error)
+        except OSError, e:
+            _log.warn("Failed to run nm: %s.  Can't determine WebCore supported features." % e)
+        return None
 
-    def _directories_for_features(self):
-        """Return the supported feature dictionary. The keys are the
-        features and the values are the directories in lists."""
-        directories_for_features = {
+    # Ports which use run-time feature detection should define this method and return
+    # a dictionary mapping from Feature Names to skipped directoires.  NRWT will
+    # run DumpRenderTree --print-supported-features and parse the output.
+    # If the Feature Names are not found in the output, the corresponding directories
+    # will be skipped.
+    def _missing_feature_to_skipped_tests(self):
+        """Return the supported feature dictionary. Keys are feature names and values
+        are the lists of directories to skip if the feature name is not matched."""
+        # FIXME: This list matches WebKitWin and should be moved onto the Win port.
+        return {
             "Accelerated Compositing": ["compositing"],
             "3D Rendering": ["animations/3d", "transforms/3d"],
         }
-        return directories_for_features
 
-    def _directories_for_symbols(self):
-        """Return the supported feature dictionary. The keys are the
-        symbols and the values are the directories in lists."""
-        directories_for_symbol = {
+    # Ports which use compile-time feature detection should define this method and return
+    # a dictionary mapping from symbol substrings to possibly disabled test directories.
+    # When the symbol substrings are not matched, the directories will be skipped.
+    # If ports don't ever enable certain features, then those directories can just be
+    # in the Skipped list instead of compile-time-checked here.
+    def _missing_symbol_to_skipped_tests(self):
+        """Return the supported feature dictionary. The keys are symbol-substrings
+        and the values are the lists of directories to skip if that symbol is missing."""
+        return {
             "MathMLElement": ["mathml"],
             "GraphicsLayer": ["compositing"],
             "WebCoreHas3DRendering": ["animations/3d", "transforms/3d"],
             "WebGLShader": ["fast/canvas/webgl", "compositing/webgl", "http/tests/canvas/webgl"],
-            "isXHTMLMPDocument": ["fast/xhtmlmp"],
             "MHTMLArchive": ["mhtml"],
         }
-        return directories_for_symbol
 
     def _skipped_tests_for_unsupported_features(self):
-        """Return the directories of unsupported tests. Search for the
-        symbols in the symbol_list, if found add the corresponding
-        directories to the skipped directory list."""
-        feature_list = self._runtime_feature_list()
-        directories = self._directories_for_features()
+        # If the port supports runtime feature detection, disable any tests
+        # for features missing from the runtime feature list.
+        supported_feature_list = self._runtime_feature_list()
+        # If _runtime_feature_list returns a non-None value, then prefer
+        # runtime feature detection over static feature detection.
+        if supported_feature_list is not None:
+            return reduce(operator.add, [directories for feature, directories in self._missing_feature_to_skipped_tests().items() if feature not in supported_feature_list])
 
-        # if DRT feature detection not supported
-        if not feature_list:
-            feature_list = self._supported_symbol_list()
-            directories = self._directories_for_symbols()
-
-        if not feature_list:
-            return []
-
-        skipped_directories = [directories[feature]
-                              for feature in directories.keys()
-                              if feature not in feature_list]
-        return reduce(operator.add, skipped_directories)
+        # Runtime feature detection not supported, fallback to static dectection:
+        # Disable any tests for symbols missing from the webcore symbol string.
+        webcore_symbols_string = self._webcore_symbols_string()
+        if webcore_symbols_string is not None:
+            return reduce(operator.add, [directories for symbol_substring, directories in self._missing_symbol_to_skipped_tests().items() if symbol_substring not in webcore_symbols_string], [])
+        # Failed to get any runtime or symbol information, don't skip any tests.
+        return []
 
     def _tests_from_skipped_file_contents(self, skipped_file_contents):
         tests_to_skip = []
         for line in skipped_file_contents.split('\n'):
             line = line.strip()
+            line = line.rstrip('/')  # Best to normalize directory names to not include the trailing slash.
             if line.startswith('#') or not len(line):
                 continue
             tests_to_skip.append(line)
@@ -336,7 +361,7 @@ class WebKitPort(Port):
         expectations_path = self.path_to_test_expectations_file()
         if self._filesystem.exists(expectations_path):
             _log.debug("Using test_expectations.txt: %s" % expectations_path)
-            expectations = self._filesystem.read_text_file(expectations_path) + expectations
+            expectations = self._filesystem.read_text_file(expectations_path) + '\n' + expectations
         return expectations
 
     def _skipped_list_as_expectations(self):
@@ -360,8 +385,11 @@ class WebKitPort(Port):
         return tests_to_skip
 
     def _build_path(self, *comps):
-        return self._filesystem.join(self._config.build_directory(
-            self.get_option('configuration')), *comps)
+        # --root is used for running with a pre-built root (like from a nightly zip).
+        build_directory = self.get_option('root')
+        if not build_directory:
+            build_directory = self._config.build_directory(self.get_option('configuration'))
+        return self._filesystem.join(build_directory, *comps)
 
     def _path_to_driver(self):
         return self._build_path(self.driver_name())
@@ -417,9 +445,22 @@ class WebKitPort(Port):
 class WebKitDriver(Driver):
     """WebKit implementation of the DumpRenderTree/WebKitTestRunner interface."""
 
-    def __init__(self, port, worker_number):
-        Driver.__init__(self, port, worker_number)
+    def __init__(self, port, worker_number, pixel_tests):
+        Driver.__init__(self, port, worker_number, pixel_tests)
         self._driver_tempdir = port._filesystem.mkdtemp(prefix='%s-' % self._port.driver_name())
+        # WebKitTestRunner can report back subprocess crashes by printing
+        # "#CRASHED - PROCESSNAME".  Since those can happen at any time
+        # and ServerProcess won't be aware of them (since the actual tool
+        # didn't crash, just a subprocess) we record the crashed subprocess name here.
+        self._crashed_subprocess_name = None
+
+        # stderr reading is scoped on a per-test (not per-block) basis, so we store the accumulated
+        # stderr output, as well as if we've seen #EOF on this driver instance.
+        # FIXME: We should probably remove _read_first_block and _read_optional_image_block and
+        # instead scope these locally in run_test.
+        self.error_from_test = str()
+        self.err_seen_eof = False
+        self._server_process = None
 
     # FIXME: This may be unsafe, as python does not guarentee any ordering of __del__ calls
     # I believe it's possible that self._port or self._port._filesystem may already be destroyed.
@@ -429,7 +470,7 @@ class WebKitDriver(Driver):
     def cmd_line(self):
         cmd = self._command_wrapper(self._port.get_option('wrapper'))
         cmd.append(self._port._path_to_driver())
-        if self._port.get_option('pixel_tests'):
+        if self._pixel_tests:
             cmd.append('--pixel-tests')
         if self._port.get_option('gc_between_tests'):
             cmd.append('--gc-between-tests')
@@ -443,23 +484,44 @@ class WebKitDriver(Driver):
         cmd.append('-')
         return cmd
 
-    def start(self):
+    def _start(self):
         server_name = self._port.driver_name()
         environment = self._port.setup_environ_for_server(server_name)
         environment['DYLD_FRAMEWORK_PATH'] = self._port._build_path()
         # FIXME: We're assuming that WebKitTestRunner checks this DumpRenderTree-named environment variable.
         environment['DUMPRENDERTREE_TEMP'] = str(self._driver_tempdir)
         environment['LOCAL_RESOURCE_ROOT'] = self._port.layout_tests_dir()
+        self._crashed_subprocess_name = None
         self._server_process = server_process.ServerProcess(self._port, server_name, self.cmd_line(), environment)
 
-    def poll(self):
-        return self._server_process.poll()
+    def has_crashed(self):
+        if self._server_process is None:
+            return False
+        return self._server_process.poll() is not None
 
-    def detected_crash(self):
-        # FIXME: We can't just check self._server_process.crashed for two reasons:
-        # 1. WebKitTestRunner will print "#CRASHED - WebProcess" and then exit if the WebProcess crashes.
-        # 2. Adam Roben tells me Windows DumpRenderTree can print "#CRASHED" yet still exit cleanly.
-        return self._server_process.crashed
+    def _check_for_driver_crash(self, error_line):
+        if error_line == "#CRASHED\n":
+            # This is used on Windows to report that the process has crashed
+            # See http://trac.webkit.org/changeset/65537.
+            self._server_process.crash = True
+        elif error_line == "#CRASHED - WebProcess\n":
+            # WebKitTestRunner uses this to report that the WebProcess subprocess crashed.
+            self._subprocess_crashed("WebProcess")
+        return self._detected_crash()
+
+    def _detected_crash(self):
+        # We can't just check self._server_process.crashed because WebKitTestRunner
+        # can report subprocess crashes at any time by printing
+        # "#CRASHED - WebProcess", we want to count those as crashes as well.
+        return self._server_process.crashed or self._crashed_subprocess_name
+
+    def _subprocess_crashed(self, subprocess_name):
+        self._crashed_subprocess_name = subprocess_name
+
+    def _crashed_process_name(self):
+        if not self._detected_crash():
+            return None
+        return self._crashed_subprocess_name or self._server_process.process_name()
 
     def _command_from_driver_input(self, driver_input):
         uri = self._port.test_to_uri(driver_input.test_name)
@@ -471,26 +533,25 @@ class WebKitDriver(Driver):
         return command + "\n"
 
     def _read_first_block(self, deadline):
-        """Reads a block from the server_process and returns (text_content, audio_content)."""
-        if self.detected_crash():
-            return (None, None)
-
+        # returns (text_content, audio_content)
         block = self._read_block(deadline)
         if block.content_type == 'audio/wav':
             return (None, block.decoded_content)
         return (block.decoded_content, None)
 
     def _read_optional_image_block(self, deadline):
-        """Reads a block from the server_process and returns (image, actual_image_hash)."""
-        if self.detected_crash():
-            return (None, None)
-
-        block = self._read_block(deadline)
+        # returns (image, actual_image_hash)
+        block = self._read_block(deadline, wait_for_stderr_eof=True)
         if block.content and block.content_type == 'image/png':
             return (block.decoded_content, block.content_hash)
         return (None, block.content_hash)
 
     def run_test(self, driver_input):
+        if not self._server_process:
+            self._start()
+        self.error_from_test = str()
+        self.err_seen_eof = False
+
         command = self._command_from_driver_input(driver_input)
         start_time = time.time()
         deadline = time.time() + int(driver_input.timeout) / 1000.0
@@ -499,61 +560,85 @@ class WebKitDriver(Driver):
         text, audio = self._read_first_block(deadline)  # First block is either text or audio
         image, actual_image_hash = self._read_optional_image_block(deadline)  # The second (optional) block is image data.
 
-        error_lines = self._server_process.error.splitlines()
-        # FIXME: This is a hack.  It is unclear why sometimes
-        # we do not get any error lines from the server_process
-        # probably we are not flushing stderr.
-        if error_lines and error_lines[-1] == "#EOF":
-            error_lines.pop()  # Remove the expected "#EOF"
-        error = "\n".join(error_lines)
+        # We may not have read all of the output if an error (crash) occured.
+        # Since some platforms output the stacktrace over error, we should
+        # dump any buffered error into self.error_from_test.
+        # FIXME: We may need to also read stderr until the process dies?
+        self.error_from_test += self._server_process.pop_all_buffered_stderr()
 
-        # FIXME: This seems like the wrong section of code to be resetting _server_process.error.
-        self._server_process.error = ""
         return DriverOutput(text, image, actual_image_hash, audio,
-            crash=self.detected_crash(), test_time=time.time() - start_time,
-            timeout=self._server_process.timed_out, error=error)
+            crash=self._detected_crash(), test_time=time.time() - start_time,
+            timeout=self._server_process.timed_out, error=self.error_from_test,
+            crashed_process_name=self._crashed_process_name())
 
-    LENGTH_HEADER = 'Content-Length: '
-    HASH_HEADER = 'ActualHash: '
-    TYPE_HEADER = 'Content-Type: '
-    ENCODING_HEADER = 'Content-Transfer-Encoding: '
+    def _read_header(self, block, line, header_text, header_attr, header_filter=None):
+        if line.startswith(header_text) and getattr(block, header_attr) is None:
+            value = line.split()[1]
+            if header_filter:
+                value = header_filter(value)
+            setattr(block, header_attr, value)
+            return True
+        return False
 
-    def _read_line_until(self, deadline):
-        return self._server_process.read_line(deadline - time.time())
+    def _process_stdout_line(self, block, line):
+        if (self._read_header(block, line, 'Content-Type: ', 'content_type')
+            or self._read_header(block, line, 'Content-Transfer-Encoding: ', 'encoding')
+            or self._read_header(block, line, 'Content-Length: ', '_content_length', int)
+            or self._read_header(block, line, 'ActualHash: ', 'content_hash')):
+            return
+        # Note, we're not reading ExpectedHash: here, but we could.
+        # If the line wasn't a header, we just append it to the content.
+        block.content += line
 
-    def _read_block(self, deadline):
-        content_type = None
-        encoding = None
-        content_hash = None
-        content_length = None
+    def _strip_eof(self, line):
+        if line and line.endswith("#EOF\n"):
+            return line[:-5], True
+        return line, False
 
-        # Content is treated as binary data even though the text output is usually UTF-8.
-        content = str()  # FIXME: Should be bytearray() once we require Python 2.6.
-        line = self._read_line_until(deadline)
-        eof = False
-        while (not self._server_process.timed_out and not self.detected_crash() and not eof):
-            chomped_line = line.rstrip()  # FIXME: This will remove trailing lines from test output.  Is that right?
-            if chomped_line.endswith("#EOF"):
-                eof = True
-                line = chomped_line[:-4]
+    def _read_block(self, deadline, wait_for_stderr_eof=False):
+        block = ContentBlock()
+        out_seen_eof = False
 
-            if line.startswith(self.TYPE_HEADER) and content_type is None:
-                content_type = line.split()[1]
-            elif line.startswith(self.ENCODING_HEADER) and encoding is None:
-                encoding = line.split()[1]
-            elif line.startswith(self.LENGTH_HEADER) and content_length is None:
-                content_length = int(line[len(self.LENGTH_HEADER):])
-                # FIXME: In real HTTP there should probably be a blank line
-                # after headers before content, but DRT doesn't write one.
-                content = self._server_process.read(deadline - time.time(), content_length)
-            elif line.startswith(self.HASH_HEADER):
-                content_hash = line.split()[1]
-            elif line:
-                content += line
-            if eof:
+        while True:
+            if out_seen_eof and (self.err_seen_eof or not wait_for_stderr_eof):
                 break
-            line = self._read_line_until(deadline)
-        return ContentBlock(content_type, encoding, content_hash, content)
+
+            if self.err_seen_eof:
+                out_line = self._server_process.read_stdout_line(deadline)
+                err_line = None
+            elif out_seen_eof:
+                out_line = None
+                err_line = self._server_process.read_stderr_line(deadline)
+            else:
+                out_line, err_line = self._server_process.read_either_stdout_or_stderr_line(deadline)
+
+            if self._server_process.timed_out or self._detected_crash():
+                break
+
+            if out_line:
+                assert not out_seen_eof
+                out_line, out_seen_eof = self._strip_eof(out_line)
+            if err_line:
+                assert not self.err_seen_eof
+                err_line, self.err_seen_eof = self._strip_eof(err_line)
+
+            if out_line:
+                if out_line[-1] != "\n":
+                    _log.error("Last character read from DRT stdout line was not a newline!  This indicates either a NRWT or DRT bug.")
+                content_length_before_header_check = block._content_length
+                self._process_stdout_line(block, out_line)
+                # FIXME: Unlike HTTP, DRT dumps the content right after printing a Content-Length header.
+                # Don't wait until we're done with headers, just read the binary blob right now.
+                if content_length_before_header_check != block._content_length:
+                    block.content = self._server_process.read_stdout(deadline, block._content_length)
+
+            if err_line:
+                if self._check_for_driver_crash(err_line):
+                    break
+                self.error_from_test += err_line
+
+        block.decode_content()
+        return block
 
     def stop(self):
         if self._server_process:
@@ -562,12 +647,17 @@ class WebKitDriver(Driver):
 
 
 class ContentBlock(object):
-    def __init__(self, content_type, encoding, content_hash, content):
-        self.content_type = content_type
-        self.encoding = encoding
-        self.content_hash = content_hash
-        self.content = content
+    def __init__(self):
+        self.content_type = None
+        self.encoding = None
+        self.content_hash = None
+        self._content_length = None
+        # Content is treated as binary data even though the text output is usually UTF-8.
+        self.content = str()  # FIXME: Should be bytearray() once we require Python 2.6.
+        self.decoded_content = None
+
+    def decode_content(self):
         if self.encoding == 'base64':
-            self.decoded_content = base64.b64decode(content)
+            self.decoded_content = base64.b64decode(self.content)
         else:
-            self.decoded_content = content
+            self.decoded_content = self.content

@@ -38,6 +38,11 @@ OBJC_CLASS NSURLDownload;
 OBJC_CLASS WKDownloadAsDelegate;
 #endif
 
+#if PLATFORM(GTK)
+#include <WebCore/ResourceHandle.h>
+#include <WebCore/ResourceHandleClient.h>
+#endif
+
 #if USE(CFNETWORK)
 #include <CFNetwork/CFURLDownloadPriv.h>
 #endif
@@ -93,6 +98,10 @@ public:
     void didCancel(const CoreIPC::DataReference& resumeData);
     void didDecideDestination(const String&, bool allowOverwrite);
 
+#if PLATFORM(QT)
+    void startTransfer(const String& destination);
+#endif
+
 #if USE(CFNETWORK)
     const String& destination() const { return m_destination; }
     DownloadAuthenticationClient* authenticationClient();
@@ -132,6 +141,10 @@ private:
 #endif
 #if PLATFORM(QT)
     QtFileDownloader* m_qtDownloader;
+#endif
+#if PLATFORM(GTK)
+    OwnPtr<WebCore::ResourceHandleClient> m_downloadClient;
+    RefPtr<WebCore::ResourceHandle> m_resourceHandle;
 #endif
 };
 

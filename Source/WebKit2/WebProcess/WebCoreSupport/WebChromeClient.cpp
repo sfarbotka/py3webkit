@@ -58,6 +58,7 @@
 #include <WebCore/NotImplemented.h>
 #include <WebCore/Page.h>
 #include <WebCore/SecurityOrigin.h>
+#include <WebCore/Settings.h>
 
 using namespace WebCore;
 using namespace HTMLNames;
@@ -369,12 +370,12 @@ IntRect WebChromeClient::windowResizerRect() const
     return m_page->windowResizerRect();
 }
 
-void WebChromeClient::invalidateWindow(const IntRect&, bool)
+void WebChromeClient::invalidateRootView(const IntRect&, bool)
 {
     // Do nothing here, there's no concept of invalidating the window in the web process.
 }
 
-void WebChromeClient::invalidateContentsAndWindow(const IntRect& rect, bool)
+void WebChromeClient::invalidateContentsAndRootView(const IntRect& rect, bool)
 {
     if (Document* document = m_page->corePage()->mainFrame()->document()) {
         if (document->printing())
@@ -401,19 +402,19 @@ void WebChromeClient::scroll(const IntSize& scrollOffset, const IntRect& scrollR
     m_page->drawingArea()->scroll(intersection(scrollRect, clipRect), scrollOffset);
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void WebChromeClient::delegatedScrollRequested(const IntPoint& scrollOffset)
 {
     m_page->pageDidRequestScroll(scrollOffset);
 }
 #endif
 
-IntPoint WebChromeClient::screenToWindow(const IntPoint& point) const
+IntPoint WebChromeClient::screenToRootView(const IntPoint& point) const
 {
     return m_page->screenToWindow(point);
 }
 
-IntRect WebChromeClient::windowToScreen(const IntRect& rect) const
+IntRect WebChromeClient::rootViewToScreen(const IntRect& rect) const
 {
     return m_page->windowToScreen(rect);
 }
@@ -426,40 +427,35 @@ PlatformPageClient WebChromeClient::platformPageClient() const
 
 void WebChromeClient::contentsSizeChanged(Frame* frame, const IntSize& size) const
 {
-#if PLATFORM(QT)
-#if ENABLE(TILED_BACKING_STORE)
-    if (frame->page()->mainFrame() == frame)
-        m_page->resizeToContentsIfNeeded();
-#endif
-
-    WebFrame* webFrame = static_cast<WebFrameLoaderClient*>(frame->loader()->client())->webFrame();
-
-    if (!m_page->mainWebFrame() || m_page->mainWebFrame() != webFrame)
-        return;
-
-    m_page->send(Messages::WebPageProxy::DidChangeContentsSize(size));
-#endif
-
-    WebFrame* largestFrame = findLargestFrameInFrameSet(m_page);
-    if (largestFrame != m_cachedFrameSetLargestFrame.get()) {
-        m_cachedFrameSetLargestFrame = largestFrame;
-        m_page->send(Messages::WebPageProxy::FrameSetLargestFrameChanged(largestFrame ? largestFrame->frameID() : 0));
+    if (!m_page->corePage()->settings()->frameFlatteningEnabled()) {
+        WebFrame* largestFrame = findLargestFrameInFrameSet(m_page);
+        if (largestFrame != m_cachedFrameSetLargestFrame.get()) {
+            m_cachedFrameSetLargestFrame = largestFrame;
+            m_page->send(Messages::WebPageProxy::FrameSetLargestFrameChanged(largestFrame ? largestFrame->frameID() : 0));
+        }
     }
 
     if (frame->page()->mainFrame() != frame)
         return;
+
+#if PLATFORM(QT)
+    m_page->send(Messages::WebPageProxy::DidChangeContentsSize(size));
+
+    if (m_page->useFixedLayout())
+        m_page->resizeToContentsIfNeeded();
+#endif
+
     FrameView* frameView = frame->view();
-    if (!frameView)
-        return;
+    if (frameView && !frameView->delegatesScrolling())  {
+        bool hasHorizontalScrollbar = frameView->horizontalScrollbar();
+        bool hasVerticalScrollbar = frameView->verticalScrollbar();
 
-    bool hasHorizontalScrollbar = frameView->horizontalScrollbar();
-    bool hasVerticalScrollbar = frameView->verticalScrollbar();
+        if (hasHorizontalScrollbar != m_cachedMainFrameHasHorizontalScrollbar || hasVerticalScrollbar != m_cachedMainFrameHasVerticalScrollbar) {
+            m_page->send(Messages::WebPageProxy::DidChangeScrollbarsForMainFrame(hasHorizontalScrollbar, hasVerticalScrollbar));
 
-    if (hasHorizontalScrollbar != m_cachedMainFrameHasHorizontalScrollbar || hasVerticalScrollbar != m_cachedMainFrameHasVerticalScrollbar) {
-        m_page->send(Messages::WebPageProxy::DidChangeScrollbarsForMainFrame(hasHorizontalScrollbar, hasVerticalScrollbar));
-        
-        m_cachedMainFrameHasHorizontalScrollbar = hasHorizontalScrollbar;
-        m_cachedMainFrameHasVerticalScrollbar = hasVerticalScrollbar;
+            m_cachedMainFrameHasHorizontalScrollbar = hasHorizontalScrollbar;
+            m_cachedMainFrameHasVerticalScrollbar = hasVerticalScrollbar;
+        }
     }
 }
 
@@ -498,6 +494,7 @@ void WebChromeClient::mouseDidMoveOverElement(const HitTestResult& hitTestResult
 
     WebHitTestResult::Data webHitTestResultData;
     webHitTestResultData.absoluteImageURL = hitTestResult.absoluteImageURL().string();
+    webHitTestResultData.absolutePDFURL = hitTestResult.absolutePDFURL().string();
     webHitTestResultData.absoluteLinkURL = hitTestResult.absoluteLinkURL().string();
     webHitTestResultData.absoluteMediaURL = hitTestResult.absoluteMediaURL().string();
     webHitTestResultData.linkLabel = hitTestResult.textContent();
@@ -614,18 +611,7 @@ void WebChromeClient::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> prpFile
     RefPtr<FileChooser> fileChooser = prpFileChooser;
 
     m_page->setActiveOpenPanelResultListener(WebOpenPanelResultListener::create(m_page, fileChooser.get()));
-    
-    WebOpenPanelParameters::Data parameters;
-    parameters.allowMultipleFiles = fileChooser->settings().allowsMultipleFiles;
-#if ENABLE(DIRECTORY_UPLOAD)
-    parameters.allowsDirectoryUpload = fileChooser->settings().allowsDirectoryUpload;
-#else
-    parameters.allowsDirectoryUpload = false;
-#endif
-    parameters.acceptTypes = fileChooser->settings().acceptTypes;
-    parameters.filenames = fileChooser->settings().selectedFiles;
-
-    m_page->send(Messages::WebPageProxy::RunOpenPanel(static_cast<WebFrameLoaderClient*>(frame->loader()->client())->webFrame()->frameID(), parameters));
+    m_page->send(Messages::WebPageProxy::RunOpenPanel(static_cast<WebFrameLoaderClient*>(frame->loader()->client())->webFrame()->frameID(), fileChooser->settings()));
 }
 
 void WebChromeClient::loadIconForFiles(const Vector<String>& filenames, FileIconLoader* loader)
@@ -750,9 +736,23 @@ void WebChromeClient::setRootFullScreenLayer(GraphicsLayer* layer)
 
 #endif
 
-void WebChromeClient::dispatchViewportDataDidChange(const ViewportArguments& args) const
+void WebChromeClient::dispatchViewportPropertiesDidChange(const ViewportArguments& args) const
 {
-    m_page->send(Messages::WebPageProxy::DidChangeViewportData(args));
+    m_page->send(Messages::WebPageProxy::DidChangeViewportProperties(args));
+
+#if USE(TILED_BACKING_STORE)
+    // When viewport properties change, recalculate and set the new recommended layout size in case of fixed layout rendering.
+    if (m_page->useFixedLayout()) {
+        Settings* settings = m_page->corePage()->settings();
+
+        int minimumLayoutFallbackWidth = std::max(settings->layoutFallbackWidth(), m_page->viewportSize().width());
+
+        IntSize targetLayoutSize = computeViewportAttributes(m_page->corePage()->viewportArguments(),
+            minimumLayoutFallbackWidth, settings->deviceWidth(), settings->deviceHeight(),
+            settings->deviceDPI(), m_page->viewportSize()).layoutSize;
+        m_page->setResizesToContentsUsingLayoutSize(targetLayoutSize);
+    }
+#endif
 }
 
 void WebChromeClient::didStartRubberBandForFrame(Frame*, const IntSize&) const

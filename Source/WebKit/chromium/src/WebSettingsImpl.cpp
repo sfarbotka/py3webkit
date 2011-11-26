@@ -117,7 +117,7 @@ void WebSettingsImpl::setDefaultTextEncodingName(const WebString& encoding)
 
 void WebSettingsImpl::setJavaScriptEnabled(bool enabled)
 {
-    m_settings->setJavaScriptEnabled(enabled);
+    m_settings->setScriptEnabled(enabled);
 }
 
 void WebSettingsImpl::setWebSecurityEnabled(bool enabled)
@@ -284,6 +284,11 @@ void WebSettingsImpl::setOpenGLMultisamplingEnabled(bool enabled)
     m_settings->setOpenGLMultisamplingEnabled(enabled);
 }
 
+void WebSettingsImpl::setPrivilegedWebGLExtensionsEnabled(bool enabled)
+{
+    m_settings->setPrivilegedWebGLExtensionsEnabled(enabled);
+}
+
 void WebSettingsImpl::setShowDebugBorders(bool show)
 {
     m_settings->setShowDebugBorders(show);
@@ -312,6 +317,11 @@ void WebSettingsImpl::setAcceleratedCompositingEnabled(bool enabled)
 void WebSettingsImpl::setForceCompositingMode(bool enabled)
 {
     m_settings->setForceCompositingMode(enabled);
+}
+
+void WebSettingsImpl::setMockScrollbarsEnabled(bool enabled)
+{
+    m_settings->setMockScrollbarsEnabled(enabled);
 }
 
 void WebSettingsImpl::setCompositeToTextureEnabled(bool enabled)
@@ -359,6 +369,11 @@ void WebSettingsImpl::setLegacyAccelerated2dCanvasEnabled(bool enabled)
     m_settings->setLegacyAccelerated2dCanvasEnabled(enabled);
 }
 
+void WebSettingsImpl::setAcceleratedCompositingForFixedPositionEnabled(bool enabled)
+{
+    m_settings->setAcceleratedCompositingForFixedPositionEnabled(enabled);
+}
+
 void WebSettingsImpl::setMinimumAccelerated2dCanvasSize(int numPixels)
 {
     m_settings->setMinimumAccelerated2dCanvasSize(numPixels);
@@ -382,6 +397,11 @@ void WebSettingsImpl::setHyperlinkAuditingEnabled(bool enabled)
 void WebSettingsImpl::setAsynchronousSpellCheckingEnabled(bool enabled)
 {
     m_settings->setAsynchronousSpellCheckingEnabled(enabled);
+}
+
+void WebSettingsImpl::setUnifiedTextCheckerEnabled(bool enabled)
+{
+    m_settings->setUnifiedTextCheckerEnabled(enabled);
 }
 
 void WebSettingsImpl::setCaretBrowsingEnabled(bool enabled)
@@ -444,6 +464,11 @@ void WebSettingsImpl::setHixie76WebSocketProtocolEnabled(bool enabled)
 #else
     UNUSED_PARAM(enabled);
 #endif
+}
+
+void WebSettingsImpl::setVisualWordMovementEnabled(bool enabled)
+{
+    m_settings->setVisualWordMovementEnabled(enabled);
 }
 
 } // namespace WebKit

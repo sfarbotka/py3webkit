@@ -33,7 +33,7 @@
 
 #if ENABLE(VIDEO_TRACK)
 
-#include "ActiveDOMObject.h"
+#include "EventTarget.h"
 #include "TextTrack.h"
 #include <wtf/PassOwnPtr.h>
 #include <wtf/RefCounted.h>
@@ -44,7 +44,7 @@ class DocumentFragment;
 class ScriptExecutionContext;
 class TextTrack;
 
-class TextTrackCue : public RefCounted<TextTrackCue>, public ActiveDOMObject {
+class TextTrackCue : public RefCounted<TextTrackCue>, public EventTarget {
 public:
     static PassRefPtr<TextTrackCue> create(ScriptExecutionContext* context, const String& id, double start, double end, const String& content, const String& settings, bool pauseOnExit)
     {
@@ -57,7 +57,7 @@ public:
     virtual ~TextTrackCue();
 
     TextTrack* track() const;
-    void setTrack(TextTrack*);
+    void setTrack(PassRefPtr<TextTrack>);
 
     String id() const;
     double startTime() const;
@@ -78,29 +78,46 @@ public:
     bool isActive();
     void setIsActive(bool);
     
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const;
+
+    DEFINE_ATTRIBUTE_EVENT_LISTENER(enter);
+    DEFINE_ATTRIBUTE_EVENT_LISTENER(exit);
+
+    using RefCounted<TextTrackCue>::ref;
+    using RefCounted<TextTrackCue>::deref;
+
+protected:
+
+    virtual EventTargetData* eventTargetData();
+    virtual EventTargetData* ensureEventTargetData();
 
 private:
     TextTrackCue(ScriptExecutionContext*, const String& id, double start, double end, const String& content, const String& settings, bool pauseOnExit);
 
     void parseSettings(const String&);
     
-    TextTrack* m_track;
+    virtual void refEventTarget() { ref(); }
+    virtual void derefEventTarget() { deref(); }
     
     String m_id;
     double m_startTime;
     double m_endTime;
     String m_content;
-    bool m_pauseOnExit;
     Direction m_writingDirection;
-    bool m_snapToLines;
     int m_linePosition;
     int m_textPosition;
     int m_cueSize;
     Alignment m_cueAlignment;
     RefPtr<DocumentFragment> m_documentFragment;
+    RefPtr<TextTrack> m_track;
+
+    EventTargetData m_eventTargetData;
+    ScriptExecutionContext* m_scriptExecutionContext;
 
     bool m_isActive;
+    bool m_pauseOnExit;
+    bool m_snapToLines;
 };
 
 } // namespace WebCore

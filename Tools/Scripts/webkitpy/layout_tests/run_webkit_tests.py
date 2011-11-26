@@ -29,8 +29,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""Run layout tests."""
-
 import errno
 import logging
 import optparse
@@ -38,8 +36,7 @@ import os
 import signal
 import sys
 
-from webkitpy import layout_tests
-
+from webkitpy.common.host import Host
 from webkitpy.layout_tests.controllers.manager import Manager, WorkerException
 from webkitpy.layout_tests.views import printing
 
@@ -47,29 +44,13 @@ from webkitpy.layout_tests.views import printing
 _log = logging.getLogger(__name__)
 
 
-def run(port, options, args, regular_output=sys.stderr,
-        buildbot_output=sys.stdout):
-    """Run the tests.
-
-    Args:
-      port: Port object for port-specific behavior
-      options: a dictionary of command line options
-      args: a list of sub directories or files to test
-      regular_output: a stream-like object that we can send logging/debug
-          output to
-      buildbot_output: a stream-like object that we can write all output that
-          is intended to be parsed by the buildbot to
-    Returns:
-      the number of unexpected results that occurred, or -1 if there is an
-          error.
-
-    """
+def run(port, options, args, regular_output=sys.stderr, buildbot_output=sys.stdout):
     warnings = _set_up_derived_options(port, options)
 
-    printer = printing.Printer(port, options, regular_output, buildbot_output,
-                               configure_logging=True)
-    for w in warnings:
-        _log.warning(w)
+    printer = printing.Printer(port, options, regular_output, buildbot_output, configure_logging=True)
+
+    for warning in warnings:
+        _log.warning(warning)
 
     if options.help_printing:
         printer.help_printing()
@@ -78,7 +59,7 @@ def run(port, options, args, regular_output=sys.stderr,
 
     # We wrap any parts of the run that are slow or likely to raise exceptions
     # in a try/finally to ensure that we clean up the logging configuration.
-    num_unexpected_results = -1
+    unexpected_result_count = -1
     try:
         manager = Manager(port, options, printer)
         manager.print_config()
@@ -104,14 +85,13 @@ def run(port, options, args, regular_output=sys.stderr,
 
         result_summary = manager.set_up_run()
         if result_summary:
-            num_unexpected_results = manager.run(result_summary)
+            unexpected_result_count = manager.run(result_summary)
             manager.clean_up_run()
-            _log.debug("Testing completed, Exit status: %d" %
-                       num_unexpected_results)
+            _log.debug("Testing completed, Exit status: %d" % unexpected_result_count)
     finally:
         printer.cleanup()
 
-    return num_unexpected_results
+    return unexpected_result_count
 
 
 def _set_up_derived_options(port, options):
@@ -189,6 +169,9 @@ def parse_args(args=None):
                              const='Release', dest="configuration",
                              help='Set the configuration to Release'),
         # old-run-webkit-tests also accepts -c, --configuration CONFIGURATION.
+        optparse.make_option("--platform", help="Override port/platform being tested (i.e. chromium-mac)"),
+        optparse.make_option('--qt', action='store_const', const='qt', dest="platform", help='Alias for --platform=qt'),
+        optparse.make_option('--gtk', action='store_const', const='gtk', dest="platform", help='Alias for --platform=gtk'),
     ]
 
     print_options = printing.print_options()
@@ -212,13 +195,13 @@ def parse_args(args=None):
         optparse.make_option("--nocheck-sys-deps", action="store_true",
             default=False,
             help="Don't check the system dependencies (themes)"),
-        optparse.make_option("--accelerated-compositing",
+        optparse.make_option("--accelerated-video",
             action="store_true",
-            help="Use hardware-accelerated compositing for rendering"),
-        optparse.make_option("--no-accelerated-compositing",
+            help="Use hardware-accelerated compositing for video"),
+        optparse.make_option("--no-accelerated-video",
             action="store_false",
-            dest="accelerated_compositing",
-            help="Don't use hardware-accelerated compositing for rendering"),
+            dest="accelerated_video",
+            help="Don't use hardware-accelerated compositing for video"),
         optparse.make_option("--threaded-compositing",
             action="store_true",
             help="Use threaded compositing for rendering"),
@@ -252,6 +235,8 @@ def parse_args(args=None):
             help="Run a concurrent JavaScript thread with each test"),
         optparse.make_option("--webkit-test-runner", "-2", action="store_true",
             help="Use WebKitTestRunner rather than DumpRenderTree."),
+        optparse.make_option("--root", action="store",
+            help="Path to a pre-built root of WebKit (for running tests using a nightly build of WebKit)"),
     ]
 
     old_run_webkit_tests_compat = [
@@ -261,14 +246,14 @@ def parse_args(args=None):
     ]
 
     results_options = [
-        # NEED for bots: --use-remote-links-to-tests Link to test files
-        # within the SVN repository in the results.
         optparse.make_option("-p", "--pixel-tests", action="store_true",
             dest="pixel_tests", help="Enable pixel-to-pixel PNG comparisons"),
         optparse.make_option("--no-pixel-tests", action="store_false",
             dest="pixel_tests", help="Disable pixel-to-pixel PNG comparisons"),
         optparse.make_option("--no-sample-on-timeout", action="store_false",
             dest="sample_on_timeout", help="Don't run sample on timeout (Mac OS X only)"),
+        optparse.make_option("--no-ref-tests", action="store_true",
+            dest="no_ref_tests", help="Skip all ref tests"),
         optparse.make_option("--tolerance",
             help="Ignore image differences less than this percentage (some "
                 "ports may ignore this option)", type="float"),
@@ -302,23 +287,13 @@ def parse_args(args=None):
                  "are done"),
         # FIXME: We should have a helper function to do this sort of
         # deprectated mapping and automatically log, etc.
-        optparse.make_option("--noshow-results", action="store_false",
-            dest="show_results",
-            help="Deprecated, same as --no-show-results."),
-        optparse.make_option("--no-launch-safari", action="store_false",
-            dest="show_results",
-            help="old-run-webkit-tests compat, same as --noshow-results."),
-        # old-run-webkit-tests:
-        # --[no-]launch-safari    Launch (or do not launch) Safari to display
-        #                         test results (default: launch)
+        optparse.make_option("--noshow-results", action="store_false", dest="show_results", help="Deprecated, same as --no-show-results."),
+        optparse.make_option("--no-launch-safari", action="store_false", dest="show_results", help="Deprecated, same as --no-show-results."),
         optparse.make_option("--full-results-html", action="store_true",
             default=False,
-            help="Show all failures in results.html, rather than only "
-                 "regressions"),
+            help="Show all failures in results.html, rather than only regressions"),
         optparse.make_option("--clobber-old-results", action="store_true",
             default=False, help="Clobbers test results from previous runs."),
-        optparse.make_option("--platform",
-            help="Override the platform for expected results"),
         optparse.make_option("--no-record-results", action="store_false",
             default=True, dest="record_results",
             help="Don't record the results."),
@@ -392,8 +367,8 @@ def parse_args(args=None):
         optparse.make_option("--exit-after-n-crashes-or-timeouts", type="int",
             default=20, help="Exit after the first N crashes instead of "
             "running all tests"),
-        # FIXME: consider: --iterations n
-        #      Number of times to run the set of tests (e.g. ABCABCABC)
+        optparse.make_option("--iterations", type="int", help="Number of times to run the set of tests (e.g. ABCABCABC)"),
+        optparse.make_option("--repeat-each", type="int", help="Number of times to run each test (e.g. AAABBBCCC)"),
         optparse.make_option("--retry-failures", action="store_true",
             default=True,
             help="Re-try any tests that produce unexpected results (default)"),
@@ -434,7 +409,9 @@ def parse_args(args=None):
 
 def main():
     options, args = parse_args()
-    port = layout_tests.port.get(options.platform, options)
+    host = Host()
+    host._initialize_scm()
+    port = host.port_factory.get(options.platform, options)
     return run(port, options, args)
 
 

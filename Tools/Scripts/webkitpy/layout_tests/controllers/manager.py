@@ -46,7 +46,6 @@ import re
 import sys
 import time
 
-from webkitpy.common.checkout.scm import default_scm
 from webkitpy.layout_tests.controllers import manager_worker_broker
 from webkitpy.layout_tests.controllers import worker
 from webkitpy.layout_tests.layout_package import json_layout_results_generator
@@ -66,6 +65,43 @@ _log = logging.getLogger(__name__)
 BUILDER_BASE_URL = "http://build.chromium.org/buildbot/layout_test_results/"
 
 TestExpectations = test_expectations.TestExpectations
+
+
+def interpret_test_failures(port, test_name, failures):
+    """Interpret test failures and returns a test result as dict.
+
+    Args:
+        port: interface to port-specific hooks
+        test_name: test name relative to layout_tests directory
+        failures: list of test failures
+    Returns:
+        A dictionary like {'is_reftest': True, ...}
+    """
+    test_dict = {}
+    failure_types = [type(failure) for failure in failures]
+    # FIXME: get rid of all this is_* values once there is a 1:1 map between
+    # TestFailure type and test_expectations.EXPECTATION.
+    if test_failures.FailureMissingAudio in failure_types:
+        test_dict['is_missing_audio'] = True
+
+    for failure in failures:
+        if isinstance(failure, test_failures.FailureImageHashMismatch):
+            test_dict['image_diff_percent'] = failure.diff_percent
+        elif isinstance(failure, test_failures.FailureReftestMismatch):
+            test_dict['is_reftest'] = True
+            if failure.reference_filename != port.reftest_expected_filename(test_name):
+                test_dict['ref_file'] = port.relative_test_filename(failure.reference_filename)
+        elif isinstance(failure, test_failures.FailureReftestMismatchDidNotOccur):
+            test_dict['is_mismatch_reftest'] = True
+            if failure.reference_filename != port.reftest_expected_mismatch_filename(test_name):
+                test_dict['ref_file'] = port.relative_test_filename(failure.reference_filename)
+
+    if test_failures.FailureMissingResult in failure_types:
+        test_dict['is_missing_text'] = True
+
+    if test_failures.FailureMissingImage in failure_types or test_failures.FailureMissingImageHash in failure_types:
+        test_dict['is_missing_image'] = True
+    return test_dict
 
 
 # FIXME: This should be on the Manager class (since that's the only caller)
@@ -88,11 +124,12 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
         A dictionary containing a summary of the unexpected results from the
         run, with the following fields:
         'version': a version indicator
-        'fixable': # of fixable tests (NOW - PASS)
-        'skipped': # of skipped tests (NOW & SKIPPED)
-        'num_regressions': # of non-flaky failures
-        'num_flaky': # of flaky failures
-        'num_passes': # of unexpected passes
+        'fixable': The number of fixable tests (NOW - PASS)
+        'skipped': The number of skipped tests (NOW & SKIPPED)
+        'num_regressions': The number of non-flaky failures
+        'num_flaky': The number of flaky failures
+        'num_missing': The number of tests with missing results
+        'num_passes': The number of unexpected passes
         'tests': a dict of tests -> {'expected': '...', 'actual': '...'}
     """
     results = {}
@@ -105,6 +142,7 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
 
     num_passes = 0
     num_flaky = 0
+    num_missing = 0
     num_regressions = 0
     keywords = {}
     for expecation_string, expectation_enum in TestExpectations.EXPECTATIONS.iteritems():
@@ -138,6 +176,9 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
                 continue
         elif result_type == test_expectations.CRASH:
             num_regressions += 1
+        elif result_type == test_expectations.MISSING:
+            if test_name in result_summary.unexpected_results:
+                num_missing += 1
         elif test_name in result_summary.unexpected_results:
             if test_name not in retry_summary.unexpected_results:
                 actual.extend(expectations.get_expectations_string(test_name).split(" "))
@@ -147,9 +188,6 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
                 if result_type != retry_result_type:
                     actual.append(keywords[retry_result_type])
                     num_flaky += 1
-                # FIXME: break MISSING results into a different category
-                elif 'MISSING' in actual:
-                    num_flaky += 1
                 else:
                     num_regressions += 1
 
@@ -158,29 +196,7 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
         # FIXME: Set this correctly once https://webkit.org/b/37739 is fixed
         # and only set it if there actually is stderr data.
 
-        failure_types = [type(f) for f in result.failures]
-        # FIXME: get rid of all this is_* values once there is a 1:1 map between
-        # TestFailure type and test_expectations.EXPECTATION.
-        if test_failures.FailureMissingAudio in failure_types:
-            test_dict['is_missing_audio'] = True
-
-        if test_failures.FailureReftestMismatch in failure_types:
-            test_dict['is_reftest'] = True
-
-        for f in result.failures:
-            if 'is_reftest' in result.failures:
-                test_dict['is_reftest'] = True
-            if type(f) is test_failures.FailureImageHashMismatch:
-                test_dict['image_diff_percent'] = f.diff_percent
-
-        if test_failures.FailureReftestMismatchDidNotOccur in failure_types:
-            test_dict['is_mismatch_reftest'] = True
-
-        if test_failures.FailureMissingResult in failure_types:
-            test_dict['is_missing_text'] = True
-
-        if test_failures.FailureMissingImage in failure_types or test_failures.FailureMissingImageHash in failure_types:
-            test_dict['is_missing_image'] = True
+        test_dict.update(interpret_test_failures(port_obj, test_name, result.failures))
 
         # Store test hierarchically by directory. e.g.
         # foo/bar/baz.html: test_dict
@@ -206,6 +222,7 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
     results['tests'] = tests
     results['num_passes'] = num_passes
     results['num_flaky'] = num_flaky
+    results['num_missing'] = num_missing
     results['num_regressions'] = num_regressions
     results['uses_expectations_file'] = port_obj.uses_test_expectations_file()
     results['interrupted'] = interrupted  # Does results.html have enough information to compute this itself? (by checking total number of results vs. total number of tests?)
@@ -213,14 +230,9 @@ def summarize_results(port_obj, expectations, result_summary, retry_summary, tes
     results['has_wdiff'] = port_obj.wdiff_available()
     results['has_pretty_patch'] = port_obj.pretty_patch_available()
     try:
-        results['revision'] = default_scm().head_svn_revision()
+        results['revision'] = port_obj.host.scm().head_svn_revision()
     except Exception, e:
-        # FIXME: We would like to warn here, but that would cause all passing_run integration tests
-        # to fail, since they assert that we have no logging output.
-        # The revision lookup always fails when running the tests since it tries to read from
-        # "/mock-checkout" using the real file system (since there is no way to mock out detect_scm_system at current).
-        # Once we fix detect_scm_system to use the mock file system we can add this log back.
-        #_log.warn("Failed to determine svn revision for checkout (cwd: %s, webkit_base: %s), leaving 'revision' key blank in full_results.json.\n%s" % (port_obj._filesystem.getcwd(), port_obj.path_from_webkit_base(), e))
+        _log.warn("Failed to determine svn revision for checkout (cwd: %s, webkit_base: %s), leaving 'revision' key blank in full_results.json.\n%s" % (port_obj._filesystem.getcwd(), port_obj.path_from_webkit_base(), e))
         # Handle cases where we're running outside of version control.
         import traceback
         _log.debug('Failed to learn head svn revision:')
@@ -382,6 +394,88 @@ class Manager(object):
             self._options.lint_test_files,
             port.test_expectations_overrides())
 
+    def _split_into_chunks_if_necessary(self, skipped):
+        if not self._options.run_chunk and not self._options.run_part:
+            return skipped
+
+        # If the user specifies they just want to run a subset of the tests,
+        # just grab a subset of the non-skipped tests.
+        chunk_value = self._options.run_chunk or self._options.run_part
+        test_files = self._test_files_list
+        try:
+            (chunk_num, chunk_len) = chunk_value.split(":")
+            chunk_num = int(chunk_num)
+            assert(chunk_num >= 0)
+            test_size = int(chunk_len)
+            assert(test_size > 0)
+        except AssertionError:
+            _log.critical("invalid chunk '%s'" % chunk_value)
+            return None
+
+        # Get the number of tests
+        num_tests = len(test_files)
+
+        # Get the start offset of the slice.
+        if self._options.run_chunk:
+            chunk_len = test_size
+            # In this case chunk_num can be really large. We need
+            # to make the slave fit in the current number of tests.
+            slice_start = (chunk_num * chunk_len) % num_tests
+        else:
+            # Validate the data.
+            assert(test_size <= num_tests)
+            assert(chunk_num <= test_size)
+
+            # To count the chunk_len, and make sure we don't skip
+            # some tests, we round to the next value that fits exactly
+            # all the parts.
+            rounded_tests = num_tests
+            if rounded_tests % test_size != 0:
+                rounded_tests = (num_tests + test_size - (num_tests % test_size))
+
+            chunk_len = rounded_tests / test_size
+            slice_start = chunk_len * (chunk_num - 1)
+            # It does not mind if we go over test_size.
+
+        # Get the end offset of the slice.
+        slice_end = min(num_tests, slice_start + chunk_len)
+
+        files = test_files[slice_start:slice_end]
+
+        tests_run_msg = 'Running: %d tests (chunk slice [%d:%d] of %d)' % ((slice_end - slice_start), slice_start, slice_end, num_tests)
+        self._printer.print_expected(tests_run_msg)
+
+        # If we reached the end and we don't have enough tests, we run some
+        # from the beginning.
+        if slice_end - slice_start < chunk_len:
+            extra = chunk_len - (slice_end - slice_start)
+            extra_msg = ('   last chunk is partial, appending [0:%d]' % extra)
+            self._printer.print_expected(extra_msg)
+            tests_run_msg += "\n" + extra_msg
+            files.extend(test_files[0:extra])
+        tests_run_filename = self._fs.join(self._results_directory, "tests_run.txt")
+        self._fs.write_text_file(tests_run_filename, tests_run_msg)
+
+        len_skip_chunk = int(len(files) * len(skipped) / float(len(self._test_files)))
+        skip_chunk_list = list(skipped)[0:len_skip_chunk]
+        skip_chunk = set(skip_chunk_list)
+
+        # FIXME: This is a total hack.
+        # Update expectations so that the stats are calculated correctly.
+        # We need to pass a list that includes the right # of skipped files
+        # to ParseExpectations so that ResultSummary() will get the correct
+        # stats. So, we add in the subset of skipped files, and then
+        # subtract them back out.
+        self._test_files_list = files + skip_chunk_list
+        self._test_files = set(self._test_files_list)
+
+        self.parse_expectations()
+
+        self._test_files = set(files)
+        self._test_files_list = files
+
+        return skip_chunk
+
     # FIXME: This method is way too long and needs to be broken into pieces.
     def prepare_lists_and_print_output(self):
         """Create appropriate subsets of test lists and returns a
@@ -391,8 +485,7 @@ class Manager(object):
         # Remove skipped - both fixable and ignored - files from the
         # top-level list of files to test.
         num_all_test_files = len(self._test_files)
-        self._printer.print_expected("Found:  %d tests" %
-                                     (len(self._test_files)))
+        self._printer.print_expected("Found:  %d tests" % (len(self._test_files)))
         if not num_all_test_files:
             _log.critical('No tests to run.')
             return None
@@ -418,102 +511,31 @@ class Manager(object):
         else:
             self._test_files_list.sort(key=lambda test: test_key(self._port, test))
 
-        # If the user specifies they just want to run a subset of the tests,
-        # just grab a subset of the non-skipped tests.
-        if self._options.run_chunk or self._options.run_part:
-            chunk_value = self._options.run_chunk or self._options.run_part
-            test_files = self._test_files_list
-            try:
-                (chunk_num, chunk_len) = chunk_value.split(":")
-                chunk_num = int(chunk_num)
-                assert(chunk_num >= 0)
-                test_size = int(chunk_len)
-                assert(test_size > 0)
-            except AssertionError:
-                _log.critical("invalid chunk '%s'" % chunk_value)
-                return None
+        skipped = self._split_into_chunks_if_necessary(skipped)
 
-            # Get the number of tests
-            num_tests = len(test_files)
+        # FIXME: It's unclear how --repeat-each and --iterations should interact with chunks?
+        if self._options.repeat_each:
+            list_with_repetitions = []
+            for test in self._test_files_list:
+                list_with_repetitions += ([test] * self._options.repeat_each)
+            self._test_files_list = list_with_repetitions
 
-            # Get the start offset of the slice.
-            if self._options.run_chunk:
-                chunk_len = test_size
-                # In this case chunk_num can be really large. We need
-                # to make the slave fit in the current number of tests.
-                slice_start = (chunk_num * chunk_len) % num_tests
-            else:
-                # Validate the data.
-                assert(test_size <= num_tests)
-                assert(chunk_num <= test_size)
+        if self._options.iterations:
+            self._test_files_list = self._test_files_list * self._options.iterations
 
-                # To count the chunk_len, and make sure we don't skip
-                # some tests, we round to the next value that fits exactly
-                # all the parts.
-                rounded_tests = num_tests
-                if rounded_tests % test_size != 0:
-                    rounded_tests = (num_tests + test_size -
-                                     (num_tests % test_size))
-
-                chunk_len = rounded_tests / test_size
-                slice_start = chunk_len * (chunk_num - 1)
-                # It does not mind if we go over test_size.
-
-            # Get the end offset of the slice.
-            slice_end = min(num_tests, slice_start + chunk_len)
-
-            files = test_files[slice_start:slice_end]
-
-            tests_run_msg = 'Running: %d tests (chunk slice [%d:%d] of %d)' % (
-                (slice_end - slice_start), slice_start, slice_end, num_tests)
-            self._printer.print_expected(tests_run_msg)
-
-            # If we reached the end and we don't have enough tests, we run some
-            # from the beginning.
-            if slice_end - slice_start < chunk_len:
-                extra = chunk_len - (slice_end - slice_start)
-                extra_msg = ('   last chunk is partial, appending [0:%d]' %
-                            extra)
-                self._printer.print_expected(extra_msg)
-                tests_run_msg += "\n" + extra_msg
-                files.extend(test_files[0:extra])
-            tests_run_filename = self._fs.join(self._results_directory, "tests_run.txt")
-            self._fs.write_text_file(tests_run_filename, tests_run_msg)
-
-            len_skip_chunk = int(len(files) * len(skipped) /
-                                 float(len(self._test_files)))
-            skip_chunk_list = list(skipped)[0:len_skip_chunk]
-            skip_chunk = set(skip_chunk_list)
-
-            # Update expectations so that the stats are calculated correctly.
-            # We need to pass a list that includes the right # of skipped files
-            # to ParseExpectations so that ResultSummary() will get the correct
-            # stats. So, we add in the subset of skipped files, and then
-            # subtract them back out.
-            self._test_files_list = files + skip_chunk_list
-            self._test_files = set(self._test_files_list)
-
-            self.parse_expectations()
-
-            self._test_files = set(files)
-            self._test_files_list = files
-        else:
-            skip_chunk = skipped
-
-        result_summary = ResultSummary(self._expectations, self._test_files | skip_chunk)
+        result_summary = ResultSummary(self._expectations, self._test_files | skipped)
         self._print_expected_results_of_type(result_summary, test_expectations.PASS, "passes")
         self._print_expected_results_of_type(result_summary, test_expectations.FAIL, "failures")
         self._print_expected_results_of_type(result_summary, test_expectations.FLAKY, "flaky")
         self._print_expected_results_of_type(result_summary, test_expectations.SKIP, "skipped")
 
         if self._options.force:
-            self._printer.print_expected('Running all tests, including '
-                                         'skips (--force)')
+            self._printer.print_expected('Running all tests, including skips (--force)')
         else:
             # Note that we don't actually run the skipped tests (they were
             # subtracted out of self._test_files, above), but we stub out the
             # results here so the statistics can remain accurate.
-            for test in skip_chunk:
+            for test in skipped:
                 result = test_results.TestResult(test)
                 result.type = test_expectations.SKIP
                 result_summary.add(result, expected=True)
@@ -870,7 +892,7 @@ class Manager(object):
         Return:
           The number of unexpected results (0 == success)
         """
-        # gather_test_files() must have been called first to initialize us.
+        # collect_tests() must have been called first to initialize us.
         # If we didn't find any files to test, we've errored out already in
         # prepare_lists_and_print_output().
         assert(len(self._test_files))
@@ -924,9 +946,7 @@ class Manager(object):
             if self._options.show_results:
                 self._show_results_html_file(result_summary)
 
-        # Ignore flaky failures and unexpected passes so we don't turn the
-        # bot red for those.
-        return unexpected_results['num_regressions']
+        return self._port.exit_code_from_summarized_results(unexpected_results)
 
     def start_servers_with_lock(self):
         assert(self._options.http)
@@ -1061,7 +1081,8 @@ class Manager(object):
         json_results_generator.write_json(self._fs, times_trie, times_json_path)
 
         full_results_path = self._fs.join(self._results_directory, "full_results.json")
-        json_results_generator.write_json(self._fs, summarized_results, full_results_path)
+        # We write full_results.json out as jsonp because we need to load it from a file url and Chromium doesn't allow that.
+        json_results_generator.write_json(self._fs, summarized_results, full_results_path, callback="ADD_RESULTS")
 
         generator = json_layout_results_generator.JSONLayoutResultsGenerator(
             self._port, self._options.builder_name, self._options.build_name,

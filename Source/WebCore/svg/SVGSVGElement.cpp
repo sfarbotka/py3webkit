@@ -87,8 +87,6 @@ inline SVGSVGElement::SVGSVGElement(const QualifiedName& tagName, Document* doc)
     , m_height(LengthModeHeight, "100%") 
     , m_useCurrentView(false)
     , m_timeContainer(SMILTimeContainer::create(this))
-    , m_containerSize(300, 150)
-    , m_hasSetContainerSize(false)
 {
     ASSERT(hasTagName(SVGNames::svgTag));
     registerAnimatedPropertiesForSVGSVGElement();
@@ -146,30 +144,14 @@ void SVGSVGElement::setContentStyleType(const AtomicString& type)
 
 FloatRect SVGSVGElement::viewport() const
 {
+    // FIXME: This method doesn't follow the spec and is basically untested. Parent documents are not considered here.
+    SVGLengthContext lengthContext(this);
     FloatRect viewRectangle;
     if (!isOutermostSVG())
-        viewRectangle.setLocation(FloatPoint(x().value(this), y().value(this)));
+        viewRectangle.setLocation(FloatPoint(x().value(lengthContext), y().value(lengthContext)));
 
-    viewRectangle.setSize(FloatSize(width().value(this), height().value(this)));    
+    viewRectangle.setSize(FloatSize(width().value(lengthContext), height().value(lengthContext)));    
     return viewBoxToViewTransform(viewRectangle.width(), viewRectangle.height()).mapRect(viewRectangle);
-}
-
-int SVGSVGElement::relativeWidthValue() const
-{
-    SVGLength w = width();
-    if (w.unitType() != LengthTypePercentage)
-        return 0;
-
-    return static_cast<int>(w.valueAsPercentage() * m_containerSize.width());
-}
-
-int SVGSVGElement::relativeHeightValue() const
-{
-    SVGLength h = height();
-    if (h.unitType() != LengthTypePercentage)
-        return 0;
-
-    return static_cast<int>(h.valueAsPercentage() * m_containerSize.height());
 }
 
 float SVGSVGElement::pixelUnitToMillimeterX() const
@@ -472,13 +454,16 @@ SVGTransform SVGSVGElement::createSVGTransformFromMatrix(const SVGMatrix& matrix
 
 AffineTransform SVGSVGElement::localCoordinateSpaceTransform(SVGLocatable::CTMScope mode) const
 {
+    // This method resolves length manually, w/o involving the render tree. This is desired, as getCTM()/getScreenCTM()/.. have to work without a renderer.
+    SVGLengthContext lengthContext(this);
+
     AffineTransform viewBoxTransform;
     if (attributes()->getAttributeItem(SVGNames::viewBoxAttr))
-        viewBoxTransform = viewBoxToViewTransform(width().value(this), height().value(this));
+        viewBoxTransform = viewBoxToViewTransform(width().value(lengthContext), height().value(lengthContext));
 
     AffineTransform transform;
     if (!isOutermostSVG())
-        transform.translate(x().value(this), y().value(this));
+        transform.translate(x().value(lengthContext), y().value(lengthContext));
     else if (mode == SVGLocatable::ScreenScope) {
         if (RenderObject* renderer = this->renderer()) {
             // Translate in our CSS parent coordinate space
@@ -571,15 +556,37 @@ bool SVGSVGElement::isOutermostSVG() const
     return !parentNode()->isSVGElement();
 }
 
-FloatRect SVGSVGElement::currentViewBoxRect() const
+FloatRect SVGSVGElement::currentViewBoxRect(CalculateViewBoxMode mode) const
 {
+    // This method resolves length manually, w/o involving the render tree. This is desired, as getCTM()/getScreenCTM()/.. have to work without a renderer.
+    SVGLengthContext lengthContext(this);
+
+    // FIXME: The interaction of 'currentView' and embedding SVGs in other documents, is untested and unspecified.
     if (useCurrentView()) {
         if (SVGViewSpec* view = currentView()) // what if we should use it but it is not set?
             return view->viewBox();
         return FloatRect();
     }
 
-    return viewBox();
+    bool isEmbeddedThroughSVGImage = renderer() && renderer()->isSVGRoot() ? toRenderSVGRoot(renderer())->isEmbeddedThroughSVGImage() : false;
+    bool hasFixedSize = width().unitType() != LengthTypePercentage && height().unitType() != LengthTypePercentage;
+
+    FloatRect useViewBox = viewBox();
+    if (useViewBox.isEmpty()) {
+        // If no viewBox is specified but non-relative width/height values, then we
+        // should always synthesize a viewBox if we're embedded through a SVGImage.
+        if (hasFixedSize && isEmbeddedThroughSVGImage)
+            return FloatRect(0, 0, width().value(lengthContext), height().value(lengthContext));
+        return FloatRect();
+    }
+
+    // If a viewBox is specified and non-relative width/height values, then the host document only
+    // uses the width/height values to figure out the intrinsic size when embedding us, whereas the
+    // embedded document sees specified viewBox only.
+    if (hasFixedSize && mode == CalculateViewBoxInHostDocument)
+        return FloatRect(0, 0, width().value(lengthContext), height().value(lengthContext));
+
+    return useViewBox;
 }
 
 AffineTransform SVGSVGElement::viewBoxToViewTransform(float viewWidth, float viewHeight) const

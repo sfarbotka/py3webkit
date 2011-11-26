@@ -31,6 +31,7 @@
 #define FileChooser_h
 
 #include "PlatformString.h"
+#include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -42,7 +43,7 @@ struct FileChooserSettings {
 #if ENABLE(DIRECTORY_UPLOAD)
     bool allowsDirectoryUpload;
 #endif
-    String acceptTypes;
+    Vector<String> acceptMIMETypes;
     Vector<String> selectedFiles;
 };
 

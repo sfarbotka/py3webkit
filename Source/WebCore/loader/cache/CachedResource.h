@@ -2,7 +2,7 @@
     Copyright (C) 1998 Lars Knoll (knoll@mpi-hd.mpg.de)
     Copyright (C) 2001 Dirk Mueller <mueller@kde.org>
     Copyright (C) 2006 Samuel Weinig (sam.weinig@gmail.com)
-    Copyright (C) 2004, 2005, 2006, 2007 Apple Inc. All rights reserved.
+    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Library General Public
@@ -44,11 +44,11 @@ class CachedMetadata;
 class CachedResourceClient;
 class CachedResourceHandleBase;
 class CachedResourceLoader;
-class CachedResourceRequest;
 class Frame;
 class InspectorResource;
 class PurgeableBuffer;
 class SecurityOrigin;
+class SubresourceLoader;
 
 // A resource that is held in the cache. Classes who want to use this object should derive
 // from CachedResourceClient, to get the function calls in case the requested data has arrived.
@@ -72,6 +72,12 @@ public:
         , LinkPrefetch
         , LinkPrerender
         , LinkSubresource
+#endif
+#if ENABLE(VIDEO_TRACK)
+        , TextTrackResource
+#endif
+#if ENABLE(CSS_SHADERS)
+        , ShaderResource
 #endif
     };
 
@@ -115,7 +121,6 @@ public:
         PreloadReferencedWhileComplete
     };
     PreloadResult preloadResult() const { return static_cast<PreloadResult>(m_preloadResult); }
-    void setRequestedFromNetworkingLayer() { m_requestedFromNetworkingLayer = true; }
 
     virtual void didAddClient(CachedResourceClient*);
     virtual void allClientsRemoved() { }
@@ -170,7 +175,8 @@ public:
 
     SharedBuffer* data() const { ASSERT(!m_purgeableData); return m_data.get(); }
 
-    void setResponse(const ResourceResponse&);
+    virtual void willSendRequest(ResourceRequest&, const ResourceResponse&) { m_requestedFromNetworkingLayer = true; }
+    virtual void setResponse(const ResourceResponse&);
     const ResourceResponse& response() const { return m_response; }
 
     // Sets the serialized metadata retrieved from the platform's cache.
@@ -184,7 +190,7 @@ public:
     // Returns cached metadata of the given type associated with this resource.
     CachedMetadata* cachedMetadata(unsigned dataTypeID) const;
 
-    bool canDelete() const { return !hasClients() && !m_request && !m_preloadCount && !m_handleCount && !m_resourceToRevalidate && !m_proxyResource; }
+    bool canDelete() const { return !hasClients() && !m_loader && !m_preloadCount && !m_handleCount && !m_resourceToRevalidate && !m_proxyResource; }
     bool hasOneHandle() const { return m_handleCount == 1; }
 
     bool isExpired() const;
@@ -228,6 +234,14 @@ public:
     void switchClientsToRevalidatedResource();
     void clearResourceToRevalidate();
     void updateResponseAfterRevalidation(const ResourceResponse& validatingResponse);
+    
+    virtual void didSendData(unsigned long long /* bytesSent */, unsigned long long /* totalBytesToBeSent */) { }
+#if PLATFORM(CHROMIUM)
+    virtual void didDownloadData(int) { }
+#endif
+
+    void setLoadFinishTime(double finishTime) { m_loadFinishTime = finishTime; }
+    double loadFinishTime() const { return m_loadFinishTime; }
 
 protected:
     void checkNotify();
@@ -242,7 +256,7 @@ protected:
 
     ResourceRequest m_resourceRequest;
     String m_accept;
-    OwnPtr<CachedResourceRequest> m_request;
+    RefPtr<SubresourceLoader> m_loader;
     ResourceLoaderOptions m_options;
     ResourceLoadPriority m_loadPriority;
 
@@ -263,6 +277,7 @@ private:
     RefPtr<CachedMetadata> m_cachedMetadata;
 
     double m_lastDecodedAccessTime; // Used as a "thrash guard" in the cache
+    double m_loadFinishTime;
 
     unsigned m_encodedSize;
     unsigned m_decodedSize;
@@ -278,7 +293,7 @@ private:
     bool m_inCache : 1;
     bool m_loading : 1;
 
-    unsigned m_type : 3; // Type
+    unsigned m_type : 4; // Type
     unsigned m_status : 3; // Status
 
 #ifndef NDEBUG

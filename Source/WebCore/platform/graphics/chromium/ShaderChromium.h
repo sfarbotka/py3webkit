@@ -51,6 +51,23 @@ private:
     int m_matrixLocation;
 };
 
+class VertexShaderPosTexStretch {
+public:
+    VertexShaderPosTexStretch();
+
+    void init(GraphicsContext3D*, unsigned program);
+    String getShaderString() const;
+
+    int matrixLocation() const { return m_matrixLocation; }
+    int offsetLocation() const { return m_offsetLocation; }
+    int scaleLocation() const { return m_scaleLocation; }
+
+private:
+    int m_matrixLocation;
+    int m_offsetLocation;
+    int m_scaleLocation;
+};
+
 class VertexShaderPosTexYUVStretch {
 public:
     VertexShaderPosTexYUVStretch();
@@ -141,6 +158,18 @@ private:
     int m_alphaLocation;
 };
 
+class FragmentTexOpaqueBinding {
+public:
+    FragmentTexOpaqueBinding();
+
+    void init(GraphicsContext3D*, unsigned program);
+    int alphaLocation() const { return -1; }
+    int samplerLocation() const { return m_samplerLocation; }
+
+private:
+    int m_samplerLocation;
+};
+
 class FragmentShaderRGBATexFlipAlpha : public FragmentTexAlphaBinding {
 public:
     String getShaderString() const;
@@ -151,8 +180,29 @@ public:
     String getShaderString() const;
 };
 
-// Swizzles the red and blue component of sampled texel.
+class FragmentShaderRGBATexRectFlipAlpha : public FragmentTexAlphaBinding {
+public:
+    String getShaderString() const;
+};
+
+class FragmentShaderRGBATexRectAlpha : public FragmentTexAlphaBinding {
+public:
+    String getShaderString() const;
+};
+
+class FragmentShaderRGBATexOpaque : public FragmentTexOpaqueBinding {
+public:
+    String getShaderString() const;
+};
+
+// Swizzles the red and blue component of sampled texel with alpha.
 class FragmentShaderRGBATexSwizzleAlpha : public FragmentTexAlphaBinding {
+public:
+    String getShaderString() const;
+};
+
+// Swizzles the red and blue component of sampled texel without alpha.
+class FragmentShaderRGBATexSwizzleOpaque : public FragmentTexOpaqueBinding {
 public:
     String getShaderString() const;
 };

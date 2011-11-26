@@ -44,27 +44,18 @@ WebInspector.ResourceCookiesView = function(resource)
 }
 
 WebInspector.ResourceCookiesView.prototype = {
-    show: function(parentElement)
+    wasShown: function()
     {
         if (!this._gotCookies) {
             if (!this._emptyView) {
                 this._emptyView = new WebInspector.EmptyView(WebInspector.UIString("This request has no cookies."));
                 this._emptyView.show(this.element);
             }
-            WebInspector.View.prototype.show.call(this, parentElement);
             return;
         }
 
         if (!this._cookiesTable)
             this._buildCookiesTable();
-        WebInspector.View.prototype.show.call(this, parentElement);
-        this._cookiesTable.updateWidths();
-    },
-
-    onResize: function()
-    {
-        if (this._cookiesTable)
-            this._cookiesTable.updateWidths();
     },
 
     get _gotCookies()
@@ -74,18 +65,18 @@ WebInspector.ResourceCookiesView.prototype = {
 
     _buildCookiesTable: function()
     {
-        this.element.removeChildren();
+        this.detachChildViews();
 
         this._cookiesTable = new WebInspector.CookiesTable(null, true);
         this._cookiesTable.addCookiesFolder(WebInspector.UIString("Request Cookies"), this._resource.requestCookies);
         this._cookiesTable.addCookiesFolder(WebInspector.UIString("Response Cookies"), this._resource.responseCookies);
-        this.element.appendChild(this._cookiesTable.element);
+        this._cookiesTable.show(this.element);
     },
 
     _refreshCookies: function()
     {
         delete this._cookiesTable;
-        if (!this._gotCookies || !this.visible)
+        if (!this._gotCookies || !this.isShowing())
             return;
         this._buildCookiesTable();
         this._cookiesTable.updateWidths();

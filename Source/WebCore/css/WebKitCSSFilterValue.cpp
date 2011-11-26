@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -35,16 +35,21 @@
 namespace WebCore {
 
 WebKitCSSFilterValue::WebKitCSSFilterValue(FilterOperationType operationType)
-    : CSSValueList(true)
+    : CSSValueList(WebKitCSSFilterClass, typeUsesSpaceSeparator(operationType))
     , m_type(operationType)
 {
 }
 
-WebKitCSSFilterValue::~WebKitCSSFilterValue()
+bool WebKitCSSFilterValue::typeUsesSpaceSeparator(FilterOperationType operationType)
 {
+#if ENABLE(CSS_SHADERS)
+    return operationType != CustomFilterOperation;
+#else
+    return true;
+#endif
 }
 
-String WebKitCSSFilterValue::cssText() const
+String WebKitCSSFilterValue::customCssText() const
 {
     String result;
     switch (m_type) {
@@ -81,11 +86,16 @@ String WebKitCSSFilterValue::cssText() const
     case DropShadowFilterOperation:
         result = "drop-shadow(";
         break;
+#if ENABLE(CSS_SHADERS)
+    case CustomFilterOperation:
+        result = "custom(";
+        break;
+#endif
     default:
         break;
     }
-    
-    return result + CSSValueList::cssText() + ")";
+
+    return result + CSSValueList::customCssText() + ")";
 }
 
 }

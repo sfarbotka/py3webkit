@@ -28,162 +28,10 @@
 
 #if ENABLE(DFG_JIT)
 
+#include "DataFormat.h"
 #include <dfg/DFGJITCompiler.h>
 
 namespace JSC { namespace DFG {
-
-// === DataFormat ===
-//
-// This enum tracks the current representation in which a value is being held.
-// Values may be unboxed primitives (int32, double, or cell), or boxed as a JSValue.
-// For boxed values, we may know the type of boxing that has taken place.
-// (May also need bool, array, object, string types!)
-enum DataFormat {
-    DataFormatNone = 0,
-    DataFormatInteger = 1,
-    DataFormatDouble = 2,
-    DataFormatBoolean = 3,
-    DataFormatCell = 4,
-    DataFormatStorage = 5,
-    DataFormatJS = 8,
-    DataFormatJSInteger = DataFormatJS | DataFormatInteger,
-    DataFormatJSDouble = DataFormatJS | DataFormatDouble,
-    DataFormatJSCell = DataFormatJS | DataFormatCell,
-    DataFormatJSBoolean = DataFormatJS | DataFormatBoolean
-};
-
-#ifndef NDEBUG
-inline const char* dataFormatToString(DataFormat dataFormat)
-{
-    switch (dataFormat) {
-    case DataFormatNone:
-        return "None";
-    case DataFormatInteger:
-        return "Integer";
-    case DataFormatDouble:
-        return "Double";
-    case DataFormatCell:
-        return "Cell";
-    case DataFormatBoolean:
-        return "Boolean";
-    case DataFormatStorage:
-        return "Storage";
-    case DataFormatJS:
-        return "JS";
-    case DataFormatJSInteger:
-        return "JSInteger";
-    case DataFormatJSDouble:
-        return "JSDouble";
-    case DataFormatJSCell:
-        return "JSCell";
-    case DataFormatJSBoolean:
-        return "JSBoolean";
-    default:
-        return "Unknown";
-    }
-}
-#endif
-
-#if USE(JSVALUE64)
-inline bool needDataFormatConversion(DataFormat from, DataFormat to)
-{
-    ASSERT(from != DataFormatNone);
-    ASSERT(to != DataFormatNone);
-    switch (from) {
-    case DataFormatInteger:
-    case DataFormatDouble:
-        return to != from;
-    case DataFormatCell:
-    case DataFormatJS:
-    case DataFormatJSInteger:
-    case DataFormatJSDouble:
-    case DataFormatJSCell:
-    case DataFormatJSBoolean:
-        switch (to) {
-        case DataFormatInteger:
-        case DataFormatDouble:
-            return true;
-        case DataFormatCell:
-        case DataFormatJS:
-        case DataFormatJSInteger:
-        case DataFormatJSDouble:
-        case DataFormatJSCell:
-        case DataFormatJSBoolean:
-            return false;
-        default:
-            // This captures DataFormatBoolean, which is currently unused.
-            ASSERT_NOT_REACHED();
-        }
-    case DataFormatStorage:
-        ASSERT(to == DataFormatStorage);
-        return false;
-    default:
-        // This captures DataFormatBoolean, which is currently unused.
-        ASSERT_NOT_REACHED();
-    }
-    return true;
-}
-
-#elif USE(JSVALUE32_64)
-inline bool needDataFormatConversion(DataFormat from, DataFormat to)
-{
-    ASSERT(from != DataFormatNone);
-    ASSERT(to != DataFormatNone);
-    switch (from) {
-    case DataFormatInteger:
-    case DataFormatCell:
-        return to != DataFormatInteger && to != DataFormatCell;
-    case DataFormatDouble:
-    case DataFormatJSDouble:
-        switch (to) {
-        case DataFormatDouble:
-        case DataFormatJS:
-        case DataFormatJSDouble:
-            return false;
-        default:
-            return true;
-        }
-    case DataFormatJS:
-        return !(to & DataFormatJS);
-    case DataFormatJSInteger:
-    case DataFormatJSCell:
-    case DataFormatJSBoolean:
-        return to != DataFormatJS && to != from;
-    case DataFormatStorage:
-        ASSERT(to == DataFormatStorage);
-        return false;
-    default:
-        ASSERT_NOT_REACHED();
-    }
-    return true;
-}
-#endif
-
-inline bool isJSFormat(DataFormat format, DataFormat expectedFormat)
-{
-    ASSERT(expectedFormat & DataFormatJS);
-    return (format | DataFormatJS) == expectedFormat;
-}
-
-inline bool isJSInteger(DataFormat format)
-{
-    return isJSFormat(format, DataFormatJSInteger);
-}
-
-inline bool isJSDouble(DataFormat format)
-{
-    return isJSFormat(format, DataFormatJSDouble);
-}
-
-inline bool isJSCell(DataFormat format)
-{
-    return isJSFormat(format, DataFormatJSCell);
-}
-
-inline bool isJSBoolean(DataFormat format)
-{
-    return isJSFormat(format, DataFormatJSBoolean);
-}
 
 // === GenerationInfo ===
 //
@@ -257,6 +105,15 @@ public:
         m_canFill = false;
         u.gpr = gpr;
     }
+    void initBoolean(NodeIndex nodeIndex, uint32_t useCount, GPRReg gpr)
+    {
+        m_nodeIndex = nodeIndex;
+        m_useCount = useCount;
+        m_registerFormat = DataFormatBoolean;
+        m_spillFormat = DataFormatNone;
+        m_canFill = false;
+        u.gpr = gpr;
+    }
     void initDouble(NodeIndex nodeIndex, uint32_t useCount, FPRReg fpr)
     {
         ASSERT(fpr != InvalidFPRReg);
@@ -304,7 +161,7 @@ public:
     
     bool isJSFormat(DataFormat expectedFormat)
     {
-        return DFG::isJSFormat(registerFormat(), expectedFormat) || DFG::isJSFormat(spillFormat(), expectedFormat);
+        return JSC::isJSFormat(registerFormat(), expectedFormat) || JSC::isJSFormat(spillFormat(), expectedFormat);
     }
     
     bool isJSInteger()
@@ -337,11 +194,13 @@ public:
 #if USE(JSVALUE64)
     GPRReg gpr() { ASSERT(m_registerFormat && m_registerFormat != DataFormatDouble); return u.gpr; }
     FPRReg fpr() { ASSERT(m_registerFormat == DataFormatDouble); return u.fpr; }
+    JSValueRegs jsValueRegs() { ASSERT(m_registerFormat & DataFormatJS); return JSValueRegs(u.gpr); }
 #elif USE(JSVALUE32_64)
-    GPRReg gpr() { ASSERT(m_registerFormat == DataFormatInteger || m_registerFormat == DataFormatCell || m_registerFormat == DataFormatStorage); return u.gpr; }
+    GPRReg gpr() { ASSERT(!(m_registerFormat & DataFormatJS) && m_registerFormat != DataFormatDouble); return u.gpr; }
     GPRReg tagGPR() { ASSERT(m_registerFormat & DataFormatJS); return u.v.tagGPR; }
     GPRReg payloadGPR() { ASSERT(m_registerFormat & DataFormatJS); return u.v.payloadGPR; }
     FPRReg fpr() { ASSERT(m_registerFormat == DataFormatDouble || m_registerFormat == DataFormatJSDouble); return u.fpr; }
+    JSValueRegs jsValueRegs() { ASSERT(m_registerFormat & DataFormatJS); return JSValueRegs(u.v.tagGPR, u.v.payloadGPR); }
 #endif
 
     // Check whether a value needs spilling in order to free up any associated machine registers.
@@ -367,7 +226,7 @@ public:
         // pointers. This is not true anymore, but we still assume, in the fill code,
         // that any spill slot for a JS value is boxed. For storage pointers, there is
         // nothing we can do to box them, so we allow that to be an exception.
-        ASSERT((spillFormat & DataFormatJS) || spillFormat == DataFormatStorage);
+        ASSERT((spillFormat & DataFormatJS) || spillFormat == DataFormatStorage || spillFormat == DataFormatInteger || spillFormat == DataFormatDouble);
 
         m_registerFormat = DataFormatNone;
         m_spillFormat = spillFormat;
@@ -415,6 +274,11 @@ public:
     void fillInteger(GPRReg gpr)
     {
         m_registerFormat = DataFormatInteger;
+        u.gpr = gpr;
+    }
+    void fillBoolean(GPRReg gpr)
+    {
+        m_registerFormat = DataFormatBoolean;
         u.gpr = gpr;
     }
     void fillDouble(FPRReg fpr)

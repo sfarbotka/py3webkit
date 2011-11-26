@@ -56,8 +56,8 @@ struct _Ewk_Context_Menu_Item {
     const char* title; /**< contains the title of the item */
     Ewk_Context_Menu* submenu; /**< contains the pointer to the submenu of the item */
 
-    Eina_Bool checked : 1;
-    Eina_Bool enabled : 1;
+    bool checked : 1;
+    bool enabled : 1;
 };
 
 void ewk_context_menu_ref(Ewk_Context_Menu* menu)
@@ -83,20 +83,20 @@ void ewk_context_menu_unref(Ewk_Context_Menu* menu)
 Eina_Bool ewk_context_menu_destroy(Ewk_Context_Menu* menu)
 {
 #if ENABLE(CONTEXT_MENUS)
-    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, EINA_FALSE);
-    EINA_SAFETY_ON_NULL_RETURN_VAL(menu->controller, EINA_FALSE);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, false);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu->controller, false);
     menu->controller->clearContextMenu();
-    return EINA_TRUE;
+    return true;
 #else
-    return EINA_FALSE;
+    return false;
 #endif
 }
 
-const Eina_List* ewk_context_menu_item_list_get(const Ewk_Context_Menu* o)
+const Eina_List* ewk_context_menu_item_list_get(const Ewk_Context_Menu* menu)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, 0);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, 0);
 
-    return o->items;
+    return menu->items;
 }
 
 Ewk_Context_Menu_Item* ewk_context_menu_item_new(Ewk_Context_Menu_Item_Type type,
@@ -120,17 +120,17 @@ Ewk_Context_Menu_Item* ewk_context_menu_item_new(Ewk_Context_Menu_Item_Type type
 Eina_Bool ewk_context_menu_item_select(Ewk_Context_Menu* menu, Ewk_Context_Menu_Item* item)
 {
 #if ENABLE(CONTEXT_MENUS)
-    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, EINA_FALSE);
-    EINA_SAFETY_ON_NULL_RETURN_VAL(item, EINA_FALSE);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, false);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
     WebCore::ContextMenuAction action = static_cast<WebCore::ContextMenuAction>(item->action);
     WebCore::ContextMenuItemType type = static_cast<WebCore::ContextMenuItemType>(item->type);
 
     // Don't care about title and submenu as they're not used after this point.
     WebCore::ContextMenuItem core(type, action, WTF::String());
     menu->controller->contextMenuItemSelected(&core);
-    return EINA_TRUE;
+    return true;
 #else
-    return EINA_FALSE;
+    return false;
 #endif
 }
 
@@ -142,69 +142,69 @@ void ewk_context_menu_item_free(Ewk_Context_Menu_Item* item)
     free(item);
 }
 
-Ewk_Context_Menu_Item_Type ewk_context_menu_item_type_get(const Ewk_Context_Menu_Item* o)
+Ewk_Context_Menu_Item_Type ewk_context_menu_item_type_get(const Ewk_Context_Menu_Item* item)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EWK_ACTION_TYPE);
-    return o->type;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, EWK_ACTION_TYPE);
+    return item->type;
 }
 
-Eina_Bool ewk_context_menu_item_type_set(Ewk_Context_Menu_Item* o, Ewk_Context_Menu_Item_Type type)
+Eina_Bool ewk_context_menu_item_type_set(Ewk_Context_Menu_Item* item, Ewk_Context_Menu_Item_Type type)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    o->type = type;
-    return EINA_TRUE;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    item->type = type;
+    return true;
 }
 
-Ewk_Context_Menu_Action ewk_context_menu_item_action_get(const Ewk_Context_Menu_Item* o)
+Ewk_Context_Menu_Action ewk_context_menu_item_action_get(const Ewk_Context_Menu_Item* item)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EWK_CONTEXT_MENU_ITEM_TAG_NO_ACTION);
-    return o->action;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, EWK_CONTEXT_MENU_ITEM_TAG_NO_ACTION);
+    return item->action;
 }
 
-Eina_Bool ewk_context_menu_item_action_set(Ewk_Context_Menu_Item* o, Ewk_Context_Menu_Action action)
+Eina_Bool ewk_context_menu_item_action_set(Ewk_Context_Menu_Item* item, Ewk_Context_Menu_Action action)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    o->action = action;
-    return EINA_TRUE;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    item->action = action;
+    return true;
 }
 
-const char* ewk_context_menu_item_title_get(const Ewk_Context_Menu_Item* o)
+const char* ewk_context_menu_item_title_get(const Ewk_Context_Menu_Item* item)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, 0);
-    return o->title;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, 0);
+    return item->title;
 }
 
-const char* ewk_context_menu_item_title_set(Ewk_Context_Menu_Item* o, const char* title)
+const char* ewk_context_menu_item_title_set(Ewk_Context_Menu_Item* item, const char* title)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, 0);
-    eina_stringshare_replace(&o->title, title);
-    return o->title;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, 0);
+    eina_stringshare_replace(&item->title, title);
+    return item->title;
 }
 
-Eina_Bool ewk_context_menu_item_checked_get(const Ewk_Context_Menu_Item* o)
+Eina_Bool ewk_context_menu_item_checked_get(const Ewk_Context_Menu_Item* item)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    return o->checked;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    return item->checked;
 }
 
-Eina_Bool ewk_context_menu_item_checked_set(Ewk_Context_Menu_Item* o, Eina_Bool checked)
+Eina_Bool ewk_context_menu_item_checked_set(Ewk_Context_Menu_Item* item, Eina_Bool checked)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    o->checked = checked;
-    return EINA_TRUE;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    item->checked = checked;
+    return true;
 }
 
-Eina_Bool ewk_context_menu_item_enabled_get(const Ewk_Context_Menu_Item* o)
+Eina_Bool ewk_context_menu_item_enabled_get(const Ewk_Context_Menu_Item* item)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    return o->enabled;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    return item->enabled;
 }
 
-Eina_Bool ewk_context_menu_item_enabled_set(Ewk_Context_Menu_Item* o, Eina_Bool enabled)
+Eina_Bool ewk_context_menu_item_enabled_set(Ewk_Context_Menu_Item* item, Eina_Bool enabled)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    o->enabled = enabled;
-    return EINA_TRUE;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(item, false);
+    item->enabled = enabled;
+    return true;
 }
 
 
@@ -248,20 +248,20 @@ Ewk_Context_Menu* ewk_context_menu_new(Evas_Object* view, WebCore::ContextMenuCo
  *
  * Frees the context menu.
  *
- * @param o the view object
- * @return @c EINA_TRUE on success, or @c EINA_FALSE on failure
+ * @param menu the view object
+ * @return @c true on success, or @c false on failure
  *
  * @note emits a signal "contextmenu,free"
  *
  * @see ewk_context_menu_unref
  * @see ewk_context_menu_destroy
  */
-Eina_Bool ewk_context_menu_free(Ewk_Context_Menu* o)
+bool ewk_context_menu_free(Ewk_Context_Menu* menu)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, EINA_FALSE);
-    evas_object_smart_callback_call(o->view, "contextmenu,free", o);
-    ewk_context_menu_unref(o);
-    return EINA_TRUE;
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, false);
+    evas_object_smart_callback_call(menu->view, "contextmenu,free", menu);
+    ewk_context_menu_unref(menu);
+    return true;
 }
 
 /**
@@ -269,13 +269,13 @@ Eina_Bool ewk_context_menu_free(Ewk_Context_Menu* o)
  *
  * Appends the WebCore's item to the context menu object.
  *
- * @param o the context menu object
+ * @param menu the context menu object
  * @param core the WebCore's context menu item that will be added to the context menu
  * @note emits a signal "contextmenu,item,appended"
  *
  * @see ewk_context_menu_item_new
  */
-void ewk_context_menu_item_append(Ewk_Context_Menu* o, WebCore::ContextMenuItem& core)
+void ewk_context_menu_item_append(Ewk_Context_Menu* menu, WebCore::ContextMenuItem& core)
 {
     Ewk_Context_Menu_Item_Type type = static_cast<Ewk_Context_Menu_Item_Type>(core.type());
     Ewk_Context_Menu_Action action = static_cast<Ewk_Context_Menu_Action>(core.action());
@@ -285,8 +285,8 @@ void ewk_context_menu_item_append(Ewk_Context_Menu* o, WebCore::ContextMenuItem&
                                            core.enabled());
     EINA_SAFETY_ON_NULL_RETURN(menu_item);
 
-    o->items = eina_list_append(o->items, menu_item);
-    evas_object_smart_callback_call(o->view, "contextmenu,item,appended", o);
+    menu->items = eina_list_append(menu->items, menu_item);
+    evas_object_smart_callback_call(menu->view, "contextmenu,item,appended", menu);
 }
 
 /**
@@ -294,19 +294,19 @@ void ewk_context_menu_item_append(Ewk_Context_Menu* o, WebCore::ContextMenuItem&
  *
  * Emits a signal with the items of the context menu.
  *
- * @param o the context menu object
+ * @param menu the context menu object
  * @return the same context menu object that was given through parameter
  *
  * @note emits a signal "contextmenu,customize"
  *
  * @see ewk_context_menu_item_list_get
  */
-Ewk_Context_Menu* ewk_context_menu_custom_get(const Ewk_Context_Menu* o)
+Ewk_Context_Menu* ewk_context_menu_customize(Ewk_Context_Menu* menu)
 {
-    EINA_SAFETY_ON_NULL_RETURN_VAL(o, 0);
+    EINA_SAFETY_ON_NULL_RETURN_VAL(menu, 0);
 
-    evas_object_smart_callback_call(o->view, "contextmenu,customize", o->items);
-    return o;
+    evas_object_smart_callback_call(menu->view, "contextmenu,customize", menu->items);
+    return menu;
 }
 
 /**
@@ -314,13 +314,13 @@ Ewk_Context_Menu* ewk_context_menu_custom_get(const Ewk_Context_Menu* o)
  *
  * Emits a signal "contextmenu,show"
  *
- * @param o the context menu object
+ * @param menu the context menu object
  */
-void ewk_context_menu_show(const Ewk_Context_Menu* o)
+void ewk_context_menu_show(Ewk_Context_Menu* menu)
 {
-    EINA_SAFETY_ON_NULL_RETURN(o);
+    EINA_SAFETY_ON_NULL_RETURN(menu);
 
-    evas_object_smart_callback_call(o->view, "contextmenu,show", o);
+    evas_object_smart_callback_call(menu->view, "contextmenu,show", menu);
 }
 
 #endif

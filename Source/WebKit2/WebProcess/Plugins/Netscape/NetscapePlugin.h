@@ -29,6 +29,7 @@
 #include "NetscapePluginModule.h"
 #include "Plugin.h"
 #include "RunLoop.h"
+#include <WebCore/AffineTransform.h>
 #include <WebCore/GraphicsLayer.h>
 #include <WebCore/IntRect.h>
 #include <wtf/HashMap.h>
@@ -64,9 +65,13 @@ public:
 
     mach_port_t compositingRenderServerPort();
 
+    // Computes an affine transform from the given coordinate space to the screen coordinate space.
+    bool getScreenTransform(NPCoordinateSpace sourceSpace, WebCore::AffineTransform&);
+
 #ifndef NP_NO_CARBON
     WindowRef windowRef() const;
     bool isWindowActive() const { return m_windowHasFocus; }
+    void updateFakeWindowBounds();
 
     static NetscapePlugin* netscapePluginFromWindow(WindowRef);
     static unsigned buttonState();
@@ -114,6 +119,7 @@ public:
     unsigned scheduleTimer(unsigned interval, bool repeat, void (*timerFunc)(NPP, unsigned timerID));
     void unscheduleTimer(unsigned timerID);
 
+    double contentsScaleFactor();
     String proxiesForURL(const String& urlString);
     String cookiesForURL(const String& urlString);
     void setCookiesForURL(const String& urlString, const String& cookieString);
@@ -158,6 +164,8 @@ private:
     bool platformHandleKeyboardEvent(const WebKeyboardEvent&);
     void platformSetFocus(bool);
 
+    static bool wantsPluginRelativeNPWindowCoordinates();
+
     // Plugin
     virtual bool initialize(const Parameters&);
     virtual void destroy();
@@ -167,18 +175,18 @@ private:
     virtual PlatformLayer* pluginLayer();
 #endif
     virtual bool isTransparent();
-    virtual void geometryDidChange(const WebCore::IntRect& frameRect, const WebCore::IntRect& clipRect);
+    virtual void geometryDidChange(const WebCore::IntSize& pluginSize, const WebCore::IntRect& clipRect, const WebCore::AffineTransform& pluginToRootViewTransform);
     virtual void visibilityDidChange();
     virtual void frameDidFinishLoading(uint64_t requestID);
     virtual void frameDidFail(uint64_t requestID, bool wasCancelled);
     virtual void didEvaluateJavaScript(uint64_t requestID, const String& result);
     virtual void streamDidReceiveResponse(uint64_t streamID, const WebCore::KURL& responseURL, uint32_t streamLength, 
-                                          uint32_t lastModifiedTime, const String& mimeType, const String& headers);
+                                          uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFileName);
     virtual void streamDidReceiveData(uint64_t streamID, const char* bytes, int length);
     virtual void streamDidFinishLoading(uint64_t streamID);
     virtual void streamDidFail(uint64_t streamID, bool wasCancelled);
     virtual void manualStreamDidReceiveResponse(const WebCore::KURL& responseURL, uint32_t streamLength, 
-                                                uint32_t lastModifiedTime, const String& mimeType, const String& headers);
+                                                uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFileName);
     virtual void manualStreamDidReceiveData(const char* bytes, int length);
     virtual void manualStreamDidFinishLoading();
     virtual void manualStreamDidFail(bool wasCancelled);
@@ -187,6 +195,7 @@ private:
     virtual bool handleWheelEvent(const WebWheelEvent&);
     virtual bool handleMouseEnterEvent(const WebMouseEvent&);
     virtual bool handleMouseLeaveEvent(const WebMouseEvent&);
+    virtual bool handleContextMenuEvent(const WebMouseEvent&);
     virtual bool handleKeyboardEvent(const WebKeyboardEvent&);
     virtual void setFocus(bool);
     virtual NPObject* pluginScriptableNPObject();
@@ -203,6 +212,7 @@ private:
     void setComplexTextInputEnabled(bool);
 #endif
 
+    virtual void contentsScaleFactorChanged(float);
     virtual void privateBrowsingStateChanged(bool);
     virtual bool getFormValue(String& formValue);
     virtual bool handleScroll(WebCore::ScrollDirection, WebCore::ScrollGranularity);
@@ -210,6 +220,13 @@ private:
     virtual WebCore::Scrollbar* verticalScrollbar();
 
     bool supportsSnapshotting() const;
+
+    // Convert the given point from plug-in coordinates to root view coordinates.
+    WebCore::IntPoint convertToRootView(const WebCore::IntPoint&) const;
+
+    // Convert the given point from root view coordinates to plug-in coordinates. Returns false if the point can't be
+    // converted (if the transformation matrix isn't invertible).
+    bool convertFromRootView(const WebCore::IntPoint& pointInRootViewCoordinates, WebCore::IntPoint& pointInPluginCoordinates);
 
 #if PLUGIN_ARCHITECTURE(WIN)
     static BOOL WINAPI hookedTrackPopupMenu(HMENU, UINT uFlags, int x, int y, int nReserved, HWND, const RECT*);
@@ -228,8 +245,16 @@ private:
     NPP_t m_npp;
     NPWindow m_npWindow;
 
-    WebCore::IntRect m_frameRect;
+    WebCore::IntSize m_pluginSize;
+
+    // The clip rect in plug-in coordinates.
     WebCore::IntRect m_clipRect;
+
+    // A transform that can be used to convert from root view coordinates to plug-in coordinates.
+    WebCore::AffineTransform m_pluginToRootViewTransform;
+
+    // FIXME: Get rid of these.
+    WebCore::IntRect m_frameRectInWindowCoordinates;
 
     CString m_userAgent;
 
@@ -316,6 +341,9 @@ private:
 #elif PLUGIN_ARCHITECTURE(X11)
     Pixmap m_drawable;
     Display* m_pluginDisplay;
+
+public: // Need to call it in the NPN_GetValue browser callback.
+    static Display* x11HostDisplay();
 #endif
 };
 

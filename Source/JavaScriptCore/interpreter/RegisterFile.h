@@ -38,7 +38,7 @@
 namespace JSC {
 
     class ConservativeRoots;
-    class JettisonedCodeBlocks;
+    class DFGCodeBlocks;
 
     class RegisterFile {
         WTF_MAKE_NONCOPYABLE(RegisterFile);
@@ -65,14 +65,14 @@ namespace JSC {
         ~RegisterFile();
         
         void gatherConservativeRoots(ConservativeRoots&);
-        void gatherConservativeRoots(ConservativeRoots&, JettisonedCodeBlocks&);
+        void gatherConservativeRoots(ConservativeRoots&, DFGCodeBlocks&);
 
         Register* begin() const { return static_cast<Register*>(m_reservation.base()); }
         Register* end() const { return m_end; }
         size_t size() const { return end() - begin(); }
 
-        bool grow(Register* newEnd);
-        void shrink(Register* newEnd);
+        bool grow(Register*);
+        void shrink(Register*);
         
         static size_t committedByteCount();
         static void initializeThreading();
@@ -83,6 +83,7 @@ namespace JSC {
         }
 
     private:
+        bool growSlowCase(Register*);
         void releaseExcessCapacity();
         void addToCommittedByteCount(long);
         Register* m_end;
@@ -113,21 +114,7 @@ namespace JSC {
     {
         if (newEnd <= m_end)
             return true;
-            
-        if (newEnd <= m_commitEnd) {
-            m_end = newEnd;
-            return true;
-        }
-
-        long delta = roundUpAllocationSize(reinterpret_cast<char*>(newEnd) - reinterpret_cast<char*>(m_commitEnd), commitSize);
-        if (reinterpret_cast<char*>(m_commitEnd) + delta > static_cast<char*>(m_reservation.base()) + m_reservation.size())
-            return false;
-
-        m_reservation.commit(m_commitEnd, delta);
-        addToCommittedByteCount(delta);
-        m_commitEnd = reinterpret_cast_ptr<Register*>(reinterpret_cast<char*>(m_commitEnd) + delta);
-        m_end = newEnd;
-        return true;
+        return growSlowCase(newEnd);
     }
 
 } // namespace JSC

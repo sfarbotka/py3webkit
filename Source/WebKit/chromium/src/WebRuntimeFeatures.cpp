@@ -34,7 +34,7 @@
 #include "AbstractDatabase.h"
 #include "RuntimeEnabledFeatures.h"
 #include "WebMediaPlayerClientImpl.h"
-#include "WebSocket.h"
+#include "websockets/WebSocket.h"
 
 #include <wtf/UnusedParam.h>
 
@@ -58,36 +58,28 @@ bool WebRuntimeFeatures::isDatabaseEnabled()
 #endif
 }
 
+// FIXME: Remove the ability to enable this feature at runtime.
 void WebRuntimeFeatures::enableLocalStorage(bool enable)
 {
-#if ENABLE(DOM_STORAGE)
     RuntimeEnabledFeatures::setLocalStorageEnabled(enable);
-#endif
 }
 
+// FIXME: Remove the ability to enable this feature at runtime.
 bool WebRuntimeFeatures::isLocalStorageEnabled()
 {
-#if ENABLE(DOM_STORAGE)
     return RuntimeEnabledFeatures::localStorageEnabled();
-#else
-    return false;
-#endif
 }
 
+// FIXME: Remove the ability to enable this feature at runtime.
 void WebRuntimeFeatures::enableSessionStorage(bool enable)
 {
-#if ENABLE(DOM_STORAGE)
     RuntimeEnabledFeatures::setSessionStorageEnabled(enable);
-#endif
 }
 
+// FIXME: Remove the ability to enable this feature at runtime.
 bool WebRuntimeFeatures::isSessionStorageEnabled()
 {
-#if ENABLE(DOM_STORAGE)
     return RuntimeEnabledFeatures::sessionStorageEnabled();
-#else
-    return false;
-#endif
 }
 
 void WebRuntimeFeatures::enableMediaPlayer(bool enable)
@@ -109,7 +101,7 @@ bool WebRuntimeFeatures::isMediaPlayerEnabled()
 void WebRuntimeFeatures::enableSockets(bool enable)
 {
 #if ENABLE(WEB_SOCKETS)
-    WebSocket::setIsAvailable(enable);
+    WebCore::WebSocket::setIsAvailable(enable);
 #endif
 }
 
@@ -368,6 +360,24 @@ bool WebRuntimeFeatures::isFullScreenAPIEnabled()
 #endif
 }
 
+void WebRuntimeFeatures::enablePointerLock(bool enable)
+{
+#if ENABLE(POINTER_LOCK)
+    RuntimeEnabledFeatures::setWebkitPointerLockEnabled(enable);
+#else
+    UNUSED_PARAM(enable);
+#endif
+}
+
+bool WebRuntimeFeatures::isPointerLockEnabled()
+{
+#if ENABLE(POINTER_LOCK)
+    return RuntimeEnabledFeatures::webkitPointerLockEnabled();
+#else
+    return false;
+#endif
+}
+
 void WebRuntimeFeatures::enableMediaSource(bool enable)
 {
 #if ENABLE(MEDIA_SOURCE)
@@ -399,6 +409,24 @@ bool WebRuntimeFeatures::isVideoTrackEnabled()
 {
 #if ENABLE(VIDEO_TRACK)
     return RuntimeEnabledFeatures::webkitVideoTrackEnabled();
+#else
+    return false;
+#endif
+}
+
+void WebRuntimeFeatures::enableGamepad(bool enable)
+{
+#if ENABLE(GAMEPAD)
+    RuntimeEnabledFeatures::setWebkitGamepadsEnabled(enable);
+#else
+    UNUSED_PARAM(enable);
+#endif
+}
+
+bool WebRuntimeFeatures::isGamepadEnabled()
+{
+#if ENABLE(GAMEPAD)
+    return RuntimeEnabledFeatures::webkitGamepadsEnabled();
 #else
     return false;
 #endif

@@ -143,7 +143,7 @@ static void webkit_web_data_source_init(WebKitWebDataSource* webDataSource)
  * Creates a new #WebKitWebDataSource instance. The URL of the
  * #WebKitWebDataSource will be set to "about:blank".
  *
- * Return: a new #WebKitWebDataSource.
+ * Returns: a new #WebKitWebDataSource.
  *
  * Since: 1.1.14
  */
@@ -434,7 +434,7 @@ WebKitWebDataSource* kitNew(PassRefPtr<WebKit::DocumentLoader> loader)
 {
     WebKitWebDataSource* webDataSource = WEBKIT_WEB_DATA_SOURCE(g_object_new(WEBKIT_TYPE_WEB_DATA_SOURCE, NULL));
     WebKitWebDataSourcePrivate* priv = webDataSource->priv;
-    priv->loader = loader.releaseRef();
+    priv->loader = loader.leakRef();
 
     return webDataSource;
 }

@@ -31,12 +31,10 @@
 #include "config.h"
 
 #if USE(ACCELERATED_COMPOSITING)
-
 #include "LayerChromium.h"
 
 #include "cc/CCLayerImpl.h"
 #include "cc/CCLayerTreeHost.h"
-#include "GraphicsContext3D.h"
 #if USE(SKIA)
 #include "NativeImageSkia.h"
 #include "PlatformContextSkia.h"
@@ -60,20 +58,23 @@ LayerChromium::LayerChromium(CCLayerDelegate* delegate)
     : m_delegate(delegate)
     , m_layerId(s_nextLayerId++)
     , m_parent(0)
+    , m_scrollable(false)
     , m_anchorPoint(0.5, 0.5)
     , m_backgroundColor(0, 0, 0, 0)
     , m_debugBorderWidth(0)
     , m_opacity(1.0)
     , m_anchorPointZ(0)
     , m_masksToBounds(false)
-    , m_opaque(true)
+    , m_opaque(false)
     , m_doubleSided(true)
-    , m_usesLayerScissor(false)
+    , m_usesLayerClipping(false)
     , m_isNonCompositedContent(false)
     , m_preserves3D(false)
     , m_replicaLayer(0)
     , m_drawOpacity(0)
     , m_targetRenderSurface(0)
+    , m_contentsScale(1.0)
+    , m_pageScaleDirty(false)
 {
 }
 
@@ -212,10 +213,12 @@ void LayerChromium::setBounds(const IntSize& size)
 
     m_bounds = size;
 
-    if (firstResize)
+    if (firstResize || m_pageScaleDirty)
         setNeedsDisplay(FloatRect(0, 0, bounds().width(), bounds().height()));
     else
         setNeedsCommit();
+
+    m_pageScaleDirty = false;
 }
 
 const LayerChromium* LayerChromium::rootLayer() const
@@ -280,6 +283,7 @@ void LayerChromium::pushPropertiesTo(CCLayerImpl* layer)
 {
     layer->setAnchorPoint(m_anchorPoint);
     layer->setAnchorPointZ(m_anchorPointZ);
+    layer->setBackgroundColor(m_backgroundColor);
     layer->setBounds(m_bounds);
     layer->setContentBounds(contentBounds());
     layer->setDebugBorderColor(m_debugBorderColor);
@@ -288,19 +292,25 @@ void LayerChromium::pushPropertiesTo(CCLayerImpl* layer)
     layer->setDrawsContent(drawsContent());
     layer->setIsNonCompositedContent(m_isNonCompositedContent);
     layer->setMasksToBounds(m_masksToBounds);
-    layer->setMaxScrollPosition(m_maxScrollPosition);
+    layer->setScrollable(m_scrollable);
     layer->setName(m_name);
+    layer->setOpaque(m_opaque);
     layer->setOpacity(m_opacity);
     layer->setPosition(m_position);
     layer->setPreserves3D(preserves3D());
     layer->setScrollPosition(m_scrollPosition);
     layer->setSublayerTransform(m_sublayerTransform);
     layer->setTransform(m_transform);
+    layer->setUpdateRect(m_updateRect);
+    layer->setSentScrollDelta(IntSize());
 
     if (maskLayer())
         maskLayer()->pushPropertiesTo(layer->maskLayer());
     if (replicaLayer())
         replicaLayer()->pushPropertiesTo(layer->replicaLayer());
+
+    // Reset any state that should be cleared for the next update.
+    m_updateRect = FloatRect();
 }
 
 PassRefPtr<CCLayerImpl> LayerChromium::createCCLayerImpl()
@@ -318,6 +328,13 @@ void LayerChromium::setDebugBorderWidth(float width)
 {
     m_debugBorderWidth = width;
     setNeedsCommit();
+}
+
+void LayerChromium::setContentsScale(float contentsScale)
+{
+    if (!needsContentsScale())
+        return;
+    m_contentsScale = contentsScale;
 }
 
 void LayerChromium::createRenderSurface()

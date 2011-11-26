@@ -21,6 +21,7 @@
 #include "config.h"
 #include "RenderView.h"
 
+#include "ColumnInfo.h"
 #include "Document.h"
 #include "Element.h"
 #include "FloatQuad.h"
@@ -171,6 +172,17 @@ void RenderView::mapAbsoluteToLocalPoint(bool fixed, bool useTransforms, Transfo
         getTransformFromContainer(0, LayoutSize(), t);
         transformState.applyTransform(t);
     }
+}
+
+bool RenderView::requiresColumns(int desiredColumnCount) const
+{
+    if (m_frameView) {
+        if (Frame* frame = m_frameView->frame()) {
+            if (Page* page = frame->page())
+                return frame == page->mainFrame() && page->pagination().mode != Page::Pagination::Unpaginated;
+        }
+    }
+    return RenderBlock::requiresColumns(desiredColumnCount);
 }
 
 void RenderView::paint(PaintInfo& paintInfo, const LayoutPoint& paintOffset)
@@ -488,7 +500,8 @@ void RenderView::setSelection(RenderObject* start, int startPos, RenderObject* e
         o = o->nextInPreOrder();
     }
 
-    m_layer->clearBlockSelectionGapsBounds();
+    if (blockRepaintMode != RepaintNothing)
+        m_layer->clearBlockSelectionGapsBounds();
 
     // Now that the selection state has been updated for the new objects, walk them again and
     // put them in the new objects list.
@@ -509,7 +522,7 @@ void RenderView::setSelection(RenderObject* start, int startPos, RenderObject* e
         o = o->nextInPreOrder();
     }
 
-    if (!m_frameView) {
+    if (!m_frameView || blockRepaintMode == RepaintNothing) {
         // We built the maps, but we aren't going to use them.
         // We need to delete the values, otherwise they'll all leak!
         deleteAllValues(oldSelectedObjects);
@@ -573,6 +586,14 @@ void RenderView::setSelection(RenderObject* start, int startPos, RenderObject* e
     }
 
     m_frameView->endDeferredRepaints();
+}
+
+void RenderView::getSelection(RenderObject*& startRenderer, int& startOffset, RenderObject*& endRenderer, int& endOffset) const
+{
+    startRenderer = m_selectionStart;
+    startOffset = m_selectionStartPos;
+    endRenderer = m_selectionEnd;
+    endOffset = m_selectionEndPos;
 }
 
 void RenderView::clearSelection()
@@ -669,6 +690,20 @@ IntRect RenderView::unscaledDocumentRect() const
     IntRect overflowRect(layoutOverflowRect());
     flipForWritingMode(overflowRect);
     return overflowRect;
+}
+
+LayoutRect RenderView::backgroundRect(RenderBox* backgroundRenderer) const
+{
+    if (!hasColumns())
+        return unscaledDocumentRect();
+
+    ColumnInfo* columnInfo = this->columnInfo();
+    LayoutRect backgroundRect(0, 0, columnInfo->desiredColumnWidth(), columnInfo->columnHeight() * columnInfo->columnCount());
+    if (!isHorizontalWritingMode())
+        backgroundRect = backgroundRect.transposedRect();
+    backgroundRenderer->flipForWritingMode(backgroundRect);
+
+    return backgroundRect;
 }
 
 IntRect RenderView::documentRect() const

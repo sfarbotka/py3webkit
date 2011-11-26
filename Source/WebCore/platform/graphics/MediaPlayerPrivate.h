@@ -29,6 +29,7 @@
 #if ENABLE(VIDEO)
 
 #include "MediaPlayer.h"
+#include "TimeRanges.h"
 #include <wtf/Forward.h>
 
 namespace WebCore {
@@ -56,6 +57,7 @@ public:
 
     virtual bool supportsFullscreen() const { return false; }
     virtual bool supportsSave() const { return false; }
+    virtual bool supportsScanning() const { return false; }
 
     virtual IntSize naturalSize() const = 0;
 
@@ -90,6 +92,7 @@ public:
     virtual MediaPlayer::NetworkState networkState() const = 0;
     virtual MediaPlayer::ReadyState readyState() const = 0;
 
+    virtual PassRefPtr<TimeRanges> seekable() const { return maxTimeSeekable() ? TimeRanges::create(0, maxTimeSeekable()) : TimeRanges::create(); }
     virtual float maxTimeSeekable() const = 0;
     virtual PassRefPtr<TimeRanges> buffered() const = 0;
 

@@ -34,21 +34,21 @@ namespace JSC {
     class JSActivation;
     class JSGlobalObject;
     class NativeExecutable;
+    class SourceCode;
     class VPtrHackExecutable;
     namespace DFG {
-    class JITCodeGenerator;
+    class SpeculativeJIT;
+    class JITCompiler;
     }
 
     EncodedJSValue JSC_HOST_CALL callHostFunctionAsConstructor(ExecState*);
-
-    extern const char* StrictModeCallerAccessError;
-    extern const char* StrictModeArgumentsAccessError;
 
     void createDescriptorForThrowingProperty(ExecState*, PropertyDescriptor&, const char* message);
 
     class JSFunction : public JSNonFinalObject {
         friend class JIT;
-        friend class DFG::JITCodeGenerator;
+        friend class DFG::SpeculativeJIT;
+        friend class DFG::JITCompiler;
         friend class JSGlobalData;
 
     public:
@@ -97,6 +97,8 @@ namespace JSC {
         inline bool isHostFunction() const;
         FunctionExecutable* jsExecutable() const;
 
+        const SourceCode* sourceCode() const;
+
         static JS_EXPORTDATA const ClassInfo s_info;
 
         static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype) 
@@ -108,8 +110,7 @@ namespace JSC {
         NativeFunction nativeFunction();
         NativeFunction nativeConstructor();
 
-        virtual ConstructType getConstructData(ConstructData&);
-        virtual CallType getCallDataVirtual(CallData&);
+        static ConstructType getConstructData(JSCell*, ConstructData&);
         static CallType getCallData(JSCell*, CallData&);
 
         static inline size_t offsetOfScopeChain()
@@ -131,9 +132,13 @@ namespace JSC {
         void finishCreation(ExecState*, NativeExecutable*, int length, const Identifier& name);
         void finishCreation(ExecState*, FunctionExecutable*, ScopeChainNode*);
 
-        virtual bool getOwnPropertySlot(ExecState*, const Identifier&, PropertySlot&);
-        virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
-        virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode = ExcludeDontEnumProperties);
+        static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier&, PropertySlot&);
+        static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor&);
+        static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode = ExcludeDontEnumProperties);
+
+        static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+
+        static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
 
         static void visitChildren(JSCell*, SlotVisitor&);
 
@@ -141,12 +146,6 @@ namespace JSC {
         explicit JSFunction(VPtrStealingHackType);
 
         bool isHostFunctionNonInline() const;
-
-        virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
-        static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
-
-        virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
-        static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
 
         static JSValue argumentsGetter(ExecState*, JSValue, const Identifier&);
         static JSValue callerGetter(ExecState*, JSValue, const Identifier&);

@@ -53,16 +53,6 @@ void RenderTableRow::willBeDestroyed()
         recalcSection->setNeedsCellRecalc();
 }
 
-void RenderTableRow::styleWillChange(StyleDifference diff, const RenderStyle* newStyle)
-{
-    if (section() && style() && style()->logicalHeight() != newStyle->logicalHeight())
-        section()->setNeedsCellRecalc();
-
-    ASSERT(newStyle->display() == TABLE_ROW);
-
-    RenderBox::styleWillChange(diff, newStyle);
-}
-
 void RenderTableRow::updateBeforeAndAfterContent()
 {
     if (!isAnonymous() && document()->usesBeforeAfterRules()) {
@@ -73,11 +63,16 @@ void RenderTableRow::updateBeforeAndAfterContent()
 
 void RenderTableRow::styleDidChange(StyleDifference diff, const RenderStyle* oldStyle)
 {
+    ASSERT(style()->display() == TABLE_ROW);
+
     RenderBox::styleDidChange(diff, oldStyle);
     propagateStyleToAnonymousChildren();
 
     if (parent())
         updateBeforeAndAfterContent();
+
+    if (section() && oldStyle && style()->logicalHeight() != oldStyle->logicalHeight())
+        section()->rowLogicalHeightChanged(section()->rowIndexForRenderer(this));
 
     // If border was changed, notify table.
     if (parent()) {
@@ -91,7 +86,7 @@ void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
 {
     // Make sure we don't append things after :after-generated content if we have it.
     if (!beforeChild)
-        beforeChild = findAfterContentRenderer();
+        beforeChild = afterPseudoElementRenderer();
 
     if (!child->isTableCell()) {
         RenderObject* last = beforeChild;
@@ -102,6 +97,14 @@ void RenderTableRow::addChild(RenderObject* child, RenderObject* beforeChild)
                 beforeChild = last->firstChild();
             last->addChild(child, beforeChild);
             return;
+        }
+
+        if (beforeChild && !beforeChild->isAnonymous() && beforeChild->parent() == this) {
+            RenderObject* cell = beforeChild->previousSibling();
+            if (cell && cell->isTableCell() && cell->isAnonymous()) {
+                cell->addChild(child);
+                return;
+            }
         }
 
         // If beforeChild is inside an anonymous cell, insert into the cell.
@@ -176,7 +179,7 @@ void RenderTableRow::layout()
     setNeedsLayout(false);
 }
 
-IntRect RenderTableRow::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderTableRow::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     ASSERT(parent());
 
@@ -190,7 +193,7 @@ IntRect RenderTableRow::clippedOverflowRectForRepaint(RenderBoxModelObject* repa
     if (RenderTable* parentTable = table())
         return parentTable->clippedOverflowRectForRepaint(repaintContainer);
 
-    return IntRect();
+    return LayoutRect();
 }
 
 // Hit Testing

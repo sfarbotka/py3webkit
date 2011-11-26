@@ -87,20 +87,9 @@ namespace WebCore {
         UnloadEventPolicyUnloadAndPageHide
     };
 
-    enum ReferrerPolicy {
-        SendReferrer,
-        NoReferrer
-    };
-
-    enum SandboxFlag {
-        SandboxNone = 0,
-        SandboxNavigation = 1,
-        SandboxPlugins = 1 << 1,
-        SandboxOrigin = 1 << 2,
-        SandboxForms = 1 << 3,
-        SandboxScripts = 1 << 4,
-        SandboxTopNavigation = 1 << 5,
-        SandboxAll = -1 // Mask with all bits set to 1.
+    enum ShouldSendReferrer {
+        MaybeSendReferrer,
+        NeverSendReferrer
     };
 
     // Passed to FrameLoader::urlSelected() and ScriptController::executeIfJavaScriptURL()
@@ -117,7 +106,6 @@ namespace WebCore {
         NotAboutToInstantiatePlugin
     };
 
-    typedef int SandboxFlags;
 }
 
 #endif

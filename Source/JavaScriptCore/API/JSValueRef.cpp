@@ -175,7 +175,7 @@ bool JSValueIsInstanceOfConstructor(JSContextRef ctx, JSValueRef value, JSObject
     JSObject* jsConstructor = toJS(constructor);
     if (!jsConstructor->structure()->typeInfo().implementsHasInstance())
         return false;
-    bool result = jsConstructor->hasInstance(exec, jsValue, jsConstructor->get(exec, exec->propertyNames().prototype)); // false if an exception is thrown
+    bool result = jsConstructor->methodTable()->hasInstance(jsConstructor, exec, jsValue, jsConstructor->get(exec, exec->propertyNames().prototype)); // false if an exception is thrown
     if (exec->hadException()) {
         if (exception)
             *exception = toRef(exec, exec->exception());
@@ -235,7 +235,11 @@ JSValueRef JSValueMakeFromJSONString(JSContextRef ctx, JSStringRef string)
     ExecState* exec = toJS(ctx);
     APIEntryShim entryShim(exec);
     UString str = string->ustring();
-    LiteralParser parser(exec, str.characters(), str.length(), LiteralParser::StrictJSON);
+    if (str.is8Bit()) {
+        LiteralParser<LChar> parser(exec, str.characters8(), str.length(), StrictJSON);
+        return toRef(exec, parser.tryLiteralParse());
+    }
+    LiteralParser<UChar> parser(exec, str.characters16(), str.length(), StrictJSON);
     return toRef(exec, parser.tryLiteralParse());
 }
 

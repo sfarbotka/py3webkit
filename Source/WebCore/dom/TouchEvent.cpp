@@ -28,6 +28,8 @@
 #if ENABLE(TOUCH_EVENTS)
 
 #include "TouchEvent.h"
+
+#include "EventNames.h"
 #include "TouchList.h"
 
 namespace WebCore {
@@ -41,7 +43,11 @@ TouchEvent::TouchEvent(TouchList* touches, TouchList* targetTouches,
         PassRefPtr<AbstractView> view, int screenX, int screenY, int pageX, int pageY,
         bool ctrlKey, bool altKey, bool shiftKey, bool metaKey)
     : MouseRelatedEvent(type, true, true, view, 0, IntPoint(screenX, screenY),
-                        IntPoint(pageX, pageY), ctrlKey, altKey, shiftKey, metaKey)
+                        IntPoint(pageX, pageY),
+#if ENABLE(POINTER_LOCK)
+                        IntPoint(0, 0),
+#endif
+                        ctrlKey, altKey, shiftKey, metaKey)
     , m_touches(touches)
     , m_targetTouches(targetTouches)
     , m_changedTouches(changedTouches)
@@ -71,6 +77,11 @@ void TouchEvent::initTouchEvent(TouchList* touches, TouchList* targetTouches,
     m_shiftKey = shiftKey;
     m_metaKey = metaKey;
     initCoordinates(IntPoint(clientX, clientY));
+}
+
+const AtomicString& TouchEvent::interfaceName() const
+{
+    return eventNames().interfaceForTouchEvent;
 }
 
 } // namespace WebCore

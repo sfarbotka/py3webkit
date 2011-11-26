@@ -32,7 +32,8 @@ from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.thirdparty.mock import Mock
 from webkitpy.tool.commands.commandtest import CommandsTest
 from webkitpy.tool.commands.download import *
-from webkitpy.tool.mocktool import MockCheckout, MockOptions, MockTool
+from webkitpy.tool.mocktool import MockOptions, MockTool
+from webkitpy.common.checkout.checkout_mock import MockCheckout
 
 
 class AbstractRolloutPrepCommandTest(unittest.TestCase):
@@ -72,6 +73,7 @@ class DownloadCommandsTest(CommandsTest):
         options.build = True
         options.build_style = True
         options.check_style = True
+        options.check_style_filter = None
         options.clean = True
         options.close_bug = True
         options.force_clean = False
@@ -88,7 +90,7 @@ class DownloadCommandsTest(CommandsTest):
         self.assert_execute_outputs(Build(), [], options=self._default_options(), expected_stderr=expected_stderr)
 
     def test_build_and_test(self):
-        expected_stderr = "Updating working directory\nBuilding WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning Bindings tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\n"
+        expected_stderr = "Updating working directory\nBuilding WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\n"
         self.assert_execute_outputs(BuildAndTest(), [], options=self._default_options(), expected_stderr=expected_stderr)
 
     def test_apply_attachment(self):
@@ -114,7 +116,7 @@ MockWatchList: determine_cc_and_messages
         self.assert_execute_outputs(ApplyWatchList(), [10000], options=self._default_options(), expected_stderr=expected_stderr, tool=MockTool(log_executive=True))
 
     def test_land(self):
-        expected_stderr = "Building WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning Bindings tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\nCommitted r49824: <http://trac.webkit.org/changeset/49824>\nUpdating bug 50000\n"
+        expected_stderr = "Building WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\nCommitted r49824: <http://trac.webkit.org/changeset/49824>\nUpdating bug 50000\n"
         mock_tool = MockTool()
         mock_tool.scm().create_patch = Mock(return_value="Patch1\nMockPatch\n")
         mock_tool.checkout().modified_changelogs = Mock(return_value=[])
@@ -123,8 +125,31 @@ MockWatchList: determine_cc_and_messages
         self.assertEqual(mock_tool.scm().create_patch.call_count, 0)
         self.assertEqual(mock_tool.checkout().modified_changelogs.call_count, 1)
 
+    def test_land_cowboy(self):
+        expected_stderr = """MOCK run_and_throw_if_fail: ['mock-prepare-ChangeLog', '--email=MOCK email', '--merge-base=None', 'MockFile1'], cwd=/mock-checkout
+MOCK run_and_throw_if_fail: ['mock-check-webkit-style', '--git-commit', 'MOCK git commit', '--diff-files', 'MockFile1', '--filter', '-changelog'], cwd=/mock-checkout
+MOCK run_command: ['ruby', '-I', '/mock-checkout/Websites/bugs.webkit.org/PrettyPatch', '/mock-checkout/Websites/bugs.webkit.org/PrettyPatch/prettify.rb'], cwd=None
+MOCK: user.open_url: file://...
+Was that diff correct?
+Building WebKit
+MOCK run_and_throw_if_fail: ['mock-build-webkit'], cwd=/mock-checkout
+Running Python unit tests
+MOCK run_and_throw_if_fail: ['mock-test-webkitpy'], cwd=/mock-checkout
+Running Perl unit tests
+MOCK run_and_throw_if_fail: ['mock-test-webkitperl'], cwd=/mock-checkout
+Running JavaScriptCore tests
+MOCK run_and_throw_if_fail: ['mock-run-javacriptcore-tests'], cwd=/mock-checkout
+Running run-webkit-tests
+MOCK run_and_throw_if_fail: ['mock-run-webkit-tests', '--quiet'], cwd=/mock-checkout
+Committed r49824: <http://trac.webkit.org/changeset/49824>
+Committed r49824: <http://trac.webkit.org/changeset/49824>
+No bug id provided.
+"""
+        mock_tool = MockTool(log_executive=True)
+        self.assert_execute_outputs(LandCowboy(), [50000], options=self._default_options(), expected_stderr=expected_stderr, tool=mock_tool)
+
     def test_land_red_builders(self):
-        expected_stderr = 'Building WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning Bindings tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\nCommitted r49824: <http://trac.webkit.org/changeset/49824>\nUpdating bug 50000\n'
+        expected_stderr = 'Building WebKit\nRunning Python unit tests\nRunning Perl unit tests\nRunning JavaScriptCore tests\nRunning run-webkit-tests\nCommitted r49824: <http://trac.webkit.org/changeset/49824>\nUpdating bug 50000\n'
         mock_tool = MockTool()
         mock_tool.buildbot.light_tree_on_fire()
         self.assert_execute_outputs(Land(), [50000], options=self._default_options(), expected_stderr=expected_stderr, tool=mock_tool)
@@ -150,7 +175,6 @@ Processing patch 10000 from bug 50000.
 Building WebKit
 Running Python unit tests
 Running Perl unit tests
-Running Bindings tests
 Running JavaScriptCore tests
 Running run-webkit-tests
 Committed r49824: <http://trac.webkit.org/changeset/49824>
@@ -167,7 +191,6 @@ Processing patch 10000 from bug 50000.
 Building WebKit
 Running Python unit tests
 Running Perl unit tests
-Running Bindings tests
 Running JavaScriptCore tests
 Running run-webkit-tests
 Committed r49824: <http://trac.webkit.org/changeset/49824>
@@ -177,7 +200,6 @@ Processing patch 10001 from bug 50000.
 Building WebKit
 Running Python unit tests
 Running Perl unit tests
-Running Bindings tests
 Running JavaScriptCore tests
 Running run-webkit-tests
 Committed r49824: <http://trac.webkit.org/changeset/49824>

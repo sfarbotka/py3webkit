@@ -135,6 +135,9 @@ ui.results.ResultsGrid = base.extends('div', {
             }
             this.addComparison(resultType, resultsURLsByKind);
         }.bind(this));
+
+        if (!this.children.length)
+            this.textContent = 'No results to display.'
     }
 });
 
@@ -176,7 +179,6 @@ ui.results.TestSelector = base.extends('div', {
             var header = document.createElement('h3');
             $(header).append(new ui.actions.List([
                 new ui.actions.Rebaseline().makeDefault(),
-                new ui.actions.UpdateExpectations(),
             ])).append(link);
             this.appendChild(header);
             this.appendChild(this._delegate.contentForTest(testName));

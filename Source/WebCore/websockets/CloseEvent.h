@@ -50,11 +50,14 @@ struct CloseEventInit : public EventInit {
 
 class CloseEvent : public Event {
 public:
-    virtual bool isCloseEvent() const { return true; }
-
     static PassRefPtr<CloseEvent> create()
     {
         return adoptRef(new CloseEvent());
+    }
+
+    static PassRefPtr<CloseEvent> create(bool wasClean, unsigned short code, const String& reason)
+    {
+        return adoptRef(new CloseEvent(wasClean, code, reason));
     }
 
     static PassRefPtr<CloseEvent> create(const AtomicString& type, const CloseEventInit& initializer)
@@ -62,21 +65,11 @@ public:
         return adoptRef(new CloseEvent(type, initializer));
     }
 
-    void initCloseEvent(const AtomicString& type, bool canBubble, bool cancelable, bool wasClean, unsigned short code, const String& reason)
-    {
-        if (dispatched())
-            return;
-
-        initEvent(type, canBubble, cancelable);
-
-        m_wasClean = wasClean;
-        m_code = code;
-        m_reason = reason;
-    }
-
     bool wasClean() const { return m_wasClean; }
     unsigned short code() const { return m_code; }
     String reason() const { return m_reason; }
+
+    virtual const AtomicString& interfaceName() const { return eventNames().interfaceForCloseEvent; }
 
 private:
     CloseEvent()
@@ -85,6 +78,15 @@ private:
         , m_code(0)
     {
     }
+
+    CloseEvent(bool wasClean, int code, const String& reason)
+        : Event(eventNames().closeEvent, false, false)
+        , m_wasClean(wasClean)
+        , m_code(code)
+        , m_reason(reason)
+    {
+    }
+
     CloseEvent(const AtomicString& type, const CloseEventInit& initializer)
         : Event(type, initializer)
         , m_wasClean(initializer.wasClean)

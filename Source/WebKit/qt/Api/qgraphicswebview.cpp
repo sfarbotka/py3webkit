@@ -148,7 +148,7 @@ void QGraphicsWebViewPrivate::_q_contentsSizeChanged(const QSize& size)
 
 void QGraphicsWebViewPrivate::_q_scaleChanged()
 {
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     if (!page)
         return;
     pageClient()->updateTiledBackingStoreScale();
@@ -244,7 +244,7 @@ QGraphicsWebView::QGraphicsWebView(QGraphicsItem* parent)
     setAcceptTouchEvents(true);
     setFocusPolicy(Qt::StrongFocus);
     setFlag(QGraphicsItem::ItemClipsChildrenToShape, true);
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     QObject::connect(this, SIGNAL(scaleChanged()), this, SLOT(_q_scaleChanged()));
 #endif
 }
@@ -286,7 +286,7 @@ void QGraphicsWebView::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 {
     QPainter::RenderHints oldHints = painter->renderHints();
     painter->setRenderHints(oldHints | d->renderHints);
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     if (WebCore::TiledBackingStore* backingStore = QWebFramePrivate::core(page()->mainFrame())->tiledBackingStore()) {
         // FIXME: We should set the backing store viewport earlier than in paint
         backingStore->adjustVisibleRect();
@@ -538,7 +538,7 @@ void QGraphicsWebView::setPage(QWebPage* page)
             this, SIGNAL(linkClicked(QUrl)));
     connect(d->page, SIGNAL(destroyed()),
             this, SLOT(_q_pageDestroyed()));
-#if !defined(QT_NO_IM) && (defined(Q_WS_X11) || defined(Q_WS_QWS) || defined(Q_OS_SYMBIAN))
+#if !defined(QT_NO_IM) && (defined(Q_WS_X11) || defined(Q_WS_QWS))
     connect(d->page, SIGNAL(microFocusChanged()),
             this, SLOT(updateMicroFocus()));
 #endif
@@ -909,7 +909,7 @@ bool QGraphicsWebView::resizesToContents() const
 */
 bool QGraphicsWebView::isTiledBackingStoreFrozen() const
 {
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     WebCore::TiledBackingStore* backingStore = QWebFramePrivate::core(page()->mainFrame())->tiledBackingStore();
     if (!backingStore)
         return false;
@@ -921,7 +921,7 @@ bool QGraphicsWebView::isTiledBackingStoreFrozen() const
 
 void QGraphicsWebView::setTiledBackingStoreFrozen(bool frozen)
 {
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     WebCore::TiledBackingStore* backingStore = QWebFramePrivate::core(page()->mainFrame())->tiledBackingStore();
     if (!backingStore)
         return;

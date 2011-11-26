@@ -35,7 +35,6 @@
 #include "ActiveDOMObject.h"
 #include "EventNames.h"
 #include "EventTarget.h"
-#include "ExceptionCode.h"
 #include "KURL.h"
 #include "NotificationContents.h"
 #include "SharedBuffer.h"
@@ -55,6 +54,8 @@ namespace WebCore {
     class ResourceResponse;
     class ScriptExecutionContext;
     class ThreadableLoader;
+
+    typedef int ExceptionCode;
 
     class Notification : public RefCounted<Notification>, public ActiveDOMObject, public ThreadableLoaderClient, public EventTarget {
         WTF_MAKE_FAST_ALLOCATED;
@@ -83,13 +84,13 @@ namespace WebCore {
         DEFINE_ATTRIBUTE_EVENT_LISTENER(error);
         DEFINE_ATTRIBUTE_EVENT_LISTENER(close);
         DEFINE_ATTRIBUTE_EVENT_LISTENER(click);
-    
+
         using RefCounted<Notification>::ref;
         using RefCounted<Notification>::deref;
-    
+
         // EventTarget interface
+        virtual const AtomicString& interfaceName() const;
         virtual ScriptExecutionContext* scriptExecutionContext() const { return ActiveDOMObject::scriptExecutionContext(); }
-        virtual Notification* toNotification() { return this; }
 
         // ActiveDOMObject interface
         virtual void contextDestroyed();

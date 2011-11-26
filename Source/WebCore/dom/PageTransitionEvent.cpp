@@ -56,17 +56,9 @@ PageTransitionEvent::~PageTransitionEvent()
 {
 }
 
-void PageTransitionEvent::initPageTransitionEvent(const AtomicString& type, 
-                                            bool canBubbleArg,
-                                            bool cancelableArg,
-                                            bool persisted)
+const AtomicString& PageTransitionEvent::interfaceName() const
 {
-    if (dispatched())
-        return;
-
-    initEvent(type, canBubbleArg, cancelableArg);
-
-    m_persisted = persisted;
+    return eventNames().interfaceForPageTransitionEvent;
 }
 
 } // namespace WebCore

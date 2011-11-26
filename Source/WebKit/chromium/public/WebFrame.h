@@ -35,8 +35,9 @@
 #include "WebFileSystem.h"
 #include "WebIconURL.h"
 #include "WebNode.h"
-#include "WebURL.h"
+#include "WebReferrerPolicy.h"
 #include "WebURLLoaderOptions.h"
+#include "platform/WebURL.h"
 
 struct NPObject;
 
@@ -79,6 +80,14 @@ template <typename T> class WebVector;
 
 class WebFrame {
 public:
+    // Control of renderTreeAsText output
+    enum RenderAsTextControl {
+        RenderAsTextNormal = 0,
+        RenderAsTextDebug = 1 << 0,
+        RenderAsTextPrinting = 1 << 1
+    };
+    typedef unsigned RenderAsTextControls;
+
     // Returns the number of live WebFrame objects, used for leak checking.
     WEBKIT_EXPORT static int instanceCount();
 
@@ -131,6 +140,9 @@ public:
     // WebIconURL::Type values, used to select from the available set of icon
     // URLs
     virtual WebVector<WebIconURL> iconURLs(int iconTypes) const = 0;
+
+    // The referrer policy of the document associated with this frame.
+    virtual WebReferrerPolicy referrerPolicy() const = 0;
 
 
     // Geometry -----------------------------------------------------------
@@ -382,6 +394,8 @@ public:
 
     virtual WebRange markedRange() const = 0;
 
+    virtual void setSelectionToRange(const WebRange&) = 0;
+
     // Returns the frame rectangle in window coordinate space of the given text
     // range.
     virtual bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const = 0;
@@ -448,6 +462,11 @@ public:
     // Reformats the WebFrame for screen display.
     virtual void printEnd() = 0;
 
+    // If the frame contains a full-frame plugin or the given node refers to a
+    // plugin whose content indicates that printed output should not be scaled,
+    // return true, otherwise return false.
+    virtual bool isPrintScalingDisabledForPlugin(const WebNode& = WebNode()) = 0;
+
     // CSS3 Paged Media ----------------------------------------------------
 
     // Returns true if page box (margin boxes and page borders) is visible.
@@ -463,6 +482,10 @@ public:
                                             int& marginRight,
                                             int& marginBottom,
                                             int& marginLeft) = 0;
+
+    // Returns the value for a page property that is only defined when printing.
+    // printBegin must have been called before this method.
+    virtual WebString pageProperty(const WebString& propertyName, int pageIndex) = 0;
 
     // Find-in-page --------------------------------------------------------
 
@@ -521,6 +544,20 @@ public:
     virtual void resetMatchCount() = 0;
 
 
+    // Web Intents ---------------------------------------------------------
+
+    // Forwards a web intents reply from the invoked activity back to the
+    // appropriate registered Javascript callback. The |intentIdentifier| is
+    // the WebIntent parameter received from the dispatchIntent method.
+    virtual void handleIntentResult(int intentIdentifier, const WebString&) = 0;
+
+    // Forwards a web intents failure notification from the invoked activity
+    // or intervening browser logic back to the appropriate registered
+    // Javascript callback. The |intentIdentifier| is the WebIntent parameter
+    // received from the dispatchIntent method.
+    virtual void handleIntentFailure(int intentIdentifier, const WebString&) = 0;
+
+
     // Utility -------------------------------------------------------------
 
     // Returns the contents of this frame as a string.  If the text is
@@ -539,7 +576,7 @@ public:
 
     // Returns a text representation of the render tree.  This method is used
     // to support layout tests.
-    virtual WebString renderTreeAsText(bool showDebugInfo = false) const = 0;
+    virtual WebString renderTreeAsText(RenderAsTextControls toShow = RenderAsTextNormal) const = 0;
 
     // Returns the counter value for the specified element.  This method is
     // used to support layout tests.
@@ -553,6 +590,10 @@ public:
     virtual int pageNumberForElementById(const WebString& id,
                                          float pageWidthInPixels,
                                          float pageHeightInPixels) const = 0;
+
+    // Prints all of the pages into the canvas, with page boundaries drawn as
+    // one pixel wide blue lines. This method exists to support layout tests.
+    virtual void printPagesWithBoundaries(WebCanvas*, const WebSize&) = 0;
 
     // Returns the bounds rect for current selection. If selection is performed
     // on transformed text, the rect will still bound the selection but will

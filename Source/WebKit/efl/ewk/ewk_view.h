@@ -156,7 +156,7 @@ struct _Ewk_View_Smart_Class {
     Eina_Bool (*should_interrupt_javascript)(Ewk_View_Smart_Data *sd);
     uint64_t (*exceeded_database_quota)(Ewk_View_Smart_Data *sd, Evas_Object *frame, const char *databaseName, uint64_t current_size, uint64_t expected_size);
 
-    Eina_Bool (*run_open_panel)(Ewk_View_Smart_Data *sd, Evas_Object *frame, Eina_Bool allows_multiple_files, const char *accept_types, Eina_List **selected_filenames);
+    Eina_Bool (*run_open_panel)(Ewk_View_Smart_Data *sd, Evas_Object *frame, Eina_Bool allows_multiple_files, Eina_List *accept_types, Eina_List **selected_filenames);
 
     Eina_Bool (*navigation_policy_decision)(Ewk_View_Smart_Data *sd, Ewk_Frame_Resource_Request *request);
     Eina_Bool (*focus_can_cycle)(Ewk_View_Smart_Data *sd, Ewk_Focus_Direction direction);
@@ -166,7 +166,7 @@ struct _Ewk_View_Smart_Class {
  * The version you have to put into the version field
  * in the @a Ewk_View_Smart_Class structure.
  */
-#define EWK_VIEW_SMART_CLASS_VERSION 2UL
+#define EWK_VIEW_SMART_CLASS_VERSION 3UL
 
 /**
  * Initializes a whole @a Ewk_View_Smart_Class structure.
@@ -972,6 +972,65 @@ EAPI Eina_Bool    ewk_view_history_enable_set(Evas_Object *o, Eina_Bool enable);
 EAPI Ewk_History *ewk_view_history_get(const Evas_Object *o);
 
 /**
+ * Gets the current page zoom level of the main frame.
+ *
+ * @param o view object to get the zoom level
+ *
+ * @return current zoom level in use on success or @c -1.0 on failure
+ */
+EAPI float        ewk_view_page_zoom_get(const Evas_Object *o);
+
+/**
+ * Sets the current page zoom level of the main frame.
+ *
+ * @param o view object to set the zoom level
+ * @param page_zoom_factor a new level to set
+ *
+ * @return @c EINA_TRUE on success or @c EINA_FALSE otherwise
+ */
+EAPI Eina_Bool    ewk_view_page_zoom_set(Evas_Object *o, float page_zoom_factor);
+
+/**
+ * Gets the current scale factor of the page.
+ *
+ * @param o view object to get the scale factor 
+ *
+ * @return current scale factor in use on success or @c -1.0 on failure
+ */
+EAPI float        ewk_view_scale_get(const Evas_Object *o);
+
+/**
+ * Scales the current page, centered at the given point.
+ *
+ * @param o view object to set the zoom level
+ * @param scale_factor a new level to set
+ * @param cx x of center coordinate
+ * @param cy y of center coordinate
+ *
+ * @return @c EINA_TRUE on success or @c EINA_FALSE otherwise
+ */
+EAPI Eina_Bool    ewk_view_scale_set(Evas_Object *o, float scale_factor, Evas_Coord cx, Evas_Coord cy);
+
+/**
+ * Gets the current text zoom level of the main frame.
+ *
+ * @param o view object to get the zoom level
+ *
+ * @return current zoom level in use on success or @c -1.0 on failure
+ */
+EAPI float        ewk_view_text_zoom_get(const Evas_Object *o);
+
+/**
+ * Sets the current text zoom level of the main frame.
+ *
+ * @param o view object to set the zoom level
+ * @param textZoomFactor a new level to set
+ *
+ * @return @c EINA_TRUE on success or @c EINA_FALSE otherwise
+ */
+EAPI Eina_Bool    ewk_view_text_zoom_set(Evas_Object *o, float text_zoom_factor);
+
+/**
  * Gets the current zoom level of the main frame.
  *
  * @param o view object to get the zoom level
@@ -1136,25 +1195,6 @@ EAPI Eina_Bool    ewk_view_zoom_animated_mark_stop(Evas_Object *o);
  *            because zoom is too small/big
  */
 EAPI Eina_Bool    ewk_view_zoom_animated_set(Evas_Object *o, float zoom, float duration, Evas_Coord cx, Evas_Coord cy);
-
-/**
- * Queries if zoom level just applies to text only and not other elements.
- *
- * @param o view to query zoom level for text only
- *
- * @return @c EINA_TRUE if zoom level is applied to text only, @c EINA_FALSE if not or on failure
- */
-EAPI Eina_Bool    ewk_view_zoom_text_only_get(const Evas_Object *o);
-
-/**
- * Sets if zoom level just applies to text only and not other elements.
- *
- * @param o view to apply zoom level for text only
- * @param setting @c EINA_TRUE if zoom level should be applied to text only, @c EINA_FALSE if not
- *
- * @return @c EINA_TRUE on success or @c EINA_FALSE otherwise
- */
-EAPI Eina_Bool    ewk_view_zoom_text_only_set(Evas_Object *o, Eina_Bool setting);
 
 /**
  * Asks engine to pre-render region.
@@ -1398,7 +1438,7 @@ EAPI Eina_Bool    ewk_view_setting_enable_frame_flattening_set(Evas_Object* o, E
  * @return @c EINA_TRUE if the scripts can open the new windows
  *         @c EINA_FALSE if not or on failure
  */
-EAPI Eina_Bool    ewk_view_setting_scripts_window_open_get(const Evas_Object *o);
+EAPI Eina_Bool    ewk_view_setting_scripts_can_open_windows_get(const Evas_Object *o);
 
 /**
  * Enables/disables if the scripts can open the new windows.
@@ -1411,7 +1451,7 @@ EAPI Eina_Bool    ewk_view_setting_scripts_window_open_get(const Evas_Object *o)
  *
  * @see ewk_view_setting_enable_scripts_set
  */
-EAPI Eina_Bool    ewk_view_setting_scripts_window_open_set(Evas_Object *o, Eina_Bool allow);
+EAPI Eina_Bool    ewk_view_setting_scripts_can_open_windows_set(Evas_Object *o, Eina_Bool allow);
 
 /**
  * Returns whether scripts can close windows automatically.
@@ -1515,25 +1555,39 @@ EAPI Eina_Bool    ewk_view_setting_private_browsing_get(const Evas_Object *o);
 EAPI Eina_Bool    ewk_view_setting_private_browsing_set(Evas_Object *o, Eina_Bool enable);
 
 /**
- * Queries if the cache for offline application is enabled.
+ * Returns whether HTML5 application cache support is enabled for this view.
  *
- * @param o view object to query if the cache for offline application is enabled
+ * The Offline Application Caching APIs are part of HTML5 and allow applications to store data locally that is accessed
+ * when the network cannot be reached.
  *
- * @return @c EINA_TRUE if the cache for offline application is enabled,
+ * Application cache support is enabled by default.
+ *
+ * @param o view object whose settings to query
+ *
+ * @return @c EINA_TRUE if the application cache is enabled,
  *         @c EINA_FALSE if not or on failure
+ *
+ * @sa ewk_settings_application_cache_path_set
  */
-EAPI Eina_Bool    ewk_view_setting_offline_app_cache_get(const Evas_Object *o);
+EAPI Eina_Bool    ewk_view_setting_application_cache_get(const Evas_Object *o);
 
 /**
- * Enables/disables the cache for offline application.
+ * Enables/disables the HTML5 application cache for this view.
  *
- * @param o view object to set if the cache for offline application
- * @param enable @c EINA_TRUE to enable the cache for offline application
+ * The Offline Application Caching APIs are part of HTML5 and allow applications to store data locally that is accessed
+ * when the network cannot be reached.
+ *
+ * Application cache support is enabled by default.
+ *
+ * @param o view object whose settings to change
+ * @param enable @c EINA_TRUE to enable the application cache,
  *        @c EINA_FALSE to disable
  *
  * @return @c EINA_TRUE on success or @c EINA_FALSE on failure
+ *
+ * @sa ewk_settings_application_cache_path_set
  */
-EAPI Eina_Bool    ewk_view_setting_offline_app_cache_set(Evas_Object *o, Eina_Bool enable);
+EAPI Eina_Bool    ewk_view_setting_application_cache_set(Evas_Object *o, Eina_Bool enable);
 
 /**
  * Queries if the caret browsing feature is enabled.
@@ -1725,33 +1779,51 @@ EAPI Eina_Bool    ewk_view_setting_spatial_navigation_set(Evas_Object *o, Eina_B
 EAPI Eina_Bool    ewk_view_setting_local_storage_get(const Evas_Object *o);
 
 /**
- * Enables/disable the local storage feature of HTML5.
+ * Enables/disables the local storage feature of HTML5.
+ *
+ * Please notice that by default there is no storage path specified for the database.
+ * This means that the contents of @c window.localStorage will not be saved to disk and
+ * will be lost when the view is removed.
+ * To set the path where the storage database will be stored, use
+ * ewk_view_setting_local_storage_database_path_set.
  *
  * @param o view object to set if local storage is enabled
  * @param enable @c EINA_TRUE to enable the local storage feature,
  *        @c EINA_FALSE to disable
  *
  * @return @c EINA_TRUE on success or @c EINA_FALSE on failure
+ *
+ * @sa ewk_view_setting_local_storage_database_path_set
  */
 EAPI Eina_Bool    ewk_view_setting_local_storage_set(Evas_Object *o, Eina_Bool enable);
 
 /**
- * Gets the database path to the local storage feature of HTML5.
+ * Returns the path where the HTML5 local storage database is stored on disk.
+ *
+ * By default, there is no path set, which means changes to @c window.localStorage will not
+ * be saved to disk whatsoever.
  *
  * @param o view object to get the database path to the local storage feature
  *
- * @return @c eina_strinshare containing the database path to the local storage feature, or
+ * @return @c eina_stringshare containing the database path to the local storage feature, or
  *         @c 0 if it's not set
+ *
+ * @sa ewk_view_setting_local_storage_database_path_set
  */
 EAPI const char  *ewk_view_setting_local_storage_database_path_get(const Evas_Object *o);
 
 /**
- * Sets the database path to the local storage feature of HTML5.
+ * Sets the path where the HTML5 local storage database is stored on disk.
+ *
+ * By default, there is no path set, which means changes to @c window.localStorage will not
+ * be saved to disk whatsoever.
  *
  * @param o view object to set the database path to the local storage feature
  * @param path a new database path to the local storage feature
  *
  * @return @c EINA_TRUE on success or @c EINA_FALSE on failure
+ *
+ * @sa ewk_view_setting_local_storage_set
  */
 EAPI Eina_Bool    ewk_view_setting_local_storage_database_path_set(Evas_Object *o, const char *path);
 
@@ -2177,6 +2249,51 @@ EAPI Eina_Bool ewk_view_protocol_handler_set(Evas_Object* o, const char** protoc
  * @return @c EINA_TRUE if success, @c EINA_FALSE if not.
  */
 EAPI Eina_Bool ewk_view_protocol_handler_unset(Evas_Object* o);
+
+/// Defines the page visibility status.
+enum _Ewk_Page_Visibility_State {
+    EWK_PAGE_VISIBILITY_STATE_VISIBLE,
+    EWK_PAGE_VISIBILITY_STATE_HIDDEN,
+    EWK_PAGE_VISIBILITY_STATE_PRERENDER
+};
+/// Creates a type name for @a _Ewk_Page_Visibility_State.
+typedef enum _Ewk_Page_Visibility_State Ewk_Page_Visibility_State;
+
+/**
+ * Sets the visibility state of the page.
+ *
+ * This function let WebKit knows the visibility status of the page.
+ * WebKit will save the current status, and fire a "visibilitychange"
+ * event which web application can listen. Web application could slow
+ * down or stop itself when it gets a "visibilitychange" event and its
+ * visibility state is hidden. If its visibility state is visible, then
+ * the web application could use more resources.
+ *
+ * This feature makes that web application could use the resources efficiently,
+ * such as power, CPU, and etc.
+ *
+ * If more detailed description is needed, please see the specification.
+ * (http://www.w3.org/TR/page-visibility)
+ *
+ * @param o view object to set the visibility state.
+ * @param page_visible_state the visible state of the page to set.
+ * @param initial_state @c EINA_TRUE if this function is called at page initialization time,
+ *                      @c EINA_FALSE otherwise.
+ *
+ * @return @c EINA_TRUE on success or @c EINA_FALSE on failure.
+ */
+EAPI Eina_Bool ewk_view_visibility_state_set(Evas_Object* o, Ewk_Page_Visibility_State page_visible_state, Eina_Bool initial_state);
+
+/**
+ * Gets the visibility state of the page.
+ *
+ * @param o view object
+ *
+ * @return enum value of @a Ewk_Page_Visibility_State that indicates current visibility status of the page.
+ *
+ * @see ewk_view_visibility_state_set()
+ */
+EAPI Ewk_Page_Visibility_State ewk_view_visibility_state_get(const Evas_Object *o);
 
 #ifdef __cplusplus
 }

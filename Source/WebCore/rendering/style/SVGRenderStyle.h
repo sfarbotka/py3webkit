@@ -46,6 +46,7 @@ public:
 
     bool inheritedNotEqual(const SVGRenderStyle*) const;
     void inheritFrom(const SVGRenderStyle*);
+    void copyNonInheritedFrom(const SVGRenderStyle*);
 
     StyleDifference diff(const SVGRenderStyle*) const;
 
@@ -152,14 +153,24 @@ public:
             fill.access()->opacity = obj;
     }
 
-    void setFillPaint(SVGPaint::SVGPaintType type, const Color& color, const String& uri)
+    void setFillPaint(SVGPaint::SVGPaintType type, const Color& color, const String& uri, bool applyToRegularStyle = true, bool applyToVisitedLinkStyle = false)
     {
-        if (!(fill->paintType == type))
-            fill.access()->paintType = type;
-        if (!(fill->paintColor == color))
-            fill.access()->paintColor = color;
-        if (!(fill->paintUri == uri))
-            fill.access()->paintUri = uri;
+        if (applyToRegularStyle) {
+            if (!(fill->paintType == type))
+                fill.access()->paintType = type;
+            if (!(fill->paintColor == color))
+                fill.access()->paintColor = color;
+            if (!(fill->paintUri == uri))
+                fill.access()->paintUri = uri;
+        }
+        if (applyToVisitedLinkStyle) {
+            if (!(fill->paintType == type))
+                fill.access()->visitedLinkPaintType = type;
+            if (!(fill->paintColor == color))
+                fill.access()->visitedLinkPaintColor = color;
+            if (!(fill->paintUri == uri))
+                fill.access()->visitedLinkPaintUri = uri;
+        }
     }
 
     void setStrokeOpacity(float obj)
@@ -168,14 +179,24 @@ public:
             stroke.access()->opacity = obj;
     }
 
-    void setStrokePaint(SVGPaint::SVGPaintType type, const Color& color, const String& uri)
+    void setStrokePaint(SVGPaint::SVGPaintType type, const Color& color, const String& uri, bool applyToRegularStyle = true, bool applyToVisitedLinkStyle = false)
     {
-        if (!(stroke->paintType == type))
-            stroke.access()->paintType = type;
-        if (!(stroke->paintColor == color))
-            stroke.access()->paintColor = color;
-        if (!(stroke->paintUri == uri))
-            stroke.access()->paintUri = uri;
+        if (applyToRegularStyle) {
+            if (!(stroke->paintType == type))
+                stroke.access()->paintType = type;
+            if (!(stroke->paintColor == color))
+                stroke.access()->paintColor = color;
+            if (!(stroke->paintUri == uri))
+                stroke.access()->paintUri = uri;
+        }
+        if (applyToVisitedLinkStyle) {
+            if (!(stroke->paintType == type))
+                stroke.access()->visitedLinkPaintType = type;
+            if (!(stroke->paintColor == color))
+                stroke.access()->visitedLinkPaintColor = color;
+            if (!(stroke->paintUri == uri))
+                stroke.access()->visitedLinkPaintUri = uri;
+        }
     }
 
     void setStrokeDashArray(const Vector<SVGLength>& obj)
@@ -327,6 +348,13 @@ public:
     String markerStartResource() const { return inheritedResources->markerStart; }
     String markerMidResource() const { return inheritedResources->markerMid; }
     String markerEndResource() const { return inheritedResources->markerEnd; }
+    
+    const SVGPaint::SVGPaintType& visitedLinkFillPaintType() const { return fill->visitedLinkPaintType; }
+    const Color& visitedLinkFillPaintColor() const { return fill->visitedLinkPaintColor; }
+    const String& visitedLinkFillPaintUri() const { return fill->visitedLinkPaintUri; }
+    const SVGPaint::SVGPaintType& visitedLinkStrokePaintType() const { return stroke->visitedLinkPaintType; }
+    const Color& visitedLinkStrokePaintColor() const { return stroke->visitedLinkPaintColor; }
+    const String& visitedLinkStrokePaintUri() const { return stroke->visitedLinkPaintUri; }
 
     // convenience
     bool hasClipper() const { return !clipperResource().isEmpty(); }

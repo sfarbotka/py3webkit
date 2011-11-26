@@ -33,10 +33,10 @@ from __future__ import with_statement
 import base64
 import time
 
-from webkitpy.common.system import filesystem_mock
 from webkitpy.layout_tests.port import Port, Driver, DriverOutput
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
-from webkitpy.tool import mocktool
+from webkitpy.common.host_mock import MockHost
+from webkitpy.common.system.filesystem_mock import MockFileSystem
 
 
 # This sets basic expectations for a test. Each individual expectation
@@ -46,6 +46,7 @@ class TestInstance(object):
         self.name = name
         self.base = name[(name.rfind("/") + 1):name.rfind(".html")]
         self.crash = False
+        self.web_process_crash = False
         self.exception = False
         self.hang = False
         self.keyboard = False
@@ -139,8 +140,18 @@ def unit_test_list():
     tests.add('failures/expected/text.html', actual_text='text_fail-png')
     tests.add('failures/unexpected/missing_text.html', expected_text=None)
     tests.add('failures/unexpected/missing_image.html', expected_image=None)
+    tests.add('failures/unexpected/missing_render_tree_dump.html', actual_text="""layer at (0,0) size 800x600
+  RenderView at (0,0) size 800x600
+layer at (0,0) size 800x34
+  RenderBlock {HTML} at (0,0) size 800x34
+    RenderBody {BODY} at (8,8) size 784x18
+      RenderText {#text} at (0,0) size 133x18
+        text run at (0,0) width 133: "This is an image test!"
+""", expected_text=None)
     tests.add('failures/unexpected/crash.html', crash=True)
     tests.add('failures/unexpected/crash-with-stderr.html', crash=True,
+              error="mock-std-error-output")
+    tests.add('failures/unexpected/web-process-crash-with-stderr.html', web_process_crash=True,
               error="mock-std-error-output")
     tests.add('failures/unexpected/text-image-checksum.html',
               actual_text='text-image-checksum_fail-txt',
@@ -249,7 +260,7 @@ WONTFIX SKIP : failures/expected/exception.html = CRASH
     # Add in a file should be ignored by test_files.find().
     #files[LAYOUT_TEST_DIR + '/userscripts/resources/iframe.html'] = 'iframe'
 
-    fs = filesystem_mock.MockFileSystem(files, dirs=set(['/mock-checkout']))  # Make sure at least the checkout_root exists as a directory.
+    fs = MockFileSystem(files, dirs=set(['/mock-checkout']))  # Make sure at least the checkout_root exists as a directory.
     fs._tests = test_list
     return fs
 
@@ -262,12 +273,20 @@ class TestPort(Port):
         'test-linux-x86_64',
     )
 
-    def __init__(self, port_name=None, user=None, filesystem=None, **kwargs):
+    def _set_default_overriding_none(self, dictionary, key, default):
+        # dict.setdefault almost works, but won't actually override None values, which we want.
+        if not dictionary.get(key):
+            dictionary[key] = default
+        return dictionary[key]
+
+    def __init__(self, host=None, port_name=None, **kwargs):
         if not port_name or port_name == 'test':
             port_name = 'test-mac-leopard'
-        user = user or mocktool.MockUser()
-        filesystem = filesystem or unit_test_filesystem()
-        Port.__init__(self, port_name=port_name, filesystem=filesystem, user=user, **kwargs)
+
+        host = host or MockHost()
+        filesystem = self._set_default_overriding_none(kwargs, 'filesystem', unit_test_filesystem())
+
+        Port.__init__(self, host, port_name=port_name, **kwargs)
         self._results_directory = None
 
         assert filesystem._tests
@@ -343,8 +362,8 @@ class TestPort(Port):
     def setup_test_run(self):
         pass
 
-    def create_driver(self, worker_number):
-        return TestDriver(self, worker_number)
+    def _driver_class(self):
+        return TestDriver
 
     def start_http_server(self):
         pass
@@ -472,9 +491,6 @@ class TestDriver(Driver):
     def cmd_line(self):
         return [self._port._path_to_driver()] + self._port.get_option('additional_drt_flag', [])
 
-    def poll(self):
-        return True
-
     def run_test(self, test_input):
         start_time = time.time()
         test_name = test_input.test_name
@@ -489,12 +505,15 @@ class TestDriver(Driver):
         audio = None
         if test.actual_audio:
             audio = base64.b64decode(test.actual_audio)
+        crashed_process_name = None
+        if test.crash:
+            crashed_process_name = self._port.driver_name()
+        elif test.web_process_crash:
+            crashed_process_name = 'WebProcess'
         return DriverOutput(test.actual_text, test.actual_image,
-            test.actual_checksum, audio, crash=test.crash,
+            test.actual_checksum, audio, crash=test.crash or test.web_process_crash,
+            crashed_process_name=crashed_process_name,
             test_time=time.time() - start_time, timeout=test.timeout, error=test.error)
-
-    def start(self):
-        pass
 
     def stop(self):
         pass

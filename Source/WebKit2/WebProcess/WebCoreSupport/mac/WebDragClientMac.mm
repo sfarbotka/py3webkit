@@ -58,6 +58,7 @@ using namespace WebKit;
 // Create it explicitly because dragImage is called in the UI process.
 @interface NSFilePromiseDragSource : NSObject
 {
+    id _dragSource;
     char _unknownFields[256];
 }
 - (id)initWithSource:(id)dragSource;
@@ -69,9 +70,9 @@ using namespace WebKit;
 
 @interface WKPasteboardOwner : NSObject
 {
-    CachedResourceHandle<CachedImage> _image;
+    CachedResourceHandle<WebCore::CachedImage> _image;
 }
-- (id)initWithImage:(CachedImage*)image;
+- (id)initWithImage:(WebCore::CachedImage*)image;
 @end
 
 namespace WebKit {
@@ -102,14 +103,14 @@ void WebDragClient::startDrag(RetainPtr<NSImage> image, const IntPoint& point, c
     m_page->send(Messages::WebPageProxy::SetDragImage(frame->view()->contentsToWindow(point), handle, linkDrag));
 }
 
-static CachedImage* cachedImage(Element* element)
+static WebCore::CachedImage* cachedImage(Element* element)
 {
     RenderObject* renderer = element->renderer();
     if (!renderer)
         return 0;
     if (!renderer->isRenderImage())
         return 0;
-    CachedImage* image = toRenderImage(renderer)->cachedImage();
+    WebCore::CachedImage* image = toRenderImage(renderer)->cachedImage();
     if (!image || image->errorOccurred()) 
         return 0;
     return image;
@@ -128,7 +129,7 @@ void WebDragClient::declareAndWriteDragImage(NSPasteboard *pasteboard, DOMElemen
 
     Element* coreElement = core(element);
 
-    CachedImage* image = cachedImage(coreElement);
+    WebCore::CachedImage* image = cachedImage(coreElement);
 
     NSString *extension = @"";
     if (image) {
@@ -189,6 +190,21 @@ void WebDragClient::dragEnded()
 
 @implementation WKPasteboardFilePromiseOwner
 
+- (id)initWithSource:(id)dragSource
+{
+    self = [super initWithSource:dragSource];
+    if (!self)
+        return nil;
+    [_dragSource retain];
+    return self;
+}
+
+- (void)dealloc
+{
+    [_dragSource release];
+    [super dealloc];
+}
+
 // The AppKit implementation of copyDropDirectory gets the current pasteboard in
 // a way that only works in the process where the drag is initiated. We supply
 // an implementation that gets the pasteboard by name instead.
@@ -211,9 +227,9 @@ void WebDragClient::dragEnded()
 
 @implementation WKPasteboardOwner
 
-static CachedResourceClient* promisedDataClient()
+static CachedImageClient* promisedDataClient()
 {
-    static CachedResourceClient* client = new CachedResourceClient;
+    static CachedImageClient* client = new CachedImageClient;
     return client;
 }
 
@@ -225,7 +241,7 @@ static CachedResourceClient* promisedDataClient()
     _image = 0;
 }
 
-- (id)initWithImage:(CachedImage*)image
+- (id)initWithImage:(WebCore::CachedImage*)image
 {
     self = [super init];
     if (!self)

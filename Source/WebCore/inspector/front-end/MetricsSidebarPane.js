@@ -52,6 +52,11 @@ WebInspector.MetricsSidebarPane.prototype = {
 
     _innerUpdate: function()
     {
+        // "style" attribute might have changed. Update metrics unless they are being edited
+        // (if a CSS property is added, a StyleSheetChanged event is dispatched).
+        if (this._isEditingMetrics)
+            return;
+
         // FIXME: avoid updates of a collapsed pane.
         var node = this.node;
 
@@ -66,7 +71,7 @@ WebInspector.MetricsSidebarPane.prototype = {
                 return;
             this._updateMetrics(style);
         }
-        WebInspector.cssModel.getComputedStyleAsync(node.id, callback.bind(this));
+        WebInspector.cssModel.getComputedStyleAsync(node.id, WebInspector.panels.elements.sidebarPanes.styles.forcedPseudoClasses, callback.bind(this));
 
         function inlineStyleCallback(style)
         {
@@ -74,7 +79,7 @@ WebInspector.MetricsSidebarPane.prototype = {
                 return;
             this.inlineStyle = style;
         }
-        WebInspector.cssModel.getInlineStyleAsync(node.id, inlineStyleCallback.bind(this));
+        WebInspector.cssModel.getInlineStylesAsync(node.id, inlineStyleCallback.bind(this));
     },
 
     _styleSheetChanged: function()
@@ -87,9 +92,7 @@ WebInspector.MetricsSidebarPane.prototype = {
         if (this.node !== event.data.node)
             return;
 
-        // "style" attribute might have changed. Update metrics unless they are being edited.
-        if (!this._isEditingMetrics)
-            this._innerUpdate();
+        this._innerUpdate();
     },
 
     _getPropertyValueAsPx: function(style, propertyName)

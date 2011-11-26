@@ -51,14 +51,14 @@ static void ewk_custom_protocol_handler_init(EwkCustomProtocolHandler* customPro
     customProtocolHandler->priv->bytesRead = 0;
 }
 
-static void ewk_custom_protocol_handler_finalize(GObject* obj)
+static void ewk_custom_protocol_handler_finalize(GObject* object)
 {
-    EwkProtocolHandlerPrivate* priv  = G_TYPE_INSTANCE_GET_PRIVATE(obj, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER,
+    EwkProtocolHandlerPrivate* priv  = G_TYPE_INSTANCE_GET_PRIVATE(object, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER,
                                                                    EwkProtocolHandlerPrivate);
     if (priv)
         free(priv->mime);
 
-    G_OBJECT_CLASS(ewk_custom_protocol_handler_parent_class)->finalize(obj);
+    G_OBJECT_CLASS(ewk_custom_protocol_handler_parent_class)->finalize(object);
 }
 
 static gboolean ewk_custom_protocol_handler_check_uri(SoupRequest* request, SoupURI* uri, GError** error)
@@ -148,7 +148,7 @@ Eina_Bool ewk_custom_protocol_handler_soup_set(const char** protocols)
     protocolsSize = g_strv_length(const_cast<gchar**>(protocols));
 
     // This array must be null terminated.
-    EINA_SAFETY_ON_TRUE_RETURN_VAL(!protocolsSize || protocols[protocolsSize], EINA_FALSE);
+    EINA_SAFETY_ON_TRUE_RETURN_VAL(!protocolsSize || protocols[protocolsSize], false);
 
     requester = soup_session_get_feature(session, SOUP_TYPE_REQUESTER);
     if (!requester) {
@@ -159,15 +159,15 @@ Eina_Bool ewk_custom_protocol_handler_soup_set(const char** protocols)
 
     if (soup_session_feature_has_feature(requester, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER)) {
         customProtocolAddedCount++;
-        return EINA_TRUE;
+        return true;
     }
 
     schemes = g_strdupv(const_cast<gchar**>(protocols));
     if (!(schemes && soup_session_feature_add_feature(requester, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER)))
-        return EINA_FALSE;
+        return false;
 
     customProtocolAddedCount++;
-    return EINA_TRUE;
+    return true;
 }
 
 Eina_Bool ewk_custom_protocol_handler_soup_all_unset()
@@ -176,22 +176,22 @@ Eina_Bool ewk_custom_protocol_handler_soup_all_unset()
     SoupSessionFeature* requester;
 
     if (!customProtocolAddedCount)
-        return EINA_FALSE;
+        return false;
 
     requester = soup_session_get_feature(session, SOUP_TYPE_REQUESTER);
     if (!requester)
-        return EINA_FALSE;
+        return false;
 
     if (!soup_session_feature_has_feature(requester, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER))
-        return EINA_FALSE;
+        return false;
 
     if (customProtocolAddedCount == 1) {
         if (soup_session_feature_remove_feature(requester, EWK_TYPE_CUSTOM_PROTOCOL_HANDLER))
             g_strfreev(schemes);
         else
-            return EINA_FALSE;
+            return false;
     }
 
     customProtocolAddedCount--;
-    return EINA_TRUE;
+    return true;
 }

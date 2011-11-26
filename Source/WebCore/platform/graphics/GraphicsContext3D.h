@@ -498,10 +498,8 @@ public:
     PlatformLayer* platformLayer() const { return 0; }
 #endif
 #endif
-    void makeContextCurrent();
+    bool makeContextCurrent();
 
-    PassRefPtr<DrawingBuffer> createDrawingBuffer(const IntSize& = IntSize());
-    
 #if PLATFORM(MAC) || PLATFORM(CHROMIUM) || PLATFORM(GTK) || PLATFORM(QT)
     // With multisampling on, blit from multisampleFBO to regular FBO.
     void prepareTexture();
@@ -791,8 +789,8 @@ public:
     void markLayerComposited();
     bool layerComposited() const;
 
-    void paintRenderingResultsToCanvas(CanvasRenderingContext*);
-    PassRefPtr<ImageData> paintRenderingResultsToImageData();
+    void paintRenderingResultsToCanvas(CanvasRenderingContext*, DrawingBuffer*);
+    PassRefPtr<ImageData> paintRenderingResultsToImageData(DrawingBuffer*);
     bool paintCompositedResultsToCanvas(CanvasRenderingContext*);
 
 #if PLATFORM(QT)

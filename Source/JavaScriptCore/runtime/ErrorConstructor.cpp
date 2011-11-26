@@ -53,7 +53,7 @@ static EncodedJSValue JSC_HOST_CALL constructWithErrorConstructor(ExecState* exe
     return JSValue::encode(ErrorInstance::create(exec, errorStructure, message));
 }
 
-ConstructType ErrorConstructor::getConstructData(ConstructData& constructData)
+ConstructType ErrorConstructor::getConstructData(JSCell*, ConstructData& constructData)
 {
     constructData.native.function = constructWithErrorConstructor;
     return ConstructTypeHost;
@@ -64,11 +64,6 @@ static EncodedJSValue JSC_HOST_CALL callErrorConstructor(ExecState* exec)
     JSValue message = exec->argumentCount() ? exec->argument(0) : jsUndefined();
     Structure* errorStructure = asInternalFunction(exec->callee())->globalObject()->errorStructure();
     return JSValue::encode(ErrorInstance::create(exec, errorStructure, message));
-}
-
-CallType ErrorConstructor::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
 }
 
 CallType ErrorConstructor::getCallData(JSCell*, CallData& callData)

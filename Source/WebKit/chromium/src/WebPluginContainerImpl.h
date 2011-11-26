@@ -91,6 +91,9 @@ public:
     virtual void scrollRect(int dx, int dy, const WebRect&);
     virtual void reportGeometry();
     virtual void setBackingTextureId(unsigned);
+    virtual void setBackingIOSurfaceId(int width,
+                                       int height,
+                                       uint32_t ioSurfaceId);
     virtual void commitBackingTexture();
     virtual void clearScriptObjects();
     virtual NPObject* scriptableObjectForElement();
@@ -107,6 +110,9 @@ public:
     // Whether the plugin supports its own paginated print. The other print
     // interface methods are called only if this method returns true.
     bool supportsPaginatedPrint() const;
+    // If the plugin content should not be scaled to the printable area of
+    // the page, then this method should return true.
+    bool isPrintScalingDisabled() const;
     // Sets up printing at the given print rect and printer DPI. printableArea
     // is in points (a point is 1/72 of an inch).Returns the number of pages to
     // be printed at these settings.

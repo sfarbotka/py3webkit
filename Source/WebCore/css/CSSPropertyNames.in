@@ -193,6 +193,7 @@ z-index
 -webkit-animation-play-state
 -webkit-animation-timing-function
 -webkit-appearance
+-webkit-aspect-ratio
 -webkit-backface-visibility
 -webkit-background-clip
 -webkit-background-composite
@@ -236,6 +237,7 @@ z-index
 -webkit-box-reflect
 -webkit-box-shadow
 -webkit-color-correction
+-webkit-column-axis
 -webkit-column-break-after
 -webkit-column-break-before
 -webkit-column-break-inside
@@ -251,12 +253,10 @@ z-index
 #if defined(ENABLE_CSS_FILTERS) && ENABLE_CSS_FILTERS
 -webkit-filter
 #endif
-#if defined(ENABLE_CSS3_FLEXBOX) && ENABLE_CSS3_FLEXBOX
 -webkit-flex-align
 -webkit-flex-flow
 -webkit-flex-order
 -webkit-flex-pack
-#endif
 -webkit-font-size-delta
 -webkit-highlight
 -webkit-hyphenate-character
@@ -268,6 +268,8 @@ z-index
 -webkit-line-box-contain
 -webkit-line-break
 -webkit-line-clamp
+-webkit-line-grid
+-webkit-line-grid-snap
 -webkit-logical-width
 -webkit-logical-height
 -webkit-margin-after-collapse
@@ -318,6 +320,7 @@ z-index
 -webkit-perspective-origin
 -webkit-perspective-origin-x
 -webkit-perspective-origin-y
+-webkit-print-color-adjust
 -webkit-rtl-ordering
 -webkit-text-combine
 -epub-text-combine = -webkit-text-combine
@@ -348,13 +351,19 @@ z-index
 -webkit-user-drag
 -webkit-user-modify
 -webkit-user-select
--webkit-flow
--webkit-content-order
+-webkit-flow-into
+-webkit-flow-from
 -webkit-region-overflow
--webkit-wrap-shape
+-webkit-wrap-shape-inside
+-webkit-wrap-shape-outside
+-webkit-wrap-margin
+-webkit-wrap-padding
 -webkit-region-break-after
 -webkit-region-break-before
 -webkit-region-break-inside
+-webkit-wrap-flow
+-webkit-wrap-through
+-webkit-wrap
 #if defined(ENABLE_TOUCH_EVENTS) && ENABLE_TOUCH_EVENTS
 -webkit-tap-highlight-color
 #endif

@@ -31,17 +31,17 @@ import sys
 import unittest
 
 from webkitpy.common.system.executive import ScriptError
-from webkitpy.common.system.executive_mock import MockExecutive2
+from webkitpy.common.system.executive_mock import MockExecutive, MockExecutive2
 from webkitpy.common.system.filesystem_mock import MockFileSystem
+from webkitpy.common.host_mock import MockHost
 from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.layout_tests.port import port_testcase
 from webkitpy.layout_tests.port.win import WinPort
-from webkitpy.tool.mocktool import MockOptions, MockUser, MockExecutive
+from webkitpy.tool.mocktool import MockOptions
 
 
 class WinPortTest(port_testcase.PortTestCase):
-    def port_maker(self, platform):
-        return WinPort
+    port_maker = WinPort
 
     def test_show_results_html_file(self):
         port = self.make_port()
@@ -57,21 +57,19 @@ class WinPortTest(port_testcase.PortTestCase):
             return "6.1.7600"
 
         port._executive = MockExecutive2(run_command_fn=mock_run_command)
-        self.assertEquals(port._detect_version(), '7sp0')
+        self.assertEquals(port._detect_version(run_on_non_windows_platforms=True), '7sp0')
 
         def mock_run_command(cmd):
             raise ScriptError('Failure')
 
         port._executive = MockExecutive2(run_command_fn=mock_run_command)
         # Failures log to the python error log, but we have no easy way to capture/test that.
-        self.assertEquals(port._detect_version(), None)
+        self.assertEquals(port._detect_version(run_on_non_windows_platforms=True), None)
 
     def _assert_search_path(self, expected_search_paths, version, use_webkit2=False):
         port = WinPort(os_version_string=version,
             options=MockOptions(webkit_test_runner=use_webkit2),
-            filesystem=MockFileSystem(),
-            user=MockUser(),
-            executive=MockExecutive())
+            host=MockHost())
         absolute_search_paths = map(port._webkit_baseline_path, expected_search_paths)
         self.assertEquals(port.baseline_search_path(), absolute_search_paths)
 
@@ -87,10 +85,21 @@ class WinPortTest(port_testcase.PortTestCase):
         self._assert_search_path(['win-wk2', 'win', 'mac-wk2', 'mac-lion', 'mac'], 'bogus', use_webkit2=True)
 
     def _assert_version(self, port_name, expected_version):
-        port = WinPort(port_name=port_name, filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = WinPort(port_name=port_name, host=MockHost())
         self.assertEquals(port.version(), expected_version)
 
     def test_versions(self):
         self._assert_version('win-xp', 'xp')
         self._assert_version('win-vista', 'vista')
         self._assert_version('win-7sp0', '7sp0')
+
+    def test_compare_text(self):
+        expected = "EDITING DELEGATE: webViewDidChangeSelection:WebViewDidChangeSelectionNotification\nfoo\nEDITING DELEGATE: webViewDidChangeSelection:WebViewDidChangeSelectionNotification\n"
+        port = self.make_port()
+        self.assertFalse(port.compare_text(expected, "foo\n"))
+        self.assertTrue(port.compare_text(expected, "foo"))
+        self.assertTrue(port.compare_text(expected, "bar"))
+
+        # This hack doesn't exist in WK2.
+        port._options = MockOptions(webkit_test_runner=True)
+        self.assertTrue(port.compare_text(expected, "foo\n"))

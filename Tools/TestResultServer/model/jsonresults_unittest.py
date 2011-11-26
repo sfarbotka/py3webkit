@@ -70,9 +70,6 @@ JSON_RESULTS_TESTS_TEMPLATE = (
     '"results":[[TESTDATA_TEST_RESULTS]],'
     '"times":[[TESTDATA_TEST_TIMES]]}')
 
-JSON_RESULTS_PREFIX = "ADD_RESULTS("
-JSON_RESULTS_SUFFIX = ");"
-
 JSON_RESULTS_TEST_LIST_TEMPLATE = (
     '{"Webkit":{"tests":{[TESTDATA_TESTS]}}}')
 
@@ -81,14 +78,19 @@ class JsonResultsTest(unittest.TestCase):
     def setUp(self):
         self._builder = "Webkit"
 
+    def test_strip_prefix_suffix(self):
+        json = "['contents']"
+        self.assertEqual(JsonResults._strip_prefix_suffix("ADD_RESULTS(" + json + ");"), json)
+        self.assertEqual(JsonResults._strip_prefix_suffix(json), json)
+
     def _make_test_json(self, test_data):
         if not test_data:
-            return JSON_RESULTS_PREFIX + JSON_RESULTS_SUFFIX
+            return ""
 
         builds = test_data["builds"]
         tests = test_data["tests"]
         if not builds or not tests:
-            return JSON_RESULTS_PREFIX + JSON_RESULTS_SUFFIX
+            return ""
 
         json = JSON_RESULTS_TEMPLATE
 
@@ -111,10 +113,8 @@ class JsonResultsTest(unittest.TestCase):
         json = json.replace("[TESTDATA_CHROMEREVISION]", ",".join(chrome_revision))
         json = json.replace("[TESTDATA_TIMES]", ",".join(times))
 
-        if "version" in test_data:
-            json = json.replace("[VERSION]", str(test_data["version"]))
-        else:
-            json = json.replace("[VERSION]", "3")
+        version = str(test_data["version"]) if "version" in test_data else "4"
+        json = json.replace("[VERSION]", version)
 
         json_tests = []
         for (name, test) in sorted(tests.iteritems()):
@@ -122,7 +122,7 @@ class JsonResultsTest(unittest.TestCase):
 
         json = json.replace("[TESTDATA_TESTS]", ",".join(json_tests))
 
-        return JSON_RESULTS_PREFIX + json + JSON_RESULTS_SUFFIX
+        return json
 
     def _parse_tests_dict(self, name, test):
         if "results" in test:
@@ -156,10 +156,7 @@ class JsonResultsTest(unittest.TestCase):
         for test in expected_data:
             json_tests.append("\"" + test + "\":{}")
 
-        expected_results = (JSON_RESULTS_PREFIX +
-            JSON_RESULTS_TEST_LIST_TEMPLATE.replace("[TESTDATA_TESTS]", ",".join(json_tests)) +
-            JSON_RESULTS_SUFFIX)
-
+        expected_results = JSON_RESULTS_TEST_LIST_TEMPLATE.replace("[TESTDATA_TESTS]", ",".join(json_tests))
         actual_results = JsonResults.get_test_list(self._builder, input_results)
         self.assertEquals(actual_results, expected_results)
 
@@ -373,38 +370,42 @@ class JsonResultsTest(unittest.TestCase):
     def test_merge_incremental_result_older_build(self):
         # Test the build in incremental results is older than the most recent
         # build in aggregated results.
-        # The incremental results should be dropped and no merge happens.
         self._test_merge(
             # Aggregated results
             {"builds": ["3", "1"],
              "tests": {"001.html": {
-                           "results": "[200,\"F\"]",
-                           "times": "[200,0]"}}},
+                           "results": "[5,\"F\"]",
+                           "times": "[5,0]"}}},
             # Incremental results
             {"builds": ["2"],
              "tests": {"001.html": {
                            "results": "[1, \"F\"]",
                            "times": "[1,0]"}}},
             # Expected no merge happens.
-            None)
+            {"builds": ["2", "3", "1"],
+             "tests": {"001.html": {
+                           "results": "[6,\"F\"]",
+                           "times": "[6,0]"}}})
 
     def test_merge_incremental_result_same_build(self):
         # Test the build in incremental results is same as the build in
         # aggregated results.
-        # The incremental results should be dropped and no merge happens.
         self._test_merge(
             # Aggregated results
             {"builds": ["2", "1"],
              "tests": {"001.html": {
-                           "results": "[200,\"F\"]",
-                           "times": "[200,0]"}}},
+                           "results": "[5,\"F\"]",
+                           "times": "[5,0]"}}},
             # Incremental results
             {"builds": ["3", "2"],
              "tests": {"001.html": {
                            "results": "[2, \"F\"]",
                            "times": "[2,0]"}}},
             # Expected no merge happens.
-            None)
+            {"builds": ["3", "2", "2", "1"],
+             "tests": {"001.html": {
+                           "results": "[7,\"F\"]",
+                           "times": "[7,0]"}}})
 
     def test_merge_remove_test_with_no_data(self):
         # Remove test where there is no data in all runs.
@@ -549,19 +550,27 @@ class JsonResultsTest(unittest.TestCase):
                            "times": "[" + max_builds + ",0]"}}},
             int(max_builds))
 
-    def test_merge_build_directory_hierarchy(self):
+    def test_merge_build_directory_hierarchy_old_version(self):
         self._test_merge(
             # Aggregated results
             {"builds": ["2", "1"],
-             "tests": {"foo/001.html": {
+             "tests": {"bar/003.html": {
+                           "results": "[25,\"F\"]",
+                           "times": "[25,0]"},
+                       "foo/001.html": {
                            "results": "[50,\"F\"]",
                            "times": "[50,0]"},
                        "foo/002.html": {
                            "results": "[100,\"I\"]",
-                           "times": "[100,0]"}}},
+                           "times": "[100,0]"}},
+             "version": 3},
             # Incremental results
             {"builds": ["3"],
-             "tests": {"foo": {
+             "tests": {"baz": {
+                           "004.html": {
+                               "results": "[1,\"I\"]",
+                               "times": "[1,0]"}},
+                       "foo": {
                            "001.html": {
                                "results": "[1,\"F\"]",
                                "times": "[1,0]"},
@@ -571,13 +580,71 @@ class JsonResultsTest(unittest.TestCase):
              "version": 4},
             # Expected results
             {"builds": ["3", "2", "1"],
-             "tests": {"foo/001.html": {
-                           "results": "[51,\"F\"]",
-                           "times": "[51,0]"},
-                       "foo/002.html": {
-                           "results": "[101,\"I\"]",
-                           "times": "[101,0]"}},
-             "version": 3})
+             "tests": {"bar": {
+                           "003.html": {
+                               "results": "[1,\"N\"],[25,\"F\"]",
+                               "times": "[26,0]"}},
+                       "baz": {
+                           "004.html": {
+                               "results": "[1,\"I\"]",
+                               "times": "[1,0]"}},
+                       "foo": {
+                           "001.html": {
+                               "results": "[51,\"F\"]",
+                               "times": "[51,0]"},
+                           "002.html": {
+                               "results": "[101,\"I\"]",
+                               "times": "[101,0]"}}},
+             "version": 4})
+
+    def test_merge_build_directory_hierarchy(self):
+        self._test_merge(
+            # Aggregated results
+            {"builds": ["2", "1"],
+             "tests": {"bar": {"baz": {
+                           "003.html": {
+                                "results": "[25,\"F\"]",
+                                "times": "[25,0]"}}},
+                       "foo": {
+                           "001.html": {
+                                "results": "[50,\"F\"]",
+                                "times": "[50,0]"},
+                           "002.html": {
+                                "results": "[100,\"I\"]",
+                                "times": "[100,0]"}}},
+              "version": 4},
+            # Incremental results
+            {"builds": ["3"],
+             "tests": {"baz": {
+                           "004.html": {
+                               "results": "[1,\"I\"]",
+                               "times": "[1,0]"}},
+                       "foo": {
+                           "001.html": {
+                               "results": "[1,\"F\"]",
+                               "times": "[1,0]"},
+                           "002.html": {
+                               "results": "[1,\"I\"]",
+                               "times": "[1,0]"}}},
+             "version": 4},
+            # Expected results
+            {"builds": ["3", "2", "1"],
+             "tests": {"bar": {"baz": {
+                           "003.html": {
+                               "results": "[1,\"N\"],[25,\"F\"]",
+                               "times": "[26,0]"}}},
+                       "baz": {
+                           "004.html": {
+                               "results": "[1,\"I\"]",
+                               "times": "[1,0]"}},
+                       "foo": {
+                           "001.html": {
+                               "results": "[51,\"F\"]",
+                               "times": "[51,0]"},
+                           "002.html": {
+                               "results": "[101,\"I\"]",
+                               "times": "[101,0]"}}},
+             "version": 4})
 
     # FIXME(aboxhall): Add some tests for xhtml/svg test results.
 
@@ -609,7 +676,8 @@ class JsonResultsTest(unittest.TestCase):
                        "foo.FAILS_bar3": {
                            "results": "[100,\"I\"]",
                            "times": "[100,0]"},
-                       }},
+                       },
+             "version": 3},
             # Incremental results
             {"builds": ["3"],
              "tests": {"foo.FLAKY_bar": {
@@ -645,7 +713,7 @@ class JsonResultsTest(unittest.TestCase):
                        "foo.bar4": {
                            "results": "[1,\"I\"]",
                            "times": "[1,0]"}},
-             "version": 3})
+             "version": 4})
 
 if __name__ == '__main__':
     unittest.main()

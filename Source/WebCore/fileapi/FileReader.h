@@ -35,7 +35,6 @@
 
 #include "ActiveDOMObject.h"
 #include "EventTarget.h"
-#include "ExceptionCode.h"
 #include "FileError.h"
 #include "FileReaderLoader.h"
 #include "FileReaderLoaderClient.h"
@@ -45,9 +44,10 @@
 
 namespace WebCore {
 
-class ArrayBuffer;
 class Blob;
 class ScriptExecutionContext;
+
+typedef int ExceptionCode;
 
 class FileReader : public RefCounted<FileReader>, public ActiveDOMObject, public EventTarget, public FileReaderLoaderClient {
 public:
@@ -85,7 +85,7 @@ public:
     virtual bool hasPendingActivity() const;
 
     // EventTarget
-    virtual FileReader* toFileReader() { return this; }
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const { return ActiveDOMObject::scriptExecutionContext(); }
 
     // FileReaderLoaderClient

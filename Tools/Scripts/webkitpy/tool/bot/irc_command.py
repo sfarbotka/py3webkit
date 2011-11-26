@@ -127,14 +127,14 @@ class Rollout(IRCCommand):
             # return is equivalent to an irc().post(), but makes for easier unit testing.
             return "%s: Usage: rollout SVN_REVISION [SVN_REVISIONS] REASON" % nick
 
+        revision_urls_string = join_with_separators([urls.view_revision_url(revision) for revision in svn_revision_list])
+        tool.irc().post("%s: Preparing rollout for %s..." % (nick, revision_urls_string))
+
         self._update_working_copy(tool)
 
         # FIXME: IRCCommand should bind to a tool and have a self._tool like Command objects do.
         # Likewise we should probably have a self._sheriff.
         nicks_string = self._nicks_string(tool, sheriff, nick, svn_revision_list)
-
-        revision_urls_string = join_with_separators([urls.view_revision_url(revision) for revision in svn_revision_list])
-        tool.irc().post("%s: Preparing rollout for %s..." % (nicks_string, revision_urls_string))
 
         try:
             complete_reason = "%s (Requested by %s on %s)." % (
@@ -163,7 +163,7 @@ class RollChromiumDEPS(IRCCommand):
         tool.irc().post("%s: Rolling Chromium DEPS to %s" % (nick, roll_target))
 
         try:
-            bug_id = sheriff.post_chromium_deps_roll(revision)
+            bug_id = sheriff.post_chromium_deps_roll(revision, roll_target)
             bug_url = tool.bugs.bug_url_for_bug_id(bug_id)
             tool.irc().post("%s: Created DEPS roll: %s" % (nick, bug_url))
         except ScriptError, e:

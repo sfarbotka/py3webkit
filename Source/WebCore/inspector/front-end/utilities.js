@@ -29,8 +29,6 @@
  * http://ejohn.org/files/jsdiff.js (released under the MIT license).
  */
 
-function setupPrototypeUtilities() {
-
 Function.prototype.bind = function(thisObject)
 {
     var func = this;
@@ -283,9 +281,27 @@ Element.prototype.totalOffsetTop = function()
     return total;
 }
 
+/**
+ * @constructor
+ * @param {number=} x
+ * @param {number=} y
+ * @param {number=} width
+ * @param {number=} height
+ */
+function AnchorBox(x, y, width, height)
+{
+    this.x = x || 0;
+    this.y = y || 0;
+    this.width = width || 0;
+    this.height = height || 0;
+}
+
+/**
+ * @return {AnchorBox}
+ */
 Element.prototype.offsetRelativeToWindow = function(targetWindow)
 {
-    var elementOffset = {x: 0, y: 0};
+    var elementOffset = new AnchorBox();
     var curElement = this;
     var curWindow = this.ownerDocument.defaultView;
     while (curWindow && curElement) {
@@ -299,6 +315,34 @@ Element.prototype.offsetRelativeToWindow = function(targetWindow)
     }
 
     return elementOffset;
+}
+
+/**
+ * @return {AnchorBox}
+ */
+Element.prototype.boxInWindow = function(targetWindow, relativeParent)
+{
+    targetWindow = targetWindow || this.ownerDocument.defaultView;
+    var bodyElement = this.ownerDocument.body;
+    relativeParent = relativeParent || bodyElement;
+
+    var anchorBox = this.offsetRelativeToWindow(window);
+    anchorBox.width = this.offsetWidth;
+    anchorBox.height = this.offsetHeight;
+
+    var anchorElement = this;
+    while (anchorElement && anchorElement !== relativeParent && anchorElement !== bodyElement) {
+        if (anchorElement.scrollLeft)
+            anchorBox.x -= anchorElement.scrollLeft;
+        if (anchorElement.scrollTop)
+            anchorBox.y -= anchorElement.scrollTop;
+        anchorElement = anchorElement.parentElement;
+    }
+
+    var parentOffset = relativeParent.offsetRelativeToWindow(window);
+    anchorBox.x -= parentOffset.x;
+    anchorBox.y -= parentOffset.y;
+    return anchorBox;
 }
 
 Element.prototype.setTextAndTitle = function(text)
@@ -343,7 +387,8 @@ Text.prototype.select = function(start, end)
     return this;
 }
 
-Element.prototype.__defineGetter__("selectionLeftOffset", function() {
+Element.prototype.selectionLeftOffset = function()
+{
     // Calculate selection offset relative to the current element.
 
     var selection = window.getSelection();
@@ -362,7 +407,7 @@ Element.prototype.__defineGetter__("selectionLeftOffset", function() {
     }
 
     return leftOffset;
-});
+}
 
 String.prototype.hasSubstring = function(string, caseInsensitive)
 {
@@ -408,6 +453,20 @@ String.prototype.asParsedURL = function()
     result.port = match[3];
     result.path = match[4] || "/";
     result.fragment = match[5];
+
+    result.lastPathComponent = "";
+    if (result.path) {
+        // First cut the query params.
+        var path = result.path;
+        var indexOfQuery = path.indexOf("?");
+        if (indexOfQuery !== -1)
+            path = path.substring(0, indexOfQuery);
+
+        // Then take last path component.
+        var lastSlashIndex = path.lastIndexOf("/");
+        if (lastSlashIndex !== -1)
+            result.lastPathComponent = path.substring(lastSlashIndex + 1);
+    } 
     return result;
 }
 
@@ -540,7 +599,7 @@ Date.prototype.toISO8601Compact = function()
 {
     function leadZero(x)
     {
-        return x > 9 ? x : '0' + x
+        return x > 9 ? '' + x : '0' + x
     }
     return this.getFullYear() +
            leadZero(this.getMonth() + 1) +
@@ -827,16 +886,15 @@ String.format = function(format, substitutions, formatters, initialValue, append
     return { formattedResult: result, unusedSubstitutions: unusedSubstitutions };
 }
 
-} // setupPrototypeUtilities()
-
-setupPrototypeUtilities();
-
 function isEnterKey(event) {
     // Check if in IME.
     return event.keyCode !== 229 && event.keyIdentifier === "Enter";
 }
 
 /**
+ * @param {Element} element
+ * @param {number} offset
+ * @param {number} length
  * @param {Array.<Object>=} domChanges
  */
 function highlightSearchResult(element, offset, length, domChanges)
@@ -846,9 +904,23 @@ function highlightSearchResult(element, offset, length, domChanges)
 }
 
 /**
+ * @param {Element} element
+ * @param {Array.<Object>} resultRanges
  * @param {Array.<Object>=} changes
  */
 function highlightSearchResults(element, resultRanges, changes)
+{
+    return highlightRangesWithStyleClass(element, resultRanges, "webkit-search-result", changes);
+    
+}
+
+/**
+ * @param {Element} element
+ * @param {Array.<Object>} resultRanges
+ * @param {string} styleClass
+ * @param {Array.<Object>=} changes
+ */
+function highlightRangesWithStyleClass(element, resultRanges, styleClass, changes)
 {
     changes = changes || [];
     var highlightNodes = [];
@@ -857,82 +929,73 @@ function highlightSearchResults(element, resultRanges, changes)
     var textNodeSnapshot = ownerDocument.evaluate(".//text()", element, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
     var snapshotLength = textNodeSnapshot.snapshotLength;
-    var snapshotNodeOffset = 0;
-    var currentSnapshotItem = 0;
+    if (snapshotLength === 0)
+        return highlightNodes;
 
-    for (var i = 0; i < resultRanges.length; ++i) {
-        var resultLength = resultRanges[i].length;
-        var startOffset = resultRanges[i].offset;
-        var endOffset = startOffset + resultLength;
-        var length = resultLength;
-        var textNode;
-        var textNodeOffset;
-        var found;
-
-        while (currentSnapshotItem < snapshotLength) {
-            textNode = textNodeSnapshot.snapshotItem(currentSnapshotItem++);
-            var textNodeLength = textNode.nodeValue.length;
-            if (snapshotNodeOffset + textNodeLength > startOffset) {
-                textNodeOffset = startOffset - snapshotNodeOffset;
-                snapshotNodeOffset += textNodeLength;
-                found = true;
-                break;
-            }
-            snapshotNodeOffset += textNodeLength;
-        }
-
-        if (!found) {
-            textNode = element;
-            textNodeOffset = 0;
-        }
-
-        var highlightNode = ownerDocument.createElement("span");
-        highlightNode.className = "webkit-search-result";
-        highlightNode.textContent = lineText.substring(startOffset, endOffset);
-
-        var text = textNode.textContent;
-        if (textNodeOffset + resultLength < text.length) {
-            // Selection belongs to a single split mode.
-            textNode.textContent = text.substring(textNodeOffset + resultLength);
-            changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
-
-            textNode.parentElement.insertBefore(highlightNode, textNode);
-            changes.push({ node: highlightNode, type: "added", nextSibling: textNode, parent: textNode.parentElement });
-
-            var prefixNode = ownerDocument.createTextNode(text.substring(0, textNodeOffset));
-            textNode.parentElement.insertBefore(prefixNode, highlightNode);
-            changes.push({ node: prefixNode, type: "added", nextSibling: highlightNode, parent: textNode.parentElement });
-            highlightNodes.push(highlightNode);
-            continue;
-        }
-
-        var parentElement = textNode.parentElement;
-        var anchorElement = textNode.nextSibling;
-
-        length -= text.length - textNodeOffset;
-        textNode.textContent = text.substring(0, textNodeOffset);
-        changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
-
-        while (currentSnapshotItem < snapshotLength) {
-            textNode = textNodeSnapshot.snapshotItem(currentSnapshotItem++);
-            snapshotNodeOffset += textNode.nodeValue.length;
-            text = textNode.textContent;
-            if (length < text.length) {
-                textNode.textContent = text.substring(length);
-                changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
-                break;
-            }
-
-            length -= text.length;
-            textNode.textContent = "";
-            changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
-        }
-
-        parentElement.insertBefore(highlightNode, anchorElement);
-        changes.push({ node: highlightNode, type: "added", nextSibling: anchorElement, parent: parentElement });
-        highlightNodes.push(highlightNode);
+    var nodeRanges = [];
+    var rangeEndOffset = 0;
+    for (var i = 0; i < snapshotLength; ++i) {
+        var range = {};
+        range.offset = rangeEndOffset;
+        range.length = textNodeSnapshot.snapshotItem(i).textContent.length;
+        rangeEndOffset = range.offset + range.length;
+        nodeRanges.push(range);
     }
 
+    var startIndex = 0;
+    for (var i = 0; i < resultRanges.length; ++i) {
+        var startOffset = resultRanges[i].offset;
+        var endOffset = startOffset + resultRanges[i].length;
+
+        while (startIndex < snapshotLength && nodeRanges[startIndex].offset + nodeRanges[startIndex].length <= startOffset)
+            startIndex++;
+        var endIndex = startIndex; 
+        while (endIndex < snapshotLength && nodeRanges[endIndex].offset + nodeRanges[endIndex].length < endOffset)
+            endIndex++;
+        if (endIndex === snapshotLength)
+            break;
+        
+        var highlightNode = ownerDocument.createElement("span");
+        highlightNode.className = styleClass;
+        highlightNode.textContent = lineText.substring(startOffset, endOffset);
+
+        var lastTextNode = textNodeSnapshot.snapshotItem(endIndex);
+        var lastText = lastTextNode.textContent;
+        lastTextNode.textContent = lastText.substring(endOffset - nodeRanges[endIndex].offset);
+        changes.push({ node: lastTextNode, type: "changed", oldText: lastText, newText: lastTextNode.textContent });
+        
+        if (startIndex === endIndex) {
+            lastTextNode.parentElement.insertBefore(highlightNode, lastTextNode);
+            changes.push({ node: highlightNode, type: "added", nextSibling: lastTextNode, parent: lastTextNode.parentElement });
+            highlightNodes.push(highlightNode);
+            
+            var prefixNode = ownerDocument.createTextNode(lastText.substring(0, startOffset - nodeRanges[startIndex].offset));
+            lastTextNode.parentElement.insertBefore(prefixNode, highlightNode);
+            changes.push({ node: prefixNode, type: "added", nextSibling: highlightNode, parent: lastTextNode.parentElement });
+        } else {
+            var firstTextNode = textNodeSnapshot.snapshotItem(startIndex);
+            var firstText = firstTextNode.textContent;
+            var anchorElement = firstTextNode.nextSibling;
+
+            firstTextNode.parentElement.insertBefore(highlightNode, anchorElement);
+            changes.push({ node: highlightNode, type: "added", nextSibling: anchorElement, parent: firstTextNode.parentElement });
+            highlightNodes.push(highlightNode);
+
+            firstTextNode.textContent = firstText.substring(0, startOffset - nodeRanges[startIndex].offset);
+            changes.push({ node: firstTextNode, type: "changed", oldText: firstText, newText: firstTextNode.textContent });
+
+            for (var j = startIndex + 1; j < endIndex; j++) {
+                var textNode = textNodeSnapshot.snapshotItem(j);
+                var text = textNode.textContent;
+                textNode.textContent = "";
+                changes.push({ node: textNode, type: "changed", oldText: text, newText: textNode.textContent });
+            }
+        }
+        startIndex = endIndex;
+        nodeRanges[startIndex].offset = endOffset;
+        nodeRanges[startIndex].length = lastTextNode.textContent.length;
+            
+    }
     return highlightNodes;
 }
 
@@ -953,7 +1016,7 @@ function applyDomChanges(domChanges)
 
 function revertDomChanges(domChanges)
 {
-    for (var i = 0, size = domChanges.length; i < size; ++i) {
+    for (var i = domChanges.length - 1; i >= 0; --i) {
         var entry = domChanges[i];
         switch (entry.type) {
         case "added":
@@ -968,9 +1031,36 @@ function revertDomChanges(domChanges)
 }
 
 /**
- * @param {string=} extraFlags
+ * @param {string} query
+ * @param {boolean} caseSensitive
+ * @param {boolean} isRegex
+ * @return {RegExp}
  */
-function createSearchRegex(query, extraFlags)
+function createSearchRegex(query, caseSensitive, isRegex)
+{
+    var regexFlags = caseSensitive ? "g" : "gi";
+    var regexObject;
+
+    if (isRegex) {
+        try {
+            regexObject = new RegExp(query, regexFlags);
+        } catch (e) {
+            // Silent catch.
+        }
+    }
+
+    if (!regexObject)
+        regexObject = createPlainTextSearchRegex(query, regexFlags);
+
+    return regexObject;
+}
+
+/**
+ * @param {string} query
+ * @param {string=} flags
+ * @return {RegExp}
+ */
+function createPlainTextSearchRegex(query, flags)
 {
     // This should be kept the same as the one in ContentSearchUtils.cpp.
     var regexSpecialCharacters = "[](){}+-*.,?\\^$|";
@@ -981,9 +1071,14 @@ function createSearchRegex(query, extraFlags)
             regex += "\\";
         regex += c;
     }
-    return new RegExp(regex, "i" + (extraFlags || ""));
+    return new RegExp(regex, flags || "");
 }
 
+/**
+ * @param {RegExp} regex
+ * @param {string} content
+ * @return {number}
+ */
 function countRegexMatches(regex, content)
 {
     var text = content;
@@ -995,6 +1090,19 @@ function countRegexMatches(regex, content)
         text = text.substring(match.index + 1);
     }
     return result;
+}
+
+/**
+ * @param {number} value
+ * @param {number} symbolsCount
+ * @return {string}
+ */
+function numberToStringWithSpacesPadding(value, symbolsCount)
+{
+    var numberString = value.toString();
+    var paddingLength = Math.max(0, symbolsCount - numberString.length);
+    var paddingString = Array(paddingLength + 1).join("\u00a0");
+    return paddingString + numberString;
 }
 
 /**

@@ -30,7 +30,7 @@
 #include "CCThreadImpl.h"
 #include "WebCompositorClient.h"
 #include "WebInputEvent.h"
-#include "cc/CCScrollController.h"
+#include "cc/CCInputHandler.h"
 #include "cc/CCThreadProxy.h"
 #include <wtf/ThreadingPrimitives.h>
 
@@ -38,9 +38,9 @@ using namespace WebCore;
 
 namespace WebCore {
 
-PassOwnPtr<CCInputHandler> CCInputHandler::create(CCScrollController* scrollController)
+PassOwnPtr<CCInputHandler> CCInputHandler::create(CCInputHandlerClient* inputHandlerClient)
 {
-    return WebKit::WebCompositorImpl::create(scrollController);
+    return WebKit::WebCompositorImpl::create(inputHandlerClient);
 }
 
 }
@@ -50,7 +50,7 @@ namespace WebKit {
 void WebCompositor::setThread(WebThread* compositorThread)
 {
     ASSERT(compositorThread);
-    CCThreadProxy::setThread(CCThreadImpl::create(compositorThread).leakPtr());
+    CCThreadProxy::setImplThread(CCThreadImpl::create(compositorThread).leakPtr());
 }
 
 
@@ -78,10 +78,10 @@ WebCompositor* WebCompositorImpl::fromIdentifier(int identifier)
     return 0;
 }
 
-WebCompositorImpl::WebCompositorImpl(CCScrollController* scrollController)
+WebCompositorImpl::WebCompositorImpl(CCInputHandlerClient* inputHandlerClient)
     : m_client(0)
     , m_identifier(s_nextAvailableIdentifier++)
-    , m_scrollController(scrollController)
+    , m_inputHandlerClient(inputHandlerClient)
 {
     ASSERT(CCProxy::isImplThread());
 
@@ -116,7 +116,13 @@ void WebCompositorImpl::handleInputEvent(const WebInputEvent& event)
 {
     ASSERT(CCProxy::isImplThread());
     ASSERT(m_client);
-    // FIXME: Do something interesting with this input event like inform our m_scrollController.
+
+    if (event.type == WebInputEvent::MouseWheel && !m_inputHandlerClient->haveWheelEventHandlers()) {
+        const WebMouseWheelEvent& wheelEvent = *static_cast<const WebMouseWheelEvent*>(&event);
+        m_inputHandlerClient->scrollRootLayer(IntSize(-wheelEvent.deltaX, -wheelEvent.deltaY));
+        m_client->didHandleInputEvent();
+        return;
+    }
     m_client->didNotHandleInputEvent(true /* sendToWidget */);
 }
 
@@ -126,5 +132,8 @@ int WebCompositorImpl::identifier() const
     return m_identifier;
 }
 
+void WebCompositorImpl::willDraw(double frameBeginTimeMs)
+{
 }
 
+}

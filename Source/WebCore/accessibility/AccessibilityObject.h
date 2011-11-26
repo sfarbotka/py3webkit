@@ -30,6 +30,7 @@
 #ifndef AccessibilityObject_h
 #define AccessibilityObject_h
 
+#include "FloatQuad.h"
 #include "LayoutTypes.h"
 #include "VisiblePosition.h"
 #include "VisibleSelection.h"
@@ -178,6 +179,8 @@ enum AccessibilityRole {
     SheetRole,
     SliderRole,
     SliderThumbRole,
+    SpinButtonRole,
+    SpinButtonPartRole,
     SplitGroupRole,
     SplitterRole,
     StaticTextRole,
@@ -270,11 +273,10 @@ enum AccessibilitySearchKey {
     VisitedLinkSearchKey
 };
 
-struct AccessibilitySearchPredicate {
-    AccessibilityObject* axContainerObject;
-    AccessibilityObject* axStartObject;
-    AccessibilitySearchDirection axSearchDirection;
-    AccessibilitySearchKey axSearchKey;
+struct AccessibilitySearchCriteria {
+    AccessibilityObject* startObject;
+    AccessibilitySearchDirection searchDirection;
+    AccessibilitySearchKey searchKey;
     String* searchText;
     unsigned resultsLimit;
 };
@@ -316,9 +318,6 @@ class AccessibilityObject : public RefCounted<AccessibilityObject> {
 protected:
     AccessibilityObject();
     
-    // Should only be called by accessibleObjectsWithAccessibilitySearchPredicate for AccessibilityObject searching.
-    static bool isAccessibilityObjectSearchMatch(AccessibilityObject*, AccessibilitySearchPredicate*);
-    static bool isAccessibilityTextSearchMatch(AccessibilityObject*, AccessibilitySearchPredicate*);
 public:
     virtual ~AccessibilityObject();
     virtual void detach();
@@ -369,6 +368,9 @@ public:
     virtual bool isMenuList() const { return false; }
     virtual bool isMenuListPopup() const { return false; }
     virtual bool isMenuListOption() const { return false; }
+    virtual bool isSpinButton() const { return false; }
+    virtual bool isSpinButtonPart() const { return false; }
+    virtual bool isMockObject() const { return false; }
     bool isTextControl() const { return roleValue() == TextAreaRole || roleValue() == TextFieldRole; }
     bool isARIATextControl() const;
     bool isTabList() const { return roleValue() == TabListRole; }
@@ -404,6 +406,9 @@ public:
     virtual bool isVisible() const { return true; }
     virtual bool isCollapsed() const { return false; }
     virtual void setIsExpanded(bool) { }
+
+    // In a multi-select list, many items can be selected but only one is active at a time.
+    virtual bool isSelectedOptionActive() const { return false; }
 
     virtual bool hasBoldFont() const { return false; }
     virtual bool hasItalicFont() const { return false; }
@@ -477,7 +482,7 @@ public:
     virtual AccessibilityObject* parentObjectUnignored() const;
     virtual AccessibilityObject* parentObjectIfExists() const { return 0; }
     static AccessibilityObject* firstAccessibleObjectFromNode(const Node*);
-    static void accessibleObjectsWithAccessibilitySearchPredicate(AccessibilitySearchPredicate*, AccessibilityChildrenVector&);
+    void findMatchingObjects(AccessibilitySearchCriteria*, AccessibilityChildrenVector&);
 
     virtual AccessibilityObject* observableObject() const { return 0; }
     virtual void linkedUIElements(AccessibilityChildrenVector&) const { }
@@ -485,7 +490,7 @@ public:
     virtual bool exposesTitleUIElement() const { return true; }
     virtual AccessibilityObject* correspondingLabelForControlElement() const { return 0; }
     virtual AccessibilityObject* correspondingControlForLabelElement() const { return 0; }
-    virtual AccessibilityObject* scrollBar(AccessibilityOrientation) const { return 0; }
+    virtual AccessibilityObject* scrollBar(AccessibilityOrientation) { return 0; }
     
     virtual AccessibilityRole ariaRoleAttribute() const { return UnknownRole; }
     virtual bool isPresentationalChildOfAriaRole() const { return false; }
@@ -508,7 +513,8 @@ public:
     virtual LayoutRect elementRect() const = 0;
     virtual LayoutSize size() const { return elementRect().size(); }
     virtual LayoutPoint clickPoint();
-
+    static LayoutRect boundingBoxForQuads(RenderObject*, const Vector<FloatQuad>&);
+    
     virtual PlainTextRange selectedTextRange() const { return PlainTextRange(); }
     unsigned selectionStart() const { return selectedTextRange().start; }
     unsigned selectionEnd() const { return selectedTextRange().length; }
@@ -552,11 +558,12 @@ public:
 
     virtual void childrenChanged() { }
     virtual void contentChanged() { }
-    virtual const AccessibilityChildrenVector& children() { return m_children; }
+    const AccessibilityChildrenVector& children();
     virtual void addChildren() { }
     virtual bool canHaveChildren() const { return true; }
     virtual bool hasChildren() const { return m_haveChildren; }
     virtual void updateChildrenIfNecessary();
+    virtual void setNeedsToUpdateChildren() { }
     virtual void clearChildren();
     virtual void detachFromParent() { }
 
@@ -681,7 +688,9 @@ protected:
     AccessibilityRole m_role;
     
     virtual bool isDetached() const { return true; }
-    
+    static bool isAccessibilityObjectSearchMatch(AccessibilityObject*, AccessibilitySearchCriteria*);
+    static bool isAccessibilityTextSearchMatch(AccessibilityObject*, AccessibilitySearchCriteria*);
+
 #if PLATFORM(GTK)
     bool allowsTextRanges() const;
     unsigned getLengthForTextRange() const;

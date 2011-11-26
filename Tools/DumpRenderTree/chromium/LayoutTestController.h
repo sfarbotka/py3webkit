@@ -131,6 +131,11 @@ public:
     // It takes no arguments, and ignores any that may be present.
     void dumpWindowStatusChanges(const CppArgumentList&, CppVariant*);
 
+    // This function sets a flag that tells the test_shell to dump all calls to
+    // WebViewClient::createView().
+    // It takes no arguments, and ignores any that may be present.
+    void dumpCreateView(const CppArgumentList&, CppVariant*);
+
     // When called with a boolean argument, this sets a flag that controls
     // whether content-editable elements accept editing focus when an editing
     // attempt is made. It ignores any additional arguments.
@@ -323,8 +328,20 @@ public:
     // Gets the value of the counter in the element specified by its ID.
     void counterValueForElementById(const CppArgumentList&, CppVariant*);
 
+    // Causes layout to happen as if targetted to printed pages.
+    void setPrinting(const CppArgumentList&, CppVariant*);
+
     // Gets the number of page where the specified element will be put.
     void pageNumberForElementById(const CppArgumentList&, CppVariant*);
+
+    // Gets the page size and margins for a printed page.
+    void pageSizeAndMarginsInPixels(const CppArgumentList&, CppVariant*);
+
+    // Returns the visibililty status of a page box for printing
+    void isPageBoxVisible(const CppArgumentList&, CppVariant*);
+
+    // Gets the page-related property for printed content
+    void pageProperty(const CppArgumentList&, CppVariant*);
 
     // Gets the number of pages to be printed.
     void numberOfPages(const CppArgumentList&, CppVariant*);
@@ -387,6 +404,7 @@ public:
 
     // WebPermissionClient related.
     void setImagesAllowed(const CppArgumentList&, CppVariant*);
+    void setScriptsAllowed(const CppArgumentList&, CppVariant*);
     void setStorageAllowed(const CppArgumentList&, CppVariant*);
     void setPluginsAllowed(const CppArgumentList&, CppVariant*);
     void dumpPermissionClientCallbacks(const CppArgumentList&, CppVariant*);
@@ -434,6 +452,7 @@ public:
     bool shouldDumpChildFramesAsText() { return m_dumpChildFramesAsText; }
     bool shouldGeneratePixelResults() { return m_generatePixelResults; }
     void setShouldGeneratePixelResults(bool value) { m_generatePixelResults = value; }
+    bool shouldDumpCreateView() { return m_dumpCreateView; }
     bool acceptsEditing() { return m_acceptsEditing; }
     bool canOpenWindows() { return m_canOpenWindows; }
     bool shouldAddFileToPasteboard() { return m_shouldAddFileToPasteboard; }
@@ -444,6 +463,9 @@ public:
     {
         m_titleTextDirection.set(dir == WebKit::WebTextDirectionLeftToRight ? "ltr" : "rtl");
     }
+
+    void setIsPrinting(bool value) { m_isPrinting = value; }
+    bool isPrinting() { return m_isPrinting; }
 
     bool testRepaint() const { return m_testRepaint; }
     bool sweepHorizontally() const { return m_sweepHorizontally; }
@@ -511,6 +533,7 @@ private:
     bool cppVariantToBool(const CppVariant&);
     int32_t cppVariantToInt32(const CppVariant&);
     WebKit::WebString cppVariantToWebString(const CppVariant&);
+    Vector<WebKit::WebString> cppVariantToWebStringArray(const CppVariant&);
 
     void logErrorToConsole(const std::string&);
     void completeNotifyDone(bool isTimeout);
@@ -594,6 +617,10 @@ private:
     // If true, the test_shell will generate pixel results in dumpAsText mode
     bool m_generatePixelResults;
 
+    // If true, output a descriptive line each time WebViewClient::createView
+    // is invoked.
+    bool m_dumpCreateView;
+
     // If true, the element will be treated as editable. This value is returned
     // from various editing callbacks that are called just before edit operations
     // are allowed.
@@ -632,6 +659,9 @@ private:
     // If true, we will show extended information in the graphics layer tree.
     bool m_showDebugLayerTree;
 
+    // If true, layout is to target printed pages.
+    bool m_isPrinting;
+
     WorkQueue m_workQueue;
 
     CppVariant m_globalFlag;
@@ -641,6 +671,9 @@ private:
 
     // Bound variable tracking the directionality of the <title> tag.
     CppVariant m_titleTextDirection;
+
+    // Bound variable to return the name of this platform (chromium).
+    CppVariant m_platformName;
 
     WebKit::WebURL m_userStyleSheetLocation;
 

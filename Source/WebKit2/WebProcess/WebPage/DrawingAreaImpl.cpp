@@ -56,6 +56,7 @@ DrawingAreaImpl::~DrawingAreaImpl()
 DrawingAreaImpl::DrawingAreaImpl(WebPage* webPage, const WebPageCreationParameters& parameters)
     : DrawingArea(DrawingAreaTypeImpl, webPage)
     , m_backingStoreStateID(0)
+    , m_isPaintingEnabled(true)
     , m_inUpdateBackingStoreState(false)
     , m_shouldSendDidUpdateBackingStoreState(false)
     , m_isWaitingForDidUpdate(false)
@@ -78,6 +79,9 @@ DrawingAreaImpl::DrawingAreaImpl(WebPage* webPage, const WebPageCreationParamete
 
 void DrawingAreaImpl::setNeedsDisplay(const IntRect& rect)
 {
+    if (!m_isPaintingEnabled)
+        return;
+
     IntRect dirtyRect = rect;
     dirtyRect.intersect(m_webPage->bounds());
 
@@ -100,6 +104,9 @@ void DrawingAreaImpl::setNeedsDisplay(const IntRect& rect)
 
 void DrawingAreaImpl::scroll(const IntRect& scrollRect, const IntSize& scrollOffset)
 {
+    if (!m_isPaintingEnabled)
+        return;
+
     if (m_layerTreeHost) {
         ASSERT(m_scrollRect.isEmpty());
         ASSERT(m_scrollOffset.isEmpty());
@@ -228,6 +235,11 @@ void DrawingAreaImpl::setPageOverlayNeedsDisplay(const IntRect& rect)
     setNeedsDisplay(rect);
 }
 
+void DrawingAreaImpl::setPaintingEnabled(bool paintingEnabled)
+{
+    m_isPaintingEnabled = paintingEnabled;
+}
+
 void DrawingAreaImpl::layerHostDidFlushLayers()
 {
     ASSERT(m_layerTreeHost);
@@ -296,10 +308,6 @@ void DrawingAreaImpl::scheduleCompositingLayerSync()
     if (!m_layerTreeHost)
         return;
     m_layerTreeHost->scheduleLayerFlush();
-}
-
-void DrawingAreaImpl::syncCompositingLayers()
-{
 }
 
 void DrawingAreaImpl::updateBackingStoreState(uint64_t stateID, bool respondImmediately, float deviceScaleFactor, const WebCore::IntSize& size, const WebCore::IntSize& scrollOffset)
@@ -406,6 +414,8 @@ void DrawingAreaImpl::suspendPainting()
 
     m_isPaintingSuspended = true;
     m_displayTimer.stop();
+
+    m_webPage->corePage()->suspendScriptedAnimations();
 }
 
 void DrawingAreaImpl::resumePainting()
@@ -423,6 +433,8 @@ void DrawingAreaImpl::resumePainting()
 
     // FIXME: We shouldn't always repaint everything here.
     setNeedsDisplay(m_webPage->bounds());
+
+    m_webPage->corePage()->resumeScriptedAnimations();
 }
 
 void DrawingAreaImpl::enterAcceleratedCompositingMode(GraphicsLayer* graphicsLayer)
@@ -630,7 +642,8 @@ void DrawingAreaImpl::display(UpdateInfo& updateInfo)
     ASSERT(m_webPage->bounds().contains(bounds));
 
     IntSize bitmapSize = bounds.size();
-    bitmapSize.scale(m_webPage->corePage()->deviceScaleFactor());
+    float deviceScaleFactor = m_webPage->corePage()->deviceScaleFactor();
+    bitmapSize.scale(deviceScaleFactor);
     RefPtr<ShareableBitmap> bitmap = ShareableBitmap::createShareable(bitmapSize, ShareableBitmap::SupportsAlpha);
     if (!bitmap)
         return;
@@ -653,8 +666,8 @@ void DrawingAreaImpl::display(UpdateInfo& updateInfo)
     m_scrollOffset = IntSize();
 
     OwnPtr<GraphicsContext> graphicsContext = createGraphicsContext(bitmap.get());
-    graphicsContext->scale(FloatSize(m_webPage->corePage()->deviceScaleFactor(), m_webPage->corePage()->deviceScaleFactor()));
-
+    graphicsContext->applyDeviceScaleFactor(deviceScaleFactor);
+    
     updateInfo.updateRectBounds = bounds;
 
     graphicsContext->translate(-bounds.x(), -bounds.y());
@@ -672,6 +685,14 @@ void DrawingAreaImpl::display(UpdateInfo& updateInfo)
 
     m_lastDisplayTime = currentTime();
 }
+
+#if USE(ACCELERATED_COMPOSITING) && USE(TEXTURE_MAPPER)
+void DrawingAreaImpl::didReceiveLayerTreeHostMessage(CoreIPC::Connection* connection, CoreIPC::MessageID messageID, CoreIPC::ArgumentDecoder* arguments)
+{
+    if (m_layerTreeHost)
+        m_layerTreeHost->didReceiveLayerTreeHostMessage(connection, messageID, arguments);
+}
+#endif
 
 
 } // namespace WebKit

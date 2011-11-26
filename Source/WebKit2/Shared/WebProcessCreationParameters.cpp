@@ -54,6 +54,7 @@ void WebProcessCreationParameters::encode(CoreIPC::ArgumentEncoder* encoder) con
     encoder->encode(applicationCacheDirectory);
     encoder->encode(databaseDirectory);
     encoder->encode(localStorageDirectory);
+    encoder->encode(webInspectorLocalizedStringsPath);
     encoder->encode(urlSchemesRegistererdAsEmptyDocument);
     encoder->encode(urlSchemesRegisteredAsSecure);
     encoder->encode(urlSchemesForWhichDomainRelaxationIsForbidden);
@@ -68,6 +69,7 @@ void WebProcessCreationParameters::encode(CoreIPC::ArgumentEncoder* encoder) con
 #endif
     encoder->encode(languageCode);
     encoder->encode(textCheckerState);
+    encoder->encode(fullKeyboardAccessEnabled);
     encoder->encode(defaultRequestTimeoutInterval);
 #if USE(CFURLSTORAGESESSIONS)
     encoder->encode(uiProcessBundleIdentifier);
@@ -80,6 +82,7 @@ void WebProcessCreationParameters::encode(CoreIPC::ArgumentEncoder* encoder) con
     encoder->encode(nsURLCacheDiskCapacity);
     encoder->encode(acceleratedCompositingPort);
     encoder->encode(uiProcessBundleResourcePath);
+    encoder->encode(webInspectorBaseDirectory);
 #elif PLATFORM(WIN)
     encoder->encode(shouldPaintNativeControls);
     encoder->encode(cfURLCachePath);
@@ -110,6 +113,8 @@ bool WebProcessCreationParameters::decode(CoreIPC::ArgumentDecoder* decoder, Web
         return false;
     if (!decoder->decode(parameters.localStorageDirectory))
         return false;
+    if (!decoder->decode(parameters.webInspectorLocalizedStringsPath))
+        return false;
     if (!decoder->decode(parameters.urlSchemesRegistererdAsEmptyDocument))
         return false;
     if (!decoder->decode(parameters.urlSchemesRegisteredAsSecure))
@@ -137,6 +142,8 @@ bool WebProcessCreationParameters::decode(CoreIPC::ArgumentDecoder* decoder, Web
         return false;
     if (!decoder->decode(parameters.textCheckerState))
         return false;
+    if (!decoder->decode(parameters.fullKeyboardAccessEnabled))
+        return false;
     if (!decoder->decode(parameters.defaultRequestTimeoutInterval))
         return false;
 #if USE(CFURLSTORAGESESSIONS)
@@ -158,6 +165,8 @@ bool WebProcessCreationParameters::decode(CoreIPC::ArgumentDecoder* decoder, Web
     if (!decoder->decode(parameters.acceleratedCompositingPort))
         return false;
     if (!decoder->decode(parameters.uiProcessBundleResourcePath))
+        return false;
+    if (!decoder->decode(parameters.webInspectorBaseDirectory))
         return false;
 #elif PLATFORM(WIN)
     if (!decoder->decode(parameters.shouldPaintNativeControls))

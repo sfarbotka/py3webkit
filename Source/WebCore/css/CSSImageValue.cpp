@@ -21,6 +21,7 @@
 #include "config.h"
 #include "CSSImageValue.h"
 
+#include "CSSCursorImageValue.h"
 #include "CSSValueKeywords.h"
 #include "Document.h"
 #include "MemoryCache.h"
@@ -31,22 +32,26 @@
 
 namespace WebCore {
 
-CSSImageValue::CSSImageValue(const String& url)
-    : CSSPrimitiveValue(url, CSS_URI)
+CSSImageValue::CSSImageValue(ClassType classType, const String& url)
+    : CSSPrimitiveValue(classType, url, CSS_URI)
     , m_accessedImage(false)
 {
 }
 
 CSSImageValue::CSSImageValue()
-    : CSSPrimitiveValue(CSSValueNone)
+    : CSSPrimitiveValue(ImageClass, CSSValueNone)
     , m_accessedImage(true)
+{
+}
+
+CSSImageValue::CSSImageValue(const String& url)
+    : CSSPrimitiveValue(ImageClass, url, CSS_URI)
+    , m_accessedImage(false)
 {
 }
 
 CSSImageValue::~CSSImageValue()
 {
-    if (m_image && m_image->isCachedImage())
-        static_cast<StyleCachedImage*>(m_image.get())->cachedImage()->removeClient(this);
 }
 
 StyleImage* CSSImageValue::cachedOrPendingImage()
@@ -62,6 +67,8 @@ StyleImage* CSSImageValue::cachedOrPendingImage()
 
 StyleCachedImage* CSSImageValue::cachedImage(CachedResourceLoader* loader)
 {
+    if (isCursorImageValue())
+        return static_cast<CSSCursorImageValue*>(this)->cachedImage(loader);
     return cachedImage(loader, getStringValue());
 }
 
@@ -73,12 +80,10 @@ StyleCachedImage* CSSImageValue::cachedImage(CachedResourceLoader* loader, const
         m_accessedImage = true;
 
         ResourceRequest request(loader->document()->completeURL(url));
-        if (CachedImage* cachedImage = loader->requestImage(request)) {
-            cachedImage->addClient(this);
+        if (CachedImage* cachedImage = loader->requestImage(request))
             m_image = StyleCachedImage::create(cachedImage);
-        }
     }
-    
+
     return (m_image && m_image->isCachedImage()) ? static_cast<StyleCachedImage*>(m_image.get()) : 0;
 }
 
@@ -91,8 +96,6 @@ String CSSImageValue::cachedImageURL()
 
 void CSSImageValue::clearCachedImage()
 {
-    if (m_image && m_image->isCachedImage())
-        static_cast<StyleCachedImage*>(m_image.get())->cachedImage()->removeClient(this);
     m_image = 0;
     m_accessedImage = false;
 }

@@ -32,8 +32,6 @@
 #include "CSSPrimitiveValue.h"
 #include "CSSValue.h"
 
-#if ENABLE(CSS3_FLEXBOX)
-
 namespace WebCore {
 
 class CSSFlexValue : public CSSValue {
@@ -43,11 +41,7 @@ public:
         return adoptRef(new CSSFlexValue(positiveFlex, negativeFlex, preferredSize));
     }
 
-    virtual ~CSSFlexValue();
-
-    virtual String cssText() const;
-
-    virtual bool isFlexValue() const { return true; }
+    String customCssText() const;
 
     float positiveFlex() { return m_positiveFlex; }
     float negativeFlex() { return m_negativeFlex; }
@@ -55,7 +49,8 @@ public:
 
 private:
     CSSFlexValue(float positiveFlex, float negativeFlex, PassRefPtr<CSSPrimitiveValue> preferredSize)
-        : m_positiveFlex(positiveFlex)
+        : CSSValue(FlexClass)
+        , m_positiveFlex(positiveFlex)
         , m_negativeFlex(negativeFlex)
         , m_preferredSize(preferredSize)
     {
@@ -67,7 +62,5 @@ private:
 };
 
 }
-
-#endif // ENABLE(CSS3_FLEXBOX)
 
 #endif

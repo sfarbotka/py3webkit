@@ -17,6 +17,7 @@
  * Boston, MA 02110-1301, USA.
  *
 */
+
 #ifndef HitTestResult_h
 #define HitTestResult_h
 
@@ -85,6 +86,7 @@ public:
     Image* image() const;
     IntRect imageRect() const;
     KURL absoluteImageURL() const;
+    KURL absolutePDFURL() const;
     KURL absoluteMediaURL() const;
     KURL absoluteLinkURL() const;
     String textContent() const;

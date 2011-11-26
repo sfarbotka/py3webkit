@@ -34,6 +34,7 @@
 #include "LayoutTestController.h"
 #include "TestNavigationController.h"
 #include "TestShell.h"
+#include "TestWebPlugin.h"
 #include "TestWebWorker.h"
 #include "WebCString.h"
 #include "WebCompositor.h"
@@ -49,6 +50,7 @@
 #include "WebKit.h"
 #include "WebKitPlatformSupport.h"
 #include "WebNode.h"
+#include "WebPluginParams.h"
 #include "WebPopupMenu.h"
 #include "WebPopupType.h"
 #include "WebRange.h"
@@ -237,10 +239,12 @@ static string textAffinityDescription(WebTextAffinity affinity)
 
 // WebViewClient -------------------------------------------------------------
 
-WebView* WebViewHost::createView(WebFrame*, const WebURLRequest&, const WebWindowFeatures&, const WebString&)
+WebView* WebViewHost::createView(WebFrame*, const WebURLRequest& request, const WebWindowFeatures&, const WebString&)
 {
     if (!layoutTestController()->canOpenWindows())
         return 0;
+    if (layoutTestController()->shouldDumpCreateView())
+        fprintf(stdout, "createView(%s)\n", URLDescription(request.url()).c_str());
     return m_shell->createNewWindow(WebURL())->webView();
 }
 
@@ -272,6 +276,8 @@ WebStorageNamespace* WebViewHost::createSessionStorageNamespace(unsigned quota)
 void WebViewHost::didAddMessageToConsole(const WebConsoleMessage& message, const WebString& sourceName, unsigned sourceLine)
 {
     // This matches win DumpRenderTree's UIDelegate.cpp.
+    if (!m_logConsoleOutput)
+        return;
     string newMessage;
     if (!message.text.isEmpty()) {
         newMessage = message.text.utf8();
@@ -452,7 +458,7 @@ void WebViewHost::finishLastTextCheck()
             break;
         results.append(WebTextCheckingResult(WebTextCheckingResult::ErrorSpelling, offset + misspelledPosition, misspelledLength));
         text = text.substring(misspelledPosition + misspelledLength);
-        offset += misspelledPosition;
+        offset += misspelledPosition + misspelledLength;
     }
 
     m_lastRequestedTextCheckingCompletion->didFinishCheckingText(results);
@@ -550,58 +556,71 @@ void WebViewHost::postAccessibilityNotification(const WebAccessibilityObject& ob
     if (notification == WebAccessibilityNotificationFocusedUIElementChanged)
         m_shell->accessibilityController()->setFocusedElement(obj);
 
-    if (m_shell->accessibilityController()->shouldDumpAccessibilityNotifications()) {
-        printf("AccessibilityNotification - ");
+    const char* notificationName;
+    switch (notification) {
+    case WebAccessibilityNotificationActiveDescendantChanged:
+        notificationName = "ActiveDescendantChanged";
+        break;
+    case WebAccessibilityNotificationAutocorrectionOccured:
+        notificationName = "AutocorrectionOccured";
+        break;
+    case WebAccessibilityNotificationCheckedStateChanged:
+        notificationName = "CheckedStateChanged";
+        break;
+    case WebAccessibilityNotificationChildrenChanged:
+        notificationName = "ChildrenChanged";
+        break;
+    case WebAccessibilityNotificationFocusedUIElementChanged:
+        notificationName = "FocusedUIElementChanged";
+        break;
+    case WebAccessibilityNotificationLayoutComplete:
+        notificationName = "LayoutComplete";
+        break;
+    case WebAccessibilityNotificationLoadComplete:
+        notificationName = "LoadComplete";
+        break;
+    case WebAccessibilityNotificationSelectedChildrenChanged:
+        notificationName = "SelectedChildrenChanged";
+        break;
+    case WebAccessibilityNotificationSelectedTextChanged:
+        notificationName = "SelectedTextChanged";
+        break;
+    case WebAccessibilityNotificationValueChanged:
+        notificationName = "ValueChanged";
+        break;
+    case WebAccessibilityNotificationScrolledToAnchor:
+        notificationName = "ScrolledToAnchor";
+        break;
+    case WebAccessibilityNotificationLiveRegionChanged:
+        notificationName = "LiveRegionChanged";
+        break;
+    case WebAccessibilityNotificationMenuListItemSelected:
+        notificationName = "MenuListItemSelected";
+        break;
+    case WebAccessibilityNotificationMenuListValueChanged:
+        notificationName = "MenuListValueChanged";
+        break;
+    case WebAccessibilityNotificationRowCountChanged:
+        notificationName = "RowCountChanged";
+        break;
+    case WebAccessibilityNotificationRowCollapsed:
+        notificationName = "RowCollapsed";
+        break;
+    case WebAccessibilityNotificationRowExpanded:
+        notificationName = "RowExpanded";
+        break;
+    case WebAccessibilityNotificationInvalidStatusChanged:
+        notificationName = "InvalidStatusChanged";
+        break;
+    default:
+        notificationName = "UnknownNotification";
+        break;
+    }
 
-        switch (notification) {
-        case WebAccessibilityNotificationActiveDescendantChanged:
-            printf("ActiveDescendantChanged");
-            break;
-        case WebAccessibilityNotificationCheckedStateChanged:
-            printf("CheckedStateChanged");
-            break;
-        case WebAccessibilityNotificationChildrenChanged:
-            printf("ChildrenChanged");
-            break;
-        case WebAccessibilityNotificationFocusedUIElementChanged:
-            printf("FocusedUIElementChanged");
-            break;
-        case WebAccessibilityNotificationLayoutComplete:
-            printf("LayoutComplete");
-            break;
-        case WebAccessibilityNotificationLoadComplete:
-            printf("LoadComplete");
-            break;
-        case WebAccessibilityNotificationSelectedChildrenChanged:
-            printf("SelectedChildrenChanged");
-            break;
-        case WebAccessibilityNotificationSelectedTextChanged:
-            printf("SelectedTextChanged");
-            break;
-        case WebAccessibilityNotificationValueChanged:
-            printf("ValueChanged");
-            break;
-        case WebAccessibilityNotificationScrolledToAnchor:
-            printf("ScrolledToAnchor");
-            break;
-        case WebAccessibilityNotificationLiveRegionChanged:
-            printf("LiveRegionChanged");
-            break;
-        case WebAccessibilityNotificationMenuListValueChanged:
-            printf("MenuListValueChanged");
-            break;
-        case WebAccessibilityNotificationRowCountChanged:
-            printf("RowCountChanged");
-            break;
-        case WebAccessibilityNotificationRowCollapsed:
-            printf("RowCollapsed");
-            break;
-        case WebAccessibilityNotificationRowExpanded:
-            printf("RowExpanded");
-            break;
-        default:
-            break;
-        }
+    m_shell->accessibilityController()->notificationReceived(obj, notificationName);
+
+    if (m_shell->accessibilityController()->shouldLogAccessibilityEvents()) {
+        printf("AccessibilityNotification - %s", notificationName);
 
         WebKit::WebNode node = obj.node();
         if (!node.isNull() && node.isElementNode()) {
@@ -776,10 +795,24 @@ void WebViewHost::runModal()
     webkit_support::MessageLoopSetNestableTasksAllowed(oldState);
 }
 
+bool WebViewHost::enterFullScreen()
+{
+    postDelayedTask(new HostMethodTask(this, &WebViewHost::enterFullScreenNow), 0);
+    return true;
+}
+
+void WebViewHost::exitFullScreen()
+{
+    postDelayedTask(new HostMethodTask(this, &WebViewHost::exitFullScreenNow), 0);
+}
+
 // WebFrameClient ------------------------------------------------------------
 
 WebPlugin* WebViewHost::createPlugin(WebFrame* frame, const WebPluginParams& params)
 {
+    if (params.mimeType == TestWebPlugin::mimeType())
+        return new TestWebPlugin(frame, params);
+
     return webkit_support::CreateWebPlugin(frame, params);
 }
 
@@ -1158,6 +1191,12 @@ void WebViewHost::didRunInsecureContent(WebFrame*, const WebSecurityOrigin& orig
         fputs("didRunInsecureContent\n", stdout);
 }
 
+void WebViewHost::didDetectXSS(WebFrame*, const WebURL&, bool)
+{
+    if (m_shell->shouldDumpFrameLoadCallbacks())
+        fputs("didDetectXSS\n", stdout);
+}
+
 void WebViewHost::openFileSystem(WebFrame* frame, WebFileSystem::Type type, long long size, bool create, WebFileSystemCallbacks* callbacks)
 {
     webkit_support::OpenFileSystem(frame, type, size, create, callbacks);
@@ -1227,6 +1266,7 @@ void WebViewHost::reset()
     m_hasWindow = false;
     m_inModalLoop = false;
     m_smartInsertDeleteEnabled = true;
+    m_logConsoleOutput = true;
 #if OS(WINDOWS)
     m_selectTrailingWhitespaceEnabled = true;
 #else
@@ -1275,6 +1315,11 @@ void WebViewHost::setSmartInsertDeleteEnabled(bool enabled)
     // In upstream WebKit, smart insert/delete is mutually exclusive with select
     // trailing whitespace, however, we allow both because Chromium on Windows
     // allows both.
+}
+
+void WebViewHost::setLogConsoleOutput(bool enabled)
+{
+    m_logConsoleOutput = enabled;
 }
 
 void WebViewHost::setCustomPolicyDelegate(bool isCustom, bool isPermissive)
@@ -1488,6 +1533,18 @@ void WebViewHost::setAddressBarURL(const WebURL&)
     // Nothing to do in layout test.
 }
 
+void WebViewHost::enterFullScreenNow()
+{
+    webView()->willEnterFullScreen();
+    webView()->didEnterFullScreen();
+}
+
+void WebViewHost::exitFullScreenNow()
+{
+    webView()->willExitFullScreen();
+    webView()->didExitFullScreen();
+}
+
 // Painting functions ---------------------------------------------------------
 
 void WebViewHost::updatePaintRect(const WebRect& rect)
@@ -1552,6 +1609,47 @@ void WebViewHost::paintInvalidatedRegion()
         paintRect(rect);
     }
     ASSERT(m_paintRect.isEmpty());
+}
+
+void WebViewHost::paintPagesWithBoundaries()
+{
+    ASSERT(!m_isPainting);
+    ASSERT(canvas());
+    m_isPainting = true;
+
+    WebSize pageSizeInPixels = webWidget()->size();
+    WebFrame* webFrame = webView()->mainFrame();
+
+    int pageCount = webFrame->printBegin(pageSizeInPixels);
+    int totalHeight = pageCount * (pageSizeInPixels.height + 1) - 1;
+
+    SkCanvas* testCanvas = skia::TryCreateBitmapCanvas(pageSizeInPixels.width, totalHeight, true);
+    if (testCanvas) {
+        discardBackingStore();
+        m_canvas = adoptPtr(testCanvas);
+    } else {
+        webFrame->printEnd();
+        return;
+    }
+
+#if WEBKIT_USING_SKIA
+    WebCanvas* webCanvas = canvas();
+#elif WEBKIT_USING_CG
+    const SkBitmap& canvasBitmap = canvas()->getDevice()->accessBitmap(false);
+    WebCanvas* webCanvas = CGBitmapContextCreate(canvasBitmap.getPixels(),
+                                                 pageSizeInPixels.width, totalHeight,
+                                                 8, pageSizeInPixels.width * 4,
+                                                 CGColorSpaceCreateDeviceRGB(),
+                                                 kCGImageAlphaPremultipliedFirst |
+                                                 kCGBitmapByteOrder32Host);
+    CGContextTranslateCTM(webCanvas, 0.0, totalHeight);
+    CGContextScaleCTM(webCanvas, 1.0, -1.0f);
+#endif
+
+    webFrame->printPagesWithBoundaries(webCanvas, pageSizeInPixels);
+    webFrame->printEnd();
+
+    m_isPainting = false;
 }
 
 SkCanvas* WebViewHost::canvas()

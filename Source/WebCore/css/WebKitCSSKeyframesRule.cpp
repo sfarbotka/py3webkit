@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -35,56 +35,43 @@
 namespace WebCore {
 
 WebKitCSSKeyframesRule::WebKitCSSKeyframesRule(CSSStyleSheet* parent)
-    : CSSRule(parent)
+    : CSSRule(parent, CSSRule::WEBKIT_KEYFRAMES_RULE)
     , m_lstCSSRules(CSSRuleList::create())
 {
 }
 
 WebKitCSSKeyframesRule::~WebKitCSSKeyframesRule()
 {
-    int length = m_lstCSSRules->length();
-    if (length == 0)
-        return;
-        
-    for (int i = 0; i < length; i++) {
-        if (m_lstCSSRules->item(i)->isKeyframeRule()) {
-            if (CSSMutableStyleDeclaration* style = static_cast<WebKitCSSKeyframeRule*>(m_lstCSSRules->item(i))->style())
-                style->setParent(0);
-        }
-        m_lstCSSRules->item(i)->setParent(0);
+    for (unsigned i = 0; i < length(); ++i) {
+        WebKitCSSKeyframeRule* rule = item(i);
+        if (CSSMutableStyleDeclaration* style = rule->style())
+            style->setParentRule(0);
+        rule->setParentRule(0);
     }
-}
-
-String WebKitCSSKeyframesRule::name() const
-{
-    return m_name;
 }
 
 void WebKitCSSKeyframesRule::setName(const String& name)
 {
     m_name = name;
-    
+
     // Since the name is used in the keyframe map list in CSSStyleSelector, we need
     // to recompute the style sheet to get the updated name.
-    if (stylesheet())
-        stylesheet()->styleSheetChanged();
-}
-
-unsigned WebKitCSSKeyframesRule::length() const
-{
-    return m_lstCSSRules.get()->length();
+    if (CSSStyleSheet* styleSheet = parentStyleSheet())
+        styleSheet->styleSheetChanged();
 }
 
 WebKitCSSKeyframeRule* WebKitCSSKeyframesRule::item(unsigned index)
 {
-    CSSRule* rule = m_lstCSSRules.get()->item(index);
-    return (rule && rule->isKeyframeRule()) ? static_cast<WebKitCSSKeyframeRule*>(rule) : 0;
+    CSSRule* rule = m_lstCSSRules->item(index);
+    ASSERT(rule->isKeyframeRule());
+    return static_cast<WebKitCSSKeyframeRule*>(rule);
 }
 
 const WebKitCSSKeyframeRule* WebKitCSSKeyframesRule::item(unsigned index) const
 {
-    CSSRule* rule = m_lstCSSRules.get()->item(index);
-    return (rule && rule->isKeyframeRule()) ? static_cast<const WebKitCSSKeyframeRule*>(rule) : 0;
+    const CSSRule* rule = m_lstCSSRules->item(index);
+    ASSERT(rule->isKeyframeRule());
+    return static_cast<const WebKitCSSKeyframeRule*>(rule);
 }
 
 void WebKitCSSKeyframesRule::append(WebKitCSSKeyframeRule* rule)
@@ -93,25 +80,32 @@ void WebKitCSSKeyframesRule::append(WebKitCSSKeyframeRule* rule)
         return;
 
     m_lstCSSRules->append(rule);
-    rule->setParent(this);
-    
+    rule->setParentRule(this);
+
     if (CSSMutableStyleDeclaration* style = rule->style())
-        style->setParent(this);
+        style->setParentRule(this);
 }
 
 void WebKitCSSKeyframesRule::insertRule(const String& rule)
 {
     CSSParser p(useStrictParsing());
-    RefPtr<CSSRule> newRule = p.parseKeyframeRule(parentStyleSheet(), rule);
-    if (newRule.get() && newRule.get()->isKeyframeRule())
-        append(static_cast<WebKitCSSKeyframeRule*>(newRule.get()));
+    RefPtr<WebKitCSSKeyframeRule> newRule = p.parseKeyframeRule(parentStyleSheet(), rule);
+    if (newRule)
+        append(newRule.get());
 }
 
 void WebKitCSSKeyframesRule::deleteRule(const String& s)
 {
     int i = findRuleIndex(s);
-    if (i >= 0)
-        m_lstCSSRules.get()->deleteRule(i);
+    if (i < 0)
+        return;
+
+    WebKitCSSKeyframeRule* rule = item(i);
+    if (CSSMutableStyleDeclaration* style = rule->style())
+        style->setParentRule(0);
+
+    rule->setParentRule(0);
+    m_lstCSSRules->deleteRule(i);
 }
 
 WebKitCSSKeyframeRule* WebKitCSSKeyframesRule::findRule(const String& s)
@@ -144,14 +138,8 @@ String WebKitCSSKeyframesRule::cssText() const
     result += m_name;
     result += " { \n";
 
-    if (m_lstCSSRules) {
-        unsigned len = m_lstCSSRules->length();
-        for (unsigned i = 0; i < len; i++) {
-            result += "  ";
-            result += m_lstCSSRules->item(i)->cssText();
-            result += "\n";
-        }
-    }
+    if (m_lstCSSRules)
+        result += m_lstCSSRules->rulesText();
 
     result += "}";
     return result;

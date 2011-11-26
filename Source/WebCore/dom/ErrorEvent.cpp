@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-
 #include "ErrorEvent.h"
 
 #include "EventNames.h"
@@ -67,21 +66,9 @@ ErrorEvent::~ErrorEvent()
 {
 }
 
-void ErrorEvent::initErrorEvent(const AtomicString& type, bool canBubble, bool cancelable, const String& message, const String& fileName, unsigned lineNumber)
+const AtomicString& ErrorEvent::interfaceName() const
 {
-    if (dispatched())
-        return;
-
-    initEvent(type, canBubble, cancelable);
-
-    m_message = message;
-    m_fileName = fileName;
-    m_lineNumber = lineNumber;
-}
-
-bool ErrorEvent::isErrorEvent() const
-{
-    return true;
+    return eventNames().interfaceForErrorEvent;
 }
 
 } // namespace WebCore

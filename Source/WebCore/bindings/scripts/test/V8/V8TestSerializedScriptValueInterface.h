@@ -26,16 +26,16 @@
 #include "TestSerializedScriptValueInterface.h"
 #include "V8DOMWrapper.h"
 #include "WrapperTypeInfo.h"
-#include <wtf/text/StringHash.h>
 #include <v8.h>
 #include <wtf/HashMap.h>
+#include <wtf/text/StringHash.h>
 
 namespace WebCore {
 
 class V8TestSerializedScriptValueInterface {
 public:
     static const bool hasDependentLifetime = false;
-    static bool HasInstance(v8::Handle<v8::Value> value);
+    static bool HasInstance(v8::Handle<v8::Value>);
     static v8::Persistent<v8::FunctionTemplate> GetRawTemplate();
     static v8::Persistent<v8::FunctionTemplate> GetTemplate();
     static TestSerializedScriptValueInterface* toNative(v8::Handle<v8::Object> object)
@@ -46,14 +46,20 @@ public:
     static void derefObject(void*);
     static WrapperTypeInfo info;
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
+    static v8::Handle<v8::Object> existingWrapper(TestSerializedScriptValueInterface*);
+
 private:
     static v8::Handle<v8::Object> wrapSlow(TestSerializedScriptValueInterface*);
 };
 
+ALWAYS_INLINE v8::Handle<v8::Object> V8TestSerializedScriptValueInterface::existingWrapper(TestSerializedScriptValueInterface* impl)
+{
+    return getDOMObjectMap().get(impl);
+}
 
 v8::Handle<v8::Object> V8TestSerializedScriptValueInterface::wrap(TestSerializedScriptValueInterface* impl)
 {
-        v8::Handle<v8::Object> wrapper = getDOMObjectMap().get(impl);
+        v8::Handle<v8::Object> wrapper = existingWrapper(impl);
         if (!wrapper.IsEmpty())
             return wrapper;
     return V8TestSerializedScriptValueInterface::wrapSlow(impl);
@@ -69,6 +75,7 @@ inline v8::Handle<v8::Value> toV8(PassRefPtr< TestSerializedScriptValueInterface
 {
     return toV8(impl.get());
 }
+
 }
 
 #endif // V8TestSerializedScriptValueInterface_h

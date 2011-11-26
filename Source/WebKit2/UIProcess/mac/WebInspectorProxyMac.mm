@@ -29,8 +29,9 @@
 #if ENABLE(INSPECTOR)
 
 #import "WKAPICast.h"
+#import "WebContext.h"
 #import "WKInspectorMac.h"
-#import "WKView.h"
+#import "WKViewPrivate.h"
 #import "WebPageProxy.h"
 #import "WebProcessProxy.h"
 #import <WebKitSystemInterface.h>
@@ -115,20 +116,27 @@ void WebInspectorProxy::platformOpen()
 
     m_inspectorProxyObjCAdapter.adoptNS([[WKWebInspectorProxyObjCAdapter alloc] initWithWebInspectorProxy:this]);
 
-    NSUInteger styleMask = (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask | NSTexturedBackgroundWindowMask);
+    bool useTexturedWindow = page()->process()->context()->overrideWebInspectorPagePath().isEmpty();
+
+    NSUInteger styleMask = (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask);
+    if (useTexturedWindow)
+        styleMask |= NSTexturedBackgroundWindowMask;
+
     NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, initialWindowWidth, initialWindowHeight) styleMask:styleMask backing:NSBackingStoreBuffered defer:NO];
-    [window setAutorecalculatesContentBorderThickness:NO forEdge:NSMaxYEdge];
-    [window setContentBorderThickness:windowContentBorderThickness forEdge:NSMaxYEdge];
     [window setDelegate:m_inspectorProxyObjCAdapter.get()];
     [window setMinSize:NSMakeSize(minimumWindowWidth, minimumWindowHeight)];
     [window setReleasedWhenClosed:NO];
+
+    if (useTexturedWindow) {
+        [window setAutorecalculatesContentBorderThickness:NO forEdge:NSMaxYEdge];
+        [window setContentBorderThickness:windowContentBorderThickness forEdge:NSMaxYEdge];
+        WKNSWindowMakeBottomCornersSquare(window);
+    }
 
     // Center the window initially before setting the frame autosave name so that the window will be in a good
     // position if there is no saved frame yet.
     [window center];
     [window setFrameAutosaveName:@"Web Inspector 2"];
-
-    WKNSWindowMakeBottomCornersSquare(window);
 
     NSView *contentView = [window contentView];
     [m_inspectorView.get() setFrame:[contentView bounds]];
@@ -248,17 +256,24 @@ void WebInspectorProxy::platformSetAttachedWindowHeight(unsigned height)
 
 String WebInspectorProxy::inspectorPageURL() const
 {
-    NSString *path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] pathForResource:@"inspector" ofType:@"html" inDirectory:@"inspector"];
-    ASSERT(path);
+    NSString *path = page()->process()->context()->overrideWebInspectorPagePath();
+    if (![path length])
+        path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] pathForResource:@"inspector" ofType:@"html" inDirectory:@"inspector"];
+
+    ASSERT([path length]);
 
     return [[NSURL fileURLWithPath:path] absoluteString];
 }
 
 String WebInspectorProxy::inspectorBaseURL() const
 {
-    // Web Inspector uses localized strings, so it's not contained within inspector directory.
-    NSString *path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] resourcePath];
-    ASSERT(path);
+    NSString *path = page()->process()->context()->overrideWebInspectorBaseDirectory();
+    if (![path length]) {
+        // WebCore's Web Inspector uses localized strings, which are not contained within inspector directory.
+        path = [[NSBundle bundleWithIdentifier:@"com.apple.WebCore"] resourcePath];
+    }
+
+    ASSERT([path length]);
 
     return [[NSURL fileURLWithPath:path] absoluteString];
 }

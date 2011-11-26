@@ -31,12 +31,15 @@
 
 import unittest
 
-from webkitpy.tool import mocktool
+from webkitpy.tool.mocktool import MockOptions
 from webkitpy.common.system import urlfetcher_mock
-from webkitpy.common.system import filesystem_mock
+from webkitpy.common.host_mock import MockHost
+
 from webkitpy.common.system import zipfileset_mock
 from webkitpy.common.system import outputcapture
 from webkitpy.common.system.executive import Executive, ScriptError
+
+from webkitpy.common.checkout.scm.scm_mock import MockSCM
 
 from webkitpy.layout_tests import port
 from webkitpy.layout_tests.port.test import unit_test_filesystem
@@ -51,17 +54,19 @@ class MockPort(object):
         return self.image_diff_exists
 
 
-def get_mock_get(config_expectations):
-    def mock_get(port_name, options):
-        return MockPort(config_expectations[options.configuration])
-    return mock_get
+class MockPortFactory(object):
+    def __init__(self, config_expectations):
+        self.config_expectations = config_expectations
+
+    def get(self, port_name=None, options=None):
+        return MockPort(self.config_expectations[options.configuration])
 
 
 ARCHIVE_URL = 'http://localhost/layout_test_results'
 
 
 def test_options():
-    return mocktool.MockOptions(configuration=None,
+    return MockOptions(configuration=None,
                                 backup=False,
                                 html_directory='/tmp',
                                 archive_url=ARCHIVE_URL,
@@ -72,12 +77,12 @@ def test_options():
 
 
 def test_host_port_and_filesystem(options, expectations):
-    filesystem = unit_test_filesystem()
-    host_port_obj = port.get('test', options, filesystem=filesystem, user=mocktool.MockUser())
+    host = MockHost()
+    host_port_obj = host.port_factory.get('test', options)
 
     expectations_path = host_port_obj.path_to_test_expectations_file()
-    filesystem.write_text_file(expectations_path, expectations)
-    return (host_port_obj, filesystem)
+    host_port_obj.filesystem.write_text_file(expectations_path, expectations)
+    return (host_port_obj, host_port_obj.filesystem)
 
 
 def test_url_fetcher(filesystem):
@@ -160,20 +165,15 @@ class TestGetHostPortObject(unittest.TestCase):
     def assert_result(self, release_present, debug_present, valid_port_obj):
         # Tests whether we get a valid port object returned when we claim
         # that Image diff is (or isn't) present in the two configs.
-        port.get = get_mock_get({'Release': release_present,
-                                 'Debug': debug_present})
-        options = mocktool.MockOptions(configuration=None,
-                                       html_directory='/tmp')
-        port_obj = rebaseline_chromium_webkit_tests.get_host_port_object(options)
+        port_factory = MockPortFactory({'Release': release_present, 'Debug': debug_present})
+        options = MockOptions(configuration=None, html_directory='/tmp')
+        port_obj = rebaseline_chromium_webkit_tests.get_host_port_object(port_factory, options)
         if valid_port_obj:
             self.assertNotEqual(port_obj, None)
         else:
             self.assertEqual(port_obj, None)
 
     def test_get_host_port_object(self):
-        # Save the normal port.get() function for future testing.
-        old_get = port.get
-
         # Test whether we get a valid port object back for the four
         # possible cases of having ImageDiffs built. It should work when
         # there is at least one binary present.
@@ -181,9 +181,6 @@ class TestGetHostPortObject(unittest.TestCase):
         self.assert_result(True, False, True)
         self.assert_result(False, True, True)
         self.assert_result(True, True, True)
-
-        # Restore the normal port.get() function.
-        port.get = old_get
 
 
 class TestOptions(unittest.TestCase):
@@ -211,14 +208,14 @@ class TestRebaseliner(unittest.TestCase):
         host_port_obj, filesystem = test_host_port_and_filesystem(options, expectations)
 
         target_options = options
-        target_port_obj = port.get('test', target_options,
-                                   filesystem=filesystem)
+        host = MockHost()
+        target_port_obj = host.port_factory.get('test', target_options, filesystem=filesystem)
         target_port_obj._expectations = expectations
         platform = target_port_obj.name()
 
         url_fetcher = test_url_fetcher(filesystem)
         zip_factory = test_zip_factory()
-        mock_scm = mocktool.MockSCM(filesystem)
+        mock_scm = MockSCM(filesystem)
         filesystem.maybe_make_directory(mock_scm.checkout_root)
 
         # FIXME: SCM module doesn't handle paths that aren't relative to the checkout_root consistently.
@@ -356,7 +353,7 @@ class TestRealMain(unittest.TestCase):
         host_port_obj, filesystem = test_host_port_and_filesystem(options, expectations)
         url_fetcher = test_url_fetcher(filesystem)
         zip_factory = test_zip_factory()
-        mock_scm = mocktool.MockSCM()
+        mock_scm = MockSCM()
         filesystem.maybe_make_directory(mock_scm.checkout_root)
 
         # FIXME: SCM module doesn't handle paths that aren't relative to the checkout_root consistently.
@@ -383,8 +380,9 @@ class TestRealMain(unittest.TestCase):
 
 class TestHtmlGenerator(unittest.TestCase):
     def make_generator(self, files, tests):
-        options = mocktool.MockOptions(configuration=None, html_directory='/tmp')
-        host_port = port.get('test', options, filesystem=unit_test_filesystem(files))
+        options = MockOptions(configuration=None, html_directory='/tmp')
+        host = MockHost()
+        host_port = host.port_factory.get('test', options, filesystem=unit_test_filesystem(files))
         generator = rebaseline_chromium_webkit_tests.HtmlGenerator(host_port,
             target_port=None, options=options, platforms=['test-mac-leopard'], rebaselining_tests=tests)
         return generator, host_port

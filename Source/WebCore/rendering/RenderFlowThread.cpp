@@ -144,18 +144,13 @@ void RenderFlowThread::removeFlowChild(RenderObject* child)
 
 // Compare two regions to determine in which one the content should flow first.
 // The function returns true if the first passed region is "less" than the second passed region.
-// If the first region index < second region index, then the first region is "less" than the second region.
-// If the first region index == second region index and first region appears before second region in DOM, 
+// If the first region appears before second region in DOM,
 // the first region is "less" than the second region.
 // If the first region is "less" than the second region, the first region receives content before second region.
 static bool compareRenderRegions(const RenderRegion* firstRegion, const RenderRegion* secondRegion)
 {
     ASSERT(firstRegion);
     ASSERT(secondRegion);
-
-    // First, compare only region-index properties.
-    if (firstRegion->style()->regionIndex() != secondRegion->style()->regionIndex())
-        return (firstRegion->style()->regionIndex() < secondRegion->style()->regionIndex());
 
     // If the regions have the same region-index, compare their position in dom.
     ASSERT(firstRegion->node());
@@ -528,6 +523,7 @@ void RenderFlowThread::repaintRectangleInRegions(const LayoutRect& repaintRect, 
         
         // Now switch to the region's writing mode coordinate space and let it repaint itself.
         region->flipForWritingMode(clippedRect);
+        LayoutStateDisabler layoutStateDisabler(view()); // We can't use layout state to repaint, since the region is somewhere else.
         region->repaintRectangle(clippedRect, immediate);
     }
 }
@@ -638,7 +634,7 @@ void RenderFlowThread::removeRenderBoxRegionInfo(RenderBox* box)
             break;
     }
     
-    m_regionRangeMap.remove(box);
+    delete m_regionRangeMap.take(box);
 }
 
 bool RenderFlowThread::logicalWidthChangedInRegions(const RenderBlock* block, LayoutUnit offsetFromLogicalTopOfFirstPage)
@@ -662,16 +658,17 @@ bool RenderFlowThread::logicalWidthChangedInRegions(const RenderBlock* block, La
         if (!oldInfo)
             continue;
 
+        LayoutUnit oldLogicalWidth = oldInfo->logicalWidth();
+        delete oldInfo;
+
         RenderBoxRegionInfo* newInfo = block->renderBoxRegionInfo(region, offsetFromLogicalTopOfFirstPage);
-        if (!newInfo || newInfo->logicalWidth() != oldInfo->logicalWidth()) {
-            delete oldInfo;
+        if (!newInfo || newInfo->logicalWidth() != oldLogicalWidth)
             return true;
-        }
-        
+
         if (region == endRegion)
             break;
     }
-    
+
     return false;
 }
 

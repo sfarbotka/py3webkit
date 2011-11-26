@@ -50,15 +50,18 @@ private:
     virtual bool isAttachment() const;
     virtual Widget* widgetForAttachmentView() const;
     
-    virtual AccessibilityObject* scrollBar(AccessibilityOrientation) const;
+    virtual AccessibilityObject* scrollBar(AccessibilityOrientation);
     virtual void addChildren();
+    virtual void clearChildren();
     virtual AccessibilityObject* accessibilityHitTest(const LayoutPoint&) const;
-    virtual const AccessibilityChildrenVector& children();
     virtual void updateChildrenIfNecessary();
+    virtual void setNeedsToUpdateChildren() { m_childrenDirty = true; }
+    void updateScrollbars();
     
     virtual FrameView* documentFrameView() const;
     virtual LayoutRect elementRect() const;
     virtual AccessibilityObject* parentObject() const;
+    virtual AccessibilityObject* parentObjectIfExists() const;
     
     AccessibilityObject* webAreaObject() const;
     virtual AccessibilityObject* firstChild() const { return webAreaObject(); }
@@ -68,6 +71,7 @@ private:
     RefPtr<ScrollView> m_scrollView;
     RefPtr<AccessibilityObject> m_horizontalScrollbar;
     RefPtr<AccessibilityObject> m_verticalScrollbar;
+    bool m_childrenDirty;
 };
 
 inline AccessibilityScrollView* toAccessibilityScrollView(AccessibilityObject* object)

@@ -42,7 +42,6 @@
       'ENABLE_DETAILS=1',
       'ENABLE_DEVICE_ORIENTATION=1',
       'ENABLE_DIRECTORY_UPLOAD=1',
-      'ENABLE_DOM_STORAGE=1',
       'ENABLE_DOWNLOAD_ATTRIBUTE=1',
       'ENABLE_FILE_SYSTEM=1',
       'ENABLE_FILTERS=1',
@@ -64,21 +63,23 @@
       'ENABLE_JAVASCRIPT_DEBUGGER=1',
       'ENABLE_JAVASCRIPT_I18N_API=1',
       'ENABLE_LINK_PREFETCH=1',
+      'ENABLE_MEDIA_SOURCE=1',
       'ENABLE_MEDIA_STATISTICS=1',
       'ENABLE_MEDIA_STREAM=1',
       'ENABLE_METER_TAG=1',
       'ENABLE_MHTML=1',
-      'ENABLE_MUTATION_OBSERVERS=0',
+      'ENABLE_MICRODATA=0',
+      'ENABLE_MUTATION_OBSERVERS=<(enable_mutation_observers)',
       'ENABLE_NOTIFICATIONS=1',
       'ENABLE_ORIENTATION_EVENTS=0',
       'ENABLE_PAGE_VISIBILITY_API=1',
+      'ENABLE_POINTER_LOCK=1',
       'ENABLE_PROGRESS_TAG=1',
       'ENABLE_QUOTA=1',
       'ENABLE_REQUEST_ANIMATION_FRAME=1',
       'ENABLE_RUBY=1',
       'ENABLE_SANDBOX=1',
       'ENABLE_SHARED_WORKERS=1',
-      'ENABLE_SKIA_GPU=<(use_skia_gpu)',
       'ENABLE_SMOOTH_SCROLLING=1',
       'ENABLE_SQL_DATABASE=1',
       'ENABLE_SVG=<(enable_svg)',
@@ -93,7 +94,6 @@
       'ENABLE_WEB_TIMING=1',
       'ENABLE_WORKERS=1',
       'ENABLE_XHR_RESPONSE_BLOB=1',
-      'ENABLE_XPATH=1',
       'ENABLE_XSLT=1',
       'WTF_USE_LEVELDB=1',
       'WTF_USE_BUILTIN_UTF8_CODEC=1',
@@ -101,6 +101,7 @@
       # We can't define it here because it should be present only
       # in Debug or release_valgrind_build=1 builds.
       'WTF_USE_OPENTYPE_SANITIZER=1',
+      'WTF_USE_SKIA_TEXT=<(enable_skia_text)',
       'WTF_USE_WEBP=1',
       'WTF_USE_WEBKIT_IMAGE_DECODERS=1',
     ],
@@ -108,16 +109,15 @@
     # through GYP_DEFINES.
     'variables': {
       'use_accelerated_compositing%': 1,
-      'use_threaded_compositing%': 0,
+      'enable_skia_text%': 0,
       'enable_svg%': 1,
       'enable_touch_events%': 1,
-      'use_skia_gpu%': 0,
       'use_skia%': 0,
       'enable_touch_icon_loading%' : 0,
-      'enable_css3_flexbox%': 0,
+      'enable_mutation_observers%': 0,
     },
     'use_accelerated_compositing%': '<(use_accelerated_compositing)',
-    'use_threaded_compositing%': '<(use_threaded_compositing)',
+    'enable_skia_text%': '<(enable_skia_text)',
     'enable_svg%': '<(enable_svg)',
     'enable_touch_events%': '<(enable_touch_events)',
     'use_skia%': '<(use_skia)',
@@ -142,14 +142,6 @@
           'ENABLE_ACCELERATED_2D_CANVAS=1',
         ],
       }],
-      ['use_accelerated_compositing==1 and use_threaded_compositing==1', {
-        'feature_defines': [
-          'WTF_USE_THREADED_COMPOSITING=1',
-        ],
-      }],
-      ['touchui==1', {
-        'enable_touch_icon_loading': 1,
-      }],
       # Mac OS X uses Accelerate.framework FFT by default instead of FFmpeg.
       ['OS!="mac"', {
         'feature_defines': [
@@ -166,11 +158,6 @@
         'feature_defines': [
           'ENABLE_RUBBER_BANDING=1',
           'WTF_USE_SKIA_ON_MAC_CHROMIUM=<(use_skia)',
-        ],
-      }],
-      ['enable_css3_flexbox==1', {
-        'feature_defines': [
-          'ENABLE_CSS3_FLEXBOX=1',
         ],
       }],
     ],

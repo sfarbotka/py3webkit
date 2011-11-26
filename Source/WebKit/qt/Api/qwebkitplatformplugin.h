@@ -21,8 +21,6 @@
 #ifndef QWEBKITPLATFORMPLUGIN_H
 #define QWEBKITPLATFORMPLUGIN_H
 
-#include "qwebkitglobal.h"
-
 /*
  *  Warning: The contents of this file is not  part of the public QtWebKit API
  *  and may be changed from version to version or even be completely removed.
@@ -32,8 +30,10 @@
 #include <QMediaPlayer>
 #endif
 #include <QtCore/QObject>
+#include <QtCore/QRect>
 #include <QtCore/QUrl>
 #include <QtGui/QColor>
+#include <QtGui/QFont>
 
 class QWebSelectData {
 public:
@@ -61,6 +61,8 @@ public:
 
     virtual void show(const QWebSelectData&) = 0;
     virtual void hide() = 0;
+    virtual void setGeometry(const QRect&) = 0;
+    virtual void setFont(const QFont&) = 0;
 
 Q_SIGNALS:
     void selectItem(int index, bool allowMultiplySelections, bool shift);
@@ -136,7 +138,7 @@ public Q_SLOTS:
 };
 #endif
 
-class QWEBKIT_EXPORT QWebSpellChecker : public QObject {
+class QWebSpellChecker : public QObject {
     Q_OBJECT
 public:
     struct GrammarDetail {
@@ -178,7 +180,7 @@ public:
 };
 
 QT_BEGIN_NAMESPACE
-Q_DECLARE_INTERFACE(QWebKitPlatformPlugin, "com.nokia.Qt.WebKit.PlatformPlugin/1.7");
+Q_DECLARE_INTERFACE(QWebKitPlatformPlugin, "com.nokia.Qt.WebKit.PlatformPlugin/1.8");
 QT_END_NAMESPACE
 
 #endif // QWEBKITPLATFORMPLUGIN_H

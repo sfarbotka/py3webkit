@@ -26,6 +26,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import with_statement
+
 """WebKit Gtk implementation of the Port interface."""
 
 import logging
@@ -34,49 +36,59 @@ import signal
 import subprocess
 
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
-from webkitpy.layout_tests.port import base, builders, server_process, webkit
+from webkitpy.layout_tests.port.server_process import ServerProcess
+from webkitpy.layout_tests.port.webkit import WebKitDriver, WebKitPort
 
 
 _log = logging.getLogger(__name__)
 
 
-class GtkDriver(webkit.WebKitDriver):
-    def start(self):
-        display_id = self._worker_number + 1
+class GtkDriver(WebKitDriver):
+    def _start(self):
+        # Use even displays for pixel tests and odd ones otherwise. When pixel tests are disabled,
+        # DriverProxy creates two drivers, one for normal and the other for ref tests. Both have
+        # the same worker number, so this prevents them from using the same Xvfb instance.
+        display_id = self._worker_number * 2 + 1
+        if self._pixel_tests:
+            display_id += 1
         run_xvfb = ["Xvfb", ":%d" % (display_id), "-screen",  "0", "800x600x24", "-nolisten", "tcp"]
-        devnull = open(os.devnull, 'w')
-        self._xvfb_process = subprocess.Popen(run_xvfb, stderr=devnull)
-        devnull.close()
+        with open(os.devnull, 'w') as devnull:
+            self._xvfb_process = subprocess.Popen(run_xvfb, stderr=devnull)
         server_name = self._port.driver_name()
         environment = self._port.setup_environ_for_server(server_name)
         # We must do this here because the DISPLAY number depends on _worker_number
         environment['DISPLAY'] = ":%d" % (display_id)
-        self._server_process = server_process.ServerProcess(self._port, server_name, self.cmd_line(), environment)
+        self._server_process = ServerProcess(self._port, server_name, self.cmd_line(), environment)
 
     def stop(self):
-        webkit.WebKitDriver.stop(self)
-        os.kill(self._xvfb_process.pid, signal.SIGTERM)
-        self._xvfb_process.wait()
+        WebKitDriver.stop(self)
+        if getattr(self, '_xvfb_process', None):
+            # FIXME: This should use Executive.kill_process
+            os.kill(self._xvfb_process.pid, signal.SIGTERM)
+            self._xvfb_process.wait()
+            self._xvfb_process = None
 
 
-class GtkPort(webkit.WebKitPort):
+class GtkPort(WebKitPort):
     port_name = "gtk"
 
-    def __init__(self, **kwargs):
-        webkit.WebKitPort.__init__(self, **kwargs)
+    def __init__(self, host, **kwargs):
+        WebKitPort.__init__(self, host, **kwargs)
         self._version = self.port_name
 
     def _port_flag_for_scripts(self):
         return "--gtk"
 
-    def create_driver(self, worker_number):
-        return GtkDriver(self, worker_number)
+    def _driver_class(self):
+        return GtkDriver
 
     def setup_environ_for_server(self, server_name=None):
-        environment = webkit.WebKitPort.setup_environ_for_server(self, server_name)
+        environment = WebKitPort.setup_environ_for_server(self, server_name)
         environment['GTK_MODULES'] = 'gail'
         environment['LIBOVERLAY_SCROLLBAR'] = '0'
-        environment['WEBKIT_INSPECTOR_PATH'] = self._build_path('Programs/resources/inspector')
+        environment['TEST_RUNNER_INJECTED_BUNDLE_FILENAME'] = self._build_path('Libraries', 'libTestRunnerInjectedBundle.la')
+        environment['TEST_RUNNER_TEST_PLUGIN_PATH'] = self._build_path('TestNetscapePlugin', '.libs')
+        environment['WEBKIT_INSPECTOR_PATH'] = self._build_path('Programs', 'resources', 'inspector')
         return environment
 
     def _generate_all_test_configurations(self):
@@ -115,7 +127,7 @@ class GtkPort(webkit.WebKitPort):
 
         for library in gtk_library_names:
             full_library = self._build_path(".libs", library)
-            if os.path.isfile(full_library):
+            if self._filesystem.isfile(full_library):
                 return full_library
         return None
 
@@ -127,7 +139,7 @@ class GtkPort(webkit.WebKitPort):
     def show_results_html_file(self, results_filename):
         run_launcher_args = ["file://%s" % results_filename]
         if self.get_option('webkit_test_runner'):
-            run_launcher_args.append('--webkit-test-runner')
+            run_launcher_args.append('-2')
         # FIXME: old-run-webkit-tests also added ["-graphicssystem", "raster", "-style", "windows"]
         # FIXME: old-run-webkit-tests converted results_filename path for cygwin.
         self._run_script("run-launcher", run_launcher_args)

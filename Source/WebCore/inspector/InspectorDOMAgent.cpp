@@ -50,6 +50,7 @@
 #include "DOMNodeHighlighter.h"
 #include "DOMWindow.h"
 #include "Document.h"
+#include "DocumentFragment.h"
 #include "DocumentType.h"
 #include "Event.h"
 #include "EventContext.h"
@@ -61,6 +62,7 @@
 #include "HitTestResult.h"
 #include "HTMLElement.h"
 #include "HTMLFrameOwnerElement.h"
+#include "IdentifiersFactory.h"
 #include "InjectedScriptManager.h"
 #include "InspectorClient.h"
 #include "InspectorFrontend.h"
@@ -78,10 +80,7 @@
 #include "ScriptEventListener.h"
 #include "StyleSheetList.h"
 #include "Text.h"
-
-#if ENABLE(XPATH)
 #include "XPathResult.h"
-#endif
 
 #include "markup.h"
 
@@ -97,6 +96,9 @@ namespace WebCore {
 namespace DOMAgentState {
 static const char documentRequested[] = "documentRequested";
 };
+
+static const size_t maxTextSize = 10000;
+static const UChar ellipsisUChar[] = { 0x2026, 0 };
 
 static Color parseColor(const RefPtr<InspectorObject>* colorObject)
 {
@@ -132,26 +134,6 @@ static Color parseConfigColor(const String& fieldName, InspectorObject* configOb
     return parseColor(&colorObject);
 }
 
-class MatchJob {
-public:
-    virtual void match(ListHashSet<Node*>& resultCollector) = 0;
-    virtual ~MatchJob() { }
-
-protected:
-    MatchJob(Document* document, const String& query)
-        : m_document(document)
-        , m_query(query) { }
-
-    void addNodesToResults(PassRefPtr<NodeList> nodes, ListHashSet<Node*>& resultCollector)
-    {
-        for (unsigned i = 0; nodes && i < nodes->length(); ++i)
-            resultCollector.add(nodes->item(i));
-    }
-
-    RefPtr<Document> m_document;
-    String m_query;
-};
-
 class RevalidateStyleAttributeTask {
 public:
     RevalidateStyleAttributeTask(InspectorDOMAgent*);
@@ -164,109 +146,6 @@ private:
     Timer<RevalidateStyleAttributeTask> m_timer;
     HashSet<RefPtr<Element> > m_elements;
 };
-
-namespace {
-
-class MatchExactIdJob : public WebCore::MatchJob {
-public:
-    MatchExactIdJob(Document* document, const String& query) : WebCore::MatchJob(document, query) { }
-    virtual ~MatchExactIdJob() { }
-
-protected:
-    virtual void match(ListHashSet<Node*>& resultCollector)
-    {
-        if (m_query.isEmpty())
-            return;
-
-        Element* element = m_document->getElementById(m_query);
-        if (element)
-            resultCollector.add(element);
-    }
-};
-
-class MatchExactClassNamesJob : public WebCore::MatchJob {
-public:
-    MatchExactClassNamesJob(Document* document, const String& query) : WebCore::MatchJob(document, query) { }
-    virtual ~MatchExactClassNamesJob() { }
-
-    virtual void match(ListHashSet<Node*>& resultCollector)
-    {
-        if (!m_query.isEmpty())
-            addNodesToResults(m_document->getElementsByClassName(m_query), resultCollector);
-    }
-};
-
-class MatchExactTagNamesJob : public WebCore::MatchJob {
-public:
-    MatchExactTagNamesJob(Document* document, const String& query) : WebCore::MatchJob(document, query) { }
-    virtual ~MatchExactTagNamesJob() { }
-
-    virtual void match(ListHashSet<Node*>& resultCollector)
-    {
-        if (!m_query.isEmpty())
-            addNodesToResults(m_document->getElementsByName(m_query), resultCollector);
-    }
-};
-
-class MatchQuerySelectorAllJob : public WebCore::MatchJob {
-public:
-    MatchQuerySelectorAllJob(Document* document, const String& query) : WebCore::MatchJob(document, query) { }
-    virtual ~MatchQuerySelectorAllJob() { }
-
-    virtual void match(ListHashSet<Node*>& resultCollector)
-    {
-        if (m_query.isEmpty())
-            return;
-
-        ExceptionCode ec = 0;
-        RefPtr<NodeList> list = m_document->querySelectorAll(m_query, ec);
-        if (!ec)
-            addNodesToResults(list, resultCollector);
-    }
-};
-
-class MatchXPathJob : public WebCore::MatchJob {
-public:
-    MatchXPathJob(Document* document, const String& query) : WebCore::MatchJob(document, query) { }
-    virtual ~MatchXPathJob() { }
-
-    virtual void match(ListHashSet<Node*>& resultCollector)
-    {
-#if ENABLE(XPATH)
-        if (m_query.isEmpty())
-            return;
-
-        ExceptionCode ec = 0;
-        RefPtr<XPathResult> result = m_document->evaluate(m_query, m_document.get(), 0, XPathResult::ORDERED_NODE_SNAPSHOT_TYPE, 0, ec);
-        if (ec || !result)
-            return;
-
-        unsigned long size = result->snapshotLength(ec);
-        for (unsigned long i = 0; !ec && i < size; ++i) {
-            Node* node = result->snapshotItem(i, ec);
-            if (ec)
-                break;
-
-            if (node->nodeType() == Node::ATTRIBUTE_NODE)
-                node = static_cast<Attr*>(node)->ownerElement();
-            resultCollector.add(node);
-        }
-#else
-        UNUSED_PARAM(resultCollector);
-#endif
-    }
-};
-
-class MatchPlainTextJob : public MatchXPathJob {
-public:
-    MatchPlainTextJob(Document* document, const String& query) : MatchXPathJob(document, query)
-    {
-        m_query = "//text()[contains(., '" + m_query + "')] | //comment()[contains(., '" + m_query + "')]";
-    }
-    virtual ~MatchPlainTextJob() { }
-};
-
-}
 
 RevalidateStyleAttributeTask::RevalidateStyleAttributeTask(InspectorDOMAgent* domAgent)
     : m_domAgent(domAgent)
@@ -301,7 +180,6 @@ InspectorDOMAgent::InspectorDOMAgent(InstrumentingAgents* instrumentingAgents, I
     , m_frontend(0)
     , m_domListener(0)
     , m_lastNodeId(1)
-    , m_matchJobsTimer(this, &InspectorDOMAgent::onMatchJobsTimer)
     , m_searchingForNode(false)
 {
 }
@@ -365,7 +243,7 @@ Node* InspectorDOMAgent::highlightedNode() const
 void InspectorDOMAgent::reset()
 {
     ErrorString error;
-    cancelSearch(&error);
+    m_searchResults.clear();
     discardBindings();
     if (m_revalidateStyleAttrTask)
         m_revalidateStyleAttrTask->reset();
@@ -621,7 +499,7 @@ void InspectorDOMAgent::setAttributeValue(ErrorString* errorString, int elementI
     ExceptionCode ec = 0;
     element->setAttribute(name, value, ec);
     if (ec)
-        *errorString = "Internal error: could not set attribute value.";
+        *errorString = "Internal error: could not set attribute value";
 }
 
 void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elementId, const String& text, const String* const name)
@@ -633,19 +511,19 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     ExceptionCode ec = 0;
     RefPtr<Element> parsedElement = element->document()->createElement("span", ec);
     if (ec) {
-        *errorString = "Internal error: could not set attribute value.";
+        *errorString = "Internal error: could not set attribute value";
         return;
     }
 
     toHTMLElement(parsedElement.get())->setInnerHTML("<span " + text + "></span>", ec);
     if (ec) {
-        *errorString = "Could not parse value as attributes.";
+        *errorString = "Could not parse value as attributes";
         return;
     }
 
     Node* child = parsedElement->firstChild();
     if (!child) {
-        *errorString = "Could not parse value as attributes.";
+        *errorString = "Could not parse value as attributes";
         return;
     }
 
@@ -653,7 +531,7 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     if (!attrMap && name) {
         element->removeAttribute(*name, ec);
         if (ec)
-            *errorString = "Could not remove attribute.";
+            *errorString = "Could not remove attribute";
         return;
     }
 
@@ -661,11 +539,11 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     unsigned numAttrs = attrMap->length();
     for (unsigned i = 0; i < numAttrs; ++i) {
         // Add attribute pair
-        const Attribute *attribute = attrMap->attributeItem(i);
+        const Attribute* attribute = attrMap->attributeItem(i);
         foundOriginalAttribute = foundOriginalAttribute || (name && attribute->name().toString() == *name);
         element->setAttribute(attribute->name(), attribute->value(), ec);
         if (ec) {
-            *errorString = "Internal error: could not set attribute value.";
+            *errorString = "Internal error: could not set attribute value";
             return;
         }
     }
@@ -673,7 +551,7 @@ void InspectorDOMAgent::setAttributesAsText(ErrorString* errorString, int elemen
     if (!foundOriginalAttribute && name) {
         element->removeAttribute(*name, ec);
         if (ec)
-            *errorString = "Could not remove attribute.";
+            *errorString = "Could not remove attribute";
         return;
     }
 }
@@ -745,27 +623,59 @@ void InspectorDOMAgent::setNodeName(ErrorString*, int nodeId, const String& tagN
 
 void InspectorDOMAgent::getOuterHTML(ErrorString* errorString, int nodeId, WTF::String* outerHTML)
 {
-    HTMLElement* element = assertHTMLElement(errorString, nodeId);
-    if (element)
-        *outerHTML = element->outerHTML();
+    Node* node = assertNode(errorString, nodeId);
+    if (!node)
+        return;
+
+    if (node->isHTMLElement()) {
+        *outerHTML = static_cast<HTMLElement*>(node)->outerHTML();
+        return;
+    }
+
+    if (node->isCommentNode()) {
+        *outerHTML = "<!--" + node->nodeValue() + "-->";
+        return;
+    }
+
+    if (node->isTextNode()) {
+        *outerHTML = node->nodeValue();
+        return;
+    }
+
+    *errorString = "Only HTMLElements, Comments, and Text nodes are supported";
 }
 
 void InspectorDOMAgent::setOuterHTML(ErrorString* errorString, int nodeId, const String& outerHTML, int* newId)
 {
-    HTMLElement* htmlElement = assertHTMLElement(errorString, nodeId);
-    if (!htmlElement)
+    Node* node = assertNode(errorString, nodeId);
+    if (!node)
         return;
 
-    bool requiresTotalUpdate = htmlElement->tagName() == "HTML" || htmlElement->tagName() == "BODY" || htmlElement->tagName() == "HEAD";
+    Element* parentElement = node->parentElement();
+    if (!parentElement)
+        return;
 
-    bool childrenRequested = m_childrenRequested.contains(nodeId);
-    Node* previousSibling = htmlElement->previousSibling();
-    ContainerNode* parentNode = htmlElement->parentNode();
+    Document* document = node->ownerDocument();
+    if (!document->isHTMLDocument()) {
+        *errorString = "Not an HTML document";
+        return;
+    }
+
+    Node* previousSibling = node->previousSibling(); // Remember previous sibling before replacing node.
+
+    RefPtr<DocumentFragment> fragment = DocumentFragment::create(document);
+    fragment->parseHTML(outerHTML, parentElement);
 
     ExceptionCode ec = 0;
-    htmlElement->setOuterHTML(outerHTML, ec);
-    if (ec)
+    parentElement->replaceChild(fragment.release(), node, ec);
+    if (ec) {
+        *errorString = "Failed to replace Node with new contents";
         return;
+    }
+
+    bool requiresTotalUpdate = false;
+    if (node->isHTMLElement())
+        requiresTotalUpdate = node->nodeName() == "HTML" || node->nodeName() == "BODY" || node->nodeName() == "HEAD";
 
     if (requiresTotalUpdate) {
         RefPtr<Document> document = m_document;
@@ -775,7 +685,7 @@ void InspectorDOMAgent::setOuterHTML(ErrorString* errorString, int nodeId, const
         return;
     }
 
-    Node* newNode = previousSibling ? previousSibling->nextSibling() : parentNode->firstChild();
+    Node* newNode = previousSibling ? previousSibling->nextSibling() : parentElement->firstChild();
     if (!newNode) {
         // The only child node has been deleted.
         *newId = 0;
@@ -783,6 +693,8 @@ void InspectorDOMAgent::setOuterHTML(ErrorString* errorString, int nodeId, const
     }
 
     *newId = pushNodePathToFrontend(newNode);
+
+    bool childrenRequested = m_childrenRequested.contains(nodeId);
     if (childrenRequested)
         pushChildNodesToFrontend(*newId);
 }
@@ -868,7 +780,7 @@ void InspectorDOMAgent::getEventListenersForNode(ErrorString*, int nodeId, RefPt
     }
 }
 
-void InspectorDOMAgent::performSearch(ErrorString* error, const String& whitespaceTrimmedQuery, const bool* const runSynchronously)
+void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrimmedQuery, String* searchId, int* resultCount)
 {
     // FIXME: Few things are missing here:
     // 1) Search works with node granularity - number of matches within node is not calculated.
@@ -880,88 +792,110 @@ void InspectorDOMAgent::performSearch(ErrorString* error, const String& whitespa
     bool endTagFound = whitespaceTrimmedQuery.reverseFind('>') + 1 == queryLength;
 
     String tagNameQuery = whitespaceTrimmedQuery;
-    if (startTagFound || endTagFound)
-        tagNameQuery = tagNameQuery.substring(startTagFound ? 1 : 0, endTagFound ? queryLength - 1 : queryLength);
-    if (!Document::isValidName(tagNameQuery))
-        tagNameQuery = "";
+    if (startTagFound)
+        tagNameQuery = tagNameQuery.right(tagNameQuery.length() - 1);
+    if (endTagFound)
+        tagNameQuery = tagNameQuery.left(tagNameQuery.length() - 1);
 
-    String attributeNameQuery = whitespaceTrimmedQuery;
-    if (!Document::isValidName(attributeNameQuery))
-        attributeNameQuery = "";
-
-    String escapedQuery = whitespaceTrimmedQuery;
-    escapedQuery.replace("'", "\\'");
-    String escapedTagNameQuery = tagNameQuery;
-    escapedTagNameQuery.replace("'", "\\'");
-
-    // Clear pending jobs.
-    cancelSearch(error);
-
-    // Find all frames, iframes and object elements to search their documents.
     Vector<Document*> docs = documents();
+    ListHashSet<Node*> resultCollector;
+
     for (Vector<Document*>::iterator it = docs.begin(); it != docs.end(); ++it) {
         Document* document = *it;
+        Node* node = document->documentElement();
 
-        if (!tagNameQuery.isEmpty() && startTagFound && endTagFound) {
-            m_pendingMatchJobs.append(new MatchExactTagNamesJob(document, tagNameQuery));
-            m_pendingMatchJobs.append(new MatchPlainTextJob(document, escapedQuery));
-            continue;
+        // Manual plain text search.
+        while ((node = node->traverseNextNode(document->documentElement()))) {
+            switch (node->nodeType()) {
+            case Node::TEXT_NODE:
+            case Node::COMMENT_NODE:
+            case Node::CDATA_SECTION_NODE: {
+                String text = node->nodeValue();
+                if (text.findIgnoringCase(whitespaceTrimmedQuery) != notFound)
+                    resultCollector.add(node);
+                break;
+            }
+            case Node::ELEMENT_NODE: {
+                if (node->nodeName().findIgnoringCase(tagNameQuery) != notFound) {
+                    resultCollector.add(node);
+                    break;
+                }
+                // Go through all attributes and serialize them.
+                const NamedNodeMap* attrMap = static_cast<Element*>(node)->attributes(true);
+                if (!attrMap)
+                    break;
+
+                unsigned numAttrs = attrMap->length();
+                for (unsigned i = 0; i < numAttrs; ++i) {
+                    // Add attribute pair
+                    const Attribute* attribute = attrMap->attributeItem(i);
+                    if (attribute->localName().find(whitespaceTrimmedQuery) != notFound) {
+                        resultCollector.add(node);
+                        break;
+                    }
+                    if (attribute->value().find(whitespaceTrimmedQuery) != notFound) {
+                        resultCollector.add(node);
+                        break;
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+            }
         }
 
-        if (!tagNameQuery.isEmpty() && startTagFound) {
-            m_pendingMatchJobs.append(new MatchXPathJob(document, "//*[starts-with(name(), '" + escapedTagNameQuery + "')]"));
-            m_pendingMatchJobs.append(new MatchPlainTextJob(document, escapedQuery));
-            continue;
-        }
+        // XPath evaluation
+        for (Vector<Document*>::iterator it = docs.begin(); it != docs.end(); ++it) {
+            Document* document = *it;
+            ExceptionCode ec = 0;
+            RefPtr<XPathResult> result = document->evaluate(whitespaceTrimmedQuery, document, 0, XPathResult::ORDERED_NODE_SNAPSHOT_TYPE, 0, ec);
+            if (ec || !result)
+                continue;
 
-        if (!tagNameQuery.isEmpty() && endTagFound) {
-            // FIXME: we should have a matchEndOfTagNames search function if endTagFound is true but not startTagFound.
-            // This requires ends-with() support in XPath, WebKit only supports starts-with() and contains().
-            m_pendingMatchJobs.append(new MatchXPathJob(document, "//*[contains(name(), '" + escapedTagNameQuery + "')]"));
-            m_pendingMatchJobs.append(new MatchPlainTextJob(document, escapedQuery));
-            continue;
-        }
+            unsigned long size = result->snapshotLength(ec);
+            for (unsigned long i = 0; !ec && i < size; ++i) {
+                Node* node = result->snapshotItem(i, ec);
+                if (ec)
+                    break;
 
-        bool matchesEveryNode = whitespaceTrimmedQuery == "//*" || whitespaceTrimmedQuery == "*";
-        if (matchesEveryNode) {
-            // These queries will match every node. Matching everything isn't useful and can be slow for large pages,
-            // so limit the search functions list to plain text and attribute matching for these.
-            m_pendingMatchJobs.append(new MatchXPathJob(document, "//*[contains(@*, '" + escapedQuery + "')]"));
-            m_pendingMatchJobs.append(new MatchPlainTextJob(document, escapedQuery));
-            continue;
+                if (node->nodeType() == Node::ATTRIBUTE_NODE)
+                    node = static_cast<Attr*>(node)->ownerElement();
+                resultCollector.add(node);
+            }
         }
-
-        m_pendingMatchJobs.append(new MatchExactIdJob(document, whitespaceTrimmedQuery));
-        m_pendingMatchJobs.append(new MatchExactClassNamesJob(document, whitespaceTrimmedQuery));
-        m_pendingMatchJobs.append(new MatchExactTagNamesJob(document, tagNameQuery));
-        m_pendingMatchJobs.append(new MatchQuerySelectorAllJob(document, "[" + attributeNameQuery + "]"));
-        m_pendingMatchJobs.append(new MatchQuerySelectorAllJob(document, whitespaceTrimmedQuery));
-        m_pendingMatchJobs.append(new MatchXPathJob(document, "//*[contains(@*, '" + escapedQuery + "')]"));
-        if (!tagNameQuery.isEmpty())
-            m_pendingMatchJobs.append(new MatchXPathJob(document, "//*[contains(name(), '" + escapedTagNameQuery + "')]"));
-        m_pendingMatchJobs.append(new MatchPlainTextJob(document, escapedQuery));
-        m_pendingMatchJobs.append(new MatchXPathJob(document, whitespaceTrimmedQuery));
     }
 
-    if (runSynchronously && *runSynchronously) {
-        // For tests.
-        ListHashSet<Node*> resultCollector;
-        for (Deque<MatchJob*>::iterator it = m_pendingMatchJobs.begin(); it != m_pendingMatchJobs.end(); ++it)
-            (*it)->match(resultCollector);
-        reportNodesAsSearchResults(resultCollector);
-        cancelSearch(error);
-        return;
-    }
-    m_matchJobsTimer.startOneShot(0);
+    *searchId = IdentifiersFactory::createIdentifier();
+    SearchResults::iterator resultsIt = m_searchResults.add(*searchId, Vector<RefPtr<Node> >()).first;
+
+    for (ListHashSet<Node*>::iterator it = resultCollector.begin(); it != resultCollector.end(); ++it)
+        resultsIt->second.append(*it);
+
+    *resultCount = resultsIt->second.size();
 }
 
-void InspectorDOMAgent::cancelSearch(ErrorString*)
+void InspectorDOMAgent::getSearchResults(ErrorString* errorString, const String& searchId, int fromIndex, int toIndex, RefPtr<InspectorArray>* nodeIds)
 {
-    if (m_matchJobsTimer.isActive())
-        m_matchJobsTimer.stop();
-    deleteAllValues(m_pendingMatchJobs);
-    m_pendingMatchJobs.clear();
-    m_searchResults.clear();
+    SearchResults::iterator it = m_searchResults.find(searchId);
+    if (it == m_searchResults.end()) {
+        *errorString = "No search session with given id found";
+        return;
+    }
+
+    int size = it->second.size();
+    if (fromIndex < 0 || toIndex > size || fromIndex >= toIndex) {
+        *errorString = "Invalid search result range";
+        return;
+    }
+
+    for (int i = fromIndex; i < toIndex; ++i)
+        (*nodeIds)->pushNumber(pushNodePathToFrontend((it->second)[i].get()));
+}
+
+void InspectorDOMAgent::discardSearchResults(ErrorString*, const String& searchId)
+{
+    m_searchResults.remove(searchId);
 }
 
 bool InspectorDOMAgent::handleMousePress()
@@ -1133,7 +1067,7 @@ void InspectorDOMAgent::moveTo(ErrorString* error, int nodeId, int targetElement
         if (!anchorNode)
             return;
         if (anchorNode->parentNode() != targetElement) {
-            *error = "Anchor node must be child of the target element.";
+            *error = "Anchor node must be child of the target element";
             return;
         }
     }
@@ -1141,7 +1075,7 @@ void InspectorDOMAgent::moveTo(ErrorString* error, int nodeId, int targetElement
     ExceptionCode ec = 0;
     bool success = targetElement->insertBefore(node, anchorNode, ec);
     if (ec || !success) {
-        *error = "Could not drop node.";
+        *error = "Could not drop node";
         return;
     }
     *newNodeId = pushNodePathToFrontend(node);
@@ -1152,10 +1086,15 @@ void InspectorDOMAgent::resolveNode(ErrorString* error, int nodeId, const String
     String objectGroupName = objectGroup ? *objectGroup : "";
     Node* node = nodeForId(nodeId);
     if (!node) {
-        *error = "No node with given id found.";
+        *error = "No node with given id found";
         return;
     }
-    *result = resolveNode(node, objectGroupName);
+    RefPtr<InspectorObject> object = resolveNode(node, objectGroupName);
+    if (!object) {
+        *error = "Node with given id does not belong to the document";
+        return;
+    }
+    *result = object;
 }
 
 void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, RefPtr<InspectorArray>* result)
@@ -1177,7 +1116,8 @@ void InspectorDOMAgent::requestNode(ErrorString*, const String& objectId, int* n
         *nodeId = 0;
 }
 
-String InspectorDOMAgent::documentURLString(Document* document) const
+// static
+String InspectorDOMAgent::documentURLString(Document* document)
 {
     if (!document || document->url().isNull())
         return "";
@@ -1194,22 +1134,26 @@ PassRefPtr<InspectorObject> InspectorDOMAgent::buildObjectForNode(Node* node, in
     String nodeValue;
 
     switch (node->nodeType()) {
-        case Node::TEXT_NODE:
-        case Node::COMMENT_NODE:
-        case Node::CDATA_SECTION_NODE:
-            nodeValue = node->nodeValue();
-            break;
-        case Node::ATTRIBUTE_NODE:
-            localName = node->localName();
-            break;
-        case Node::DOCUMENT_FRAGMENT_NODE:
-            break;
-        case Node::DOCUMENT_NODE:
-        case Node::ELEMENT_NODE:
-        default:
-            nodeName = node->nodeName();
-            localName = node->localName();
-            break;
+    case Node::TEXT_NODE:
+    case Node::COMMENT_NODE:
+    case Node::CDATA_SECTION_NODE:
+        nodeValue = node->nodeValue();
+        if (nodeValue.length() > maxTextSize) {
+            nodeValue = nodeValue.left(maxTextSize);
+            nodeValue.append(ellipsisUChar);
+        }
+        break;
+    case Node::ATTRIBUTE_NODE:
+        localName = node->localName();
+        break;
+    case Node::DOCUMENT_FRAGMENT_NODE:
+        break;
+    case Node::DOCUMENT_NODE:
+    case Node::ELEMENT_NODE:
+    default:
+        nodeName = node->nodeName();
+        localName = node->localName();
+        break;
     }
 
     value->setNumber("nodeId", id);
@@ -1260,7 +1204,7 @@ PassRefPtr<InspectorArray> InspectorDOMAgent::buildArrayForElementAttributes(Ele
     unsigned numAttrs = attrMap->length();
     for (unsigned i = 0; i < numAttrs; ++i) {
         // Add attribute pair
-        const Attribute *attribute = attrMap->attributeItem(i);
+        const Attribute* attribute = attrMap->attributeItem(i);
         attributesValue->pushString(attribute->name().toString());
         attributesValue->pushString(attribute->value());
     }
@@ -1539,36 +1483,6 @@ Node* InspectorDOMAgent::nodeForPath(const String& path)
         node = child;
     }
     return node;
-}
-
-void InspectorDOMAgent::onMatchJobsTimer(Timer<InspectorDOMAgent>*)
-{
-    if (!m_pendingMatchJobs.size()) {
-        ErrorString error;
-        cancelSearch(&error);
-        return;
-    }
-
-    ListHashSet<Node*> resultCollector;
-    MatchJob* job = m_pendingMatchJobs.takeFirst();
-    job->match(resultCollector);
-    delete job;
-
-    reportNodesAsSearchResults(resultCollector);
-
-    m_matchJobsTimer.startOneShot(0.025);
-}
-
-void InspectorDOMAgent::reportNodesAsSearchResults(ListHashSet<Node*>& resultCollector)
-{
-    RefPtr<InspectorArray> nodeIds = InspectorArray::create();
-    for (ListHashSet<Node*>::iterator it = resultCollector.begin(); it != resultCollector.end(); ++it) {
-        if (m_searchResults.contains(*it))
-            continue;
-        m_searchResults.add(*it);
-        nodeIds->pushNumber(pushNodePathToFrontend(*it));
-    }
-    m_frontend->searchResults(nodeIds.release());
 }
 
 void InspectorDOMAgent::copyNode(ErrorString*, int nodeId)

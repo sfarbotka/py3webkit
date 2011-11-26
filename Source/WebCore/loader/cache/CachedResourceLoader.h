@@ -1,7 +1,7 @@
 /*
     Copyright (C) 1998 Lars Knoll (knoll@mpi-hd.mpg.de)
     Copyright (C) 2001 Dirk Mueller <mueller@kde.org>
-    Copyright (C) 2004, 2005, 2006 Apple Computer, Inc.
+    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
     Copyright (C) 2009 Torch Mobile Inc. http://www.torchmobile.com/
 
     This library is free software; you can redistribute it and/or
@@ -44,6 +44,8 @@ class CachedFont;
 class CachedImage;
 class CachedRawResource;
 class CachedScript;
+class CachedShader;
+class CachedTextTrack;
 class CachedXSLStyleSheet;
 class Document;
 class Frame;
@@ -72,6 +74,12 @@ public:
 #endif
 #if ENABLE(LINK_PREFETCH)
     CachedResource* requestLinkResource(CachedResource::Type, ResourceRequest&, ResourceLoadPriority = ResourceLoadPriorityUnresolved);
+#endif
+#if ENABLE(VIDEO_TRACK)
+    CachedTextTrack* requestTextTrack(ResourceRequest&);
+#endif
+#if ENABLE(CSS_SHADERS)
+    CachedShader* requestShader(ResourceRequest&);
 #endif
 
     // Logs an access denied message to the console for the specified URL.

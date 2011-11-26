@@ -67,7 +67,7 @@ controllers.ResultsDetails = base.extends(Object, {
         $(this._view).bind('next', this.onNext.bind(this));
         $(this._view).bind('previous', this.onPrevious.bind(this));
         $(this._view).bind('rebaseline', this.onRebaseline.bind(this));
-        $(this._view).bind('updateexpectations', this.onUpdateExpectations.bind(this));
+        $(this._view).bind('expectfailure', this.onUpdateExpectations.bind(this));
     },
     onNext: function()
     {
@@ -119,7 +119,7 @@ var FailureStreamController = base.extends(Object, {
             $(failure).bind('rebaseline', function() {
                 this.onRebaseline(failure);
             }.bind(this));
-            $(failure).bind('updateexpectations', function() {
+            $(failure).bind('expectfailure', function() {
                 this.onUpdateExpectations(failure);
             }.bind(this));
         }
@@ -196,6 +196,10 @@ controllers.UnexpectedFailures = base.extends(FailureStreamController, {
         var failure = FailureStreamController.prototype.update.call(this, failureAnalysis);
         failure.updateBuilderResults(model.buildersInFlightForRevision(this._impliedFirstFailingRevision(failureAnalysis)));
     },
+    length: function()
+    {
+        return this._testFailures.length();
+    },
     onBlame: function(failure, commitData)
     {
         failure.pinToCommitData(commitData);
@@ -228,9 +232,10 @@ controllers.Failures = base.extends(FailureStreamController, {
 });
 
 controllers.FailingBuilders = base.extends(Object, {
-    init: function(view)
+    init: function(view, message)
     {
         this._view = view;
+        this._message = message;
         this._notification = null;
     },
     update: function(builderNameList)
@@ -243,7 +248,7 @@ controllers.FailingBuilders = base.extends(Object, {
             return;
         }
         if (!this._notification) {
-            this._notification = new ui.notifications.BuildersFailing();
+            this._notification = new ui.notifications.BuildersFailing(this._message);
             this._view.add(this._notification);
         }
         // FIXME: We should provide regression ranges for the failing builders.

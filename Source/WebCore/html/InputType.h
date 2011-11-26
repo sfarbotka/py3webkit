@@ -121,8 +121,8 @@ public:
     // DOM property functions
 
     virtual bool getTypeSpecificValue(String&); // Checked first, before internal storage or the value attribute.
-    virtual String fallbackValue(); // Checked last, if both internal storage and value attribute are missing.
-    virtual String defaultValue(); // Checked after even fallbackValue, only when the valueWithDefault function is called.
+    virtual String fallbackValue() const; // Checked last, if both internal storage and value attribute are missing.
+    virtual String defaultValue() const; // Checked after even fallbackValue, only when the valueWithDefault function is called.
     virtual double valueAsDate() const;
     virtual void setValueAsDate(double, ExceptionCode&) const;
     virtual double valueAsNumber() const;
@@ -161,7 +161,8 @@ public:
     virtual String convertFromVisibleValue(const String&) const;
     virtual bool isAcceptableValue(const String&);
     // Returing the null string means "use the default value."
-    virtual String sanitizeValue(const String&);
+    // This function must be called only by HTMLInputElement::sanitizeValue().
+    virtual String sanitizeValue(const String&) const;
     virtual bool hasUnacceptableValue();
 
     // Event handlers
@@ -183,7 +184,7 @@ public:
     virtual bool isKeyboardFocusable() const;
     virtual bool shouldUseInputMethod() const;
     virtual void handleBlurEvent();
-    virtual void accessKeyAction(bool sendToAnyElement);
+    virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool canBeSuccessfulSubmitButton();
 
 
@@ -237,6 +238,7 @@ public:
     virtual void multipleAttributeChanged();
     virtual void disabledAttributeChanged();
     virtual void readonlyAttributeChanged();
+    virtual String defaultToolTip() const;
 
     // Parses the specified string for the type, and return
     // the double value for the parsing result if the parsing

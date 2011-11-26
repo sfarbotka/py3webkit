@@ -29,6 +29,7 @@
 #include "AffineTransform.h"
 #include "CanvasRenderingContext.h"
 #include "Color.h"
+#include "ColorSpace.h"
 #include "DashArray.h"
 #include "FloatSize.h"
 #include "Font.h"
@@ -279,6 +280,7 @@ private:
     void applyShadow();
 
     void didDraw(const FloatRect&, unsigned options = CanvasDidDrawApplyAll);
+    void didDrawEntireCanvas();
 
     GraphicsContext* drawingContext() const;
 
@@ -298,8 +300,14 @@ private:
     void clearCanvas();
     Path transformAreaToDevice(const Path&) const;
     Path transformAreaToDevice(const FloatRect&) const;
-    bool shouldDisplayTransparencyElsewhere() const;
-    template<class T> void fillAndDisplayTransparencyElsewhere(const T& area);
+    bool rectContainsCanvas(const FloatRect&) const;
+
+    template<class T> IntRect calculateCompositingBufferRect(const T&, IntSize*);
+    PassOwnPtr<ImageBuffer> createCompositingBuffer(const IntRect&);
+    void compositeBuffer(ImageBuffer*, const IntRect&, CompositeOperator);
+
+    template<class T> void fullCanvasCompositedFill(const T&);
+    template<class T> void fullCanvasCompositedDrawImage(T*, ColorSpace, const FloatRect&, const FloatRect&, CompositeOperator);
 
     void prepareGradientForDashboard(CanvasGradient* gradient) const;
 

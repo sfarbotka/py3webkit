@@ -34,6 +34,7 @@
 
 #include "TextTrackCue.h"
 
+#include "Event.h"
 #include "DocumentFragment.h"
 #include "TextTrack.h"
 #include "WebVTTParser.h"
@@ -42,19 +43,19 @@
 namespace WebCore {
 
 TextTrackCue::TextTrackCue(ScriptExecutionContext* context, const String& id, double start, double end, const String& content, const String& settings, bool pauseOnExit)
-    : ActiveDOMObject(context, this)
-    , m_id(id)
+    : m_id(id)
     , m_startTime(start)
     , m_endTime(end)
     , m_content(content)
-    , m_pauseOnExit(pauseOnExit)
     , m_writingDirection(Horizontal)
-    , m_snapToLines(true)
     , m_linePosition(-1)
     , m_textPosition(50)
     , m_cueSize(100)
     , m_cueAlignment(Middle)
+    , m_scriptExecutionContext(context)
     , m_isActive(false)
+    , m_pauseOnExit(pauseOnExit)
+    , m_snapToLines(true)
 {
     parseSettings(settings);
 }
@@ -65,10 +66,10 @@ TextTrackCue::~TextTrackCue()
 
 TextTrack* TextTrackCue::track() const
 {
-    return m_track;
+    return m_track.get();
 }
 
-void TextTrackCue::setTrack(TextTrack* track)
+void TextTrackCue::setTrack(PassRefPtr<TextTrack>track)
 {
     m_track = track;
 }
@@ -138,18 +139,21 @@ void TextTrackCue::setCueHTML(PassRefPtr<DocumentFragment> fragment)
 
 bool TextTrackCue::isActive()
 {
-    // FIXME(62885): Implement.
-    return false;
+    return m_isActive;
 }
 
 void TextTrackCue::setIsActive(bool active)
 {
     m_isActive = active;
-}
 
-ScriptExecutionContext* TextTrackCue::scriptExecutionContext() const
-{
-    return ActiveDOMObject::scriptExecutionContext();
+    ExceptionCode ec = 0;
+    if (active)
+        dispatchEvent(Event::create(eventNames().enterEvent, false, false), ec);
+    else
+        dispatchEvent(Event::create(eventNames().exitEvent, false, false), ec);
+
+    if (m_track)
+        m_track->fireCueChangeEvent();
 }
 
 void TextTrackCue::parseSettings(const String& input)
@@ -305,6 +309,26 @@ Otherwise:
         // Collect a sequence of characters that are not space characters and discard them.
         WebVTTParser::collectWord(input, &position);
     }
+}
+
+const AtomicString& TextTrackCue::interfaceName() const
+{
+    return eventNames().interfaceForTextTrackCue;
+}
+
+ScriptExecutionContext* TextTrackCue::scriptExecutionContext() const
+{
+    return m_scriptExecutionContext;
+}
+
+EventTargetData* TextTrackCue::eventTargetData()
+{
+    return &m_eventTargetData;
+}
+
+EventTargetData* TextTrackCue::ensureEventTargetData()
+{
+    return &m_eventTargetData;
 }
 
 } // namespace WebCore

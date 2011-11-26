@@ -30,9 +30,10 @@ ui.failures = ui.failures || {};
 
 var kBuildingResult = 'BUILDING';
 
-ui.failures.Configuration = base.extends('a', {
-    init: function(configuration)
+ui.failures.Builder = base.extends('a', {
+    init: function(builderName)
     {
+        var configuration = config.kBuilders[builderName];
         if (configuration.version)
             this._addSpan('version', configuration.version);
         if (configuration.isCG)
@@ -40,7 +41,9 @@ ui.failures.Configuration = base.extends('a', {
         if (configuration.is64bit)
             this._addSpan('architecture', '64-bit');
         this._configuration = configuration;
+        this.className = 'failing-builder';
         this.target = '_blank';
+        this.href = ui.displayURLForBuilder(builderName);
     },
     _addSpan: function(className, text)
     {
@@ -88,7 +91,8 @@ ui.failures.FailureGrid = base.extends('table', {
         row.className = result;
         row.insertCell();
         row.insertCell();
-        row.insertCell().textContent = result;
+        var titleCell = row.insertCell();
+        titleCell.appendChild(document.createElement('span')).textContent = result;
         return row;
     },
     update: function(resultsByBuilder)
@@ -107,7 +111,7 @@ ui.failures.FailureGrid = base.extends('table', {
             var cell = cellByBuildType(row, configuration);
             if (cellContainsConfiguration(cell, configuration))
                 return;
-            cell.appendChild(new ui.failures.Configuration(configuration)).href = ui.displayURLForBuilder(builderName);
+            cell.appendChild(new ui.failures.Builder(builderName));
         }, this);
     },
     purge: function()

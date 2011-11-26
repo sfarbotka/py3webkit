@@ -148,7 +148,7 @@ void WKSetCGFontRenderingMode(CGContextRef cgContext, NSFont *font);
 BOOL WKCGContextGetShouldSmoothFonts(CGContextRef cgContext);
 
 
-void WKSetPatternBaseCTM(CGContextRef, CGAffineTransform);
+void WKSetBaseCTM(CGContextRef, CGAffineTransform);
 void WKSetPatternPhaseInUserSpace(CGContextRef, CGPoint);
 CGAffineTransform WKGetUserToBaseCTM(CGContextRef);
 
@@ -409,6 +409,8 @@ CFHTTPMessageRef WKGetCFURLResponseHTTPResponse(CFURLResponseRef);
 CFStringRef WKCopyCFURLResponseSuggestedFilename(CFURLResponseRef);
 void WKSetCFURLResponseMIMEType(CFURLResponseRef, CFStringRef mimeType);
 
+CIFormat WKCIGetRGBA8Format(void);
+
 #if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
 
 typedef enum {
@@ -427,6 +429,8 @@ bool WKSandboxExtensionInvalidate(WKSandboxExtensionRef sandboxExtension);
 const char* WKSandboxExtensionGetSerializedFormat(WKSandboxExtensionRef sandboxExtension, size_t* length);
 WKSandboxExtensionRef WKSandboxExtensionCreateFromSerializedFormat(const char* serializationFormat, size_t length);
 
+OSStatus WKEnableSandboxStyleFileQuarantine(void);
+
 int WKRecommendedScrollerStyle(void);
 
 bool WKExecutableWasLinkedOnOrBeforeSnowLeopard(void);
@@ -443,6 +447,14 @@ NSCursor *WKCursor(const char *name);
 
 #endif
 
+#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD)
+
+#import <dispatch/dispatch.h>
+
+dispatch_source_t WKCreateVMPressureDispatchOnMainQueue(void);
+
+#endif
+    
 #ifdef __cplusplus
 }
 #endif

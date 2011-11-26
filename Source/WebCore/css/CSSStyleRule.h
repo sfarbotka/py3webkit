@@ -22,6 +22,7 @@
 #ifndef CSSStyleRule_h
 #define CSSStyleRule_h
 
+#include "CSSMutableStyleDeclaration.h"
 #include "CSSRule.h"
 #include "CSSSelectorList.h"
 #include <wtf/PassRefPtr.h>
@@ -29,7 +30,6 @@
 
 namespace WebCore {
 
-class CSSMutableStyleDeclaration;
 class CSSSelector;
 
 class CSSStyleRule : public CSSRule {
@@ -38,36 +38,29 @@ public:
     {
         return adoptRef(new CSSStyleRule(parent, sourceLine));
     }
-    virtual ~CSSStyleRule();
+    ~CSSStyleRule();
 
-    virtual String selectorText() const;
+    String selectorText() const;
     void setSelectorText(const String&);
 
     CSSMutableStyleDeclaration* style() const { return m_style.get(); }
 
-    virtual String cssText() const;
-
-    // Not part of the CSSOM
-    virtual bool parseString(const String&, bool = false);
+    String cssText() const;
 
     void adoptSelectorVector(Vector<OwnPtr<CSSParserSelector> >& selectors) { m_selectorList.adoptSelectorVector(selectors); }
-    void setDeclaration(PassRefPtr<CSSMutableStyleDeclaration>);
+    void setDeclaration(PassRefPtr<CSSMutableStyleDeclaration> style) { m_style = style; }
 
     const CSSSelectorList& selectorList() const { return m_selectorList; }
     CSSMutableStyleDeclaration* declaration() { return m_style.get(); }
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>& urls);
+    void addSubresourceStyleURLs(ListHashSet<KURL>& urls);
 
     int sourceLine() { return m_sourceLine; }
 
 protected:
-    CSSStyleRule(CSSStyleSheet* parent, int sourceLine);
+    CSSStyleRule(CSSStyleSheet* parent, int sourceLine, CSSRule::Type = CSSRule::STYLE_RULE);
 
 private:
-    virtual bool isStyleRule() const { return true; }
-    // Inherited from CSSRule
-    virtual CSSRuleType type() const { return STYLE_RULE; }
-
     RefPtr<CSSMutableStyleDeclaration> m_style;
     CSSSelectorList m_selectorList;
     int m_sourceLine;

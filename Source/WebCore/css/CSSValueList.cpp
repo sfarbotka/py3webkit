@@ -27,28 +27,27 @@
 
 namespace WebCore {
 
+CSSValueList::CSSValueList(ClassType classType, bool isSpaceSeparated)
+    : CSSValue(classType)
+    , m_isSpaceSeparated(isSpaceSeparated)
+{
+}
+
 CSSValueList::CSSValueList(bool isSpaceSeparated)
-    : m_isSpaceSeparated(isSpaceSeparated)
+    : CSSValue(ValueListClass)
+    , m_isSpaceSeparated(isSpaceSeparated)
 {
 }
 
 CSSValueList::CSSValueList(CSSParserValueList* list)
-    : m_isSpaceSeparated(true)
+    : CSSValue(ValueListClass)
+    , m_isSpaceSeparated(true)
 {
     if (list) {
         size_t size = list->size();
         for (unsigned i = 0; i < size; ++i)
             append(list->valueAt(i)->createCSSValue());
     }
-}
-
-CSSValueList::~CSSValueList()
-{
-}
-
-unsigned short CSSValueList::cssValueType() const
-{
-    return CSS_VALUE_LIST;
 }
 
 void CSSValueList::append(PassRefPtr<CSSValue> val)
@@ -72,10 +71,10 @@ bool CSSValueList::removeAll(CSSValue* val)
             found = true;
         }
     }
-    
+
     return found;
 }
-    
+
 bool CSSValueList::hasValue(CSSValue* val) const
 {
     // FIXME: we should be implementing operator== to CSSValue and its derived classes
@@ -95,7 +94,7 @@ PassRefPtr<CSSValueList> CSSValueList::copy()
     return newList;
 }
 
-String CSSValueList::cssText() const
+String CSSValueList::customCssText() const
 {
     String result = "";
 

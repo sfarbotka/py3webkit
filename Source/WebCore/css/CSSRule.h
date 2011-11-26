@@ -2,6 +2,7 @@
  * (C) 1999-2003 Lars Knoll (knoll@kde.org)
  * (C) 2002-2003 Dirk Mueller (mueller@kde.org)
  * Copyright (C) 2002, 2006, 2007 Apple Inc. All rights reserved.
+ * Copyright (C) 2011 Andreas Kling (kling@webkit.org)
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -30,10 +31,17 @@ namespace WebCore {
 
 typedef int ExceptionCode;
 
-class CSSRule : public StyleBase {
+class CSSRule : public RefCounted<CSSRule> {
 public:
-    // FIXME: Change name to Type.
-    enum CSSRuleType {
+    // Override RefCounted's deref() to ensure operator delete is called on
+    // the appropriate subclass type.
+    void deref()
+    {
+        if (derefBase())
+            destroy();
+    }
+
+    enum Type {
         UNKNOWN_RULE,
         STYLE_RULE,
         CHARSET_RULE,
@@ -43,27 +51,84 @@ public:
         PAGE_RULE,
         // 7 used to be VARIABLES_RULE
         WEBKIT_KEYFRAMES_RULE = 8,
-        WEBKIT_KEYFRAME_RULE
+        WEBKIT_KEYFRAME_RULE,
+        WEBKIT_REGION_STYLE_RULE
     };
 
-    virtual CSSRuleType type() const = 0;
+    Type type() const { return static_cast<Type>(m_type); }
 
-    CSSStyleSheet* parentStyleSheet() const;
-    CSSRule* parentRule() const;
+    bool isCharsetRule() const { return type() == CHARSET_RULE; }
+    bool isFontFaceRule() const { return type() == FONT_FACE_RULE; }
+    bool isKeyframeRule() const { return type() == WEBKIT_KEYFRAME_RULE; }
+    bool isKeyframesRule() const { return type() == WEBKIT_KEYFRAMES_RULE; }
+    bool isMediaRule() const { return type() == MEDIA_RULE; }
+    bool isPageRule() const { return type() == PAGE_RULE; }
+    bool isStyleRule() const { return type() == STYLE_RULE; }
+    bool isRegionStyleRule() const { return type() == WEBKIT_REGION_STYLE_RULE; }
+    bool isImportRule() const { return type() == IMPORT_RULE; }
 
-    virtual String cssText() const = 0;
+    bool useStrictParsing() const
+    {
+        if (parentRule())
+            return parentRule()->useStrictParsing();
+        if (parentStyleSheet())
+            return parentStyleSheet()->useStrictParsing();
+        return true;
+    }
+
+    void setParentStyleSheet(CSSStyleSheet* styleSheet)
+    {
+        m_parentIsRule = false;
+        m_parentStyleSheet = styleSheet;
+    }
+
+    void setParentRule(CSSRule* rule)
+    {
+        m_parentIsRule = true;
+        m_parentRule = rule;
+    }
+
+    CSSStyleSheet* parentStyleSheet() const
+    {
+        if (m_parentIsRule)
+            return m_parentRule ? m_parentRule->parentStyleSheet() : 0;
+        return m_parentStyleSheet;
+    }
+
+    CSSRule* parentRule() const { return m_parentIsRule ? m_parentRule : 0; }
+
+    String cssText() const;
     void setCssText(const String&, ExceptionCode&);
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>&) { }
+    KURL baseURL() const
+    {
+        if (CSSStyleSheet* parentSheet = parentStyleSheet())
+            return parentSheet->baseURL();
+        return KURL();
+    }
 
 protected:
-    CSSRule(CSSStyleSheet* parent)
-        : StyleBase(parent)
+    CSSRule(CSSStyleSheet* parent, Type type)
+        : m_parentIsRule(false)
+        , m_type(type)
+        , m_parentStyleSheet(parent)
     {
     }
 
+    // NOTE: This class is non-virtual for memory and performance reasons.
+    // Don't go making it virtual again unless you know exactly what you're doing!
+
+    ~CSSRule() { }
+
 private:
-    virtual bool isRule() const { return true; }
+    void destroy();
+
+    bool m_parentIsRule : 1;
+    unsigned m_type : 31; // Plenty of space for additional flags here.
+    union {
+        CSSRule* m_parentRule;
+        CSSStyleSheet* m_parentStyleSheet;
+    };
 };
 
 } // namespace WebCore

@@ -46,12 +46,10 @@ class WebViewImpl;
 
 namespace WebCore {
 
+class DrawingBuffer;
 class Extensions3DChromium;
-#if USE(ACCELERATED_COMPOSITING)
-class WebGLLayerChromium;
-#endif
 class GraphicsContextLostCallbackAdapter;
-class SwapBuffersCompleteCallbackAdapter;
+class GraphicsContext3DSwapBuffersCompleteCallbackAdapter;
 
 class GraphicsContext3DPrivate {
 public:
@@ -95,17 +93,17 @@ public:
     bool layerComposited() const;
     void markLayerComposited();
 
-    void paintRenderingResultsToCanvas(CanvasRenderingContext*);
+    void paintRenderingResultsToCanvas(CanvasRenderingContext*, DrawingBuffer*);
     void paintFramebufferToCanvas(int framebuffer, int width, int height, bool premultiplyAlpha, ImageBuffer*);
-    PassRefPtr<ImageData> paintRenderingResultsToImageData();
+    PassRefPtr<ImageData> paintRenderingResultsToImageData(DrawingBuffer*);
     bool paintsIntoCanvasBuffer() const;
     bool paintCompositedResultsToCanvas(CanvasRenderingContext*);
 
     void prepareTexture();
 
-#if USE(ACCELERATED_COMPOSITING)
-    WebGLLayerChromium* platformLayer();
-#endif
+    // CHROMIUM_post_sub_buffer
+    void postSubBufferCHROMIUM(int x, int y, int width, int height);
+
     bool isGLES2Compliant() const;
 
     void releaseShaderCompiler();
@@ -290,6 +288,9 @@ public:
     void* mapTexSubImage2DCHROMIUM(GC3Denum target, GC3Dint level, GC3Dint xoffset, GC3Dint yoffset, GC3Dsizei width, GC3Dsizei height, GC3Denum format, GC3Denum type, GC3Denum access);
     void unmapTexSubImage2DCHROMIUM(const void*);
 
+    // GL_CHROMIUM_set_visibility
+    void setVisibilityCHROMIUM(bool);
+
     // GL_CHROMIUM_framebuffer_multisample
     void blitFramebufferCHROMIUM(GC3Dint srcX0, GC3Dint srcY0, GC3Dint srcX1, GC3Dint srcY1, GC3Dint dstX0, GC3Dint dstY0, GC3Dint dstX1, GC3Dint dstY1, GC3Dbitfield mask, GC3Denum filter);
     void renderbufferStorageMultisampleCHROMIUM(GC3Denum target, GC3Dsizei samples, GC3Denum internalformat, GC3Dsizei width, GC3Dsizei height);
@@ -303,13 +304,19 @@ public:
     // GL_ARB_robustness
     GC3Denum getGraphicsResetStatusARB();
 
+    // GL_ANGLE_translated_shader_source
+    String getTranslatedShaderSourceANGLE(Platform3DObject shader);
+
+    // GL_CHROMIUM_iosurface
+    void texImageIOSurface2DCHROMIUM(GC3Denum target, GC3Dint width, GC3Dint height, GC3Duint ioSurfaceId, GC3Duint plane);
+
 private:
     GraphicsContext3DPrivate(WebKit::WebViewImpl*, PassOwnPtr<WebKit::WebGraphicsContext3D>, GraphicsContext3D::Attributes);
 
     OwnPtr<WebKit::WebGraphicsContext3D> m_impl;
     OwnPtr<Extensions3DChromium> m_extensions;
     OwnPtr<GraphicsContextLostCallbackAdapter> m_contextLostCallbackAdapter;
-    OwnPtr<SwapBuffersCompleteCallbackAdapter> m_swapBuffersCompleteCallbackAdapter;
+    OwnPtr<GraphicsContext3DSwapBuffersCompleteCallbackAdapter> m_swapBuffersCompleteCallbackAdapter;
     WebKit::WebViewImpl* m_webViewImpl;
     bool m_initializedAvailableExtensions;
     HashSet<String> m_enabledExtensions;
@@ -324,9 +331,6 @@ private:
     };
     ResourceSafety m_resourceSafety;
 
-#if USE(ACCELERATED_COMPOSITING)
-    RefPtr<WebGLLayerChromium> m_compositingLayer;
-#endif
 #if USE(SKIA)
     // If the width and height of the Canvas's backing store don't
     // match those that we were given in the most recent call to

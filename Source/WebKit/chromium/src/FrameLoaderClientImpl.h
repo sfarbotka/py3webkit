@@ -138,6 +138,7 @@ public:
     virtual bool shouldStopLoadingForHistoryItem(WebCore::HistoryItem*) const;
     virtual void didDisplayInsecureContent();
     virtual void didRunInsecureContent(WebCore::SecurityOrigin*, const WebCore::KURL& insecureURL);
+    virtual void didDetectXSS(const WebCore::KURL&, bool didBlockEntirePage);
     virtual WebCore::ResourceError blockedError(const WebCore::ResourceRequest&);
     virtual WebCore::ResourceError cancelledError(const WebCore::ResourceRequest&);
     virtual WebCore::ResourceError cannotShowURLError(const WebCore::ResourceRequest&);
@@ -196,7 +197,8 @@ public:
     virtual void didPerformFirstNavigation() const;
     virtual void registerForIconNotification(bool listen = true);
     virtual void didChangeScrollOffset();
-    virtual bool allowJavaScript(bool enabledPerSettings);
+    virtual bool allowScript(bool enabledPerSettings);
+    virtual bool allowScriptFromSource(bool enabledPerSettings, const WebCore::KURL& scriptURL);
     virtual bool allowPlugins(bool enabledPerSettings);
     virtual bool allowImage(bool enabledPerSettings, const WebCore::KURL& imageURL);
     virtual bool allowDisplayingInsecureContent(bool enabledPerSettings, WebCore::SecurityOrigin*, const WebCore::KURL&);

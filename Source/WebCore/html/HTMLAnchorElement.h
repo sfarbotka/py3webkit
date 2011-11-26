@@ -84,8 +84,6 @@ public:
 
     String origin() const;
 
-    String getParameter(const String&) const;
-
     String text();
 
     String toString() const;
@@ -106,7 +104,7 @@ private:
     virtual bool isKeyboardFocusable(KeyboardEvent*) const;
     virtual void defaultEventHandler(Event*);
     virtual void setActive(bool active = true, bool pause = false);
-    virtual void accessKeyAction(bool fullAction);
+    virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool isURLAttribute(Attribute*) const;
     virtual bool canStartSelection() const;
     virtual String target() const;
@@ -124,6 +122,11 @@ private:
     };
     static EventType eventType(Event*);
     bool treatLinkAsLiveForEventType(EventType) const;
+
+#if ENABLE(MICRODATA)
+    virtual String itemValueText() const OVERRIDE;
+    virtual void setItemValueText(const String&, ExceptionCode&) OVERRIDE;
+#endif
 
     RefPtr<Element> m_rootEditableElementForSelectionOnMouseDown;
     bool m_wasShiftKeyDownOnMouseDown : 1;

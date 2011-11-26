@@ -34,6 +34,7 @@
 
 #include "ErrorEvent.h"
 #include "Event.h"
+#include "EventNames.h"
 #include "JSEvent.h"
 #include <runtime/JSLock.h>
 
@@ -52,7 +53,7 @@ JSErrorHandler::~JSErrorHandler()
 
 void JSErrorHandler::handleEvent(ScriptExecutionContext* scriptExecutionContext, Event* event)
 {
-    if (!event->isErrorEvent())
+    if (!event->hasInterface(eventNames().interfaceForErrorEvent))
         return JSEventListener::handleEvent(scriptExecutionContext, event);
 
     ASSERT(scriptExecutionContext);
@@ -74,7 +75,7 @@ void JSErrorHandler::handleEvent(ScriptExecutionContext* scriptExecutionContext,
     ExecState* exec = globalObject->globalExec();
 
     CallData callData;
-    CallType callType = jsFunction->getCallDataVirtual(callData);
+    CallType callType = jsFunction->methodTable()->getCallData(jsFunction, callData);
 
     if (callType != CallTypeNone) {
         RefPtr<JSErrorHandler> protectedctor(this);
@@ -90,7 +91,7 @@ void JSErrorHandler::handleEvent(ScriptExecutionContext* scriptExecutionContext,
         JSGlobalData& globalData = globalObject->globalData();
         DynamicGlobalObjectScope globalObjectScope(globalData, globalData.dynamicGlobalObject ? globalData.dynamicGlobalObject : globalObject);
 
-        JSValue thisValue = globalObject->toThisObject(exec);
+        JSValue thisValue = globalObject->methodTable()->toThisObject(globalObject, exec);
 
         globalData.timeoutChecker.start();
         JSValue returnValue = JSC::call(exec, jsFunction, callType, callData, thisValue, args);

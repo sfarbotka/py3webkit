@@ -35,92 +35,6 @@
     '../../WebKit/chromium/features.gypi',
     '../WebCore.gypi',
   ],
-  # Location of the chromium src directory.
-  'conditions': [
-    ['inside_chromium_build==0', {
-      # Webkit is being built outside of the full chromium project.
-      'variables': {
-        'chromium_src_dir': '../../WebKit/chromium',
-        'libjpeg_gyp_path': '<(chromium_src_dir)/third_party/libjpeg_turbo/libjpeg.gyp',
-      },
-    },{
-      # WebKit is checked out in src/chromium/third_party/WebKit
-      'variables': {
-        'chromium_src_dir': '../../../../..',
-      },
-    }],
-    ['OS == "mac"', {
-      'targets': [
-        {
-          # On the Mac, libWebKitSystemInterface*.a is used to help WebCore
-          # interface with the system.  This library is supplied as a static
-          # library in binary format.  At present, it contains many global
-          # symbols not marked private_extern.  It should be considered an
-          # implementation detail of WebCore, and does not need these symbols
-          # to be exposed so widely.
-          #
-          # This target contains an action that cracks open the existing
-          # static library and rebuilds it with these global symbols
-          # transformed to private_extern.
-          'target_name': 'webkit_system_interface',
-          'type': 'static_library',
-          'variables': {
-            'adjusted_library_path':
-                '<(PRODUCT_DIR)/libWebKitSystemInterfaceLeopardPrivateExtern.a',
-          },
-          'sources': [
-            # An empty source file is needed to convince Xcode to produce
-            # output for this target.  The resulting library won't actually
-            # contain anything.  The library at adjusted_library_path will,
-            # and that library is pushed to dependents of this target below.
-            'mac/Empty.cpp',
-          ],
-          'actions': [
-            {
-              'action_name': 'Adjust Visibility',
-              'inputs': [
-                'mac/adjust_visibility.sh',
-                '../../../WebKitLibraries/libWebKitSystemInterfaceLeopard.a',
-              ],
-              'outputs': [
-                '<(adjusted_library_path)',
-              ],
-              'action': [
-                '<@(_inputs)',
-                '<@(_outputs)',
-                '<(INTERMEDIATE_DIR)/adjust_visibility',  # work directory
-              ],
-            },
-          ],  # actions
-          'link_settings': {
-            'libraries': [
-              '<(adjusted_library_path)',
-            ],
-          },  # link_settings
-        },  # target webkit_system_interface
-      ],  # targets
-    }],  # condition OS == "mac"
-    ['OS!="win" and remove_webcore_debug_symbols==1', {
-      # Remove -g from all targets defined here.
-      'target_defaults': {
-        'cflags!': ['-g'],
-      },
-    }],
-    ['os_posix==1 and OS!="mac" and gcc_version==46', {
-      'target_defaults': {
-        # Disable warnings about c++0x compatibility, as some names (such as nullptr) conflict
-        # with upcoming c++0x types.
-        'cflags_cc': ['-Wno-c++0x-compat'],
-      },
-    }],
-    ['OS=="linux" and target_arch=="arm"', {
-      # Due to a bug in gcc arm, we get warnings about uninitialized timesNewRoman.unstatic.3258
-      # and colorTransparent.unstatic.4879.
-      'target_defaults': {
-        'cflags': ['-Wno-uninitialized'],
-      },
-    }],
-  ],  # conditions
 
   'variables': {
     # If set to 1, doesn't compile debug symbols into webcore reducing the
@@ -134,6 +48,7 @@
     'webcore_include_dirs': [
       '../',
       '../..',
+      '../Modules/gamepad',
       '../accessibility',
       '../accessibility/chromium',
       '../bindings',
@@ -164,8 +79,8 @@
       '../loader/cache',
       '../loader/icon',
       '../mathml',
+      '../mediastream',
       '../notifications',
-      '../p2p',
       '../page',
       '../page/animation',
       '../page/chromium',
@@ -253,6 +168,15 @@
     ],
 
     'conditions': [
+      # Location of the chromium src directory.
+      ['inside_chromium_build==0', {
+        # webkit is being built outside of the full chromium project.
+        'chromium_src_dir': '../../WebKit/chromium',
+        'libjpeg_gyp_path': '../../WebKit/chromium/third_party/libjpeg_turbo/libjpeg.gyp',
+      },{
+        # webkit is checked out in src/chromium/third_party/webkit
+        'chromium_src_dir': '../../../../..',
+      }],
       # TODO(maruel): Move it in its own project or generate it anyway?
       ['enable_svg!=0', {
         'bindings_idl_files': [
@@ -333,8 +257,120 @@
         ],
       }],
     ],
-  },
+  },  # variables
+
+  'conditions': [
+    ['OS!="win" and remove_webcore_debug_symbols==1', {
+      # Remove -g from all targets defined here.
+      'target_defaults': {
+        'cflags!': ['-g'],
+      },
+    }],
+    ['os_posix==1 and OS!="mac" and OS!="android" and gcc_version==46', {
+      'target_defaults': {
+        # Disable warnings about c++0x compatibility, as some names (such as nullptr) conflict
+        # with upcoming c++0x types.
+        'cflags_cc': ['-Wno-c++0x-compat'],
+      },
+    }],
+    ['OS=="linux" and target_arch=="arm"', {
+      # Due to a bug in gcc arm, we get warnings about uninitialized timesNewRoman.unstatic.3258
+      # and colorTransparent.unstatic.4879.
+      'target_defaults': {
+        'cflags': ['-Wno-uninitialized'],
+      },
+    }],
+    ['OS == "mac"', {
+      'targets': [
+        {
+          # On the Mac, libWebKitSystemInterface*.a is used to help WebCore
+          # interface with the system.  This library is supplied as a static
+          # library in binary format.  At present, it contains many global
+          # symbols not marked private_extern.  It should be considered an
+          # implementation detail of WebCore, and does not need these symbols
+          # to be exposed so widely.
+          #
+          # This target contains an action that cracks open the existing
+          # static library and rebuilds it with these global symbols
+          # transformed to private_extern.
+          'target_name': 'webkit_system_interface',
+          'type': 'static_library',
+          'variables': {
+            'adjusted_library_path':
+                '<(PRODUCT_DIR)/libWebKitSystemInterfaceLeopardPrivateExtern.a',
+          },
+          'sources': [
+            # An empty source file is needed to convince Xcode to produce
+            # output for this target.  The resulting library won't actually
+            # contain anything.  The library at adjusted_library_path will,
+            # and that library is pushed to dependents of this target below.
+            'mac/Empty.cpp',
+          ],
+          'actions': [
+            {
+              'action_name': 'Adjust Visibility',
+              'inputs': [
+                'mac/adjust_visibility.sh',
+                '<(chromium_src_dir)/third_party/apple_webkit/libWebKitSystemInterfaceLeopard.a',
+              ],
+              'outputs': [
+                '<(adjusted_library_path)',
+              ],
+              'action': [
+                '<@(_inputs)',
+                '<@(_outputs)',
+                '<(INTERMEDIATE_DIR)/adjust_visibility',  # work directory
+              ],
+            },
+          ],  # actions
+          'link_settings': {
+            'libraries': [
+              '<(adjusted_library_path)',
+            ],
+          },  # link_settings
+        },  # target webkit_system_interface
+      ],  # targets
+    }],  # condition OS == "mac"
+  ],  # conditions
+
   'targets': [
+    {
+      'target_name': 'inspector_protocol_sources',
+      'type': 'none',
+      'dependencies': [
+        'generate_inspector_protocol_version'
+      ],
+      'actions': [
+        {
+          'action_name': 'generateInspectorProtocolSources',
+          'inputs': [
+            # First input. It stands for python script in action below.
+            '../inspector/CodeGeneratorInspector.py',
+            # Other inputs. They go as arguments to the python script.
+            '../inspector/Inspector.json',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorBackendDispatcher.cpp',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/InspectorBackendDispatcher.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorFrontend.cpp',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/InspectorFrontend.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorBackendStub.js',
+          ],
+          'variables': {
+            'generator_include_dirs': [
+            ],
+          },
+          'action': [
+            'python',
+            '<@(_inputs)',
+            '--output_h_dir', '<(SHARED_INTERMEDIATE_DIR)/webkit',
+            '--output_cpp_dir', '<(SHARED_INTERMEDIATE_DIR)/webcore',
+            '--defines', '<(feature_defines) LANGUAGE_JAVASCRIPT',
+          ],
+          'message': 'Generating Inspector protocol sources from Inspector.json',
+        },
+      ]
+    },
     {
       'target_name': 'generate_inspector_protocol_version',
       'type': 'none',
@@ -361,84 +397,6 @@
           ],
           'message': 'Validate inspector protocol for backwards compatibility and generate version file',
         }
-      ]
-    },
-    {
-      'target_name': 'inspector_idl',
-      'type': 'none',
-      'actions': [
-
-        {
-          'action_name': 'generateInspectorProtocolIDL',
-          'inputs': [
-            '../inspector/generate-inspector-idl',
-            '../inspector/Inspector.json',
-          ],
-          'outputs': [
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/Inspector.idl',
-          ],
-          'variables': {
-            'generator_include_dirs': [
-            ],
-          },
-          'action': [
-            'python',
-            '../inspector/generate-inspector-idl',
-            '-o',
-            '<@(_outputs)',
-            '<@(_inputs)'
-          ],
-          'message': 'Generating Inspector protocol sources from Inspector.idl',
-        }
-      ]
-    },
-    {
-      'target_name': 'inspector_protocol_sources',
-      'type': 'none',
-      'dependencies': [
-        'inspector_idl',
-        'generate_inspector_protocol_version'
-      ],
-      'actions': [
-        {
-          'action_name': 'generateInspectorProtocolSources',
-          # The second input item will be used as item name in vcproj.
-          # It is not possible to put Inspector.idl there because
-          # all idl files are marking as excluded by gyp generator.
-          'inputs': [
-            '../bindings/scripts/generate-bindings.pl',
-            '../inspector/CodeGeneratorInspector.pm',
-            '../bindings/scripts/CodeGenerator.pm',
-            '../bindings/scripts/IDLParser.pm',
-            '../bindings/scripts/IDLStructure.pm',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/Inspector.idl',
-          ],
-          'outputs': [
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorBackendDispatcher.cpp',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorBackendStub.js',
-            '<(SHARED_INTERMEDIATE_DIR)/webkit/InspectorBackendDispatcher.h',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/InspectorFrontend.cpp',
-            '<(SHARED_INTERMEDIATE_DIR)/webkit/InspectorFrontend.h',
-          ],
-          'variables': {
-            'generator_include_dirs': [
-            ],
-          },
-          'action': [
-            'python',
-            'scripts/rule_binding.py',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/Inspector.idl',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore',
-            '<(SHARED_INTERMEDIATE_DIR)/webkit',
-            '--',
-            '<@(_inputs)',
-            '--',
-            '--defines', '<(feature_defines) LANGUAGE_JAVASCRIPT',
-            '--generator', 'Inspector',
-            '<@(generator_include_dirs)'
-          ],
-          'message': 'Generating Inspector protocol sources from Inspector.idl',
-        },
       ]
     },
     {
@@ -700,6 +658,63 @@
           ],
         },
         {
+          'action_name': 'EventFactory',
+          'inputs': [
+            '../dom/make_event_factory.pl',
+            '../dom/EventFactory.in',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/EventFactory.cpp',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/EventHeaders.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/EventInterfaces.h',
+          ],
+          'action': [
+            'python',
+            'scripts/action_makenames.py',
+            '<@(_outputs)',
+            '--',
+            '<@(_inputs)',
+          ],
+        },
+        {
+          'action_name': 'EventTargetFactory',
+          'inputs': [
+            '../dom/make_event_factory.pl',
+            '../dom/EventTargetFactory.in',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/EventTargetHeaders.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/EventTargetInterfaces.h',
+          ],
+          'action': [
+            'python',
+            'scripts/action_makenames.py',
+            '<@(_outputs)',
+            '--',
+            '<@(_inputs)',
+          ],
+        },
+        {
+          'action_name': 'ExceptionCodeDescription',
+          'inputs': [
+            '../dom/make_dom_exceptions.pl',
+            '../dom/DOMExceptions.in',
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/ExceptionCodeDescription.cpp',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/ExceptionCodeDescription.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/ExceptionHeaders.h',
+            '<(SHARED_INTERMEDIATE_DIR)/webkit/ExceptionInterfaces.h',
+          ],
+          'action': [
+            'python',
+            'scripts/action_makenames.py',
+            '<@(_outputs)',
+            '--',
+            '<@(_inputs)',
+          ],
+        },
+        {
           'action_name': 'MathMLNames',
           'inputs': [
             '../dom/make_names.pl',
@@ -928,6 +943,7 @@
               '--include', '../dom',
               '--include', '../fileapi',
               '--include', '../html',
+              '--include', '../mediastream',
               '--include', '../notifications',
               '--include', '../page',
               '--include', '../plugins',
@@ -946,17 +962,20 @@
           # from lists.  When we have a better GYP way to suppress that
           # behavior, change the output location.
           'action': [
-            'python',
-            'scripts/rule_binding.py',
-            '<(RULE_INPUT_PATH)',
-            '<(SHARED_INTERMEDIATE_DIR)/webcore/bindings',
+            'perl',
+            '-w',
+            '-I../bindings/scripts',
+            '../bindings/scripts/generate-bindings.pl',
+            '--outputHeadersDir',
             '<(SHARED_INTERMEDIATE_DIR)/webkit/bindings',
-            '--',
-            '<@(_inputs)',
-            '--',
-            '--defines', '<(feature_defines) LANGUAGE_JAVASCRIPT V8_BINDING',
-            '--generator', 'V8',
-            '<@(generator_include_dirs)'
+            '--outputDir',
+            '<(SHARED_INTERMEDIATE_DIR)/webcore/bindings',
+            '--defines',
+            '<(feature_defines) LANGUAGE_JAVASCRIPT V8_BINDING',
+            '--generator',
+            'V8',
+            '<@(generator_include_dirs)',
+            '<(RULE_INPUT_PATH)',
           ],
           'message': 'Generating binding from <(RULE_INPUT_PATH)',
         },
@@ -965,6 +984,7 @@
     {
       'target_name': 'webcore_bindings',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'hard_dependency': 1,
       'dependencies': [
         'webcore_bindings_sources',
@@ -973,6 +993,7 @@
         'debugger_script_source',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:yarr',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
@@ -1014,6 +1035,12 @@
         # Additional .cpp files from webcore_bindings_sources actions.
         '<(SHARED_INTERMEDIATE_DIR)/webkit/HTMLElementFactory.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/HTMLNames.cpp',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/EventFactory.cpp',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/EventHeaders.h',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/EventInterfaces.h',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/EventTargetHeaders.h',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/EventTargetInterfaces.h',
+        '<(SHARED_INTERMEDIATE_DIR)/webkit/ExceptionCodeDescription.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/UserAgentStyleSheetsData.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/V8HTMLElementWrapperFactory.cpp',
         '<(SHARED_INTERMEDIATE_DIR)/webkit/XLinkNames.cpp',
@@ -1050,7 +1077,7 @@
         }],
         ['OS=="mac"', {
           'include_dirs': [
-            '../../../WebKitLibraries',
+            '<(chromium_src_dir)/third_party/apple_webkit',
           ],
         }],
         ['OS=="win"', {
@@ -1088,6 +1115,7 @@
         '../../ThirdParty/glu/glu.gyp:libtess',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:yarr',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
@@ -1098,13 +1126,14 @@
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
         '<(chromium_src_dir)/third_party/ots/ots.gyp:ots',
         '<(chromium_src_dir)/third_party/sqlite/sqlite.gyp:sqlite',
-        '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_common',
+        '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_glsl',
         '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
         '<(libjpeg_gyp_path):libjpeg',
       ],
       'export_dependent_settings': [
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:yarr',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
@@ -1115,7 +1144,7 @@
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
         '<(chromium_src_dir)/third_party/ots/ots.gyp:ots',
         '<(chromium_src_dir)/third_party/sqlite/sqlite.gyp:sqlite',
-        '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_common',
+        '<(chromium_src_dir)/third_party/angle/src/build_angle.gyp:translator_glsl',
         '<(chromium_src_dir)/v8/tools/gyp/v8.gyp:v8',
         '<(libjpeg_gyp_path):libjpeg',
       ],
@@ -1239,7 +1268,7 @@
               'ScrollbarPartAnimation=ChromiumWebCoreObjCScrollbarPartAnimation',
             ],
             'include_dirs': [
-              '../../../WebKitLibraries',
+              '<(chromium_src_dir)/third_party/apple_webkit',
             ],
             'postbuilds': [
               {
@@ -1250,7 +1279,7 @@
                   'class_whitelist_regex':
                       'ChromiumWebCoreObjC|TCMVisibleView|RTCMFlippedView',
                   'category_whitelist_regex':
-                      'TCMInterposing',
+                      'TCMInterposing|ScrollAnimatorChromiumMacExt',
                 },
                 'action': [
                   'mac/check_objc_rename.sh',
@@ -1317,6 +1346,7 @@
     {
       'target_name': 'webcore_dom',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1339,6 +1369,7 @@
     {
       'target_name': 'webcore_html',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1353,6 +1384,7 @@
     {
       'target_name': 'webcore_svg',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1367,6 +1399,7 @@
     {
       'target_name': 'webcore_platform',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1449,7 +1482,7 @@
         }],['OS=="mac"', {
           # Necessary for Mac .mm stuff.
           'include_dirs': [
-            '../../../WebKitLibraries',
+            '<(chromium_src_dir)/third_party/apple_webkit',
           ],
           'dependencies': [
             'webkit_system_interface',
@@ -1485,7 +1518,7 @@
 
             # Cherry-pick some files that can't be included by broader regexps.
             # Some of these are used instead of Chromium platform files, see
-            # the specific exclusions in the "sources!" list below.
+            # the specific exclusions in the "exclude" list below.
             ['include', 'rendering/RenderThemeMac\\.mm$'],
             ['include', 'platform/graphics/mac/ColorMac\\.mm$'],
             ['include', 'platform/graphics/mac/ComplexTextControllerCoreText\\.mm$'],
@@ -1525,6 +1558,10 @@
             ['exclude', 'platform/graphics/cg/ImageSourceCG\\.cpp$'],
             ['exclude', 'platform/graphics/cg/PDFDocumentImage\\.cpp$'],
 
+            # Mac uses only ScrollAnimatorMac.
+            ['exclude', 'platform/ScrollAnimatorNone\\.cpp$'],
+            ['exclude', 'platform/ScrollAnimatorNone\\.h$'],
+
             ['include', '/chrome/junk\\.txt$'],
           ],
         },{ # OS!="mac"
@@ -1538,7 +1575,7 @@
           'sources/': [
             # Cherry-pick some files that can't be included by broader regexps.
             # Some of these are used instead of Chromium platform files, see
-            # the specific exclusions in the "sources!" list below.
+            # the specific exclusions in the "exclude" list below.
             ['include', 'platform/graphics/mac/GraphicsContextMac\\.mm$'],
 
             # Chromium Mac does not use skia.
@@ -1564,6 +1601,7 @@
             ['include', 'platform/graphics/cg/IntPointCG\\.cpp$'],
             ['include', 'platform/graphics/cg/IntRectCG\\.cpp$'],
             ['include', 'platform/graphics/cg/IntSizeCG\\.cpp$'],
+            ['exclude', 'platform/graphics/chromium/ImageChromiumMac\\.mm$'],
             ['exclude', 'platform/graphics/mac/FontMac\\.mm$'],
             ['exclude', 'platform/graphics/skia/GlyphPageTreeNodeSkia\\.cpp$'],
             ['exclude', 'platform/chromium/DragImageChromiumMac\\.cpp$'],
@@ -1609,6 +1647,7 @@
     {
       'target_name': 'webcore_arm_neon',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1633,6 +1672,7 @@
     {
       'target_name': 'webcore_rendering',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
       ],
@@ -1663,7 +1703,7 @@
             ['exclude', 'rendering/RenderThemeChromiumSkia\\.cpp$'],
           ],
         }],
-        ['os_posix == 1 and OS != "mac" and gcc_version == 42', {
+        ['os_posix == 1 and OS != "mac" and OS != "android" and gcc_version == 42', {
           # Due to a bug in gcc 4.2.1 (the current version on hardy), we get
           # warnings about uninitialized this.
           'cflags': ['-Wno-uninitialized'],
@@ -1691,6 +1731,7 @@
     {
       'target_name': 'webcore_remaining',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore_prerequisites',
         '<(chromium_src_dir)/third_party/v8-i18n/build/all.gyp:v8-i18n',
@@ -1799,7 +1840,7 @@
             ['include', '/TransparencyWin\\.cpp$'],
           ],
         }],
-        ['os_posix == 1 and OS != "mac" and gcc_version == 42', {
+        ['os_posix == 1 and OS != "mac" and OS != "android" and gcc_version == 42', {
           # Due to a bug in gcc 4.2.1 (the current version on hardy), we get
           # warnings about uninitialized this.
           'cflags': ['-Wno-uninitialized'],
@@ -1838,6 +1879,7 @@
         # Exported.
         'webcore_bindings',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
@@ -1846,6 +1888,7 @@
       'export_dependent_settings': [
         'webcore_bindings',
         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
         '<(chromium_src_dir)/build/temp_gyp/googleurl.gyp:googleurl',
         '<(chromium_src_dir)/skia/skia.gyp:skia',
         '<(chromium_src_dir)/third_party/npapi/npapi.gyp:npapi',
@@ -1870,7 +1913,7 @@
         ['OS=="mac"', {
           'direct_dependent_settings': {
             'include_dirs': [
-              '../../../WebKitLibraries',
+              '<(chromium_src_dir)/third_party/apple_webkit',
               '../../WebKit/mac/WebCoreSupport',
             ],
           },
@@ -1907,6 +1950,7 @@
     {
       'target_name': 'webcore_test_support',
       'type': 'static_library',
+      'variables': { 'enable_wexit_time_destructors': 1, },
       'dependencies': [
         'webcore',
       ],

@@ -627,7 +627,7 @@ void GraphicsContext::fillPath(const Path& path)
 
     if (m_state.fillGradient) {
         if (hasShadow()) {
-            FloatRect rect = path.boundingRect();
+            FloatRect rect = path.fastBoundingRect();
             CGLayerRef layer = CGLayerCreateWithContext(context, CGSizeMake(rect.width(), rect.height()), 0);
             CGContextRef layerContext = CGLayerGetContext(layer);
 
@@ -682,7 +682,7 @@ void GraphicsContext::strokePath(const Path& path)
 
     if (m_state.strokeGradient) {
         if (hasShadow()) {
-            FloatRect rect = path.boundingRect();
+            FloatRect rect = path.fastBoundingRect();
             float lineWidth = strokeThickness();
             float doubleLineWidth = lineWidth * 2;
             float layerWidth = ceilf(rect.width() + doubleLineWidth);
@@ -1590,6 +1590,14 @@ void GraphicsContext::setPlatformCompositeOperation(CompositeOperator mode)
         break;
     }
     CGContextSetBlendMode(platformContext(), target);
+}
+
+void GraphicsContext::platformApplyDeviceScaleFactor()
+{
+    // CoreGraphics expects the base CTM of a HiDPI context to have the scale factor applied to it.
+    // Failing to change the base level CTM will cause certain CG features, such as focus rings,
+    // to draw with a scale factor of 1 rather than the actual scale factor.
+    wkSetBaseCTM(platformContext(), getCTM());
 }
 
 }

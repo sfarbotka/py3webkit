@@ -28,12 +28,20 @@
 #define EventSenderProxy_h
 
 #if PLATFORM(QT)
-#include <Qt>
+#include <QEvent>
+#include <QTouchEvent>
+#elif PLATFORM(GTK)
+#include <gdk/gdk.h>
+#include <wtf/Vector.h>
 #endif
 
 namespace WTR {
 
 class TestController;
+
+#if PLATFORM(GTK)
+struct WTREventQueueItem;
+#endif
 
 class EventSenderProxy {
 public:
@@ -48,15 +56,36 @@ public:
 
     void keyDown(WKStringRef key, WKEventModifiers, unsigned location);
 
+#if ENABLE(TOUCH_EVENTS)
+    // Touch events.
+    void addTouchPoint(int x, int y);
+    void updateTouchPoint(int index, int x, int y);
+    void setTouchModifier(WKEventModifiers, bool enable);
+    void touchStart();
+    void touchMove();
+    void touchEnd();
+    void clearTouchPoints();
+    void releaseTouchPoint(int index);
+#endif
+
 private:
     TestController* m_testController;
 
     double currentEventTime() { return m_time; }
     void updateClickCountForButton(int button);
 
-#if PLATFORM(QT)
-    void sendOrQueueEvent(QEvent*);
+#if PLATFORM(QT) || PLATFORM(GTK)
     void replaySavedEvents();
+#endif
+
+#if PLATFORM(QT)
+#if ENABLE(TOUCH_EVENTS)
+    void sendTouchEvent(QEvent::Type);
+#endif
+    void sendOrQueueEvent(QEvent*);
+#elif PLATFORM(GTK)
+    void sendOrQueueEvent(GdkEvent*);
+    GdkEvent* createMouseButtonEvent(GdkEventType, unsigned button, WKEventModifiers);
 #endif
 
     double m_time;
@@ -68,8 +97,17 @@ private:
     WKEventMouseButton m_clickButton;
 #if PLATFORM(MAC)
     int eventNumber;
+#elif PLATFORM(GTK)
+    Vector<WTREventQueueItem> m_eventQueue;
+    unsigned m_mouseButtonCurrentlyDown;
 #elif PLATFORM(QT)
     Qt::MouseButtons m_mouseButtons;
+
+#if ENABLE(TOUCH_EVENTS)
+    QList<QTouchEvent::TouchPoint> m_touchPoints;
+    Qt::KeyboardModifiers m_touchModifiers;
+    bool m_touchActive;
+#endif
 #endif
 };
 

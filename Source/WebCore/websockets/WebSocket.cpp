@@ -407,6 +407,11 @@ void WebSocket::setBinaryType(const String& binaryType, ExceptionCode& ec)
     return;
 }
 
+const AtomicString& WebSocket::interfaceName() const
+{
+    return eventNames().interfaceForWebSocket;
+}
+
 ScriptExecutionContext* WebSocket::scriptExecutionContext() const
 {
     return ActiveDOMObject::scriptExecutionContext();
@@ -515,8 +520,7 @@ void WebSocket::didClose(unsigned long unhandledBufferedAmount, ClosingHandshake
     m_state = CLOSED;
     m_bufferedAmountAfterClose += unhandledBufferedAmount;
     ASSERT(scriptExecutionContext());
-    RefPtr<CloseEvent> event = CloseEvent::create();
-    event->initCloseEvent(eventNames().closeEvent, false, false, wasClean, code, reason);
+    RefPtr<CloseEvent> event = CloseEvent::create(wasClean, code, reason);
     dispatchEvent(event);
     if (m_channel) {
         m_channel->disconnect();

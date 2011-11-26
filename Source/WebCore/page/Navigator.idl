@@ -44,9 +44,11 @@ module window {
         readonly attribute [EnabledAtRuntime] Geolocation geolocation;
 #endif
 
-#if defined(ENABLE_DOM_STORAGE) && ENABLE_DOM_STORAGE
-        void getStorageUpdates();
+#if defined(ENABLE_POINTER_LOCK) && ENABLE_POINTER_LOCK
+        readonly attribute [EnabledAtRuntime] PointerLock webkitPointer;
 #endif
+
+        void getStorageUpdates(); // FIXME: Remove this method or rename to yieldForStorageUpdates.
 
 #if defined(ENABLE_REGISTER_PROTOCOL_HANDLER) && ENABLE_REGISTER_PROTOCOL_HANDLER
         void registerProtocolHandler(in DOMString scheme, in DOMString url, in DOMString title)
@@ -58,6 +60,10 @@ module window {
                                                            in [Callback=FunctionOnly] NavigatorUserMediaSuccessCallback successCallback,
                                                            in [Callback=FunctionOnly, Optional] NavigatorUserMediaErrorCallback errorCallback)
             raises(DOMException);
+#endif
+
+#if defined(ENABLE_GAMEPAD) && ENABLE_GAMEPAD
+        readonly attribute [EnabledAtRuntime] GamepadList webkitGamepads;
 #endif
     };
 

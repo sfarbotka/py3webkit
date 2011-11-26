@@ -35,10 +35,20 @@
 WebInspector.ElementsPanel = function()
 {
     WebInspector.Panel.call(this, "elements");
+    this.registerRequiredCSS("elementsPanel.css");
+    this.registerRequiredCSS("textPrompt.css");
+    this.setHideOnDetach();
 
-    this.contentElement = document.createElement("div");
+    const initialSidebarWidth = 325;
+    const minimalContentWidthPercent = 34;
+    this.createSplitView(this.element, WebInspector.SplitView.SidebarPosition.Right, initialSidebarWidth);
+    this.splitView.minimalSidebarWidth = Preferences.minElementsSidebarWidth;
+    this.splitView.minimalMainWidthPercent = minimalContentWidthPercent;
+
+    this.contentElement = this.splitView.mainElement;
     this.contentElement.id = "elements-content";
-    this.contentElement.className = "outline-disclosure source-code";
+    this.contentElement.addStyleClass("outline-disclosure");
+    this.contentElement.addStyleClass("source-code");
     if (!WebInspector.settings.domWordWrap.get())
         this.contentElement.classList.add("nowrap");
     WebInspector.settings.domWordWrap.addChangeListener(this._domWordWrapSettingChanged.bind(this));
@@ -49,8 +59,6 @@ WebInspector.ElementsPanel = function()
     this.treeOutline.wireToDomAgent();
 
     this.treeOutline.addEventListener(WebInspector.ElementsTreeOutline.Events.SelectedNodeChanged, this._selectedNodeChanged, this);
-
-    this.contentElement.appendChild(this.treeOutline.element);
 
     this.crumbsElement = document.createElement("div");
     this.crumbsElement.className = "crumbs";
@@ -77,25 +85,14 @@ WebInspector.ElementsPanel = function()
     this.sidebarPanes.styles.addEventListener("style property toggled", this._stylesPaneEdited, this);
     this.sidebarPanes.metrics.addEventListener("metrics edited", this._metricsPaneEdited, this);
 
-    this.sidebarElement = document.createElement("div");
-    this.sidebarElement.id = "elements-sidebar";
-
     for (var pane in this.sidebarPanes) {
         this.sidebarElement.appendChild(this.sidebarPanes[pane].element);
         if (this.sidebarPanes[pane].onattach)
             this.sidebarPanes[pane].onattach();
     }
 
-    this.sidebarResizeElement = document.createElement("div");
-    this.sidebarResizeElement.className = "sidebar-resizer-vertical";
-    this.sidebarResizeElement.addEventListener("mousedown", this.rightSidebarResizerDragStart.bind(this), false);
-
     this.nodeSearchButton = new WebInspector.StatusBarButton(WebInspector.UIString("Select an element in the page to inspect it."), "node-search-status-bar-item");
-    this.nodeSearchButton.addEventListener("click", this.toggleSearchingForNode.bind(this), false);
-
-    this.element.appendChild(this.contentElement);
-    this.element.appendChild(this.sidebarElement);
-    this.element.appendChild(this.sidebarResizeElement);
+    this.nodeSearchButton.addEventListener("click", this.toggleSearchingForNode, this);
 
     this._registerShortcuts();
 
@@ -125,25 +122,35 @@ WebInspector.ElementsPanel.prototype = {
         this.updateBreadcrumbSizes();
     },
 
-    show: function()
+    wasShown: function()
     {
-        WebInspector.Panel.prototype.show.call(this);
-        this.sidebarResizeElement.style.right = (this.sidebarElement.offsetWidth - 3) + "px";
+        WebInspector.Panel.prototype.wasShown.call(this);
+
+        // Attach heavy component lazily
+        if (this.treeOutline.element.parentElement !== this.contentElement)
+            this.contentElement.appendChild(this.treeOutline.element);
+
         this.updateBreadcrumb();
         this.treeOutline.updateSelection();
         this.treeOutline.setVisible(true);
+
+        if (!this.treeOutline.rootDOMNode)
+            WebInspector.domAgent.requestDocument();
 
         if (Preferences.nativeInstrumentationEnabled)
             this.sidebarElement.insertBefore(this.sidebarPanes.domBreakpoints.element, this.sidebarPanes.eventListeners.element);
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.Panel.prototype.hide.call(this);
-
         WebInspector.domAgent.hideDOMNodeHighlight();
         this.setSearchingForNode(false);
         this.treeOutline.setVisible(false);
+
+        // Detach heavy component on hide
+        this.contentElement.removeChild(this.treeOutline.element);
+
+        WebInspector.Panel.prototype.willHide.call(this);
     },
 
     onResize: function()
@@ -170,7 +177,6 @@ WebInspector.ElementsPanel.prototype = {
 
         if (selectedNode) {
             ConsoleAgent.addInspectedNode(selectedNode.id);
-            WebInspector.extensionServer.notifyObjectSelected(this.name);
             this._lastValidSelectedNode = selectedNode;
         }
     },
@@ -187,13 +193,19 @@ WebInspector.ElementsPanel.prototype = {
         this._reset();
         this.searchCanceled();
 
-        if (!inspectedRootDocument)
+        this.treeOutline.rootDOMNode = inspectedRootDocument;
+
+        if (!inspectedRootDocument) {
+            if (this.isShowing())
+                WebInspector.domAgent.requestDocument();
             return;
+        }
 
         if (Preferences.nativeInstrumentationEnabled)
             this.sidebarPanes.domBreakpoints.restoreBreakpoints();
 
         /**
+         * @this {WebInspector.ElementsPanel}
          * @param {WebInspector.DOMNode=} candidateFocusNode
          */
         function selectNode(candidateFocusNode)
@@ -215,7 +227,7 @@ WebInspector.ElementsPanel.prototype = {
                 // Focused node has been explicitly set while reaching out for the last selected node.
                 return;
             }
-            var node = nodeId ? WebInspector.domAgent.nodeForId(nodeId) : 0;
+            var node = nodeId ? WebInspector.domAgent.nodeForId(nodeId) : null;
             selectNode.call(this, node);
         }
 
@@ -234,7 +246,7 @@ WebInspector.ElementsPanel.prototype = {
         WebInspector.searchController.updateSearchMatchesCount(0, this);
 
         delete this._currentSearchResultIndex;
-        this._searchResults = [];
+        delete this._searchResults;
         WebInspector.domAgent.cancelSearch();
     },
 
@@ -247,11 +259,22 @@ WebInspector.ElementsPanel.prototype = {
         if (!whitespaceTrimmedQuery.length)
             return;
 
-        this._updatedMatchCountOnce = false;
-        this._matchesCountUpdateTimeout = null;
         this._searchQuery = query;
 
-        WebInspector.domAgent.performSearch(whitespaceTrimmedQuery, this._addNodesToSearchResult.bind(this));
+        /**
+         * @param {number} resultCount
+         */
+        function resultCountCallback(resultCount)
+        {
+            WebInspector.searchController.updateSearchMatchesCount(resultCount, this);
+            if (!resultCount)
+                return;
+
+            this._searchResults = new Array(resultCount);
+            this._currentSearchResultIndex = -1;
+            this.jumpToNextSearchResult();
+        }
+        WebInspector.domAgent.performSearch(whitespaceTrimmedQuery, resultCountCallback.bind(this));
     },
 
     _contextMenuEventFired: function(event)
@@ -290,7 +313,7 @@ WebInspector.ElementsPanel.prototype = {
     {
         // Reset search restore.
         WebInspector.searchController.cancelSearch();
-        WebInspector.setCurrentPanel(this);
+        WebInspector.inspectorView.setCurrentPanel(this);
         this.selectDOMNode(node, true);
     },
 
@@ -304,70 +327,55 @@ WebInspector.ElementsPanel.prototype = {
         }
     },
 
-    _updateMatchesCount: function()
-    {
-        WebInspector.searchController.updateSearchMatchesCount(this._searchResults.length, this);
-        this._matchesCountUpdateTimeout = null;
-        this._updatedMatchCountOnce = true;
-    },
-
-    _updateMatchesCountSoon: function()
-    {
-        if (!this._updatedMatchCountOnce)
-            return this._updateMatchesCount();
-        if (this._matchesCountUpdateTimeout)
-            return;
-        // Update the matches count every half-second so it doesn't feel twitchy.
-        this._matchesCountUpdateTimeout = setTimeout(this._updateMatchesCount.bind(this), 500);
-    },
-
-    _addNodesToSearchResult: function(nodeIds)
-    {
-        if (!nodeIds.length)
-            return;
-
-        var oldSearchResultIndex = this._currentSearchResultIndex;
-        for (var i = 0; i < nodeIds.length; ++i) {
-            var nodeId = nodeIds[i];
-            var node = WebInspector.domAgent.nodeForId(nodeId);
-            if (!node)
-                continue;
-
-            this._currentSearchResultIndex = 0;
-            this._searchResults.push(node);
-        }
-
-        // Avoid invocations of highlighting for every chunk of nodeIds.
-        if (oldSearchResultIndex !== this._currentSearchResultIndex)
-            this._highlightCurrentSearchResult();
-        this._updateMatchesCountSoon();
-    },
-
     jumpToNextSearchResult: function()
     {
-        if (!this._searchResults || !this._searchResults.length)
+        if (!this._searchResults)
             return;
 
+        this._hideSearchHighlights();
         if (++this._currentSearchResultIndex >= this._searchResults.length)
             this._currentSearchResultIndex = 0;
+            
         this._highlightCurrentSearchResult();
     },
 
     jumpToPreviousSearchResult: function()
     {
-        if (!this._searchResults || !this._searchResults.length)
+        if (!this._searchResults)
             return;
 
+        this._hideSearchHighlights();
         if (--this._currentSearchResultIndex < 0)
             this._currentSearchResultIndex = (this._searchResults.length - 1);
+
         this._highlightCurrentSearchResult();
     },
 
     _highlightCurrentSearchResult: function()
     {
-        this._hideSearchHighlights();
-        var node = this._searchResults[this._currentSearchResultIndex];
-        var treeElement = this.treeOutline.findTreeElement(node);
+        var index = this._currentSearchResultIndex;
+        var searchResults = this._searchResults;
+        var searchResult = searchResults[index];
+
+        if (searchResult === null) {
+            WebInspector.searchController.updateCurrentMatchIndex(index, this);
+            return;
+        }
+
+        if (typeof searchResult === "undefined") {
+            // No data for slot, request it.
+            function callback(node)
+            {
+                searchResults[index] = node || null;
+                this._highlightCurrentSearchResult();
+            }
+            WebInspector.domAgent.searchResult(index, callback.bind(this));
+            return;
+        }
+
+        WebInspector.searchController.updateCurrentMatchIndex(index, this);
+
+        var treeElement = this.treeOutline.findTreeElement(searchResult);
         if (treeElement) {
             treeElement.highlightSearchResults(this._searchQuery);
             treeElement.reveal();
@@ -376,12 +384,14 @@ WebInspector.ElementsPanel.prototype = {
 
     _hideSearchHighlights: function()
     {
-        for (var i = 0; this._searchResults && i < this._searchResults.length; ++i) {
-            var node = this._searchResults[i];
-            var treeElement = this.treeOutline.findTreeElement(node);
-            if (treeElement)
-                treeElement.hideSearchHighlights();
-        }
+        if (!this._searchResults)
+            return;
+        var searchResult = this._searchResults[this._currentSearchResultIndex];
+        if (!searchResult)
+            return;
+        var treeElement = this.treeOutline.findTreeElement(searchResult);
+        if (treeElement)
+            treeElement.hideSearchHighlights();
     },
 
     selectedDOMNode: function()
@@ -389,6 +399,9 @@ WebInspector.ElementsPanel.prototype = {
         return this.treeOutline.selectedDOMNode();
     },
 
+    /**
+     * @param {boolean=} focus
+     */
     selectDOMNode: function(node, focus)
     {
         this.treeOutline.selectDOMNode(node, focus);
@@ -396,7 +409,7 @@ WebInspector.ElementsPanel.prototype = {
 
     _nodeRemoved: function(event)
     {
-        if (!this.visible)
+        if (!this.isShowing())
             return;
 
         var crumbs = this.crumbsElement;
@@ -451,7 +464,7 @@ WebInspector.ElementsPanel.prototype = {
      */
     updateBreadcrumb: function(forceUpdate)
     {
-        if (!this.visible)
+        if (!this.isShowing())
             return;
 
         var crumbs = this.crumbsElement;
@@ -578,7 +591,7 @@ WebInspector.ElementsPanel.prototype = {
      */
     updateBreadcrumbSizes: function(focusedCrumb)
     {
-        if (!this.visible)
+        if (!this.isShowing())
             return;
 
         if (document.body.offsetWidth <= 0) {
@@ -918,30 +931,8 @@ WebInspector.ElementsPanel.prototype = {
         this.selectedDOMNode().copyNode();
     },
 
-    rightSidebarResizerDragStart: function(event)
+    sidebarResized: function(event)
     {
-        WebInspector.elementDragStart(this.sidebarElement, this.rightSidebarResizerDrag.bind(this), this.rightSidebarResizerDragEnd.bind(this), event, "ew-resize");
-    },
-
-    rightSidebarResizerDragEnd: function(event)
-    {
-        WebInspector.elementDragEnd(event);
-        this.saveSidebarWidth();
-    },
-
-    rightSidebarResizerDrag: function(event)
-    {
-        var x = event.pageX;
-        var newWidth = Number.constrain(window.innerWidth - x, Preferences.minElementsSidebarWidth, window.innerWidth * 0.66);
-        this.setSidebarWidth(newWidth);
-        event.preventDefault();
-    },
-
-    setSidebarWidth: function(newWidth)
-    {
-        this.sidebarElement.style.width = newWidth + "px";
-        this.contentElement.style.right = newWidth + "px";
-        this.sidebarResizeElement.style.right = (newWidth - 3) + "px";
         this.treeOutline.updateSelection();
     },
 
@@ -953,7 +944,7 @@ WebInspector.ElementsPanel.prototype = {
 
     revealAndSelectNode: function(nodeId)
     {
-        WebInspector.setCurrentPanel(this);
+        WebInspector.inspectorView.setCurrentPanel(this);
 
         var node = WebInspector.domAgent.nodeForId(nodeId);
         if (!node)
@@ -980,11 +971,6 @@ WebInspector.ElementsPanel.prototype = {
     toggleSearchingForNode: function()
     {
         this.setSearchingForNode(!this.nodeSearchButton.toggled);
-    },
-
-    elementsToRestoreScrollPositionsFor: function()
-    {
-        return [ this.contentElement, this.sidebarElement ];
     }
 }
 

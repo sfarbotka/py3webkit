@@ -188,9 +188,9 @@ bool NPJSObject::setProperty(NPIdentifier propertyName, const NPVariant* value)
     JSValue jsValue = m_objectMap->convertNPVariantToJSValue(exec, m_objectMap->globalObject(), *value);
     if (identifierRep->isString()) {
         PutPropertySlot slot;
-        m_jsObject->put(exec, identifierFromIdentifierRep(exec, identifierRep), jsValue, slot);
+        m_jsObject->methodTable()->put(m_jsObject.get(), exec, identifierFromIdentifierRep(exec, identifierRep), jsValue, slot);
     } else
-        m_jsObject->put(exec, identifierRep->number(), jsValue);
+        m_jsObject->methodTable()->putByIndex(m_jsObject.get(), exec, identifierRep->number(), jsValue);
     exec->clearException();
     
     return true;
@@ -213,14 +213,14 @@ bool NPJSObject::removeProperty(NPIdentifier propertyName)
             return false;
         }
         
-        m_jsObject->deleteProperty(exec, identifier);
+        m_jsObject->methodTable()->deleteProperty(m_jsObject.get(), exec, identifier);
     } else {
         if (!m_jsObject->hasProperty(exec, identifierRep->number())) {
             exec->clearException();
             return false;
         }
 
-        m_jsObject->deleteProperty(exec, identifierRep->number());
+        m_jsObject->methodTable()->deletePropertyByIndex(m_jsObject.get(), exec, identifierRep->number());
     }
 
     exec->clearException();
@@ -236,7 +236,7 @@ bool NPJSObject::enumerate(NPIdentifier** identifiers, uint32_t* identifierCount
     JSLock lock(SilenceAssertionsOnly);
 
     PropertyNameArray propertyNames(exec);
-    m_jsObject->getPropertyNames(exec, propertyNames);
+    m_jsObject->methodTable()->getPropertyNames(m_jsObject.get(), exec, propertyNames, ExcludeDontEnumProperties);
 
     NPIdentifier* nameIdentifiers = npnMemNewArray<NPIdentifier>(propertyNames.size());
 
@@ -291,7 +291,7 @@ bool NPJSObject::invoke(ExecState* exec, JSGlobalObject* globalObject, JSValue f
         argumentList.append(m_objectMap->convertNPVariantToJSValue(exec, globalObject, arguments[i]));
 
     exec->globalData().timeoutChecker.start();
-    JSValue value = JSC::call(exec, function, callType, callData, m_jsObject->toThisObject(exec), argumentList);
+    JSValue value = JSC::call(exec, function, callType, callData, m_jsObject->methodTable()->toThisObject(m_jsObject.get(), exec), argumentList);
     exec->globalData().timeoutChecker.stop();
 
     // Convert and return the result of the function call.

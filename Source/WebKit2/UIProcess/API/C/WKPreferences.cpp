@@ -49,7 +49,7 @@ WKPreferencesRef WKPreferencesCreate()
 WKPreferencesRef WKPreferencesCreateWithIdentifier(WKStringRef identifierRef)
 {
     RefPtr<WebPreferences> preferences = WebPreferences::create(toWTFString(identifierRef));
-    return toAPI(preferences.release().releaseRef());
+    return toAPI(preferences.release().leakRef());
 }
 
 void WKPreferencesSetJavaScriptEnabled(WKPreferencesRef preferencesRef, bool javaScriptEnabled)
@@ -650,4 +650,24 @@ void WKPreferencesSetSuppressIncrementalRendering(WKPreferencesRef preferencesRe
 bool WKPreferencesGetSuppressIncrementalRendering(WKPreferencesRef preferencesRef)
 {
     return toImpl(preferencesRef)->suppressIncrementalRendering();
+}
+
+void WKPreferencesSetBackspaceKeyNavigationEnabled(WKPreferencesRef preferencesRef, bool enabled)
+{
+    toImpl(preferencesRef)->setBackspaceKeyNavigationEnabled(enabled);
+}
+
+bool WKPreferencesGetBackspaceKeyNavigationEnabled(WKPreferencesRef preferencesRef)
+{
+    return toImpl(preferencesRef)->backspaceKeyNavigationEnabled();
+}
+
+void WKPreferencesSetCaretBrowsingEnabled(WKPreferencesRef preferencesRef, bool enabled)
+{
+    toImpl(preferencesRef)->setCaretBrowsingEnabled(enabled);
+}
+
+bool WKPreferencesGetCaretBrowsingEnabled(WKPreferencesRef preferencesRef)
+{
+    return toImpl(preferencesRef)->caretBrowsingEnabled();
 }

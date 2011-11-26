@@ -37,6 +37,7 @@
 #include "Frame.h"
 #include "FrameLoaderClientImpl.h"
 #include "PlatformString.h"
+#include <wtf/Compiler.h>
 #include <wtf/OwnPtr.h>
 #include <wtf/RefCounted.h>
 
@@ -69,6 +70,7 @@ public:
     virtual void setName(const WebString&);
     virtual long long identifier() const;
     virtual WebVector<WebIconURL> iconURLs(int iconTypes) const;
+    virtual WebReferrerPolicy referrerPolicy() const;
     virtual WebSize scrollOffset() const;
     virtual void setScrollOffset(const WebSize&);
     virtual WebSize minimumScrollOffset() const;
@@ -148,6 +150,7 @@ public:
     virtual void unmarkText();
     virtual bool hasMarkedText() const;
     virtual WebRange markedRange() const;
+    virtual void setSelectionToRange(const WebRange&) OVERRIDE;
     virtual bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const;
     virtual size_t characterIndexForPoint(const WebPoint&) const;
     virtual bool executeCommand(const WebString&, const WebNode& = WebNode());
@@ -168,6 +171,7 @@ public:
     virtual float printPage(int pageToPrint, WebCanvas*);
     virtual float getPrintPageShrink(int page);
     virtual void printEnd();
+    virtual bool isPrintScalingDisabledForPlugin(const WebNode&);
     virtual bool isPageBoxVisible(int pageIndex);
     virtual void pageSizeAndMarginsInPixels(int pageIndex,
                                             WebSize& pageSize,
@@ -175,6 +179,8 @@ public:
                                             int& marginRight,
                                             int& marginBottom,
                                             int& marginLeft);
+    virtual WebString pageProperty(const WebString& propertyName, int pageIndex);
+    virtual void printPagesWithBoundaries(WebCanvas*, const WebSize&);
     virtual bool find(
         int identifier, const WebString& searchText, const WebFindOptions&,
         bool wrapWithinFrame, WebRect* selectionRect);
@@ -186,9 +192,12 @@ public:
     virtual void increaseMatchCount(int count, int identifier);
     virtual void resetMatchCount();
 
+    virtual void handleIntentResult(int, const WebString&);
+    virtual void handleIntentFailure(int, const WebString&);
+
     virtual WebString contentAsText(size_t maxChars) const;
     virtual WebString contentAsMarkup() const;
-    virtual WebString renderTreeAsText(bool showDebugInfo = false) const;
+    virtual WebString renderTreeAsText(RenderAsTextControls toShow = RenderAsTextNormal) const;
     virtual WebString counterValueForElementById(const WebString& id) const;
     virtual WebString markerTextForListItem(const WebElement&) const;
     virtual int pageNumberForElementById(const WebString& id,

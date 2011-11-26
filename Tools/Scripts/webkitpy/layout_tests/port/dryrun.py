@@ -57,14 +57,14 @@ from webkitpy.layout_tests.port import Driver, DriverOutput, factory
 class DryRunPort(object):
     """DryRun implementation of the Port interface."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, host, **kwargs):
         pfx = 'dryrun-'
         if 'port_name' in kwargs:
             if kwargs['port_name'].startswith(pfx):
                 kwargs['port_name'] = kwargs['port_name'][len(pfx):]
             else:
                 kwargs['port_name'] = None
-        self.__delegate = factory.get(**kwargs)
+        self.__delegate = host.port_factory.get(**kwargs)
 
     def __getattr__(self, name):
         return getattr(self.__delegate, name)
@@ -99,8 +99,8 @@ class DryRunPort(object):
     def stop_websocket_server(self):
         pass
 
-    def create_driver(self, worker_number):
-        return DryrunDriver(self, worker_number)
+    def driver_class(self):
+        return DryrunDriver
 
 
 class DryrunDriver(Driver):
@@ -108,9 +108,6 @@ class DryrunDriver(Driver):
 
     def cmd_line(self):
         return ['None']
-
-    def poll(self):
-        return None
 
     def run_test(self, driver_input):
         start_time = time.time()
@@ -133,9 +130,6 @@ class DryrunDriver(Driver):
             checksum = self._port.expected_checksum(driver_input.test_name)
             audio = self._port.expected_audio(driver_input.test_name)
         return DriverOutput(text, image, checksum, audio, crash=False, test_time=time.time() - start_time, timeout=False, error='')
-
-    def start(self):
-        pass
 
     def stop(self):
         pass

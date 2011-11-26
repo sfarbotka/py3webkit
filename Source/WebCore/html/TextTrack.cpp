@@ -34,73 +34,207 @@
 
 #include "TextTrack.h"
 
+#include "Event.h"
+#include "ExceptionCode.h"
 #include "TextTrackCueList.h"
+#include "TrackBase.h"
 
 namespace WebCore {
 
-TextTrack::TextTrack(const String& kind, const String& label, const String& language)
-    : m_kind(kind)
+const AtomicString& TextTrack::subtitlesKeyword()
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, subtitles, ("subtitles"));
+    return subtitles;
+}
+
+const AtomicString& TextTrack::captionsKeyword()
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, captions, ("captions"));
+    return captions;
+}
+
+const AtomicString& TextTrack::descriptionsKeyword()
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, descriptions, ("descriptions"));
+    return descriptions;
+}
+
+const AtomicString& TextTrack::chaptersKeyword()
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, chapters, ("chapters"));
+    return chapters;
+}
+
+const AtomicString& TextTrack::metadataKeyword()
+{
+    DEFINE_STATIC_LOCAL(const AtomicString, metadata, ("metadata"));
+    return metadata;
+}
+
+TextTrack::TextTrack(ScriptExecutionContext* context, TextTrackClient* client, const String& kind, const String& label, const String& language, TextTrackType type)
+    : TrackBase(context, TrackBase::TextTrack)
     , m_label(label)
     , m_language(language)
-    , m_readyState(TextTrack::None)
-    , m_mode(TextTrack::Showing)
+    , m_readyState(TextTrack::NONE)
+    , m_mode(TextTrack::HIDDEN)
+    , m_client(client)
+    , m_trackType(type)
 {
+    setKind(kind);
 }
 
 TextTrack::~TextTrack()
 {
+    if (m_client && m_cues)
+        m_client->textTrackRemoveCues(this, m_cues.get());
+    clearClient();
 }
 
-String TextTrack::kind() const
+bool TextTrack::isValidKindKeyword(const String& value)
 {
-    return m_kind;
+    if (equalIgnoringCase(value, subtitlesKeyword()))
+        return true;
+    if (equalIgnoringCase(value, captionsKeyword()))
+        return true;
+    if (equalIgnoringCase(value, descriptionsKeyword()))
+        return true;
+    if (equalIgnoringCase(value, chaptersKeyword()))
+        return true;
+    if (equalIgnoringCase(value, metadataKeyword()))
+        return true;
+
+    return false;
 }
 
-String TextTrack::label() const
+void TextTrack::setKind(const String& kind)
 {
-    return m_label;
-}
+    String oldKind = m_kind;
 
-String TextTrack::language() const
-{
-    return m_language;
-}
+    if (isValidKindKeyword(kind))
+        m_kind = kind;
+    else
+        m_kind = subtitlesKeyword();
 
-TextTrack::ReadyState TextTrack::readyState() const
-{
-    return m_readyState;
+    if (m_client && oldKind != m_kind)
+        m_client->textTrackKindChanged(this);
 }
 
 void TextTrack::setReadyState(ReadyState state)
 {
     m_readyState = state;
-}
-
-TextTrack::Mode TextTrack::mode() const
-{
-    return m_mode;
+    if (m_client)
+        m_client->textTrackReadyStateChanged(this);
 }
 
 void TextTrack::setMode(unsigned short mode, ExceptionCode& ec)
 {
     // 4.8.10.12.5 On setting the mode, if the new value is not either 0, 1, or 2,
     // the user agent must throw an INVALID_ACCESS_ERR exception.
-    if (mode == TextTrack::Off || mode == TextTrack::Hidden || mode == TextTrack::Showing)
+    if (mode == TextTrack::DISABLED || mode == TextTrack::HIDDEN || mode == TextTrack::SHOWING) {
         m_mode = static_cast<Mode>(mode);
-    else
+        if (m_client)
+            m_client->textTrackModeChanged(this);
+    } else
         ec = INVALID_ACCESS_ERR;
 }
 
-PassRefPtr<TextTrackCueList> TextTrack::cues() const
+TextTrackCueList* TextTrack::cues()
 {
-    // FIXME(62885): Implement.
+    if (!m_cues)
+        m_cues = TextTrackCueList::create();    
+
+    // 4.8.10.12.5 If the text track mode ... is not the text track disabled mode,
+    // then the cues attribute must return a live TextTrackCueList object ...
+    // Otherwise, it must return null. When an object is returned, the
+    // same object must be returned each time.
+    // http://www.whatwg.org/specs/web-apps/current-work/#dom-texttrack-cues
+    if (m_cues && m_mode != TextTrack::DISABLED)
+        return m_cues.get();
     return 0;
 }
 
-PassRefPtr<TextTrackCueList> TextTrack::activeCues() const
+TextTrackCueList* TextTrack::activeCues() const
 {
-    // FIXME(62885): Implement.
+    // 4.8.10.12.5 If the text track mode ... is not the text track disabled mode,
+    // then the activeCues attribute must return a live TextTrackCueList object ...
+    // ... whose active flag was set when the script started, in text track cue
+    // order. Otherwise, it must return null. When an object is returned, the
+    // same object must be returned each time.
+    // http://www.whatwg.org/specs/web-apps/current-work/#dom-texttrack-activecues
+    if (m_cues && m_mode != TextTrack::DISABLED)
+        return m_cues->activeCues();
     return 0;
+}
+
+void TextTrack::addCue(PassRefPtr<TextTrackCue> prpCue, ExceptionCode& ec)
+{
+    if (!prpCue)
+        return;
+
+    RefPtr<TextTrackCue> cue = prpCue;
+
+    // 4.8.10.12.4 Text track API
+
+    // The addCue(cue) method of TextTrack objects, when invoked, must run the following steps:
+
+    // 1. If the given cue is already associated with a text track other than 
+    // the method's TextTrack object's text track, then throw an InvalidStateError
+    // exception and abort these steps.
+    TextTrack* cueTrack = cue->track();
+    if (cueTrack && cueTrack != this) {
+        ec = INVALID_STATE_ERR;
+        return;
+    }
+
+    // 2. Associate cue with the method's TextTrack object's text track, if it is 
+    // not currently associated with a text track.
+    cue->setTrack(this);
+
+    // 3. If the given cue is already listed in the method's TextTrack object's text
+    // track's text track list of cues, then throw an InvalidStateError exception.
+    // 4. Add cue to the method's TextTrack object's text track's text track list of cues.
+    if (!m_cues->add(cue)) {
+        ec = INVALID_STATE_ERR;
+        return;
+    }
+    
+    if (m_client)
+        m_client->textTrackAddCue(this, cue.get());
+}
+
+void TextTrack::removeCue(TextTrackCue* cue, ExceptionCode& ec)
+{
+    if (!cue)
+        return;
+
+    // 4.8.10.12.4 Text track API
+
+    // The removeCue(cue) method of TextTrack objects, when invoked, must run the following steps:
+
+    // 1. If the given cue is not associated with the method's TextTrack 
+    // object's text track, then throw an InvalidStateError exception.
+    if (cue->track() != this) {
+        ec = INVALID_STATE_ERR;
+        return;
+    }
+    
+    // 2. If the given cue is not currently listed in the method's TextTrack 
+    // object's text track's text track list of cues, then throw a NotFoundError exception.
+    // 3. Remove cue from the method's TextTrack object's text track's text track list of cues.
+    if (!m_cues->remove(cue)) {
+        ec = INVALID_STATE_ERR;
+        return;
+    }
+
+    cue->setTrack(0);
+    if (m_client)
+        m_client->textTrackRemoveCue(this, cue);
+}
+
+void TextTrack::fireCueChangeEvent()
+{
+    ExceptionCode ec = 0;
+    dispatchEvent(Event::create(eventNames().cuechangeEvent, false, false), ec);
 }
 
 } // namespace WebCore

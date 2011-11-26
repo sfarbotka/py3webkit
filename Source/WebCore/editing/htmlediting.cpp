@@ -296,6 +296,11 @@ bool isBlock(const Node* node)
     return node && node->renderer() && !node->renderer()->isInline();
 }
 
+bool isInline(const Node* node)
+{
+    return node && node->renderer() && node->renderer()->isInline();
+}
+
 // FIXME: Deploy this in all of the places where enclosingBlockFlow/enclosingBlockFlowOrTableElement are used.
 // FIXME: Pass a position to this function.  The enclosing block of [table, x] for example, should be the 
 // block that contains the table and not the table, and this function should be the only one responsible for 
@@ -1140,6 +1145,48 @@ bool isRenderedAsNonInlineTableImageOrHR(const Node* node)
     return renderer && ((renderer->isTable() && !renderer->isInline()) || (renderer->isImage() && !renderer->isInline()) || renderer->isHR());
 }
 
+bool areIdenticalElements(const Node* first, const Node* second)
+{
+    // check that tag name and all attribute names and values are identical
+
+    if (!first->isElementNode() || !second->isElementNode())
+        return false;
+
+    if (!toElement(first)->tagQName().matches(toElement(second)->tagQName()))
+        return false;
+
+    NamedNodeMap* firstMap = toElement(first)->attributes();
+    NamedNodeMap* secondMap = toElement(second)->attributes();
+    unsigned firstLength = firstMap->length();
+
+    if (firstLength != secondMap->length())
+        return false;
+
+    for (unsigned i = 0; i < firstLength; i++) {
+        Attribute* attribute = firstMap->attributeItem(i);
+        Attribute* secondAttribute = secondMap->getAttributeItem(attribute->name());
+        if (!secondAttribute || attribute->value() != secondAttribute->value())
+            return false;
+    }
+
+    return true;
+}
+
+bool isNonTableCellHTMLBlockElement(const Node* node)
+{
+    return node->hasTagName(listingTag)
+        || node->hasTagName(olTag)
+        || node->hasTagName(preTag)
+        || node->hasTagName(tableTag)
+        || node->hasTagName(ulTag)
+        || node->hasTagName(xmpTag)
+        || node->hasTagName(h1Tag)
+        || node->hasTagName(h2Tag)
+        || node->hasTagName(h3Tag)
+        || node->hasTagName(h4Tag)
+        || node->hasTagName(h5Tag);
+}
+
 PassRefPtr<Range> avoidIntersectionWithNode(const Range* range, Node* node)
 {
     if (!range)
@@ -1193,6 +1240,31 @@ VisibleSelection avoidIntersectionWithNode(const VisibleSelection& selection, No
     }
 
     return updatedSelection;
+}
+
+Position adjustedSelectionStartForStyleComputation(const VisibleSelection& selection)
+{
+    // This function is used by range style computations to avoid bugs like:
+    // <rdar://problem/4017641> REGRESSION (Mail): you can only bold/unbold a selection starting from end of line once
+    // It is important to skip certain irrelevant content at the start of the selection, so we do not wind up 
+    // with a spurious "mixed" style.
+
+    VisiblePosition visiblePosition = selection.start();
+    if (visiblePosition.isNull())
+        return Position();
+
+    // if the selection is a caret, just return the position, since the style
+    // behind us is relevant
+    if (selection.isCaret())
+        return visiblePosition.deepEquivalent();
+
+    // if the selection starts just before a paragraph break, skip over it
+    if (isEndOfParagraph(visiblePosition))
+        return visiblePosition.next().deepEquivalent().downstream();
+
+    // otherwise, make sure to be at the start of the first selected node,
+    // instead of possibly at the end of the last node before the selection
+    return visiblePosition.deepEquivalent().downstream();
 }
 
 } // namespace WebCore

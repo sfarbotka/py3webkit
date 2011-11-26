@@ -178,11 +178,20 @@ void FrameLoaderClientImpl::didChangeScrollOffset()
         m_webFrame->client()->didChangeScrollOffset(m_webFrame);
 }
 
-bool FrameLoaderClientImpl::allowJavaScript(bool enabledPerSettings)
+bool FrameLoaderClientImpl::allowScript(bool enabledPerSettings)
 {
     WebViewImpl* webview = m_webFrame->viewImpl();
     if (webview && webview->permissionClient())
         return webview->permissionClient()->allowScript(m_webFrame, enabledPerSettings);
+
+    return enabledPerSettings;
+}
+
+bool FrameLoaderClientImpl::allowScriptFromSource(bool enabledPerSettings, const KURL& scriptURL)
+{
+    WebViewImpl* webview = m_webFrame->viewImpl();
+    if (webview && webview->permissionClient())
+        return webview->permissionClient()->allowScriptFromSource(m_webFrame, enabledPerSettings, scriptURL);
 
     return enabledPerSettings;
 }
@@ -1035,7 +1044,7 @@ void FrameLoaderClientImpl::revertToProvisionalState(DocumentLoader*)
 void FrameLoaderClientImpl::setMainDocumentError(DocumentLoader*,
                                                  const ResourceError& error)
 {
-    if (m_pluginWidget.get()) {
+    if (m_pluginWidget) {
         if (m_sentInitialResponseToPlugin) {
             m_pluginWidget->didFailLoading(error);
             m_sentInitialResponseToPlugin = false;
@@ -1098,7 +1107,7 @@ void FrameLoaderClientImpl::didChangeTitle(DocumentLoader*)
 // Called whenever data is received.
 void FrameLoaderClientImpl::committedLoad(DocumentLoader* loader, const char* data, int length)
 {
-    if (!m_pluginWidget.get()) {
+    if (!m_pluginWidget) {
         if (m_webFrame->client()) {
             bool preventDefault = false;
             m_webFrame->client()->didReceiveDocumentData(m_webFrame, data, length, preventDefault);
@@ -1114,7 +1123,7 @@ void FrameLoaderClientImpl::committedLoad(DocumentLoader* loader, const char* da
 
     // The plugin widget could have been created in the m_webFrame->DidReceiveData
     // function.
-    if (m_pluginWidget.get()) {
+    if (m_pluginWidget) {
         if (!m_sentInitialResponseToPlugin) {
             m_sentInitialResponseToPlugin = true;
             m_pluginWidget->didReceiveResponse(
@@ -1123,14 +1132,14 @@ void FrameLoaderClientImpl::committedLoad(DocumentLoader* loader, const char* da
 
         // It's possible that the above call removed the pointer to the plugin, so
         // check before calling it.
-        if (m_pluginWidget.get())
+        if (m_pluginWidget)
             m_pluginWidget->didReceiveData(data, length);
     }
 }
 
 void FrameLoaderClientImpl::finishedLoading(DocumentLoader* dl)
 {
-    if (m_pluginWidget.get()) {
+    if (m_pluginWidget) {
         m_pluginWidget->didFinishLoading();
         m_pluginWidget = 0;
         m_sentInitialResponseToPlugin = false;
@@ -1193,6 +1202,12 @@ void FrameLoaderClientImpl::didRunInsecureContent(SecurityOrigin* origin, const 
 {
     if (m_webFrame->client())
         m_webFrame->client()->didRunInsecureContent(m_webFrame, WebSecurityOrigin(origin), insecureURL);
+}
+
+void FrameLoaderClientImpl::didDetectXSS(const KURL& insecureURL, bool didBlockEntirePage)
+{
+    if (m_webFrame->client())
+        m_webFrame->client()->didDetectXSS(m_webFrame, insecureURL, didBlockEntirePage);
 }
 
 ResourceError FrameLoaderClientImpl::blockedError(const ResourceRequest&)
@@ -1499,7 +1514,7 @@ void FrameLoaderClientImpl::redirectDataToPlugin(Widget* pluginWidget)
 {
     if (pluginWidget->isPluginContainer())
         m_pluginWidget = static_cast<WebPluginContainerImpl*>(pluginWidget);
-    ASSERT(m_pluginWidget.get());
+    ASSERT(m_pluginWidget);
 }
 
 PassRefPtr<Widget> FrameLoaderClientImpl::createJavaAppletWidget(

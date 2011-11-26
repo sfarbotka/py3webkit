@@ -43,12 +43,15 @@ public:
 
     virtual ~TiledLayerChromium();
 
-    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*);
+    virtual void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&);
     virtual void setIsMask(bool);
 
     virtual void pushPropertiesTo(CCLayerImpl*);
 
     virtual bool drawsContent() const;
+    virtual bool needsContentsScale() const;
+
+    virtual IntSize contentBounds() const;
 
     // Reserves all existing and valid tile textures to protect them from being
     // recycled by the texture manager.
@@ -60,6 +63,11 @@ protected:
     virtual void cleanupResources();
     void updateTileSizeAndTilingOption();
 
+    // Exposed to subclasses for testing.
+    void setTileSize(const IntSize&);
+    void createTiler(CCLayerTilingData::BorderTexelOption);
+    void setTextureFormat(GC3Denum textureFormat) { m_textureFormat = textureFormat; }
+
     virtual void createTextureUpdater(const CCLayerTreeHost*) = 0;
     virtual LayerTextureUpdater* textureUpdater() const = 0;
 
@@ -67,9 +75,10 @@ protected:
     void invalidateRect(const IntRect& contentRect);
     // Prepare data needed to update textures that intersect with contentRect.
     void prepareToUpdate(const IntRect& contentRect);
-    // Update invalid textures that intersect with contentRect provided in prepareToUpdate().
-    void updateRect(GraphicsContext3D*, LayerTextureUpdater*);
+
     virtual void protectVisibleTileTextures();
+
+    virtual TextureManager* textureManager() const;
 
 private:
     virtual PassRefPtr<CCLayerImpl> createCCLayerImpl();
@@ -81,23 +90,20 @@ private:
 
     UpdatableTile* tileAt(int, int) const;
     UpdatableTile* createTile(int, int);
-    void invalidateTiles(const IntRect& contentRect);
 
-    TextureManager* textureManager() const;
-
-    // State held between update and upload.
+    // Temporary state held between prepareToUpdate() and updateCompositorResources().
+    IntRect m_requestedUpdateRect;
+    // State held between prepareToUpdate() and pushPropertiesTo(). This represents the area
+    // of the layer that is actually re-painted by WebKit.
     IntRect m_paintRect;
-    IntRect m_updateRect;
 
-    // Tightly packed set of unused tiles.
-    Vector<RefPtr<UpdatableTile> > m_unusedTiles;
-
-    TilingOption m_tilingOption;
     GC3Denum m_textureFormat;
     bool m_skipsDraw;
     LayerTextureUpdater::Orientation m_textureOrientation;
     LayerTextureUpdater::SampledTexelFormat m_sampledTexelFormat;
 
+    TilingOption m_tilingOption;
+    IntSize m_tileSize;
     OwnPtr<CCLayerTilingData> m_tiler;
 };
 

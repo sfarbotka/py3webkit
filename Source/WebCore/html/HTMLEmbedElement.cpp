@@ -262,7 +262,7 @@ void HTMLEmbedElement::attributeChanged(Attribute* attr, bool preserveDecls)
 
 bool HTMLEmbedElement::isURLAttribute(Attribute* attr) const
 {
-    return attr->name() == srcAttr;
+    return attr->name() == srcAttr || HTMLPlugInImageElement::isURLAttribute(attr);
 }
 
 const QualifiedName& HTMLEmbedElement::imageSourceAttributeName() const
@@ -276,5 +276,17 @@ void HTMLEmbedElement::addSubresourceAttributeURLs(ListHashSet<KURL>& urls) cons
 
     addSubresourceURL(urls, document()->completeURL(getAttribute(srcAttr)));
 }
+
+#if ENABLE(MICRODATA)
+String HTMLEmbedElement::itemValueText() const
+{
+    return getURLAttribute(srcAttr);
+}
+
+void HTMLEmbedElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setAttribute(srcAttr, value, ec);
+}
+#endif
 
 }

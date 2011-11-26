@@ -312,6 +312,7 @@ TEST(CCLayerTreeHostCommonTest, verifyTransformsForSingleRenderSurface)
 
     setLayerPropertiesForTesting(parent.get(), parentLayerTransform, parentSublayerMatrix, FloatPoint(0.25f, 0.25f), FloatPoint(2.5f, 3.0f), IntSize(10, 12), false);
     setLayerPropertiesForTesting(child.get(), identityMatrix, identityMatrix, FloatPoint(0.0f, 0.0f), FloatPoint(0.0f, 0.0f), IntSize(16, 18), false);
+    setLayerPropertiesForTesting(grandChild.get(), identityMatrix, identityMatrix, FloatPoint(0.0f, 0.0f), FloatPoint(-0.5f, -0.5f), IntSize(1, 1), false);
     executeCalculateDrawTransformsAndVisibility(parent.get());
 
     // Render surface should have been created now.
@@ -323,7 +324,7 @@ TEST(CCLayerTreeHostCommonTest, verifyTransformsForSingleRenderSurface)
     VERIFY_MATRIX_ALMOST_EQUAL(childTranslationToCenter, child->drawTransform());
     VERIFY_MATRIX_ALMOST_EQUAL(parentCompositeTransform, child->screenSpaceTransform());
 
-    // Without clipping and scissoring, the origin transform and draw transform (in this particular case) should be the same.
+    // Without clipping, the origin transform and draw transform (in this particular case) should be the same.
     VERIFY_MATRIX_ALMOST_EQUAL(parentCompositeTransform, child->targetRenderSurface()->originTransform());
     VERIFY_MATRIX_ALMOST_EQUAL(parentCompositeTransform, child->targetRenderSurface()->drawTransform());
 
@@ -474,12 +475,12 @@ TEST(CCLayerTreeHostCommonTest, verifyTransformsForRenderSurfaceHierarchy)
 // FIXME:
 // continue working on https://bugs.webkit.org/show_bug.cgi?id=68942
 //  - add a test to verify clipping that changes the "center point"
-//  - add a case that checks if a render surface's drawTransform is computed correctly. For the general case, and for special cases when clipping/scissoring.
+//  - add a case that checks if a render surface's drawTransform is computed correctly. For the general case, and for special cases when clipping.
 //  - add a case that checks if a render surface's replicaTransform is computed correctly.
 //  - test all the conditions under which render surfaces are created
 //  - if possible, test all conditions under which render surfaces are not created
 //  - verify that the layer lists of render surfaces are correct, verify that "targetRenderSurface" values for each layer are correct.
-//  - test the computation of scissor rects and content rects
+//  - test the computation of clip rects and content rects
 //  - test the special cases for mask layers and replica layers
 //  - test the other functions in CCLayerTreeHostCommon
 //

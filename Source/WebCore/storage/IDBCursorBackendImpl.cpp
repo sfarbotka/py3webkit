@@ -110,7 +110,7 @@ void IDBCursorBackendImpl::continueFunctionInternal(ScriptExecutionContext*, Pas
         return;
     }
 
-    callbacks->onSuccess(cursor.get());
+    callbacks->onSuccessWithContinuation();
 }
 
 void IDBCursorBackendImpl::deleteFunction(PassRefPtr<IDBCallbacks> prpCallbacks, ExceptionCode& ec)
