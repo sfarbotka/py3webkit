@@ -39,9 +39,17 @@ namespace WebCore {
 class SQLError : public ThreadSafeRefCounted<SQLError> {
 public:
     static PassRefPtr<SQLError> create(unsigned code, const String& message) { return adoptRef(new SQLError(code, message)); }
+    static PassRefPtr<SQLError> create(unsigned code, const char* message, int sqliteCode)
+    {
+        return create(code, String::format("%s (%d)", message, sqliteCode));
+    }
+    static PassRefPtr<SQLError> create(unsigned code, const char* message, int sqliteCode, const char* sqliteMessage)
+    {
+        return create(code, String::format("%s (%d %s)", message, sqliteCode, sqliteMessage));
+    }
 
     unsigned code() const { return m_code; }
-    String message() const { return m_message.threadsafeCopy(); }
+    String message() const { return m_message.isolatedCopy(); }
 
     enum SQLErrorCode {
         UNKNOWN_ERR = 0,
@@ -55,7 +63,7 @@ public:
     };
 
 private:
-    SQLError(unsigned code, const String& message) : m_code(code), m_message(message.threadsafeCopy()) { }
+    SQLError(unsigned code, const String& message) : m_code(code), m_message(message.isolatedCopy()) { }
     unsigned m_code;
     String m_message;
 };

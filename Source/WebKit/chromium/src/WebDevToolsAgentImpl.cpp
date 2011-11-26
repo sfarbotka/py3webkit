@@ -31,13 +31,12 @@
 #include "config.h"
 #include "WebDevToolsAgentImpl.h"
 
-#include "DebuggerAgentImpl.h"
-#include "DebuggerAgentManager.h"
 #include "ExceptionCode.h"
 #include "GraphicsContext.h"
 #include "InjectedScriptHost.h"
 #include "InspectorBackendDispatcher.h"
 #include "InspectorController.h"
+#include "InspectorFrontend.h"
 #include "InspectorInstrumentation.h"
 #include "InspectorProtocolVersion.h"
 #include "MemoryCache.h"
@@ -182,13 +181,11 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     , m_webViewImpl(webViewImpl)
     , m_attached(false)
 {
-    DebuggerAgentManager::setExposeV8DebuggerProtocol(
-        client->exposeV8DebuggerProtocol());
+    ASSERT(m_hostId > 0);
 }
 
 WebDevToolsAgentImpl::~WebDevToolsAgentImpl()
 {
-    DebuggerAgentManager::onWebViewClosed(m_webViewImpl);
     ClientMessageLoopAdapter::inspectedViewClosed(m_webViewImpl);
 }
 
@@ -197,17 +194,19 @@ void WebDevToolsAgentImpl::attach()
     if (m_attached)
         return;
 
-    if (!m_client->exposeV8DebuggerProtocol())
-        ClientMessageLoopAdapter::ensureClientMessageLoopCreated(m_client);
-
-    m_debuggerAgentImpl = adoptPtr(new DebuggerAgentImpl(m_webViewImpl, this, m_client));
+    ClientMessageLoopAdapter::ensureClientMessageLoopCreated(m_client);
+    inspectorController()->connectFrontend();
     m_attached = true;
 }
 
 void WebDevToolsAgentImpl::reattach(const WebString& savedState)
 {
-    attach();
+    if (m_attached)
+        return;
+
+    ClientMessageLoopAdapter::ensureClientMessageLoopCreated(m_client);
     inspectorController()->restoreInspectorStateFromCookie(savedState);
+    m_attached = true;
 }
 
 void WebDevToolsAgentImpl::detach()
@@ -217,24 +216,23 @@ void WebDevToolsAgentImpl::detach()
     ic->disconnectFrontend();
     ic->hideHighlight();
     ic->close();
-    m_debuggerAgentImpl.clear();
     m_attached = false;
 }
 
 void WebDevToolsAgentImpl::frontendLoaded()
 {
-    inspectorController()->connectFrontend();
 }
 
 void WebDevToolsAgentImpl::didNavigate()
 {
     ClientMessageLoopAdapter::didNavigate();
-    DebuggerAgentManager::onNavigate();
 }
 
 void WebDevToolsAgentImpl::didClearWindowObject(WebFrameImpl* webframe)
 {
-    DebuggerAgentManager::setHostId(webframe, m_hostId);
+    WebCore::V8Proxy* proxy = WebCore::V8Proxy::retrieve(webframe->frame());
+    if (proxy)
+        proxy->setContextDebugId(m_hostId);
 }
 
 void WebDevToolsAgentImpl::dispatchOnInspectorBackend(const WebString& message)
@@ -267,6 +265,10 @@ void WebDevToolsAgentImpl::inspectorDestroyed()
 }
 
 void WebDevToolsAgentImpl::openInspectorFrontend(InspectorController*)
+{
+}
+
+void WebDevToolsAgentImpl::bringFrontendToFront()
 {
 }
 
@@ -343,16 +345,6 @@ bool WebDevToolsAgent::supportsInspectorProtocolVersion(const WebString& version
     return WebCore::supportsInspectorProtocolVersion(version);
 }
 
-void WebDevToolsAgent::executeDebuggerCommand(const WebString& command, int callerId)
-{
-    DebuggerAgentManager::executeDebuggerCommand(command, callerId);
-}
-
-void WebDevToolsAgent::debuggerPauseScript()
-{
-    DebuggerAgentManager::pauseScript();
-}
-
 void WebDevToolsAgent::interruptAndDispatch(MessageDescriptor* rawDescriptor)
 {
     // rawDescriptor can't be a PassOwnPtr because interruptAndDispatch is a WebKit API function.
@@ -381,9 +373,20 @@ void WebDevToolsAgent::processPendingMessages()
     PageScriptDebugServer::shared().runPendingTasks();
 }
 
-void WebDevToolsAgent::setMessageLoopDispatchHandler(MessageLoopDispatchHandler handler)
+WebString WebDevToolsAgent::disconnectEventAsText()
 {
-    DebuggerAgentManager::setMessageLoopDispatchHandler(handler);
+    class ChannelImpl : public InspectorFrontendChannel {
+    public:
+        virtual bool sendMessageToFrontend(const String& message)
+        {
+            m_message = message;
+            return true;
+        }
+        String m_message;
+    } channel;
+    InspectorFrontend::Inspector inspector(&channel);
+    inspector.disconnectFromBackend();
+    return channel.m_message;
 }
 
 } // namespace WebKit

@@ -42,13 +42,17 @@ CCLayerImpl::CCLayerImpl(int id)
     , m_layerId(id)
     , m_anchorPoint(0.5, 0.5)
     , m_anchorPointZ(0)
+    , m_scrollable(false)
     , m_doubleSided(true)
+    , m_layerPropertyChanged(false)
     , m_masksToBounds(false)
+    , m_opaque(false)
     , m_opacity(1.0)
     , m_preserves3D(false)
-    , m_usesLayerScissor(false)
+    , m_usesLayerClipping(false)
     , m_isNonCompositedContent(false)
     , m_drawsContent(false)
+    , m_pageScaleDelta(1)
     , m_targetRenderSurface(0)
     , m_drawDepth(0)
     , m_drawOpacity(0)
@@ -125,6 +129,7 @@ void CCLayerImpl::scrollBy(const IntSize& scroll)
     IntSize maxDelta = m_maxScrollPosition - toSize(m_scrollPosition);
     // Clamp newDelta so that position + delta stays within scroll bounds.
     m_scrollDelta = newDelta.expandedTo(minDelta).shrunkTo(maxDelta);
+    noteLayerPropertyChangedForSubtree();
 }
 
 void CCLayerImpl::cleanupResources()
@@ -184,9 +189,9 @@ void CCLayerImpl::dumpLayerProperties(TextStream& ts, int indent) const
 
     writeIndent(ts, indent);
     ts << "drawTransform: ";
-    ts << m_drawTransform.m11() << ", " << m_drawTransform.m12() << ", " << m_drawTransform.m13() << ", " << m_drawTransform.m14() << ", ";
-    ts << m_drawTransform.m21() << ", " << m_drawTransform.m22() << ", " << m_drawTransform.m23() << ", " << m_drawTransform.m24() << ", ";
-    ts << m_drawTransform.m31() << ", " << m_drawTransform.m32() << ", " << m_drawTransform.m33() << ", " << m_drawTransform.m34() << ", ";
+    ts << m_drawTransform.m11() << ", " << m_drawTransform.m12() << ", " << m_drawTransform.m13() << ", " << m_drawTransform.m14() << "  //  ";
+    ts << m_drawTransform.m21() << ", " << m_drawTransform.m22() << ", " << m_drawTransform.m23() << ", " << m_drawTransform.m24() << "  //  ";
+    ts << m_drawTransform.m31() << ", " << m_drawTransform.m32() << ", " << m_drawTransform.m33() << ", " << m_drawTransform.m34() << "  //  ";
     ts << m_drawTransform.m41() << ", " << m_drawTransform.m42() << ", " << m_drawTransform.m43() << ", " << m_drawTransform.m44() << "\n";
 }
 
@@ -220,6 +225,233 @@ void CCLayerImpl::dumpLayer(TextStream& ts, int indent) const
     }
     for (size_t i = 0; i < m_children.size(); ++i)
         m_children[i]->dumpLayer(ts, indent+1);
+}
+
+void CCLayerImpl::noteLayerPropertyChangedForSubtree()
+{
+    m_layerPropertyChanged = true;
+    noteLayerPropertyChangedForDescendants();
+}
+
+void CCLayerImpl::noteLayerPropertyChangedForDescendants()
+{
+    for (size_t i = 0; i < m_children.size(); ++i)
+        m_children[i]->noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::resetPropertyChangedFlagForSubtree()
+{
+    m_layerPropertyChanged = false;
+
+    if (m_renderSurface)
+        m_renderSurface->resetPropertyChangedFlag();
+
+    for (size_t i = 0; i < m_children.size(); ++i)
+        m_children[i]->resetPropertyChangedFlagForSubtree();
+}
+
+void CCLayerImpl::setBounds(const IntSize& bounds)
+{
+    if (m_bounds == bounds)
+        return;
+
+    m_bounds = bounds;
+
+    if (masksToBounds())
+        noteLayerPropertyChangedForSubtree();
+    else
+        m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setMaskLayer(PassRefPtr<CCLayerImpl> maskLayer)
+{
+    if (m_maskLayer == maskLayer)
+        return;
+
+    m_maskLayer = maskLayer;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setReplicaLayer(PassRefPtr<CCLayerImpl> replicaLayer)
+{
+    if (m_replicaLayer == replicaLayer)
+        return;
+
+    m_replicaLayer = replicaLayer;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setDrawsContent(bool drawsContent)
+{
+    if (m_drawsContent == drawsContent)
+        return;
+
+    m_drawsContent = drawsContent;
+    m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setAnchorPoint(const FloatPoint& anchorPoint)
+{
+    if (m_anchorPoint == anchorPoint)
+        return;
+
+    m_anchorPoint = anchorPoint;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setAnchorPointZ(float anchorPointZ)
+{
+    if (m_anchorPointZ == anchorPointZ)
+        return;
+
+    m_anchorPointZ = anchorPointZ;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setBackgroundColor(const Color& backgroundColor)
+{
+    if (m_backgroundColor == backgroundColor)
+        return;
+
+    m_backgroundColor = backgroundColor;
+    m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setMasksToBounds(bool masksToBounds)
+{
+    if (m_masksToBounds == masksToBounds)
+        return;
+
+    m_masksToBounds = masksToBounds;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setOpaque(bool opaque)
+{
+    if (m_opaque == opaque)
+        return;
+
+    m_opaque = opaque;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setOpacity(float opacity)
+{
+    if (m_opacity == opacity)
+        return;
+
+    m_opacity = opacity;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setPosition(const FloatPoint& position)
+{
+    if (m_position == position)
+        return;
+
+    m_position = position;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setPreserves3D(bool preserves3D)
+{
+    if (m_preserves3D == preserves3D)
+        return;
+
+    m_preserves3D = preserves3D;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setZoomAnimatorTransform(const TransformationMatrix& zoomAnimatorTransform)
+{
+    if (m_zoomAnimatorTransform == zoomAnimatorTransform)
+        return;
+
+    m_zoomAnimatorTransform = zoomAnimatorTransform;
+    noteLayerPropertyChangedForSubtree();
+}
+
+
+void CCLayerImpl::setSublayerTransform(const TransformationMatrix& sublayerTransform)
+{
+    if (m_sublayerTransform == sublayerTransform)
+        return;
+
+    m_sublayerTransform = sublayerTransform;
+    // sublayer transform does not affect the current layer; it affects only its children.
+    noteLayerPropertyChangedForDescendants();
+}
+
+void CCLayerImpl::setTransform(const TransformationMatrix& transform)
+{
+    if (m_transform == transform)
+        return;
+
+    m_transform = transform;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setDebugBorderColor(Color debugBorderColor)
+{
+    if (m_debugBorderColor == debugBorderColor)
+        return;
+
+    m_debugBorderColor = debugBorderColor;
+    m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setDebugBorderWidth(float debugBorderWidth)
+{
+    if (m_debugBorderWidth == debugBorderWidth)
+        return;
+
+    m_debugBorderWidth = debugBorderWidth;
+    m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setContentBounds(const IntSize& contentBounds)
+{
+    if (m_contentBounds == contentBounds)
+        return;
+
+    m_contentBounds = contentBounds;
+    m_layerPropertyChanged = true;
+}
+
+void CCLayerImpl::setScrollPosition(const IntPoint& scrollPosition)
+{
+    if (m_scrollPosition == scrollPosition)
+        return;
+
+    m_scrollPosition = scrollPosition;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setScrollDelta(const IntSize& scrollDelta)
+{
+    if (m_scrollDelta == scrollDelta)
+        return;
+
+    m_scrollDelta = scrollDelta;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setPageScaleDelta(float pageScaleDelta)
+{
+    if (m_pageScaleDelta == pageScaleDelta)
+        return;
+
+    m_pageScaleDelta = pageScaleDelta;
+    noteLayerPropertyChangedForSubtree();
+}
+
+void CCLayerImpl::setDoubleSided(bool doubleSided)
+{
+    if (m_doubleSided == doubleSided)
+        return;
+
+    m_doubleSided = doubleSided;
+    noteLayerPropertyChangedForSubtree();
 }
 
 }

@@ -1,3 +1,775 @@
+2011-11-26  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r101193.
+        http://trac.webkit.org/changeset/101193
+        https://bugs.webkit.org/show_bug.cgi?id=73158
+
+        Breaks Windows and Qt minimal. (Requested by pfeldman on
+        #webkit).
+
+        * WebCoreSupport/InspectorClientGtk.cpp:
+        (WebKit::InspectorClient::inspectorDestroyed):
+        (WebKit::InspectorFrontendClient::disconnectFromBackend):
+        * WebCoreSupport/InspectorClientGtk.h:
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/InspectorClientGtk.cpp:
+        (WebKit::InspectorClient::inspectorDestroyed):
+        (WebKit::InspectorClient::closeInspectorFrontend):
+        * WebCoreSupport/InspectorClientGtk.h:
+
+2011-11-17  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Integrate build-gtkdoc into build-webkit and make
+        https://bugs.webkit.org/show_bug.cgi?id=72626
+
+        Reviewed by Philippe Normand.
+
+        * docs/GNUmakefile.am: Removed.
+        * docs/version.xml.in: Removed.
+
+2011-11-23  Kaustubh Atrawalkar  <kaustubh@motorola.com>
+
+        Documentation fix for load-committed in webkitwebframe
+        https://bugs.webkit.org/show_bug.cgi?id=72927
+
+        Reviewed by Martin Robinson.
+
+        * webkit/webkitwebframe.cpp:
+        (webkit_web_frame_class_init):
+
+2011-11-22  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove Inspector::bringToFront from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=72937
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/InspectorClientGtk.cpp:
+        (WebKit::InspectorClient::bringFrontendToFront):
+        * WebCoreSupport/InspectorClientGtk.h:
+
+2011-11-22  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: strip unused InspectorController methods.
+        https://bugs.webkit.org/show_bug.cgi?id=72886
+
+        Reviewed by Yury Semikhatsky.
+
+        * webkit/webkitwebinspector.cpp:
+        (webkit_web_inspector_set_property):
+        (webkit_web_inspector_get_property):
+
+2011-11-21  Yuta Kitamura  <yutak@chromium.org>
+
+        [GTK] Enable WebSocket hybi tests
+        https://bugs.webkit.org/show_bug.cgi?id=72870
+
+        Reviewed by Xan Lopez.
+
+        Change the settings value through DumpRenderTreeSupportGtk, because we do not
+        want to expose this as a public API.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::setHixie76WebSocketProtocolEnabled):
+        Change the value of a flag in WebCore::Settings.
+        * WebCoreSupport/DumpRenderTreeSupportGtk.h:
+
+2011-11-21  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Update NEWS and configure.ac for 1.7.2 release
+        https://bugs.webkit.org/show_bug.cgi?id=72868
+
+        Reviewed by Xan Lopez.
+
+        * NEWS: Added release notes for 1.7.2.
+
+2011-10-17  Antonio Gomes  <agomes@rim.com>
+
+        Pass a Frame* parameter in EditorClient::respondToChangedSelection
+        https://bugs.webkit.org/show_bug.cgi?id=70248
+
+        Reviewed by Ryosuke Niwa.
+
+        * WebCoreSupport/EditorClientGtk.cpp: Make use of the newly added Frame* parameter.
+        (WebKit::EditorClient::respondToChangedSelection):
+        * WebCoreSupport/EditorClientGtk.h:
+
+2011-11-18  Martin Robinson  <mrobinson@igalia.com>
+
+        REGRESSION (r99924): broke 2 pasteboard tests on GTK
+        https://bugs.webkit.org/show_bug.cgi?id=72131
+
+        Reviewed by Tony Chang.
+
+        * WebCoreSupport/EditorClientGtk.cpp:
+        (WebKit::setSelectionPrimaryClipboardIfNeeded): Use the new clearAll method.
+
+2011-11-18  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [GTK] Accessibility API tests not loading Gtk's accessibility implementation
+        https://bugs.webkit.org/show_bug.cgi?id=72732
+
+        Reviewed by Philippe Normand.
+
+        Ensure that the GAIL module is being loaded by avoiding using
+        gtk_test_init() directly, but a modified version of it.
+
+        * tests/testatk.c:
+        (testWebkitAtkParentForRootObject): Use a normal GtkWidget (a
+        GtkWindow) as the parent container for the webView, instead of
+        using a dummy webView for that, which was hackish.
+        (testWebkitAtkSetParentForObject): Use normal GtkWidgets instead
+        of dummy webViews (a GtkWindow and a GtkButton).
+        (initializeTestingFramework): New function, identical to
+        gtk_test_init(), but loading GAIL as the only GTK module.
+        (main): Use initializeTestingFramework().
+
+2011-11-18  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Downloads not started by WebView only fail for transport errors
+        https://bugs.webkit.org/show_bug.cgi?id=72718
+
+        Reviewed by Martin Robinson.
+
+        Abort the download with an error if the response contains an
+        error code. It adds a new test case to the download unit tests.
+
+        * tests/testdownload.c:
+        (notifyDownloadStatusCallback):
+        (serverCallback):
+        (test_webkit_download_not_found):
+        (main):
+        * webkit/webkitdownload.cpp:
+        (DownloadClient::didReceiveResponse): Check whether http status of
+        the response is an error code and emit error signal in such case.
+
+2011-11-18  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [GTK] Accessibility API tests failing because of using non-WebKit GtkWidgets
+        https://bugs.webkit.org/show_bug.cgi?id=72708
+
+        Reviewed by Xan Lopez.
+
+        Do not use non-WebKit GtkWidget's in unit tests, to avoid problems
+        when GTK's accessibility implementation is not being loaded.
+
+        * tests/testatk.c:
+        (testWebkitAtkParentForRootObject): Use a dummy WebKitWebView
+        widget as the parent container needed for this unit test.
+        (testWebkitAtkSetParentForObject): Ditto.
+
+2011-11-17  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Remove the last remaining WebKit1 gtkdoc warnings
+        https://bugs.webkit.org/show_bug.cgi?id=72627
+
+        Reviewed by Philippe Normand.
+
+        * webkit/webkitdownload.h: Add missing enum documentation.
+        * webkit/webkiterror.h: Ditto.
+        * webkit/webkitwebview.h: Ditto.
+
+2011-11-17  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [Gtk] Ensure the parent for the webView's a11y object is set.
+
+        This should fix some accessibility related GTK API tests.
+
+        Rubber-stamped by Philippe Normand.
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_get_accessible): Always set the parent to make
+        navigation across GTK and WebKit worlds work properly.
+
+2011-11-17  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [GTK] Consider parent AtkObject in webkit_accessible_get_parent(), if already set
+        https://bugs.webkit.org/show_bug.cgi?id=72525
+
+        Reviewed by Xan Lopez.
+
+        * tests/testatk.c:
+        (testWebkitAtkSetParentForObject): New unit test to check that
+        calls to atk_object_get_parent() over a WebKitGTK's accessibility
+        wrapper object returns its parent AtkObject if previously set.
+        (main): Added new test.
+
+2011-11-17  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [GTK] ATK API tests failing because of patch for bug 72390
+        https://bugs.webkit.org/show_bug.cgi?id=72592
+
+        Reviewed by Philippe Normand.
+
+        * tests/testatk.c:
+        (testWebkitAtkParentForRootObject): Remove the offending line in
+        the unit test, which is not actually required to test the new
+        functionality and causes problems in some scenarios, due to the
+        lazy creation mechanism of AtkObjects.
+
+        * tests/testatkroles.c:
+        (finish_loading): Reflect that the document frame object is no
+        longer the root accessibility object (a scroll pane from now on),
+        but the only child of that one. Thus, skip that root object.
+
+2011-11-16  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [GTK] Do not hide accessibility root object from AT's
+        https://bugs.webkit.org/show_bug.cgi?id=72390
+
+        Reviewed by Martin Robinson.
+
+        * tests/testatk.c:
+        (getWebAreaObject): New helper function, to bypass the new root
+        object in the accessibility hierarchy, since it's not usually
+        needed for the unit tests.
+        (testWebkitAtkCaretOffsets): Use getWebAreaObject().
+        (testWebkitAtkCaretOffsetsAndExtranousWhiteSpaces): Ditto.
+        (testWebkitAtkComboBox): Ditto.
+        (testWebkitAtkEmbeddedObjects): Ditto.
+        (testWebkitAtkGetTextAtOffsetForms): Ditto.
+        (testWebkitAtkGetTextAtOffset): Ditto.
+        (testWebkitAtkGetTextAtOffsetNewlines): Ditto.
+        (testWebkitAtkGetTextAtOffsetTextarea): Ditto.
+        (testWebkitAtkGetTextAtOffsetTextInput): Ditto.
+        (testWebkitAtkGetTextAtOffsetWithSpecialCharacters): Ditto.
+        (testWebkitAtkGetTextInParagraphAndBodySimple): Ditto.
+        (testWebkitAtkGetTextInParagraphAndBodyModerate): Ditto.
+        (testWebkitAtkGetTextInTable): Ditto.
+        (testWebkitAtkGetHeadersInTable): Ditto.
+        (testWebkitAtkTextAttributes): Ditto.
+        (testWebkitAtkTextSelections): Ditto.
+        (testWebkitAtkGetExtents): Ditto.
+        (testWebkitAtkLayoutAndDataTables): Ditto.
+        (testWebkitAtkLinksWithInlineImages): Ditto.
+        (testWebkitAtkHypertextAndHyperlinks): Ditto.
+        (testWebkitAtkListsOfItems): Ditto.
+        (testWebkitAtkTextChangedNotifications): Ditto.
+        (testWebkitAtkParentForRootObject): New test, to make sure that
+        both top-down and bottom-up navigation among GTK and WebKit worlds
+        matches accordingly.
+        (main): Added new test.
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_get_accessible): Remove the hack introduced
+        because of bug 51932, to bypass the root object here.
+
+2011-11-15  Anders Carlsson  <andersca@apple.com>
+
+        HostWindow screenToWindow/windowToScreen should be screenToRootView/rootViewToScreen
+        https://bugs.webkit.org/show_bug.cgi?id=72397
+
+        Reviewed by Dan Bernstein.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::rootViewToScreen):
+        (WebKit::ChromeClient::screenToRootView):
+        * WebCoreSupport/ChromeClientGtk.h:
+
+2011-11-14  Anders Carlsson  <andersca@apple.com>
+
+        HostWindow invalidation functions should use root view coordinates
+        https://bugs.webkit.org/show_bug.cgi?id=72338
+
+        Reviewed by Dan Bernstein.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::invalidateRootView):
+        (WebKit::ChromeClient::invalidateContentsAndRootView):
+        (WebKit::ChromeClient::invalidateContentsForSlowScroll):
+        * WebCoreSupport/ChromeClientGtk.h:
+
+2011-11-15  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Implement download support in WebKit2
+        https://bugs.webkit.org/show_bug.cgi?id=72258
+
+        Reviewed by Martin Robinson.
+
+        Use errors from WebCore to emit the error signals.
+
+        * webkit/webkitdownload.cpp:
+        (webkitDownloadEmitError): Helper function that emits the error
+        signal for the given ResourceError.
+        (webkit_download_open_stream_for_uri): Use webkitDownloadEmitError().
+        (webkit_download_cancel): Ditto.
+        (webkit_download_set_destination_uri): Ditto.
+        (webkit_download_received_data): Ditto.
+        (webkit_download_error): Ditto.
+
+2011-11-14  Ryuan Choi  <ryuan.choi@samsung.com>
+
+        [GTK] Possible crash when destroying after called widgetSizeChanged.
+        https://bugs.webkit.org/show_bug.cgi?id=72237
+
+        Reviewed by Martin Robinson.
+
+        Crash can occur when ChromeclientGtk is removed before calling repaintEverythingSoonTimeout
+        registered by widgetSizeChanged.
+        This patch remove the m_repaintSoonSourceId glib source before destruction
+        of the ChromeClientGtk to prevent the above crash.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::chromeDestroyed):
+
+2011-11-09  Philippe Normand  <pnormand@igalia.com>
+
+        [GTK][DRT] window internals object is not reset after each test
+        https://bugs.webkit.org/show_bug.cgi?id=71890
+
+        Reviewed by Martin Robinson.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp: Remove problematic
+        calls to WebCoreSupport which belongs to libWebCoreInternals, not libwebkitgtk.
+        * WebCoreSupport/DumpRenderTreeSupportGtk.h:
+
+2011-11-09  Philippe Normand  <pnormand@igalia.com>
+
+        [GTK][DRT] window internals object is not reset after each test
+        https://bugs.webkit.org/show_bug.cgi?id=71890
+
+        Reviewed by Xan Lopez.
+
+        DRTSupport infrastructure to reset the Internals object, like in Qt.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::resetInternalsObject):
+        * WebCoreSupport/DumpRenderTreeSupportGtk.h:
+
+2011-11-07  Adam Barth  <abarth@webkit.org>
+
+        Move static "policy" state from SecurityOrigin.cpp to SecurityPolicy.cpp
+        https://bugs.webkit.org/show_bug.cgi?id=71755
+
+        Reviewed by Eric Seidel.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::whiteListAccessFromOrigin):
+        (DumpRenderTreeSupportGtk::resetOriginAccessWhiteLists):
+
+2011-11-08  Zan Dobersek  <zandobersek@gmail.com>
+
+        [WK][GTK] Application cache directory is incorrectly set
+        https://bugs.webkit.org/show_bug.cgi?id=71769
+
+        Reviewed by Martin Robinson.
+
+        Set the application cache directory to be placed in current user's
+        cache directory and update documentation for
+        webkit_application_cache_get_database_directory_path after these
+        changes and changes in r80715;
+
+        * webkit/webkitapplicationcache.cpp:
+        * webkit/webkitglobals.cpp:
+        (webkitInit): Switch one string formation to use GOwnPtr<gchar>.
+
+2011-11-03  Darin Adler  <darin@apple.com>
+
+        Change remaining callers of releaseRef to call leakRef
+        https://bugs.webkit.org/show_bug.cgi?id=71422
+
+        Reviewed by Darin Fisher.
+
+        * webkit/webkitwebdatasource.cpp:
+        (WebKit::kitNew):
+        * webkit/webkitwebhistoryitem.cpp:
+        (webkit_web_history_item_new):
+        (webkit_web_history_item_new_with_data):
+        (webkit_web_history_item_copy):
+        (WebKit::kit):
+        * webkit/webkitwebresource.cpp:
+        (webkit_web_resource_new_with_core_resource):
+        (webkit_web_resource_init_with_core_resource):
+        Use leakRef.
+
+2011-11-02  Darin Adler  <darin@apple.com>
+
+        Change remaining callers of releaseRef to call leakRef
+        https://bugs.webkit.org/show_bug.cgi?id=71422
+
+        Reviewed by Darin Fisher.
+
+        * webkit/webkitwebdatasource.cpp:
+        (WebKit::kitNew):
+        * webkit/webkitwebhistoryitem.cpp:
+        (webkit_web_history_item_new):
+        (webkit_web_history_item_new_with_data):
+        (webkit_web_history_item_copy):
+        (WebKit::kit):
+        * webkit/webkitwebresource.cpp:
+        (webkit_web_resource_new_with_core_resource):
+        (webkit_web_resource_init_with_core_resource):
+        Use leakRef.
+
+2011-11-03  Fady Samuel  <fsamuel@chromium.org>
+
+        Removing line in computeViewportAttributes that enforces a minimum scale factor to never allow zooming out more than viewport
+        https://bugs.webkit.org/show_bug.cgi?id=70609
+
+        Reviewed by Kenneth Rohde Christiansen.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::dumpConfigurationForViewport):
+        * webkit/webkitviewportattributes.cpp:
+        (webkitViewportAttributesRecompute):
+
+2011-11-02  Jon Lee  <jonlee@apple.com>
+
+        Expand DragController to provide more information about the dragging session
+        https://bugs.webkit.org/show_bug.cgi?id=71324
+        <rdar://problem/10379175>
+
+        Reviewed by Darin Adler.
+
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_drag_motion): Minor refactoring.
+        (webkit_web_view_drag_data_received): Minor refactoring.
+
+2011-11-02  Tom Sepez  <tsepez@chromium.org>
+
+        XSSAuditor is silent
+        https://bugs.webkit.org/show_bug.cgi?id=70973
+
+        Reviewed by Adam Barth.
+
+        * WebCoreSupport/FrameLoaderClientGtk.cpp:
+        (WebKit::FrameLoaderClient::didDetectXSS):
+        * WebCoreSupport/FrameLoaderClientGtk.h:
+
+2011-11-02  Zan Dobersek  <zandobersek@gmail.com>
+
+        [GTK] Visited links of a page group should be removed when clearing back/forward list
+        https://bugs.webkit.org/show_bug.cgi?id=71052
+
+        Reviewed by Martin Robinson.
+
+        When clearing back-forward list, also remove the visited links from page's page group.
+
+        * webkit/webkitwebbackforwardlist.cpp:
+        (webkit_web_back_forward_list_clear):
+
+2011-10-31  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Install html and tmpl dirs in a $(DOC_MODULE) dir in tarball
+        https://bugs.webkit.org/show_bug.cgi?id=71224
+
+        Reviewed by Martin Robinson.
+
+        * GNUmakefile.gtk-doc.am: Copy html and tmpl dirs to
+        $(distdir)/$(DOC_MODULE).
+
+2011-10-29  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Switch to a backing store approach for painting WebKitWebView
+        https://bugs.webkit.org/show_bug.cgi?id=70213
+
+        Reviewed by Gustavo Noronha Silva.
+
+        Paint the WebView into a backing store. This prevents expose events from
+        triggering a layout, making scrolling and resizing much smoother.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::ChromeClient): Initialize new members.
+        (WebKit::repaintEverythingSoonTimeout): Added this helper which repaints
+        the WebView more quickly during resize events.
+        (WebKit::clipOutOldWidgetArea): Clips out the old widget area, so that we
+        can clear out invalid pixels when growing the widget into a pre-existing
+        backing store.
+        (WebKit::clearEverywhereInBackingStore): Clear out the entire backing store.
+        (WebKit::ChromeClient::widgetSizeChanged): Handle widget size changes by
+        intelligently resizing or reusing the existing backing store.
+        (WebKit::coalesceRectsIfPossible): Moved this method from webkitwebview.cpp.
+        (WebKit::paintWebView): Moved this method from webkitwebview.cpp.
+        (WebKit::ChromeClient::performAllPendingScrolls): If there are any pending
+        scrolling operations, perform them by scrolling the backing store.
+        (WebKit::ChromeClient::paint): Added this timer callback, which paints the
+        WebView after a short timeout.
+        (WebKit::ChromeClient::invalidateWindow): No need to do anything here any longer.
+        (WebKit::ChromeClient::invalidateContentsAndWindow): Now unite the rect with
+        the existing dirty region and queue the paint timeout.
+        (WebKit::ChromeClient::scroll): Now just queue a scroll event in the repaint timeout.
+        Intelligently calculate the area to move and the dirty area using code derived
+        from WebKit2.
+        * WebCoreSupport/ChromeClientGtk.h: Added new method definitions and also use
+        the WebCore namespace to avoid lots of uses of "WebCore::".
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_draw): Now just blit the backing store into the widget.
+        (webkit_web_view_expose): Ditto.
+        (webkit_web_view_size_allocate): Let the ChromeClient know the widget size changed.
+        (webkit_web_view_init): Turn off GDK double buffering as we have our own double
+        buffer.
+        * webkit/webkitwebviewprivate.h: Add the backing store member.
+
+2011-10-28  Jochen Eisinger  <jochen@chromium.org>
+
+        Rename a number of methods mentioning JavaScript to just Script instead
+        https://bugs.webkit.org/show_bug.cgi?id=71105
+
+        Reviewed by Adam Barth.
+
+        * WebCoreSupport/FrameLoaderClientGtk.cpp:
+        (WebKit::FrameLoaderClient::dispatchDidClearWindowObjectInWorld):
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_update_settings):
+        (webkit_web_view_settings_notify):
+
+2011-10-27  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Remove most of the documentation errors from WebKit1
+        https://bugs.webkit.org/show_bug.cgi?id=70670
+
+        Reviewed by Gustavo Noronha Silva.
+
+        Fix most of the documentation errors for WebKit and make many
+        missing symbols show up in the documentation.
+
+        * webkit/webkitglobals.h: Doc fixes.
+        * webkit/webkitspellchecker.h: Ditto.
+        * webkit/webkitspellcheckerenchant.cpp: Ditto.
+        * webkit/webkitwebbackforwardlist.h: Ditto.
+        * webkit/webkitwebdatasource.cpp: Ditto.
+        * webkit/webkitwebframe.cpp: Ditto.
+        * webkit/webkitwebinspector.cpp: Ditto.
+        * webkit/webkitwebinspector.h: Ditto.
+        * webkit/webkitwebplugin.h: Ditto.
+        * webkit/webkitwebplugindatabase.cpp: Ditto.
+        * webkit/webkitwebplugindatabase.h: Ditto.
+        * webkit/webkitwebsettings.h: Ditto.
+        * webkit/webkitwebview.cpp: Ditto.
+        (webkit_web_view_class_init): Ditto.
+        * webkit/webkitwebview.h: Ditto.
+
+2011-10-27  Philippe Normand  <pnormand@igalia.com>
+
+        [GStreamer] WebAudio AudioFileReader implementation
+        https://bugs.webkit.org/show_bug.cgi?id=69834
+
+        Reviewed by Martin Robinson.
+
+        * GNUmakefile.am: Link against libfftw.
+
+2011-10-26  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Update NEWS and configure.ac for 1.7.1 release
+        https://bugs.webkit.org/show_bug.cgi?id=70932
+
+        Reviewed by Martin Robinson.
+
+        * NEWS: Added release notes.
+
+2011-10-26  Alejandro G. Castro  <alex@igalia.com>
+
+        [GTK] Fix distcheck compilation
+        https://bugs.webkit.org/show_bug.cgi?id=70921
+
+        Add new files required by doc compilation to the clean process.
+
+        Reviewed by Martin Robinson.
+
+        * docs/GNUmakefile.am:
+
+2011-10-26  Zalan Bujtas  <zbujtas@gmail.com>
+
+        Name viewport change event consistently.
+        https://bugs.webkit.org/show_bug.cgi?id=70901
+
+        Reviewed by Kenneth Rohde Christiansen.
+
+        Use ViewportPropertiesDidChange term consistently throughout WebKit.
+
+        * WebCoreSupport/ChromeClientGtk.cpp:
+        (WebKit::ChromeClient::dispatchViewportPropertiesDidChange):
+        * WebCoreSupport/ChromeClientGtk.h:
+
+2011-10-26  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Remove g_thread_init() calls from gtk-doc scanner too
+        https://bugs.webkit.org/show_bug.cgi?id=70908
+
+        Reviewed by Gustavo Noronha Silva.
+
+        * docs/GNUmakefile.am:
+
+2011-10-25  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] GtkAdjustment watcher updates adjustments too lazily
+        https://bugs.webkit.org/show_bug.cgi?id=70180
+
+        Reviewed by Gustavo Noronha Silva.
+
+        Increase the priority of the GtkAdjustments update in GtkAdjustmentWatcher. This
+        means that adjustments will more quickly represent the state of the WebKitWebView
+        when it scrolls. This fixes out-of-sync scrollbars and some visual artifacts.
+
+        * WebCoreSupport/GtkAdjustmentWatcher.cpp:
+        (WebKit::GtkAdjustmentWatcher::updateAdjustmentsFromScrollbarsLater): Use a timeout
+        with the default priority.
+
+2011-10-24  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Remove g_thread_init() calls
+        https://bugs.webkit.org/show_bug.cgi?id=70717
+
+        Reviewed by Xan Lopez.
+
+        With newer glib it's not needed anymore and with previous versions
+        it was already called by g_type_init().
+
+        * tests/testapplicationcache.c:
+        (main):
+        * tests/testatk.c:
+        (main):
+        * tests/testatkroles.c:
+        (main):
+        * tests/testcopyandpaste.c:
+        (main):
+        * tests/testdomdocument.c:
+        (main):
+        * tests/testdomdomwindow.c:
+        (main):
+        * tests/testdomnode.c:
+        (main):
+        * tests/testdownload.c:
+        (main):
+        * tests/testglobals.c:
+        (main):
+        * tests/testhittestresult.c:
+        (main):
+        * tests/testhttpbackend.c:
+        (main):
+        * tests/testkeyevents.c:
+        (main):
+        * tests/testloading.c:
+        (main):
+        * tests/testmimehandling.c:
+        (main):
+        * tests/testnetworkrequest.c:
+        (main):
+        * tests/testnetworkresponse.c:
+        (main):
+        * tests/testwebbackforwardlist.c:
+        (main):
+        * tests/testwebdatasource.c:
+        (main):
+        * tests/testwebframe.c:
+        (main):
+        * tests/testwebhistoryitem.c:
+        (main):
+        * tests/testwebplugindatabase.c:
+        (main):
+        * tests/testwebresource.c:
+        (main):
+        * tests/testwebsettings.c:
+        (main):
+        * tests/testwebview.c:
+        * tests/testwindow.c:
+        (main):
+
+2011-10-20  Gustavo Noronha Silva  <gns@gnome.org>
+
+        [GTK] webkitgtk's pkgconfig file needs to require javascriptcoregtk
+        https://bugs.webkit.org/show_bug.cgi?id=70500
+
+        Reviewed by Philippe Normand.
+
+        * webkit.pc.in: add javascriptcoregtk to Requires
+
+2011-10-19  Gustavo Noronha Silva  <gns@gnome.org>
+
+        GTK+ build fix. Rename the INCLUDES variable so it is not picked
+        up by random bystanders. Also do some more cleanup on stuff we
+        inherited from gtk-doc.make.
+
+        * GNUmakefile.gtk-doc.am:
+        * docs/GNUmakefile.am:
+
+2011-10-19  Gustavo Noronha Silva  <gns@gnome.org>
+
+        [GTK] Streamline wk1 documentation build
+        https://bugs.webkit.org/show_bug.cgi?id=70447
+
+        Reviewed by Martin Robinson.
+
+        * GNUmakefile.am: move files pertaining to the docs build to the
+          docs GNUmakefile.am;
+        * GNUmakefile.gtk-doc.make: incorporate the gtk-doc makefile, and customize it
+          to our non-recursive build;
+        * docs/GNUmakefile.am: simplification and adaption to work with the
+          rest of the build system.
+
+2011-10-19  Zan Dobersek  <zandobersek@gmail.com>
+
+        [Gtk][Geolocation] Build guards missing in geolocation clients
+        https://bugs.webkit.org/show_bug.cgi?id=70420
+
+        Reviewed by Gustavo Noronha Silva.
+
+        Adds build guards that were forgotten when client-based
+        geolocation was introduced in r97746. This should make builds
+        without geolocation support succeed again.
+
+        * WebCoreSupport/GeolocationClientGtk.cpp:
+        * WebCoreSupport/GeolocationClientGtk.h:
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_init):
+
+2011-10-18  Zan Dobersek  <zandobersek@gmail.com>
+
+        [Gtk] Support for client-based geolocation
+        https://bugs.webkit.org/show_bug.cgi?id=64970
+
+        Reviewed by Martin Robinson.
+
+        Add DumpRenderTree support functions for client-based geolocation tests
+        and implement GeolocationClientGtk. The implementation is based on Zecke's
+        implementation of GeolocationService class in WebCore, which is now redundant
+        and subsequently removed.
+
+        * GNUmakefile.am: Add GeolocationClientGtk.* files to compilation.
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp: Add support functions to operate
+        with GeolocationClientMock.
+        (DumpRenderTreeSupportGtk::resetGeolocationClientMock):
+        (DumpRenderTreeSupportGtk::setMockGeolocationPermission):
+        (DumpRenderTreeSupportGtk::setMockGeolocationPosition):
+        (DumpRenderTreeSupportGtk::setMockGeolocationError):
+        (DumpRenderTreeSupportGtk::numberOfPendingGeolocationPermissionRequests):
+        * WebCoreSupport/DumpRenderTreeSupportGtk.h:
+        * WebCoreSupport/GeolocationClientGtk.cpp: Added.
+        (WebKit::getPositionCallback):
+        (WebKit::positionChangedCallback):
+        (WebKit::GeolocationClient::GeolocationClient):
+        (WebKit::GeolocationClient::geolocationDestroyed):
+        (WebKit::GeolocationClient::startUpdating):
+        (WebKit::GeolocationClient::stopUpdating):
+        (WebKit::GeolocationClient::setEnableHighAccuracy):
+        (WebKit::GeolocationClient::lastPosition):
+        (WebKit::GeolocationClient::requestPermission):
+        (WebKit::GeolocationClient::cancelPermissionRequest):
+        (WebKit::GeolocationClient::positionChanged):
+        (WebKit::GeolocationClient::updatePosition):
+        (WebKit::GeolocationClient::errorOccured):
+        * WebCoreSupport/GeolocationClientGtk.h: Added.
+        * webkit/webkitwebview.cpp:
+        (webkit_web_view_init): Use GeolocationClientMock as geolocation client
+        when running in DumpRenderTree.
+
+2011-10-12  Ryosuke Niwa  <rniwa@webkit.org>
+
+        Make the interface of locationAndLengthFromRange and rangeFromLocationAndLength consistent
+        https://bugs.webkit.org/show_bug.cgi?id=69964
+
+        Reviewed by Enrica Casucci.
+
+        * WebCoreSupport/DumpRenderTreeSupportGtk.cpp:
+        (DumpRenderTreeSupportGtk::firstRectForCharacterRange):
+
 2011-09-28  Martin Robinson  <mrobinson@igalia.com>
 
         [GTK] Move drag-and-drop code which can be shared with WebKit2 to WebCore

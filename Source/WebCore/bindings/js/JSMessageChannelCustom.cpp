@@ -35,7 +35,7 @@ namespace WebCore {
 
 void JSMessageChannel::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSMessageChannel* thisObject = static_cast<JSMessageChannel*>(cell);
+    JSMessageChannel* thisObject = jsCast<JSMessageChannel*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
@@ -46,16 +46,6 @@ void JSMessageChannel::visitChildren(JSCell* cell, SlotVisitor& visitor)
 
     if (MessagePort* port = thisObject->m_impl->port2())
         visitor.addOpaqueRoot(port);
-}
-
-EncodedJSValue JSC_HOST_CALL JSMessageChannelConstructor::constructJSMessageChannel(ExecState* exec)
-{
-    JSMessageChannelConstructor* jsConstructor = static_cast<JSMessageChannelConstructor*>(exec->callee());
-    ScriptExecutionContext* context = jsConstructor->scriptExecutionContext();
-    if (!context)
-        return throwVMError(exec, createReferenceError(exec, "MessageChannel constructor associated document is unavailable"));
-
-    return JSValue::encode(asObject(toJS(exec, jsConstructor->globalObject(), MessageChannel::create(context))));
 }
 
 } // namespace WebCore

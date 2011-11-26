@@ -63,9 +63,9 @@ ol.notifications div.what {
     -webkit-box-flex: 1;
 }
 
-    ol.notifications>li div.what ul.effects>li.builder-name {
+    ol.notifications>li div.what ul.effects>li.builder {
         display: inline;
-        padding-left: 10px;
+        padding-left: 5px;
     }
 
 ol.notifications ul.causes>li, ol.notifications div.problem {
@@ -194,26 +194,30 @@ ol.notifications table.failures {
         vertical-align: top;
     }
 
-    ol.notifications table.failures tbody td:nth-child(n+2)>a {
-        display: inline-block;
-        border: 1px solid Gray;
-        margin: 0 0 2px 0;
-        padding: 1px;
-        color: Black;
-        text-decoration: none;
+    ol.notifications table.failures tbody tr td:first-child span {
+        padding: 0 2px;
     }
 
-        ol.notifications table.failures tbody td:nth-child(n+2)>a>span.version {
-            text-transform: uppercase;
-            background-color: #555;
-            color: White;
-            padding: 0 2px;
-        }
+    ol.notifications table.failures tbody tr.TIMEOUT td:first-child span {
+        background-color: #fffc6c;
+    }
 
-        ol.notifications table.failures tbody td:nth-child(n+2)>a>span.architecture {
-            padding: 0 2px;
-        }
+    ol.notifications table.failures tbody tr.TEXT td:first-child span {
+        background-color: #e98080;
+    }
 
-        ol.notifications table.failures tbody td:nth-child(n+2)>a>span.graphics {
-            padding: 0 2px;
-        }
+    ol.notifications table.failures tbody tr.CRASH td:first-child span {
+        background-color: #ffc343;
+    }
+
+    ol.notifications table.failures tbody tr.AUDIO td:first-child span {
+        background-color: #bfdfff;
+    }
+
+    ol.notifications table.failures tbody tr.IMAGE td:first-child span {
+        background-color: #69f;
+    }
+
+    ol.notifications table.failures tbody tr.IMAGE\+TEXT td:first-child span {
+        background-color: #96f;
+    }

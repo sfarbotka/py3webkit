@@ -25,7 +25,6 @@
 #include "DateInstance.h"
 #include "DateMath.h"
 #include "DatePrototype.h"
-#include "DumpRenderTreeSupportQt.h"
 #include "FunctionPrototype.h"
 #include "Interpreter.h"
 #include "JSArray.h"
@@ -52,7 +51,6 @@
 #include "qt_instance.h"
 #include "qt_pixmapruntime.h"
 #include "qvarlengtharray.h"
-#include "qwebelement.h"
 #include <limits.h>
 #include <runtime/Error.h>
 #include <runtime_array.h>
@@ -121,36 +119,21 @@ QDebug operator<<(QDebug dbg, const JSRealType &c)
 }
 #endif
 
-// this is here as a proxy, so we'd have a class to friend in QWebElement,
-// as getting/setting a WebCore in QWebElement is private
-class QtWebElementRuntime {
-public:
-    static QWebElement create(Element* element)
-    {
-        return QWebElement(element);
-    }
-
-    static Element* get(const QWebElement& element)
-    {
-        return element.m_element;
-    }
+struct RuntimeConversion {
+    ConvertToJSValueFunction toJSValueFunc;
+    ConvertToVariantFunction toVariantFunc;
 };
 
-// this is here as a proxy, so we'd have a class to friend in QDRTNode,
-// as getting/setting a WebCore in QDRTNode is private.
-// We only need to pass WebCore Nodes for layout tests.
-class QtDRTNodeRuntime {
-public:
-    static QDRTNode create(Node* node)
-    {
-        return QDRTNode(node);
-    }
+typedef QHash<int, RuntimeConversion> RuntimeConversionTable;
+Q_GLOBAL_STATIC(RuntimeConversionTable, customRuntimeConversions)
 
-    static Node* get(const QDRTNode& node)
-    {
-        return node.m_node;
-    }
-};
+void registerCustomType(int qtMetaTypeId, ConvertToVariantFunction toVariantFunc, ConvertToJSValueFunction toJSValueFunc)
+{
+    RuntimeConversion conversion;
+    conversion.toJSValueFunc = toJSValueFunc;
+    conversion.toVariantFunc = toVariantFunc;
+    customRuntimeConversions()->insert(qtMetaTypeId, conversion);
+}
 
 static JSRealType valueRealType(ExecState* exec, JSValue val)
 {
@@ -189,7 +172,7 @@ static QVariantMap convertValueToQVariantMap(ExecState* exec, JSObject* object, 
     Q_ASSERT(!exec->hadException());
 
     PropertyNameArray properties(exec);
-    object->getPropertyNames(exec, properties);
+    object->methodTable()->getPropertyNames(object, exec, properties, ExcludeDontEnumProperties);
     PropertyNameArray::const_iterator it = properties.begin();
     QVariantMap result;
     int objdist = 0;
@@ -777,26 +760,10 @@ QVariant convertValueToQVariant(ExecState* exec, JSValue value, QMetaType::Type 
                 break;
             } else if (QtPixmapInstance::canHandle(static_cast<QMetaType::Type>(hint))) {
                 ret = QtPixmapInstance::variantFromObject(object, static_cast<QMetaType::Type>(hint));
-            } else if (hint == (QMetaType::Type) qMetaTypeId<QWebElement>()) {
-                if (object && object->inherits(&JSElement::s_info)) {
-                    ret = QVariant::fromValue<QWebElement>(QtWebElementRuntime::create((static_cast<JSElement*>(object))->impl()));
-                    dist = 0;
-                    // Allow other objects to reach this one. This won't cause our algorithm to
-                    // loop since when we find an Element we do not recurse.
-                    visitedObjects->remove(object);
+            } else if (customRuntimeConversions()->contains(hint)) {
+                ret = customRuntimeConversions()->value(hint).toVariantFunc(object, &dist, visitedObjects);
+                if (dist == 0)
                     break;
-                }
-                if (object && object->inherits(&JSDocument::s_info)) {
-                    // To support LayoutTestControllerQt::nodesFromRect(), used in DRT, we do an implicit
-                    // conversion from 'document' to the QWebElement representing the 'document.documentElement'.
-                    // We can't simply use a QVariantMap in nodesFromRect() because it currently times out
-                    // when serializing DOMMimeType and DOMPlugin, even if we limit the recursion.
-                    ret = QVariant::fromValue<QWebElement>(QtWebElementRuntime::create((static_cast<JSDocument*>(object))->impl()->documentElement()));
-                } else
-                    ret = QVariant::fromValue<QWebElement>(QWebElement());
-            } else if (hint == (QMetaType::Type) qMetaTypeId<QDRTNode>()) {
-                if (object && object->inherits(&JSNode::s_info))
-                    ret = QVariant::fromValue<QDRTNode>(QtDRTNodeRuntime::create((static_cast<JSNode*>(object))->impl()));
             } else if (hint == (QMetaType::Type) qMetaTypeId<QVariant>()) {
                 if (value.isUndefinedOrNull()) {
                     if (distance)
@@ -928,26 +895,14 @@ JSValue convertQVariantToValue(ExecState* exec, PassRefPtr<RootObject> root, con
     if (QtPixmapInstance::canHandle(static_cast<QMetaType::Type>(variant.type())))
         return QtPixmapInstance::createPixmapRuntimeObject(exec, root, variant);
 
-    if (type == qMetaTypeId<QWebElement>()) {
+    if (customRuntimeConversions()->contains(type)) {
         if (!root->globalObject()->inherits(&JSDOMWindow::s_info))
             return jsUndefined();
 
         Document* document = (static_cast<JSDOMWindow*>(root->globalObject()))->impl()->document();
         if (!document)
             return jsUndefined();
-
-        return toJS(exec, toJSDOMGlobalObject(document, exec), QtWebElementRuntime::get(variant.value<QWebElement>()));
-    }
-
-    if (type == qMetaTypeId<QDRTNode>()) {
-        if (!root->globalObject()->inherits(&JSDOMWindow::s_info))
-            return jsUndefined();
-
-        Document* document = (static_cast<JSDOMWindow*>(root->globalObject()))->impl()->document();
-        if (!document)
-            return jsUndefined();
-
-        return toJS(exec, toJSDOMGlobalObject(document, exec), QtDRTNodeRuntime::get(variant.value<QDRTNode>()));
+        return customRuntimeConversions()->value(type).toJSValueFunc(exec, toJSDOMGlobalObject(document, exec), variant);
     }
 
     if (type == QMetaType::QVariantMap) {
@@ -960,7 +915,7 @@ JSValue convertQVariantToValue(ExecState* exec, PassRefPtr<RootObject> root, con
             JSValue val = convertQVariantToValue(exec, root.get(), i.value());
             if (val) {
                 PutPropertySlot slot;
-                ret->put(exec, Identifier(exec, reinterpret_cast_ptr<const UChar *>(s.constData()), s.length()), val, slot);
+                ret->methodTable()->put(ret, exec, Identifier(&exec->globalData(), reinterpret_cast_ptr<const UChar *>(s.constData()), s.length()), val, slot);
                 // ### error case?
             }
             ++i;
@@ -1443,7 +1398,7 @@ void QtRuntimeMetaMethod::finishCreation(ExecState* exec, const Identifier& iden
 
 void QtRuntimeMetaMethod::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    QtRuntimeMetaMethod* thisObject = static_cast<QtRuntimeMetaMethod*>(cell);
+    QtRuntimeMetaMethod* thisObject = jsCast<QtRuntimeMetaMethod*>(cell);
     QtRuntimeMethod::visitChildren(thisObject, visitor);
     QtRuntimeMetaMethodData* d = thisObject->d_func();
     if (d->m_connect)
@@ -1488,60 +1443,57 @@ EncodedJSValue QtRuntimeMetaMethod::call(ExecState* exec)
     return JSValue::encode(jsUndefined());
 }
 
-CallType QtRuntimeMetaMethod::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 CallType QtRuntimeMetaMethod::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = call;
     return CallTypeHost;
 }
 
-bool QtRuntimeMetaMethod::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
+bool QtRuntimeMetaMethod::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
+    QtRuntimeMetaMethod* thisObject = jsCast<QtRuntimeMetaMethod*>(cell);
     if (propertyName == "connect") {
-        slot.setCustom(this, connectGetter);
+        slot.setCustom(thisObject, thisObject->connectGetter);
         return true;
     } else if (propertyName == "disconnect") {
-        slot.setCustom(this, disconnectGetter);
+        slot.setCustom(thisObject, thisObject->disconnectGetter);
         return true;
     } else if (propertyName == exec->propertyNames().length) {
-        slot.setCustom(this, lengthGetter);
+        slot.setCustom(thisObject, thisObject->lengthGetter);
         return true;
     }
 
-    return QtRuntimeMethod::getOwnPropertySlot(exec, propertyName, slot);
+    return QtRuntimeMethod::getOwnPropertySlot(thisObject, exec, propertyName, slot);
 }
 
-bool QtRuntimeMetaMethod::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool QtRuntimeMetaMethod::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
+    QtRuntimeMetaMethod* thisObject = jsCast<QtRuntimeMetaMethod*>(object);
     if (propertyName == "connect") {
         PropertySlot slot;
-        slot.setCustom(this, connectGetter);
+        slot.setCustom(thisObject, connectGetter);
         descriptor.setDescriptor(slot.getValue(exec, propertyName), DontDelete | ReadOnly | DontEnum);
         return true;
     }
 
     if (propertyName == "disconnect") {
         PropertySlot slot;
-        slot.setCustom(this, disconnectGetter);
+        slot.setCustom(thisObject, disconnectGetter);
         descriptor.setDescriptor(slot.getValue(exec, propertyName), DontDelete | ReadOnly | DontEnum);
         return true;
     }
 
     if (propertyName == exec->propertyNames().length) {
         PropertySlot slot;
-        slot.setCustom(this, lengthGetter);
+        slot.setCustom(thisObject, lengthGetter);
         descriptor.setDescriptor(slot.getValue(exec, propertyName), DontDelete | ReadOnly | DontEnum);
         return true;
     }
 
-    return QtRuntimeMethod::getOwnPropertyDescriptor(exec, propertyName, descriptor);
+    return QtRuntimeMethod::getOwnPropertyDescriptor(thisObject, exec, propertyName, descriptor);
 }
 
-void QtRuntimeMetaMethod::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
+void QtRuntimeMetaMethod::getOwnPropertyNames(JSObject* object, ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
 {
     if (mode == IncludeDontEnumProperties) {
         propertyNames.add(Identifier(exec, "connect"));
@@ -1549,7 +1501,7 @@ void QtRuntimeMetaMethod::getOwnPropertyNames(ExecState* exec, PropertyNameArray
         propertyNames.add(exec->propertyNames().length);
     }
 
-    QtRuntimeMethod::getOwnPropertyNames(exec, propertyNames, mode);
+    QtRuntimeMethod::getOwnPropertyNames(object, exec, propertyNames, mode);
 }
 
 JSValue QtRuntimeMetaMethod::lengthGetter(ExecState*, JSValue, const Identifier&)
@@ -1609,7 +1561,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
 
     if (sender) {
 
-        JSObject* thisObject = exec->lexicalGlobalObject()->toThisObject(exec);
+        JSObject* thisObject = exec->lexicalGlobalObject()->methodTable()->toThisObject(exec->lexicalGlobalObject(), exec);
         JSObject* funcObject = 0;
 
         // QtScript checks signalness first, arguments second
@@ -1624,7 +1576,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
             if (exec->argumentCount() == 1) {
                 funcObject = exec->argument(0).toObject(exec);
                 CallData callData;
-                if (funcObject->getCallDataVirtual(callData) == CallTypeNone) {
+                if (funcObject->methodTable()->getCallData(funcObject, callData) == CallTypeNone) {
                     if (d->m_isConnect)
                         return throwVMError(exec, createTypeError(exec, "QtMetaMethod.connect: target is not a function"));
                     else
@@ -1637,7 +1589,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
                     // Get the actual function to call
                     JSObject *asObj = exec->argument(1).toObject(exec);
                     CallData callData;
-                    if (asObj->getCallDataVirtual(callData) != CallTypeNone) {
+                    if (asObj->methodTable()->getCallData(asObj, callData) != CallTypeNone) {
                         // Function version
                         funcObject = asObj;
                     } else {
@@ -1650,7 +1602,7 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
                         JSValue val = thisObject->get(exec, funcIdent);
                         JSObject* asFuncObj = val.toObject(exec);
 
-                        if (asFuncObj->getCallDataVirtual(callData) != CallTypeNone) {
+                        if (asFuncObj->methodTable()->getCallData(asFuncObj, callData) != CallTypeNone) {
                             funcObject = asFuncObj;
                         } else {
                             if (d->m_isConnect)
@@ -1734,45 +1686,42 @@ EncodedJSValue QtRuntimeConnectionMethod::call(ExecState* exec)
     return JSValue::encode(jsUndefined());
 }
 
-CallType QtRuntimeConnectionMethod::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 CallType QtRuntimeConnectionMethod::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = call;
     return CallTypeHost;
 }
 
-bool QtRuntimeConnectionMethod::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
+bool QtRuntimeConnectionMethod::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
+    QtRuntimeConnectionMethod* thisObject = jsCast<QtRuntimeConnectionMethod*>(cell);
     if (propertyName == exec->propertyNames().length) {
-        slot.setCustom(this, lengthGetter);
+        slot.setCustom(thisObject, thisObject->lengthGetter);
         return true;
     }
 
-    return QtRuntimeMethod::getOwnPropertySlot(exec, propertyName, slot);
+    return QtRuntimeMethod::getOwnPropertySlot(thisObject, exec, propertyName, slot);
 }
 
-bool QtRuntimeConnectionMethod::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool QtRuntimeConnectionMethod::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
+    QtRuntimeConnectionMethod* thisObject = jsCast<QtRuntimeConnectionMethod*>(object);
     if (propertyName == exec->propertyNames().length) {
         PropertySlot slot;
-        slot.setCustom(this, lengthGetter);
+        slot.setCustom(thisObject, lengthGetter);
         descriptor.setDescriptor(slot.getValue(exec, propertyName), DontDelete | ReadOnly | DontEnum);
         return true;
     }
 
-    return QtRuntimeMethod::getOwnPropertyDescriptor(exec, propertyName, descriptor);
+    return QtRuntimeMethod::getOwnPropertyDescriptor(thisObject, exec, propertyName, descriptor);
 }
 
-void QtRuntimeConnectionMethod::getOwnPropertyNames(ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
+void QtRuntimeConnectionMethod::getOwnPropertyNames(JSObject* object, ExecState* exec, PropertyNameArray& propertyNames, EnumerationMode mode)
 {
     if (mode == IncludeDontEnumProperties)
         propertyNames.add(exec->propertyNames().length);
 
-    QtRuntimeMethod::getOwnPropertyNames(exec, propertyNames, mode);
+    QtRuntimeMethod::getOwnPropertyNames(object, exec, propertyNames, mode);
 }
 
 JSValue QtRuntimeConnectionMethod::lengthGetter(ExecState*, JSValue, const Identifier&)
@@ -1862,7 +1811,8 @@ int QtConnectionObject::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 static bool isJavaScriptFunction(JSObjectRef object)
 {
     CallData callData;
-    return toJS(object)->getCallDataVirtual(callData) == CallTypeJS;
+    JSObject* jsObject = toJS(object);
+    return jsObject->methodTable()->getCallData(jsObject, callData) == CallTypeJS;
 }
 
 void QtConnectionObject::execute(void** argv)

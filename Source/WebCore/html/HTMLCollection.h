@@ -48,7 +48,6 @@ public:
     virtual Node* nextItem() const;
 
     virtual Node* namedItem(const AtomicString& name) const;
-    virtual Node* nextNamedItem(const AtomicString& name) const; // In case of multiple items named the same way
 
     Node* firstItem() const;
 
@@ -57,7 +56,7 @@ public:
     PassRefPtr<NodeList> tags(const String&);
 
     Node* base() const { return m_base.get(); }
-    CollectionType type() const { return m_type; }
+    CollectionType type() const { return static_cast<CollectionType>(m_type); }
 
 protected:
     HTMLCollection(PassRefPtr<Node> base, CollectionType, CollectionCache*);
@@ -66,20 +65,19 @@ protected:
     CollectionCache* info() const { return m_info; }
     void resetCollectionInfo() const;
 
-    mutable bool m_idsDone; // for nextNamedItem()
+    virtual Element* itemAfter(Element*) const;
+    bool checkForNameMatch(Element*, bool checkName, const AtomicString& name) const;
 
 private:
-    virtual Element* itemAfter(Element*) const;
     virtual unsigned calcLength() const;
     virtual void updateNameCache() const;
 
-    bool checkForNameMatch(Element*, bool checkName, const AtomicString& name) const;
+    mutable bool m_ownsInfo : 1;
+    unsigned m_type : 5; // CollectionType
 
     RefPtr<Node> m_base;
-    CollectionType m_type;
 
     mutable CollectionCache* m_info;
-    mutable bool m_ownsInfo;
 };
 
 } // namespace

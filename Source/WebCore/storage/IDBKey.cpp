@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,7 +31,7 @@
 namespace WebCore {
 
 IDBKey::IDBKey()
-    : m_type(NullType)
+    : m_type(InvalidType)
 {
 }
 
@@ -39,47 +39,53 @@ IDBKey::~IDBKey()
 {
 }
 
-bool IDBKey::isLessThan(const IDBKey* other) const
+int IDBKey::compare(const IDBKey* other) const
 {
     ASSERT(other);
-    if (other->m_type < m_type)
-        return true;
-    if (other->m_type > m_type)
-        return false;
+    if (m_type != other->m_type)
+        return m_type > other->m_type ? -1 : 1;
 
     switch (m_type) {
+    case ArrayType:
+        for (size_t i = 0; i < m_array.size() && i < other->m_array.size(); ++i) {
+            if (int result = m_array[i]->compare(other->m_array[i].get()))
+                return result;
+        }
+        if (m_array.size() < other->m_array.size())
+            return -1;
+        if (m_array.size() > other->m_array.size())
+            return 1;
+        return 0;
     case StringType:
-        return codePointCompare(other->m_string, m_string) > 0;
+        return -codePointCompare(other->m_string, m_string);
     case DateType:
-        return other->m_date > m_date;
+        return (m_date < other->m_date) ? -1 :
+                (m_date > other->m_date) ? 1 : 0;
     case NumberType:
-        return other->m_number > m_number;
-    case NullType:
-        return true;
+        return (m_number < other->m_number) ? -1 :
+                (m_number > other-> m_number) ? 1 : 0;
+    case InvalidType:
+    case MinType:
+        ASSERT_NOT_REACHED();
+        return 0;
     }
 
     ASSERT_NOT_REACHED();
-    return false;
+    return 0;
+}
+
+bool IDBKey::isLessThan(const IDBKey* other) const
+{
+    ASSERT(other);
+    return compare(other) == -1;
 }
 
 bool IDBKey::isEqual(const IDBKey* other) const
 {
-    if (!other || other->m_type != m_type)
+    if (!other)
         return false;
 
-    switch (m_type) {
-    case StringType:
-        return other->m_string == m_string;
-    case DateType:
-        return other->m_date == m_date;
-    case NumberType:
-        return other->m_number == m_number;
-    case NullType:
-        return true;
-    }
-
-    ASSERT_NOT_REACHED();
-    return false;
+    return !compare(other);
 }
 
 } // namespace WebCore

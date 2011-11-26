@@ -30,6 +30,9 @@ namespace WTF {
 
     class String;
 
+    template<typename T> class OwnPtr;
+    template<typename T> class PassOwnPtr;
+
     using std::pair;
     using std::make_pair;
 
@@ -54,6 +57,10 @@ namespace WTF {
     template<typename T> struct GenericHashTraits : GenericHashTraitsBase<IsInteger<T>::value, T> {
         typedef T TraitType;
         static T emptyValue() { return T(); }
+        typedef const T& PassType;
+        static const T& pass(const T& value) { return value; }
+        typedef const T& PeekType;
+        static const T& peek(const T& value) { return value; }
     };
 
     template<typename T> struct HashTraits : GenericHashTraits<T> { };
@@ -90,6 +97,14 @@ namespace WTF {
         static bool isDeletedValue(const T& value) { return value.isHashTableDeletedValue(); }
     };
 
+    template<typename P> struct HashTraits<OwnPtr<P> > : SimpleClassHashTraits<OwnPtr<P> > {
+        static std::nullptr_t emptyValue() { return nullptr; }
+        typedef PassOwnPtr<P> PassType;
+        static PassOwnPtr<P> pass(const OwnPtr<P>& value) { return value.release(); }
+        typedef typename OwnPtr<P>::PtrType PeekType;
+        static PeekType peek(const OwnPtr<P>& value) { return value.get(); }
+        static PeekType peek(std::nullptr_t) { return 0; }
+    };
     template<typename P> struct HashTraits<RefPtr<P> > : SimpleClassHashTraits<RefPtr<P> > { };
     template<> struct HashTraits<String> : SimpleClassHashTraits<String> { };
 

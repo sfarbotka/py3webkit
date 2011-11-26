@@ -30,10 +30,11 @@ WebInspector.CPUProfileView = function(profile)
     WebInspector.View.call(this);
 
     this.element.addStyleClass("profile-view");
-
-    this.showSelfTimeAsPercent = true;
-    this.showTotalTimeAsPercent = true;
-    this.showAverageTimeAsPercent = true;
+    
+    this.showSelfTimeAsPercent = WebInspector.settings.createSetting("cpuProfilerShowSelfTimeAsPercent", true);
+    this.showTotalTimeAsPercent = WebInspector.settings.createSetting("cpuProfilerShowTotalTimeAsPercent", true);
+    this.showAverageTimeAsPercent = WebInspector.settings.createSetting("cpuProfilerShowAverageTimeAsPercent", true);
+    this._viewType = WebInspector.settings.createSetting("cpuProfilerView", WebInspector.CPUProfileView._TypeHeavy);
 
     var columns = { "self": { title: WebInspector.UIString("Self"), width: "72px", sort: "descending", sortable: true },
                     "total": { title: WebInspector.UIString("Total"), width: "72px", sortable: true },
@@ -49,12 +50,11 @@ WebInspector.CPUProfileView = function(profile)
     this.dataGrid = new WebInspector.DataGrid(columns);
     this.dataGrid.addEventListener("sorting changed", this._sortData, this);
     this.dataGrid.element.addEventListener("mousedown", this._mouseDownInDataGrid.bind(this), true);
-    this.element.appendChild(this.dataGrid.element);
+    this.dataGrid.show(this.element);
 
     this.viewSelectElement = document.createElement("select");
     this.viewSelectElement.className = "status-bar-item";
     this.viewSelectElement.addEventListener("change", this._changeView.bind(this), false);
-    this.view = "Heavy";
 
     var heavyViewOption = document.createElement("option");
     heavyViewOption.label = WebInspector.UIString("Heavy (Bottom Up)");
@@ -62,6 +62,7 @@ WebInspector.CPUProfileView = function(profile)
     treeViewOption.label = WebInspector.UIString("Tree (Top Down)");
     this.viewSelectElement.appendChild(heavyViewOption);
     this.viewSelectElement.appendChild(treeViewOption);
+    this.viewSelectElement.selectedIndex = this._viewType.get() === WebInspector.CPUProfileView._TypeHeavy ? 0 : 1;
 
     this.percentButton = new WebInspector.StatusBarButton("", "percent-time-status-bar-item");
     this.percentButton.addEventListener("click", this._percentClicked.bind(this), false);
@@ -80,26 +81,23 @@ WebInspector.CPUProfileView = function(profile)
 
     this.profile = profile;
 
-    var self = this;
     function profileCallback(error, profile)
     {
         if (error)
             return;
-        self.profile.head = profile.head;
-        self._assignParentsInProfile();
-
-        self.profileDataGridTree = self.bottomUpProfileDataGridTree;
-        self.profileDataGridTree.sort(WebInspector.ProfileDataGridTree.propertyComparator("selfTime", false));
-
-        self.refresh();
-
-        self._updatePercentButton();
+        this.profile.head = profile.head;
+        this._assignParentsInProfile();
+        this._changeView();
+        this._updatePercentButton();
     }
 
-    this._linkifier = WebInspector.debuggerPresentationModel.createLinkifier();
+    this._linkifier = WebInspector.debuggerPresentationModel.createLinkifier(new WebInspector.DebuggerPresentationModel.DefaultLinkifierFormatter(30));
 
-    ProfilerAgent.getProfile(this.profile.typeId, this.profile.uid, profileCallback);
+    ProfilerAgent.getProfile(this.profile.typeId, this.profile.uid, profileCallback.bind(this));
 }
+
+WebInspector.CPUProfileView._TypeTree = "Tree";
+WebInspector.CPUProfileView._TypeHeavy = "Heavy";
 
 WebInspector.CPUProfileView.prototype = {
     get statusBarItems()
@@ -166,16 +164,9 @@ WebInspector.CPUProfileView.prototype = {
         return this._bottomUpTree;
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.View.prototype.hide.call(this);
         this._currentSearchResultIndex = -1;
-    },
-
-    onResize: function()
-    {
-        if (this.dataGrid)
-            this.dataGrid.updateWidths();
     },
 
     refresh: function()
@@ -412,19 +403,19 @@ WebInspector.CPUProfileView.prototype = {
         profileNode.revealAndSelect();
     },
 
-    _changeView: function(event)
+    _changeView: function()
     {
-        if (!event || !this.profile)
+        if (!this.profile)
             return;
 
-        if (event.target.selectedIndex == 1 && this.view == "Heavy") {
+        if (this.viewSelectElement.selectedIndex == 1) {
             this.profileDataGridTree = this.topDownProfileDataGridTree;
             this._sortProfile();
-            this.view = "Tree";
-        } else if (event.target.selectedIndex == 0 && this.view == "Tree") {
+            this._viewType.set(WebInspector.CPUProfileView._TypeTree);
+        } else if (this.viewSelectElement.selectedIndex == 0) {
             this.profileDataGridTree = this.bottomUpProfileDataGridTree;
             this._sortProfile();
-            this.view = "Heavy";
+            this._viewType.set(WebInspector.CPUProfileView._TypeHeavy);
         }
 
         if (!this.currentQuery || !this._searchFinishedCallback || !this._searchResults)
@@ -439,16 +430,16 @@ WebInspector.CPUProfileView.prototype = {
 
     _percentClicked: function(event)
     {
-        var currentState = this.showSelfTimeAsPercent && this.showTotalTimeAsPercent && this.showAverageTimeAsPercent;
-        this.showSelfTimeAsPercent = !currentState;
-        this.showTotalTimeAsPercent = !currentState;
-        this.showAverageTimeAsPercent = !currentState;
+        var currentState = this.showSelfTimeAsPercent.get() && this.showTotalTimeAsPercent.get() && this.showAverageTimeAsPercent.get();
+        this.showSelfTimeAsPercent.set(!currentState);
+        this.showTotalTimeAsPercent.set(!currentState);
+        this.showAverageTimeAsPercent.set(!currentState);
         this.refreshShowAsPercents();
     },
 
     _updatePercentButton: function()
     {
-        if (this.showSelfTimeAsPercent && this.showTotalTimeAsPercent && this.showAverageTimeAsPercent) {
+        if (this.showSelfTimeAsPercent.get() && this.showTotalTimeAsPercent.get() && this.showAverageTimeAsPercent.get()) {
             this.percentButton.title = WebInspector.UIString("Show absolute total and self times.");
             this.percentButton.toggled = true;
         } else {
@@ -536,11 +527,11 @@ WebInspector.CPUProfileView.prototype = {
             return;
 
         if (cell.hasStyleClass("total-column"))
-            this.showTotalTimeAsPercent = !this.showTotalTimeAsPercent;
+            this.showTotalTimeAsPercent.set(!this.showTotalTimeAsPercent.get());
         else if (cell.hasStyleClass("self-column"))
-            this.showSelfTimeAsPercent = !this.showSelfTimeAsPercent;
+            this.showSelfTimeAsPercent.set(!this.showSelfTimeAsPercent.get());
         else if (cell.hasStyleClass("average-column"))
-            this.showAverageTimeAsPercent = !this.showAverageTimeAsPercent;
+            this.showAverageTimeAsPercent.set(!this.showAverageTimeAsPercent.get());
 
         this.refreshShowAsPercents();
 
@@ -575,6 +566,7 @@ WebInspector.CPUProfileType = function()
 {
     WebInspector.ProfileType.call(this, WebInspector.CPUProfileType.TypeId, WebInspector.UIString("CPU PROFILES"));
     this._recording = false;
+    WebInspector.CPUProfileType.instance = this;
 }
 
 WebInspector.CPUProfileType.TypeId = "CPU";
@@ -603,6 +595,23 @@ WebInspector.CPUProfileType.prototype = {
     get welcomeMessage()
     {
         return WebInspector.UIString("Control CPU profiling by pressing the %s button on the status bar.");
+    },
+
+    isRecordingProfile: function()
+    {
+        return this._recording;
+    },
+
+    startRecordingProfile: function()
+    {
+        this._recording = true;
+        ProfilerAgent.start();
+    },
+
+    stopRecordingProfile: function()
+    {
+        this._recording = false;
+        ProfilerAgent.stop();
     },
 
     setRecordingProfile: function(isProfiling)

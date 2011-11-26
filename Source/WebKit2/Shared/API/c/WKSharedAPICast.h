@@ -56,15 +56,16 @@ class ImmutableDictionary;
 class MutableArray;
 class MutableDictionary;
 class WebCertificateInfo;
+class WebConnection;
 class WebContextMenuItem;
 class WebData;
 class WebGraphicsContext;
 class WebImage;
 class WebPoint;
 class WebRect;
-class WebSize;
 class WebSecurityOrigin;
 class WebSerializedScriptValue;
+class WebSize;
 class WebURLRequest;
 class WebURLResponse;
 class WebUserContentURLPattern;
@@ -79,6 +80,7 @@ template<typename ImplType> struct ImplTypeInfo { };
 WK_ADD_API_MAPPING(WKArrayRef, ImmutableArray)
 WK_ADD_API_MAPPING(WKBooleanRef, WebBoolean)
 WK_ADD_API_MAPPING(WKCertificateInfoRef, WebCertificateInfo)
+WK_ADD_API_MAPPING(WKConnectionRef, WebConnection)
 WK_ADD_API_MAPPING(WKContextMenuItemRef, WebContextMenuItem)
 WK_ADD_API_MAPPING(WKDataRef, WebData)
 WK_ADD_API_MAPPING(WKDictionaryRef, ImmutableDictionary)
@@ -145,7 +147,7 @@ inline ProxyingRefPtr<WebString> toAPI(StringImpl* string)
 inline WKStringRef toCopiedAPI(const String& string)
 {
     RefPtr<WebString> webString = WebString::create(string);
-    return toAPI(webString.release().releaseRef());
+    return toAPI(webString.release().leakRef());
 }
 
 inline ProxyingRefPtr<WebURL> toURLRef(StringImpl* string)
@@ -160,7 +162,7 @@ inline WKURLRef toCopiedURLAPI(const String& string)
     if (!string)
         return 0;
     RefPtr<WebURL> webURL = WebURL::create(string);
-    return toAPI(webURL.release().releaseRef());
+    return toAPI(webURL.release().leakRef());
 }
 
 inline String toWTFString(WKStringRef stringRef)

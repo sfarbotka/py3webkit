@@ -30,6 +30,8 @@ namespace JSC {
     public:
         typedef JSWrapperObject Base;
 
+        virtual void vtableAnchor();
+
         static StringObject* create(ExecState* exec, Structure* structure)
         {
             JSString* string = jsEmptyString(exec);
@@ -37,25 +39,22 @@ namespace JSC {
             object->finishCreation(exec->globalData(), string);
             return object;
         }
-        static StringObject* create(ExecState* exec, Structure* structure, const UString& str)
+        static StringObject* create(ExecState* exec, Structure* structure, JSString* string)
         {
-            JSString* string = jsString(exec, str);
             StringObject* object = new (allocateCell<StringObject>(*exec->heap())) StringObject(exec->globalData(), structure);
             object->finishCreation(exec->globalData(), string);
             return object;
         }
         static StringObject* create(ExecState*, JSGlobalObject*, JSString*);
 
-        virtual bool getOwnPropertySlot(ExecState*, const Identifier& propertyName, PropertySlot&);
-        virtual bool getOwnPropertySlot(ExecState*, unsigned propertyName, PropertySlot&);
-        virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
+        static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier& propertyName, PropertySlot&);
+        static bool getOwnPropertySlotByIndex(JSCell*, ExecState*, unsigned propertyName, PropertySlot&);
+        static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor&);
 
-        virtual void put(ExecState* exec, const Identifier& propertyName, JSValue, PutPropertySlot&);
         static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
 
-        virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
         static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
-        virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
+        static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
 
         static const JS_EXPORTDATA ClassInfo s_info;
 

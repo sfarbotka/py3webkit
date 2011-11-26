@@ -26,8 +26,6 @@
 #include "config.h"
 #include "StorageSyncManager.h"
 
-#if ENABLE(DOM_STORAGE)
-
 #include "EventNames.h"
 #include "FileSystem.h"
 #include "Frame.h"
@@ -50,7 +48,7 @@ PassRefPtr<StorageSyncManager> StorageSyncManager::create(const String& path)
 
 StorageSyncManager::StorageSyncManager(const String& path)
     : m_thread(LocalStorageThread::create())
-    , m_path(path.crossThreadString())
+    , m_path(path.isolatedCopy())
 {
     ASSERT(isMainThread());
     ASSERT(!m_path.isEmpty());
@@ -108,6 +106,5 @@ void StorageSyncManager::scheduleDeleteEmptyDatabase(PassRefPtr<StorageAreaSync>
     if (m_thread)
         m_thread->scheduleTask(LocalStorageTask::createDeleteEmptyDatabase(area.get()));
 }
-} // namespace WebCore
 
-#endif // ENABLE(DOM_STORAGE)
+} // namespace WebCore

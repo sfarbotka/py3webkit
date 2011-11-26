@@ -27,6 +27,7 @@
  */
 
 #include "UrlLoader.h"
+#include "qquickwebview_p.h"
 
 #include <QDebug>
 #include <QFile>
@@ -42,7 +43,8 @@ UrlLoader::UrlLoader(BrowserWindow* browserWindow, const QString& inputFileName,
     connect(&m_checkIfFinishedTimer, SIGNAL(timeout()), this, SLOT(checkIfFinished()));
     // loadStarted and loadFinished on QWebPage is emitted for each frame/sub-frame
     connect(m_browserWindow->webView(), SIGNAL(loadStarted()), this, SLOT(frameLoadStarted()));
-    connect(m_browserWindow->webView(), SIGNAL(loadFinished(bool)), this, SLOT(frameLoadFinished()));
+    connect(m_browserWindow->webView(), SIGNAL(loadSucceeded()), this, SLOT(frameLoadFinished()));
+    connect(m_browserWindow->webView(), SIGNAL(loadFailed(QDesktopWebView::ErrorType, int, const QUrl&)), this, SLOT(frameLoadFinished()));
 
     if (timeoutSeconds) {
         m_timeoutTimer.setInterval(timeoutSeconds * 1000);

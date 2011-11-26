@@ -30,7 +30,7 @@ import unittest
 
 from webkitpy.common.net.statusserver import StatusServer
 from webkitpy.common.system.outputcapture import OutputCaptureTestCaseBase
-from webkitpy.tool.mocktool import MockBrowser
+from webkitpy.common.net.web_mock import MockBrowser
 
 
 class StatusServerTest(OutputCaptureTestCaseBase):

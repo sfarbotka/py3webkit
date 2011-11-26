@@ -47,6 +47,7 @@
 #include "RenderEmbeddedObject.h"
 #include "RenderView.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 
 #if ENABLE(PLUGIN_PROXY_FOR_VIDEO)
@@ -112,7 +113,7 @@ bool SubframeLoader::requestPlugin(HTMLPlugInImageElement* ownerElement, const K
         return false;
 
     if (m_frame->document()) {
-        if (m_frame->document()->securityOrigin()->isSandboxed(SandboxPlugins))
+        if (m_frame->document()->isSandboxed(SandboxPlugins))
             return false;
         if (!m_frame->document()->contentSecurityPolicy()->allowObjectFromSource(url))
             return false;
@@ -261,8 +262,8 @@ Frame* SubframeLoader::loadSubframe(HTMLFrameOwnerElement* ownerElement, const K
     if (!ownerElement->document()->contentSecurityPolicy()->allowChildFrameFromSource(url))
         return 0;
 
-    bool hideReferrer = SecurityOrigin::shouldHideReferrer(url, referrer);
-    RefPtr<Frame> frame = m_frame->loader()->client()->createFrame(url, name, ownerElement, hideReferrer ? String() : referrer, allowsScrolling, marginWidth, marginHeight);
+    String referrerToUse = SecurityPolicy::generateReferrerHeader(ownerElement->document()->referrerPolicy(), url, referrer);
+    RefPtr<Frame> frame = m_frame->loader()->client()->createFrame(url, name, ownerElement, referrerToUse, allowsScrolling, marginWidth, marginHeight);
 
     if (!frame)  {
         m_frame->loader()->checkCallImplicitClose();

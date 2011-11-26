@@ -34,9 +34,11 @@ module threads {
     interface [
         Conditional=SHARED_WORKERS,
         ActiveDOMObject,
-        CanBeConstructed,
-        CustomConstructor,
+        JSCustomConstructor,
         ConstructorParameters=2,
+        Constructor(in DOMString scriptURL, in [Optional=CallWithNullValue] DOMString name),
+        CallWith=ScriptExecutionContext,
+        ConstructorRaisesException,
         CustomMarkFunction,
         GenerateNativeConverter,
         GenerateToJS

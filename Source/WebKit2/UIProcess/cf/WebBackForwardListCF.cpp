@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "WebBackForwardList.h"
+
 #include "Logging.h"
 #include <wtf/RetainPtr.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -82,7 +83,7 @@ CFDictionaryRef WebBackForwardList::createCFDictionaryRepresentation(WebPageProx
         CFArrayAppendValue(entries.get(), entryDictionary.get());
     }
 
-    ASSERT(currentIndex < CFArrayGetCount(entries.get()));
+    ASSERT(currentIndex < CFArrayGetCount(entries.get()) && currentIndex >= static_cast<int>(NoCurrentItemIndex));
     RetainPtr<CFNumberRef> currentIndexNumber(AdoptCF, CFNumberCreate(0, kCFNumberIntType, &currentIndex));
 
     const void* keys[2] = { SessionHistoryCurrentIndexKey(), SessionHistoryEntriesKey() };
@@ -158,8 +159,11 @@ bool WebBackForwardList::restoreFromCFDictionaryRepresentation(CFDictionaryRef d
         newEntries.append(WebBackForwardListItem::create(originalURL, entryURL, entryTitle, CFDataGetBytePtr(backForwardData), CFDataGetLength(backForwardData), generateWebBackForwardItemID()));
     }
     
-    m_current = currentIndex;
     m_entries = newEntries;
+    m_current = currentIndex;
+    // Perform a sanity check: in case we're out of range, we reset.
+    if (m_current != NoCurrentItemIndex && m_current >= newEntries.size())
+        m_current = NoCurrentItemIndex;
 
     return true;
 }

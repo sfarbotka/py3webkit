@@ -132,7 +132,7 @@ IDBLevelDBBackingStore::~IDBLevelDBBackingStore()
     m_comparator.clear();
 }
 
-PassRefPtr<IDBBackingStore> IDBLevelDBBackingStore::open(SecurityOrigin* securityOrigin, const String& pathBaseArg, int64_t maximumSize, const String& fileIdentifier, IDBFactoryBackendImpl* factory)
+PassRefPtr<IDBBackingStore> IDBLevelDBBackingStore::open(SecurityOrigin* securityOrigin, const String& pathBaseArg, const String& fileIdentifier, IDBFactoryBackendImpl* factory)
 {
     String pathBase = pathBaseArg;
 
@@ -186,7 +186,7 @@ void IDBLevelDBBackingStore::getDatabaseNames(Vector<String>& foundNames)
     }
 }
 
-bool IDBLevelDBBackingStore::extractIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId)
+bool IDBLevelDBBackingStore::getIDBDatabaseMetaData(const String& name, String& foundVersion, int64_t& foundId)
 {
     const Vector<char> key = DatabaseNameKey::encode(m_identifier, name);
 
@@ -216,21 +216,67 @@ static int64_t getNewDatabaseId(LevelDBDatabase* db)
     return databaseId;
 }
 
-bool IDBLevelDBBackingStore::setIDBDatabaseMetaData(const String& name, const String& version, int64_t& rowId, bool invalidRowId)
+bool IDBLevelDBBackingStore::createIDBDatabaseMetaData(const String& name, const String& version, int64_t& rowId)
 {
-    if (invalidRowId) {
-        rowId = getNewDatabaseId(m_db.get());
-        if (rowId < 0)
-            return false;
+    rowId = getNewDatabaseId(m_db.get());
+    if (rowId < 0)
+        return false;
 
-        const Vector<char> key = DatabaseNameKey::encode(m_identifier, name);
-        if (!putInt(m_db.get(), key, rowId))
+    const Vector<char> key = DatabaseNameKey::encode(m_identifier, name);
+    if (!putInt(m_db.get(), key, rowId))
+        return false;
+    if (!putString(m_db.get(), DatabaseMetaDataKey::encode(rowId, DatabaseMetaDataKey::kUserVersion), version))
+        return false;
+    return true;
+}
+
+bool IDBLevelDBBackingStore::updateIDBDatabaseMetaData(int64_t rowId, const String& version)
+{
+    ASSERT(m_currentTransaction);
+    if (!putString(m_currentTransaction.get(), DatabaseMetaDataKey::encode(rowId, DatabaseMetaDataKey::kUserVersion), version))
+        return false;
+
+    return true;
+}
+
+static bool deleteRange(LevelDBTransaction* transaction, const Vector<char>& begin, const Vector<char>& end)
+{
+    OwnPtr<LevelDBIterator> it = transaction->createIterator();
+    for (it->seek(begin); it->isValid() && compareKeys(it->key(), end) < 0; it->next()) {
+        if (!transaction->remove(it->key()))
             return false;
     }
 
-    if (!putString(m_db.get(), DatabaseMetaDataKey::encode(rowId, DatabaseMetaDataKey::kUserVersion), version))
+    return true;
+}
+
+
+bool IDBLevelDBBackingStore::deleteDatabase(const String& name)
+{
+    if (m_currentTransaction)
         return false;
 
+    RefPtr<IDBLevelDBBackingStore::Transaction> transaction = IDBLevelDBBackingStore::Transaction::create(this);
+    transaction->begin();
+
+    int64_t databaseId;
+    String version;
+    if (!getIDBDatabaseMetaData(name, version, databaseId)) {
+        transaction->rollback();
+        return true;
+    }
+
+    const Vector<char> startKey = DatabaseMetaDataKey::encode(databaseId, DatabaseMetaDataKey::kOriginName);
+    const Vector<char> stopKey = DatabaseMetaDataKey::encode(databaseId + 1, DatabaseMetaDataKey::kOriginName);
+    if (!deleteRange(m_currentTransaction.get(), startKey, stopKey)) {
+        transaction->rollback();
+        return false;
+    }
+
+    const Vector<char> key = DatabaseNameKey::encode(m_identifier, name);
+    m_currentTransaction->remove(key);
+
+    transaction->commit();
     return true;
 }
 
@@ -409,17 +455,6 @@ bool IDBLevelDBBackingStore::createObjectStore(int64_t databaseId, const String&
     }
 
     assignedObjectStoreId = objectStoreId;
-
-    return true;
-}
-
-static bool deleteRange(LevelDBTransaction* transaction, const Vector<char>& begin, const Vector<char>& end)
-{
-    OwnPtr<LevelDBIterator> it = transaction->createIterator();
-    for (it->seek(begin); it->isValid() && compareKeys(it->key(), end) < 0; it->next()) {
-        if (!transaction->remove(it->key()))
-            return false;
-    }
 
     return true;
 }
@@ -744,8 +779,8 @@ void IDBLevelDBBackingStore::deleteIndex(int64_t databaseId, int64_t objectStore
         return;
     }
 
-    const Vector<char> indexDataStart = IndexDataKey::encode(databaseId, objectStoreId, indexId, minIDBKey(), 0);
-    const Vector<char> indexDataEnd = IndexDataKey::encode(databaseId, objectStoreId, indexId, maxIDBKey(), 0);
+    const Vector<char> indexDataStart = IndexDataKey::encodeMinKey(databaseId, objectStoreId, indexId);
+    const Vector<char> indexDataEnd = IndexDataKey::encodeMaxKey(databaseId, objectStoreId, indexId);
 
     if (!deleteRange(m_currentTransaction.get(), indexDataStart, indexDataEnd)) {
         LOG_ERROR("Internal Indexed DB error.");
@@ -759,8 +794,7 @@ bool IDBLevelDBBackingStore::putIndexDataForRecord(int64_t databaseId, int64_t o
     const LevelDBRecordIdentifier* levelDBRecordIdentifier = static_cast<const LevelDBRecordIdentifier*>(recordIdentifier);
 
     ASSERT(m_currentTransaction);
-    const int64_t globalSequenceNumber = getNewVersionNumber(m_currentTransaction.get(), databaseId, objectStoreId);
-    const Vector<char> indexDataKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, key, globalSequenceNumber);
+    const Vector<char> indexDataKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, encodeIDBKey(key), levelDBRecordIdentifier->primaryKey());
 
     Vector<char> data;
     data.append(encodeVarInt(levelDBRecordIdentifier->version()));
@@ -821,7 +855,7 @@ static bool findKeyInIndex(LevelDBTransaction* transaction, int64_t databaseId, 
 {
     ASSERT(foundEncodedPrimaryKey.isEmpty());
 
-    const Vector<char> leveldbKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, key, 0);
+    const Vector<char> leveldbKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, key);
     OwnPtr<LevelDBIterator> it = transaction->createIterator();
     it->seek(leveldbKey);
 
@@ -1258,15 +1292,15 @@ PassRefPtr<IDBBackingStore::Cursor> IDBLevelDBBackingStore::openIndexKeyCursor(i
     cursorOptions.unique = (direction == IDBCursor::NEXT_NO_DUPLICATE || direction == IDBCursor::PREV_NO_DUPLICATE);
 
     if (!lowerBound) {
-        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, minIDBKey(), 0);
+        cursorOptions.lowKey = IndexDataKey::encodeMinKey(databaseId, objectStoreId, indexId);
         cursorOptions.lowOpen = false; // Included.
     } else {
-        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->lower(), 0);
+        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->lower());
         cursorOptions.lowOpen = range->lowerOpen();
     }
 
     if (!upperBound) {
-        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, maxIDBKey(), 0);
+        cursorOptions.highKey = IndexDataKey::encodeMaxKey(databaseId, objectStoreId, indexId);
         cursorOptions.highOpen = false; // Included.
 
         if (!cursorOptions.forward) { // We need a key that exists.
@@ -1275,7 +1309,7 @@ PassRefPtr<IDBBackingStore::Cursor> IDBLevelDBBackingStore::openIndexKeyCursor(i
             cursorOptions.highOpen = false;
         }
     } else {
-        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->upper(), 0);
+        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->upper());
         if (!findLastIndexKeyEqualTo(m_currentTransaction.get(), cursorOptions.highKey, cursorOptions.highKey)) // Seek to the *last* key in the set of non-unique keys.
             return 0;
         cursorOptions.highOpen = range->upperOpen();
@@ -1298,15 +1332,15 @@ PassRefPtr<IDBBackingStore::Cursor> IDBLevelDBBackingStore::openIndexCursor(int6
     cursorOptions.unique = (direction == IDBCursor::NEXT_NO_DUPLICATE || direction == IDBCursor::PREV_NO_DUPLICATE);
 
     if (!lowerBound) {
-        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, minIDBKey(), 0);
+        cursorOptions.lowKey = IndexDataKey::encodeMinKey(databaseId, objectStoreId, indexId);
         cursorOptions.lowOpen = false; // Included.
     } else {
-        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->lower(), 0);
+        cursorOptions.lowKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->lower());
         cursorOptions.lowOpen = range->lowerOpen();
     }
 
     if (!upperBound) {
-        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, maxIDBKey(), 0);
+        cursorOptions.highKey = IndexDataKey::encodeMaxKey(databaseId, objectStoreId, indexId);
         cursorOptions.highOpen = false; // Included.
 
         if (!cursorOptions.forward) { // We need a key that exists.
@@ -1315,7 +1349,7 @@ PassRefPtr<IDBBackingStore::Cursor> IDBLevelDBBackingStore::openIndexCursor(int6
             cursorOptions.highOpen = false;
         }
     } else {
-        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->upper(), 0);
+        cursorOptions.highKey = IndexDataKey::encode(databaseId, objectStoreId, indexId, *range->upper());
         if (!findLastIndexKeyEqualTo(m_currentTransaction.get(), cursorOptions.highKey, cursorOptions.highKey)) // Seek to the *last* key in the set of non-unique keys.
             return 0;
         cursorOptions.highOpen = range->upperOpen();
@@ -1376,8 +1410,6 @@ bool IDBLevelDBBackingStore::backingStoreExists(SecurityOrigin* securityOrigin, 
     // FIXME: this is checking for presence of the domain, not the database itself
     return fileExists(path+"/CURRENT");
 }
-
-// FIXME: deleteDatabase should be part of IDBBackingStore.
 
 } // namespace WebCore
 

@@ -51,10 +51,10 @@ namespace WebCore {
 
     class Worker : public AbstractWorker, private WorkerScriptLoaderClient {
     public:
-        static PassRefPtr<Worker> create(const String& url, ScriptExecutionContext*, ExceptionCode&);
+        static PassRefPtr<Worker> create(ScriptExecutionContext*, const String& url, ExceptionCode&);
         virtual ~Worker();
 
-        virtual Worker* toWorker() { return this; }
+        virtual const AtomicString& interfaceName() const;
 
         void postMessage(PassRefPtr<SerializedScriptValue> message, ExceptionCode&);
         void postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray*, ExceptionCode&);

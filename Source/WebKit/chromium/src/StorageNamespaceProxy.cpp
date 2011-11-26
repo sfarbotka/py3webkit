@@ -26,8 +26,6 @@
 #include "config.h"
 #include "StorageNamespaceProxy.h"
 
-#if ENABLE(DOM_STORAGE)
-
 #include "Chrome.h"
 #include "ChromeClientImpl.h"
 #include "Page.h"
@@ -87,11 +85,6 @@ void StorageNamespaceProxy::close()
     m_storageNamespace->close();
 }
 
-void StorageNamespaceProxy::unlock()
-{
-    // FIXME: Implement.
-}
-
 void StorageNamespaceProxy::clearOriginForDeletion(SecurityOrigin* origin)
 {
     ASSERT_NOT_REACHED();
@@ -108,5 +101,3 @@ void StorageNamespaceProxy::sync()
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(DOM_STORAGE)

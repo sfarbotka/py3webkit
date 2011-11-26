@@ -130,7 +130,7 @@ void PageClientImpl::setCursorHiddenUntilMouseMoves(bool)
     notImplemented();
 }
 
-void PageClientImpl::setViewportArguments(const WebCore::ViewportArguments&)
+void PageClientImpl::didChangeViewportProperties(const WebCore::ViewportArguments&)
 {
     notImplemented();
 }
@@ -197,7 +197,7 @@ PassRefPtr<WebContextMenuProxy> PageClientImpl::createContextMenuProxy(WebPagePr
     return 0;
 }
 
-void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator>, bool)
+void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator>, bool, bool)
 {
     notImplemented();
 }

@@ -97,6 +97,7 @@ bool PluginProxy::initialize(const Parameters& parameters)
     creationParameters.windowNPObjectID = windowNPObjectID();
     creationParameters.parameters = parameters;
     creationParameters.userAgent = controller()->userAgent();
+    creationParameters.contentsScaleFactor = contentsScaleFactor();
     creationParameters.isPrivateBrowsingEnabled = controller()->isPrivateBrowsingEnabled();
 #if USE(ACCELERATED_COMPOSITING)
     creationParameters.isAcceleratedCompositingEnabled = controller()->isAcceleratedCompositingEnabled();
@@ -137,17 +138,15 @@ void PluginProxy::paint(GraphicsContext* graphicsContext, const IntRect& dirtyRe
     
         // Blit the plug-in backing store into our own backing store.
         OwnPtr<WebCore::GraphicsContext> graphicsContext = m_backingStore->createGraphicsContext();
+        graphicsContext->applyDeviceScaleFactor(contentsScaleFactor());
         graphicsContext->setCompositeOperation(CompositeCopy);
 
-        m_pluginBackingStore->paint(*graphicsContext, IntPoint(), IntRect(0, 0, m_frameRect.width(), m_frameRect.height()));
+        m_pluginBackingStore->paint(*graphicsContext, contentsScaleFactor(), IntPoint(), pluginBounds());
 
         m_pluginBackingStoreContainsValidData = true;
     }
 
-    IntRect dirtyRectInPluginCoordinates = dirtyRect;
-    dirtyRectInPluginCoordinates.move(-m_frameRect.x(), -m_frameRect.y());
-
-    m_backingStore->paint(*graphicsContext, dirtyRect.location(), dirtyRectInPluginCoordinates);
+    m_backingStore->paint(*graphicsContext, contentsScaleFactor(), dirtyRect.location(), dirtyRect);
 
     if (m_waitingForPaintInResponseToUpdate) {
         m_waitingForPaintInResponseToUpdate = false;
@@ -172,35 +171,15 @@ bool PluginProxy::isTransparent()
     return false;
 }
 
-void PluginProxy::geometryDidChange(const IntRect& frameRect, const IntRect& clipRect)
+void PluginProxy::geometryDidChange()
 {
     ASSERT(m_isStarted);
 
-    m_frameRect = frameRect;
-
-    if (m_frameRect.isEmpty() || !needsBackingStore()) {
-        ShareableBitmap::Handle pluginBackingStoreHandle;
-        m_connection->connection()->send(Messages::PluginControllerProxy::GeometryDidChange(frameRect, clipRect, pluginBackingStoreHandle), m_pluginInstanceID, CoreIPC::DispatchMessageEvenWhenWaitingForSyncReply);
-        return;
-    }
-
-    bool didUpdateBackingStore = false;
-    if (!m_backingStore) {
-        m_backingStore = ShareableBitmap::create(frameRect.size(), ShareableBitmap::SupportsAlpha);
-        didUpdateBackingStore = true;
-    } else if (frameRect.size() != m_backingStore->size()) {
-        // The backing store already exists, just resize it.
-        if (!m_backingStore->resize(frameRect.size()))
-            return;
-
-        didUpdateBackingStore = true;
-    }
-
     ShareableBitmap::Handle pluginBackingStoreHandle;
 
-    if (didUpdateBackingStore) {
+    if (updateBackingStore()) {
         // Create a new plug-in backing store.
-        m_pluginBackingStore = ShareableBitmap::createShareable(frameRect.size(), ShareableBitmap::SupportsAlpha);
+        m_pluginBackingStore = ShareableBitmap::createShareable(m_backingStore->size(), ShareableBitmap::SupportsAlpha);
         if (!m_pluginBackingStore)
             return;
 
@@ -213,7 +192,21 @@ void PluginProxy::geometryDidChange(const IntRect& frameRect, const IntRect& cli
         m_pluginBackingStoreContainsValidData = false;
     }
 
-    m_connection->connection()->send(Messages::PluginControllerProxy::GeometryDidChange(frameRect, clipRect, pluginBackingStoreHandle), m_pluginInstanceID, CoreIPC::DispatchMessageEvenWhenWaitingForSyncReply);
+    m_connection->connection()->send(Messages::PluginControllerProxy::GeometryDidChange(m_pluginSize, m_clipRect, m_pluginToRootViewTransform, contentsScaleFactor(), pluginBackingStoreHandle), m_pluginInstanceID, CoreIPC::DispatchMessageEvenWhenWaitingForSyncReply);
+}
+
+void PluginProxy::geometryDidChange(const IntSize& pluginSize, const IntRect& clipRect, const AffineTransform& pluginToRootViewTransform)
+{
+    if (pluginSize == m_pluginSize && m_clipRect == clipRect && m_pluginToRootViewTransform == pluginToRootViewTransform) {
+        // Nothing to do.
+        return;
+    }
+    
+    m_pluginSize = pluginSize;
+    m_clipRect = clipRect;
+    m_pluginToRootViewTransform = pluginToRootViewTransform;
+
+    geometryDidChange();
 }
 
 void PluginProxy::visibilityDidChange()
@@ -237,7 +230,7 @@ void PluginProxy::didEvaluateJavaScript(uint64_t requestID, const WTF::String& r
     m_connection->connection()->send(Messages::PluginControllerProxy::DidEvaluateJavaScript(requestID, result), m_pluginInstanceID);
 }
 
-void PluginProxy::streamDidReceiveResponse(uint64_t streamID, const KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers)
+void PluginProxy::streamDidReceiveResponse(uint64_t streamID, const KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers, const String& /* suggestedFileName */)
 {
     m_connection->connection()->send(Messages::PluginControllerProxy::StreamDidReceiveResponse(streamID, responseURL.string(), streamLength, lastModifiedTime, mimeType, headers), m_pluginInstanceID);
 }
@@ -257,7 +250,7 @@ void PluginProxy::streamDidFail(uint64_t streamID, bool wasCancelled)
     m_connection->connection()->send(Messages::PluginControllerProxy::StreamDidFail(streamID, wasCancelled), m_pluginInstanceID);
 }
 
-void PluginProxy::manualStreamDidReceiveResponse(const KURL& responseURL, uint32_t streamLength,  uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers)
+void PluginProxy::manualStreamDidReceiveResponse(const KURL& responseURL, uint32_t streamLength,  uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers, const String& /* suggestedFileName */)
 {
     m_connection->connection()->send(Messages::PluginControllerProxy::ManualStreamDidReceiveResponse(responseURL.string(), streamLength, lastModifiedTime, mimeType, headers), m_pluginInstanceID);
 }
@@ -311,6 +304,12 @@ bool PluginProxy::handleMouseLeaveEvent(const WebMouseEvent& mouseLeaveEvent)
         return false;
     
     return handled;
+}
+
+bool PluginProxy::handleContextMenuEvent(const WebMouseEvent&)
+{
+    // We don't know if the plug-in has handled mousedown event by displaying a context menu, so we never want WebKit to show a default one.
+    return true;
 }
 
 bool PluginProxy::handleKeyboardEvent(const WebKeyboardEvent& keyboardEvent)
@@ -369,8 +368,12 @@ void PluginProxy::sendComplexTextInput(const String& textInput)
 {
     m_connection->connection()->send(Messages::PluginControllerProxy::SendComplexTextInput(textInput), m_pluginInstanceID);
 }
-
 #endif
+
+void PluginProxy::contentsScaleFactorChanged(float scaleFactor)
+{
+    geometryDidChange();
+}
 
 void PluginProxy::privateBrowsingStateChanged(bool isPrivateBrowsingEnabled)
 {
@@ -426,6 +429,32 @@ void PluginProxy::getAuthenticationInfo(const ProtectionSpace& protectionSpace, 
     returnValue = controller()->getAuthenticationInfo(protectionSpace, username, password);
 }
 
+float PluginProxy::contentsScaleFactor()
+{
+    return controller()->contentsScaleFactor();
+}
+
+bool PluginProxy::updateBackingStore()
+{
+    if (m_pluginSize.isEmpty() || !needsBackingStore())
+        return false;
+
+    IntSize backingStoreSize = m_pluginSize;
+    backingStoreSize.scale(contentsScaleFactor());
+    
+    if (!m_backingStore) {
+        m_backingStore = ShareableBitmap::create(backingStoreSize, ShareableBitmap::SupportsAlpha);
+        return true;
+    }
+
+    if (backingStoreSize != m_backingStore->size()) {
+        // The backing store already exists, just resize it.
+        return m_backingStore->resize(backingStoreSize);
+    }
+
+    return false;
+}
+
 uint64_t PluginProxy::windowNPObjectID()
 {
     NPObject* windowScriptNPObject = controller()->windowScriptNPObject();
@@ -436,6 +465,11 @@ uint64_t PluginProxy::windowNPObjectID()
     releaseNPObject(windowScriptNPObject);
 
     return windowNPObjectID;
+}
+
+IntRect PluginProxy::pluginBounds()
+{
+    return IntRect(IntPoint(), m_pluginSize);
 }
 
 void PluginProxy::getPluginElementNPObject(uint64_t& pluginElementNPObjectID)
@@ -491,23 +525,20 @@ void PluginProxy::setStatusbarText(const String& statusbarText)
 
 void PluginProxy::update(const IntRect& paintedRect)
 {
-    if (paintedRect == m_frameRect)
+    if (paintedRect == pluginBounds())
         m_pluginBackingStoreContainsValidData = true;
-
-    IntRect paintedRectPluginCoordinates = paintedRect;
-    paintedRectPluginCoordinates.move(-m_frameRect.x(), -m_frameRect.y());
 
     if (m_backingStore) {
         // Blit the plug-in backing store into our own backing store.
         OwnPtr<GraphicsContext> graphicsContext = m_backingStore->createGraphicsContext();
+        graphicsContext->applyDeviceScaleFactor(contentsScaleFactor());
         graphicsContext->setCompositeOperation(CompositeCopy);
-        m_pluginBackingStore->paint(*graphicsContext, paintedRectPluginCoordinates.location(), 
-                                    paintedRectPluginCoordinates);
+        m_pluginBackingStore->paint(*graphicsContext, contentsScaleFactor(), paintedRect.location(), paintedRect);
     }
 
     // Ask the controller to invalidate the rect for us.
     m_waitingForPaintInResponseToUpdate = true;
-    controller()->invalidate(paintedRectPluginCoordinates);
+    controller()->invalidate(paintedRect);
 }
 
 } // namespace WebKit

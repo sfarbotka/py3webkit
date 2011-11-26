@@ -130,44 +130,47 @@ RenderObject* RenderObject::createObject(Node* node, RenderStyle* style)
         return new (arena) RenderRubyText(node);
 
     switch (style->display()) {
-        case NONE:
-            return 0;
-        case INLINE:
-            return new (arena) RenderInline(node);
-        case BLOCK:
-        case INLINE_BLOCK:
-        case RUN_IN:
-        case COMPACT:
-            // Only non-replaced block elements can become a region.
-            if (!style->regionThread().isEmpty() && doc->renderView())
-                return new (arena) RenderRegion(node, doc->renderView()->renderFlowThreadWithName(style->regionThread()));
-            return new (arena) RenderBlock(node);
-        case LIST_ITEM:
-            return new (arena) RenderListItem(node);
-        case TABLE:
-        case INLINE_TABLE:
-            return new (arena) RenderTable(node);
-        case TABLE_ROW_GROUP:
-        case TABLE_HEADER_GROUP:
-        case TABLE_FOOTER_GROUP:
-            return new (arena) RenderTableSection(node);
-        case TABLE_ROW:
-            return new (arena) RenderTableRow(node);
-        case TABLE_COLUMN_GROUP:
-        case TABLE_COLUMN:
-            return new (arena) RenderTableCol(node);
-        case TABLE_CELL:
-            return new (arena) RenderTableCell(node);
-        case TABLE_CAPTION:
-            return new (arena) RenderBlock(node);
-        case BOX:
-        case INLINE_BOX:
-            return new (arena) RenderDeprecatedFlexibleBox(node);
-#if ENABLE(CSS3_FLEXBOX)
-        case FLEXBOX:
-        case INLINE_FLEXBOX:
-            return new (arena) RenderFlexibleBox(node);
+#if ENABLE(CSS_GRID_LAYOUT)
+    // For now, we don't show grid elements.
+    case GRID:
+    case INLINE_GRID:
 #endif
+    case NONE:
+        return 0;
+    case INLINE:
+        return new (arena) RenderInline(node);
+    case BLOCK:
+    case INLINE_BLOCK:
+    case RUN_IN:
+    case COMPACT:
+        // Only non-replaced block elements can become a region.
+        if (!style->regionThread().isEmpty() && doc->renderView())
+            return new (arena) RenderRegion(node, doc->renderView()->renderFlowThreadWithName(style->regionThread()));
+        return new (arena) RenderBlock(node);
+    case LIST_ITEM:
+        return new (arena) RenderListItem(node);
+    case TABLE:
+    case INLINE_TABLE:
+        return new (arena) RenderTable(node);
+    case TABLE_ROW_GROUP:
+    case TABLE_HEADER_GROUP:
+    case TABLE_FOOTER_GROUP:
+        return new (arena) RenderTableSection(node);
+    case TABLE_ROW:
+        return new (arena) RenderTableRow(node);
+    case TABLE_COLUMN_GROUP:
+    case TABLE_COLUMN:
+        return new (arena) RenderTableCol(node);
+    case TABLE_CELL:
+        return new (arena) RenderTableCell(node);
+    case TABLE_CAPTION:
+        return new (arena) RenderBlock(node);
+    case BOX:
+    case INLINE_BOX:
+        return new (arena) RenderDeprecatedFlexibleBox(node);
+    case FLEXBOX:
+    case INLINE_FLEXBOX:
+        return new (arena) RenderFlexibleBox(node);
     }
 
     return 0;
@@ -176,7 +179,7 @@ RenderObject* RenderObject::createObject(Node* node, RenderStyle* style)
 DEFINE_DEBUG_ONLY_GLOBAL(WTF::RefCountedLeakCounter, renderObjectCounter, ("RenderObject"));
 
 RenderObject::RenderObject(Node* node)
-    : CachedResourceClient()
+    : CachedImageClient()
     , m_style(0)
     , m_node(node)
     , m_parent(0)
@@ -268,6 +271,16 @@ bool RenderObject::isHTMLMarquee() const
     return node() && node()->renderer() == this && node()->hasTagName(marqueeTag);
 }
 
+static bool isBeforeAfterContentGeneratedByAncestor(RenderObject* renderer, RenderObject* beforeAfterContent)
+{
+    while (renderer) {
+        if (renderer->generatingNode() == beforeAfterContent->generatingNode())
+            return true;
+        renderer = renderer->parent();
+    }
+    return false;
+}
+
 void RenderObject::addChild(RenderObject* newChild, RenderObject* beforeChild)
 {
     RenderObjectChildList* children = virtualChildren();
@@ -277,10 +290,10 @@ void RenderObject::addChild(RenderObject* newChild, RenderObject* beforeChild)
 
     RenderObject* beforeContent = 0;
     bool beforeChildHasBeforeAndAfterContent = false;
-    if (beforeChild && (beforeChild->isTable() || beforeChild->isTableSection() || beforeChild->isTableRow())) {
-        beforeContent = beforeChild->findBeforeContentRenderer();
-        RenderObject* afterContent = beforeChild->findAfterContentRenderer();
-        if (beforeContent && afterContent) {
+    if (beforeChild && (beforeChild->isTable() || beforeChild->isTableSection() || beforeChild->isTableRow() || beforeChild->isTableCell())) {
+        beforeContent = beforeChild->beforePseudoElementRenderer();
+        RenderObject* afterContent = beforeChild->afterPseudoElementRenderer();
+        if (beforeContent && afterContent && isBeforeAfterContentGeneratedByAncestor(this, beforeContent)) {
             beforeChildHasBeforeAndAfterContent = true;
             beforeContent->destroy();
         }
@@ -309,7 +322,7 @@ void RenderObject::addChild(RenderObject* newChild, RenderObject* beforeChild)
     if (needsTable) {
         RenderTable* table;
         RenderObject* afterChild = beforeChild ? beforeChild->previousSibling() : children->lastChild();
-        if (afterChild && afterChild->isAnonymous() && afterChild->isTable())
+        if (afterChild && afterChild->isAnonymous() && afterChild->isTable() && !afterChild->isBeforeContent())
             table = toRenderTable(afterChild);
         else {
             table = new (renderArena()) RenderTable(document() /* is anonymous */);
@@ -373,7 +386,7 @@ RenderObject* RenderObject::nextInPreOrderAfterChildren() const
     return o;
 }
 
-RenderObject* RenderObject::nextInPreOrder(RenderObject* stayWithin) const
+RenderObject* RenderObject::nextInPreOrder(const RenderObject* stayWithin) const
 {
     if (RenderObject* o = firstChild())
         return o;
@@ -381,7 +394,7 @@ RenderObject* RenderObject::nextInPreOrder(RenderObject* stayWithin) const
     return nextInPreOrderAfterChildren(stayWithin);
 }
 
-RenderObject* RenderObject::nextInPreOrderAfterChildren(RenderObject* stayWithin) const
+RenderObject* RenderObject::nextInPreOrderAfterChildren(const RenderObject* stayWithin) const
 {
     if (this == stayWithin)
         return 0;
@@ -745,7 +758,7 @@ static bool mustRepaintFillLayers(const RenderObject* renderer, const FillLayer*
 
     // Make sure we have a valid image.
     StyleImage* img = layer->image();
-    if (!img || !img->canRender(renderer->style()->effectiveZoom()))
+    if (!img || !img->canRender(renderer, renderer->style()->effectiveZoom()))
         return false;
 
     if (!layer->xPosition().isZero() || !layer->yPosition().isZero())
@@ -765,7 +778,7 @@ bool RenderObject::borderImageIsLoadedAndCanBeRendered() const
     ASSERT(style()->hasBorder());
 
     StyleImage* borderImage = style()->borderImage().image();
-    return borderImage && borderImage->canRender(style()->effectiveZoom()) && borderImage->isLoaded();
+    return borderImage && borderImage->canRender(this, style()->effectiveZoom()) && borderImage->isLoaded();
 }
 
 bool RenderObject::mustRepaintBackgroundOrBorder() const
@@ -787,7 +800,7 @@ bool RenderObject::mustRepaintBackgroundOrBorder() const
     return false;
 }
 
-void RenderObject::drawLineForBoxSide(GraphicsContext* graphicsContext, int x1, int y1, int x2, int y2,
+void RenderObject::drawLineForBoxSide(GraphicsContext* graphicsContext, LayoutUnit x1, LayoutUnit y1, LayoutUnit x2, LayoutUnit y2,
                                       BoxSide side, Color color, EBorderStyle style,
                                       int adjacentWidth1, int adjacentWidth2, bool antialias)
 {
@@ -1097,7 +1110,7 @@ void RenderObject::paintFocusRing(GraphicsContext* context, const LayoutPoint& p
         addPDFURLRect(context, unionRect(focusRingRects));
 }        
 
-void RenderObject::addPDFURLRect(GraphicsContext* context, const IntRect& rect)
+void RenderObject::addPDFURLRect(GraphicsContext* context, const LayoutRect& rect)
 {
     if (rect.isEmpty())
         return;
@@ -1133,26 +1146,38 @@ void RenderObject::paintOutline(GraphicsContext* graphicsContext, const LayoutRe
     if (styleToUse->outlineStyleIsAuto() || styleToUse->outlineStyle() == BNONE)
         return;
 
-    LayoutRect adjustedPaintRec = paintRect;
-    adjustedPaintRec.inflate(offset);
+    LayoutRect inner = paintRect;
+    inner.inflate(offset);
 
-    if (adjustedPaintRec.isEmpty())
+    if (inner.isEmpty())
         return;
+
+    LayoutRect outer = inner;
+    outer.inflate(outlineWidth);
 
     bool useTransparencyLayer = outlineColor.hasAlpha();
     if (useTransparencyLayer) {
+        if (outlineStyle == SOLID) {
+            Path path;
+            path.addRect(outer);
+            path.addRect(inner);
+            graphicsContext->setFillRule(RULE_EVENODD);
+            graphicsContext->setFillColor(outlineColor, styleToUse->colorSpace());
+            graphicsContext->fillPath(path);
+            return;
+        }
         graphicsContext->beginTransparencyLayer(static_cast<float>(outlineColor.alpha()) / 255);
         outlineColor = Color(outlineColor.red(), outlineColor.green(), outlineColor.blue());
     }
 
-    LayoutUnit leftOuter = adjustedPaintRec.x() - outlineWidth;
-    LayoutUnit leftInner = adjustedPaintRec.x();
-    LayoutUnit rightOuter = adjustedPaintRec.maxX() + outlineWidth;
-    LayoutUnit rightInner = adjustedPaintRec.maxX();
-    LayoutUnit topOuter = adjustedPaintRec.y() - outlineWidth;
-    LayoutUnit topInner = adjustedPaintRec.y();
-    LayoutUnit bottomOuter = adjustedPaintRec.maxY() + outlineWidth;
-    LayoutUnit bottomInner = adjustedPaintRec.maxY();
+    LayoutUnit leftOuter = outer.x();
+    LayoutUnit leftInner = inner.x();
+    LayoutUnit rightOuter = outer.maxX();
+    LayoutUnit rightInner = inner.maxX();
+    LayoutUnit topOuter = outer.y();
+    LayoutUnit topInner = inner.y();
+    LayoutUnit bottomOuter = outer.maxY();
+    LayoutUnit bottomInner = inner.maxY();
     
     drawLineForBoxSide(graphicsContext, leftOuter, topOuter, leftInner, bottomOuter, BSLeft, outlineColor, outlineStyle, outlineWidth, outlineWidth);
     drawLineForBoxSide(graphicsContext, leftOuter, topOuter, rightOuter, topInner, BSTop, outlineColor, outlineStyle, outlineWidth, outlineWidth);
@@ -1163,7 +1188,7 @@ void RenderObject::paintOutline(GraphicsContext* graphicsContext, const LayoutRe
         graphicsContext->endTransparencyLayer();
 }
 
-IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
+LayoutRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
 {
     if (useTransforms) {
         Vector<FloatQuad> quads;
@@ -1173,21 +1198,21 @@ IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
         if (!n)
             return IntRect();
     
-        IntRect result = quads[0].enclosingBoundingBox();
+        LayoutRect result = quads[0].enclosingBoundingBox();
         for (size_t i = 1; i < n; ++i)
             result.unite(quads[i].enclosingBoundingBox());
         return result;
     }
 
     FloatPoint absPos = localToAbsolute();
-    Vector<IntRect> rects;
+    Vector<LayoutRect> rects;
     absoluteRects(rects, flooredLayoutPoint(absPos));
 
     size_t n = rects.size();
     if (!n)
-        return IntRect();
+        return LayoutRect();
 
-    IntRect result = rects[0];
+    LayoutRect result = rects[0];
     for (size_t i = 1; i < n; ++i)
         result.unite(rects[i]);
     return result;
@@ -1195,22 +1220,22 @@ IntRect RenderObject::absoluteBoundingBoxRect(bool useTransforms) const
 
 void RenderObject::absoluteFocusRingQuads(Vector<FloatQuad>& quads)
 {
-    Vector<IntRect> rects;
+    Vector<LayoutRect> rects;
     // FIXME: addFocusRingRects() needs to be passed this transform-unaware
     // localToAbsolute() offset here because RenderInline::addFocusRingRects()
     // implicitly assumes that. This doesn't work correctly with transformed
     // descendants.
     FloatPoint absolutePoint = localToAbsolute();
-    addFocusRingRects(rects, flooredIntPoint(absolutePoint));
+    addFocusRingRects(rects, flooredLayoutPoint(absolutePoint));
     size_t count = rects.size(); 
     for (size_t i = 0; i < count; ++i) {
-        IntRect rect = rects[i];
+        LayoutRect rect = rects[i];
         rect.move(-absolutePoint.x(), -absolutePoint.y());
         quads.append(localToAbsoluteQuad(FloatQuad(rect)));
     }
 }
 
-void RenderObject::addAbsoluteRectForLayer(IntRect& result)
+void RenderObject::addAbsoluteRectForLayer(LayoutRect& result)
 {
     if (hasLayer())
         result.unite(absoluteBoundingBoxRectIgnoringTransforms());
@@ -1264,8 +1289,10 @@ void RenderObject::repaintUsingContainer(RenderBoxModelObject* repaintContainer,
         return;
     }
 
-    if (repaintContainer->isRenderFlowThread())
-        return toRenderFlowThread(repaintContainer)->repaintRectangleInRegions(r, immediate);
+    if (repaintContainer->isRenderFlowThread()) {
+        toRenderFlowThread(repaintContainer)->repaintRectangleInRegions(r, immediate);
+        return;
+    }
 
 #if USE(ACCELERATED_COMPOSITING)
     RenderView* v = view();
@@ -1399,9 +1426,9 @@ bool RenderObject::repaintAfterLayoutIfNeeded(RenderBoxModelObject* repaintConta
         LayoutUnit shadowRight;
         style()->getBoxShadowHorizontalExtent(shadowLeft, shadowRight);
 
-        LayoutUnit borderRight = isBox() ? toRenderBox(this)->borderRight() : 0;
-        LayoutUnit boxWidth = isBox() ? toRenderBox(this)->width() : 0;
-        LayoutUnit borderWidth = max(-outlineStyle->outlineOffset(), max(borderRight, max(style()->borderTopRightRadius().width().calcValue(boxWidth), style()->borderBottomRightRadius().width().calcValue(boxWidth)))) + max(ow, shadowRight);
+        LayoutUnit borderRight = isBox() ? toRenderBox(this)->borderRight() : LayoutUnit(0);
+        LayoutUnit boxWidth = isBox() ? toRenderBox(this)->width() : LayoutUnit(0);
+        LayoutUnit borderWidth = max<LayoutUnit>(-outlineStyle->outlineOffset(), max(borderRight, max<LayoutUnit>(style()->borderTopRightRadius().width().calcValue(boxWidth), style()->borderBottomRightRadius().width().calcValue(boxWidth)))) + max(ow, shadowRight);
         LayoutRect rightRect(newOutlineBox.x() + min(newOutlineBox.width(), oldOutlineBox.width()) - borderWidth,
             newOutlineBox.y(),
             width + borderWidth,
@@ -1418,9 +1445,9 @@ bool RenderObject::repaintAfterLayoutIfNeeded(RenderBoxModelObject* repaintConta
         LayoutUnit shadowBottom;
         style()->getBoxShadowVerticalExtent(shadowTop, shadowBottom);
 
-        LayoutUnit borderBottom = isBox() ? toRenderBox(this)->borderBottom() : 0;
-        LayoutUnit boxHeight = isBox() ? toRenderBox(this)->height() : 0;
-        LayoutUnit borderHeight = max(-outlineStyle->outlineOffset(), max(borderBottom, max(style()->borderBottomLeftRadius().height().calcValue(boxHeight), style()->borderBottomRightRadius().height().calcValue(boxHeight)))) + max(ow, shadowBottom);
+        LayoutUnit borderBottom = isBox() ? toRenderBox(this)->borderBottom() : LayoutUnit(0);
+        LayoutUnit boxHeight = isBox() ? toRenderBox(this)->height() : LayoutUnit(0);
+        LayoutUnit borderHeight = max<LayoutUnit>(-outlineStyle->outlineOffset(), max(borderBottom, max<LayoutUnit>(style()->borderBottomLeftRadius().height().calcValue(boxHeight), style()->borderBottomRightRadius().height().calcValue(boxHeight)))) + max(ow, shadowBottom);
         LayoutRect bottomRect(newOutlineBox.x(),
             min(newOutlineBox.maxY(), oldOutlineBox.maxY()) - borderHeight,
             max(newOutlineBox.width(), oldOutlineBox.width()),
@@ -1450,20 +1477,20 @@ bool RenderObject::checkForRepaintDuringLayout() const
     return !document()->view()->needsFullRepaint() && !hasLayer();
 }
 
-IntRect RenderObject::rectWithOutlineForRepaint(RenderBoxModelObject* repaintContainer, int outlineWidth) const
+LayoutRect RenderObject::rectWithOutlineForRepaint(RenderBoxModelObject* repaintContainer, LayoutUnit outlineWidth) const
 {
-    IntRect r(clippedOverflowRectForRepaint(repaintContainer));
+    LayoutRect r(clippedOverflowRectForRepaint(repaintContainer));
     r.inflate(outlineWidth);
     return r;
 }
 
-IntRect RenderObject::clippedOverflowRectForRepaint(RenderBoxModelObject*) const
+LayoutRect RenderObject::clippedOverflowRectForRepaint(RenderBoxModelObject*) const
 {
     ASSERT_NOT_REACHED();
-    return IntRect();
+    return LayoutRect();
 }
 
-void RenderObject::computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect& rect, bool fixed) const
+void RenderObject::computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect& rect, bool fixed) const
 {
     if (repaintContainer == this)
         return;
@@ -1481,10 +1508,10 @@ void RenderObject::computeRectForRepaint(RenderBoxModelObject* repaintContainer,
             // anyway if its size does change.
             RenderBox* boxParent = toRenderBox(o);
 
-            IntRect repaintRect(rect);
+            LayoutRect repaintRect(rect);
             repaintRect.move(-boxParent->layer()->scrolledContentOffset()); // For overflow:auto/scroll/hidden.
 
-            IntRect boxRect(IntPoint(), boxParent->layer()->size());
+            LayoutRect boxRect(LayoutPoint(), boxParent->layer()->size());
             rect = intersection(repaintRect, boxRect);
             if (rect.isEmpty())
                 return;
@@ -1906,7 +1933,7 @@ void RenderObject::propagateStyleToAnonymousChildren(bool blockChildrenOnly)
             if (child->style()->specifiesColumns())
                 newStyle->inheritColumnPropertiesFrom(style());
             if (child->style()->columnSpan())
-                newStyle->setColumnSpan(true);
+                newStyle->setColumnSpan(ColumnSpanAll);
         }
         newStyle->setDisplay(child->style()->display());
         child->setStyle(newStyle.release());
@@ -1941,7 +1968,7 @@ void RenderObject::updateImage(StyleImage* oldImage, StyleImage* newImage)
     }
 }
 
-IntRect RenderObject::viewRect() const
+LayoutRect RenderObject::viewRect() const
 {
     return view()->viewRect();
 }
@@ -1973,12 +2000,12 @@ void RenderObject::mapLocalToContainer(RenderBoxModelObject* repaintContainer, b
     if (!o)
         return;
 
-    IntPoint centerPoint = roundedIntPoint(transformState.mappedPoint());
+    LayoutPoint centerPoint = roundedLayoutPoint(transformState.mappedPoint());
     if (o->isBox() && o->style()->isFlippedBlocksWritingMode())
-        transformState.move(toRenderBox(o)->flipForWritingModeIncludingColumns(roundedIntPoint(transformState.mappedPoint())) - centerPoint);
+        transformState.move(toRenderBox(o)->flipForWritingModeIncludingColumns(roundedLayoutPoint(transformState.mappedPoint())) - centerPoint);
 
-    IntSize columnOffset;
-    o->adjustForColumns(columnOffset, roundedIntPoint(transformState.mappedPoint()));
+    LayoutSize columnOffset;
+    o->adjustForColumns(columnOffset, roundedLayoutPoint(transformState.mappedPoint()));
     if (!columnOffset.isZero())
         transformState.move(columnOffset);
 
@@ -2081,12 +2108,12 @@ LayoutSize RenderObject::offsetFromAncestorContainer(RenderObject* container) co
     return offset;
 }
 
-IntRect RenderObject::localCaretRect(InlineBox*, int, int* extraWidthToEndOfLine)
+LayoutRect RenderObject::localCaretRect(InlineBox*, int, LayoutUnit* extraWidthToEndOfLine)
 {
     if (extraWidthToEndOfLine)
         *extraWidthToEndOfLine = 0;
 
-    return IntRect();
+    return LayoutRect();
 }
 
 RenderView* RenderObject::view() const
@@ -2155,6 +2182,10 @@ RenderObject* RenderObject::container(RenderBoxModelObject* repaintContainer, bo
         while (o && o->style()->position() == StaticPosition && !o->isRenderView() && !(o->hasTransform() && o->isRenderBlock())) {
             if (repaintContainerSkipped && o == repaintContainer)
                 *repaintContainerSkipped = true;
+#if ENABLE(SVG)
+            if (o->isSVGForeignObject()) // foreignObject is the containing block for contents inside it
+                break;
+#endif
             o = o->parent();
         }
     }
@@ -2479,15 +2510,15 @@ void RenderObject::addDashboardRegions(Vector<DashboardRegionValue>& regions)
     for (i = 0; i < count; i++) {
         StyleDashboardRegion styleRegion = styleRegions[i];
 
-        int w = box->width();
-        int h = box->height();
+        LayoutUnit w = box->width();
+        LayoutUnit h = box->height();
 
         DashboardRegionValue region;
         region.label = styleRegion.label;
-        region.bounds = IntRect(styleRegion.offset.left().value(),
-                                styleRegion.offset.top().value(),
-                                w - styleRegion.offset.left().value() - styleRegion.offset.right().value(),
-                                h - styleRegion.offset.top().value() - styleRegion.offset.bottom().value());
+        region.bounds = LayoutRect(styleRegion.offset.left().value(),
+                                   styleRegion.offset.top().value(),
+                                   w - styleRegion.offset.left().value() - styleRegion.offset.right().value(),
+                                   h - styleRegion.offset.top().value() - styleRegion.offset.bottom().value());
         region.type = styleRegion.type;
 
         region.clip = region.bounds;
@@ -2537,7 +2568,7 @@ bool RenderObject::willRenderImage(CachedImage*)
     return !document()->inPageCache() && !document()->view()->isOffscreen();
 }
 
-int RenderObject::maximalOutlineSize(PaintPhase p) const
+LayoutUnit RenderObject::maximalOutlineSize(PaintPhase p) const
 {
     if (p != PaintPhaseOutline && p != PaintPhaseSelfOutline && p != PaintPhaseChildOutlines)
         return 0;
@@ -2573,9 +2604,9 @@ int RenderObject::nextOffset(int current) const
     return current + 1;
 }
 
-void RenderObject::adjustRectForOutlineAndShadow(IntRect& rect) const
+void RenderObject::adjustRectForOutlineAndShadow(LayoutRect& rect) const
 {
-    int outlineSize = outlineStyleForRepaint()->outlineSize();
+    LayoutUnit outlineSize = outlineStyleForRepaint()->outlineSize();
     if (const ShadowData* boxShadow = style()->boxShadow()) {
         boxShadow->adjustRectForShadow(rect, outlineSize);
         return;

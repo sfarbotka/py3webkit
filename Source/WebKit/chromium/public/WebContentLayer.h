@@ -26,7 +26,7 @@
 #ifndef WebContentLayer_h
 #define WebContentLayer_h
 
-#include "WebCommon.h"
+#include "platform/WebCommon.h"
 #include "WebLayer.h"
 
 namespace WebKit {
@@ -37,7 +37,7 @@ class WebLayerClient;
 
 class WebContentLayer : public WebLayer {
 public:
-    static WebContentLayer create(WebLayerClient*, WebContentLayerClient*);
+    WEBKIT_EXPORT static WebContentLayer create(WebLayerClient*, WebContentLayerClient*);
 
     WebContentLayer() { }
     WebContentLayer(const WebContentLayer& layer) : WebLayer(layer) { }

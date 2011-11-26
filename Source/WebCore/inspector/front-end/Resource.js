@@ -44,6 +44,7 @@ WebInspector.MIMETypes = {
     "image/bmp":                   {2: true},
     "image/svg+xml":               {2: true},
     "image/vnd.microsoft.icon":    {2: true},
+    "image/webp":                  {2: true},
     "image/x-icon":                {2: true},
     "image/x-xbitmap":             {2: true},
     "font/ttf":                    {3: true},
@@ -69,7 +70,7 @@ WebInspector.MIMETypes = {
  * @constructor
  * @extends {WebInspector.Object}
  *
- * @param {?NetworkAgent.RequestId} requestId
+ * @param {NetworkAgent.RequestId} requestId
  * @param {string} url
  * @param {?string} frameId
  * @param {?NetworkAgent.LoaderId} loaderId
@@ -95,7 +96,7 @@ WebInspector.Resource = function(requestId, url, frameId, loaderId)
 
 WebInspector.Resource.displayName = function(url)
 {
-    return new WebInspector.Resource(null, url, null, null).displayName;
+    return new WebInspector.Resource("fake-transient-resource", url, null, null).displayName;
 }
 
 // Keep these in sync with WebCore::InspectorResource::Type
@@ -248,7 +249,7 @@ WebInspector.Resource.persistRevision = function(resource)
 WebInspector.Resource.Events = {
     RevisionAdded: "revision-added",
     MessageAdded: "message-added",
-    MessagesCleared: "messages-cleared"
+    MessagesCleared: "messages-cleared",
 }
 
 WebInspector.Resource.prototype = {
@@ -269,19 +270,7 @@ WebInspector.Resource.prototype = {
         this.domain = parsedURL ? parsedURL.host : "";
         this.path = parsedURL ? parsedURL.path : "";
         this.urlFragment = parsedURL ? parsedURL.fragment : "";
-        this.lastPathComponent = "";
-        if (parsedURL && parsedURL.path) {
-            // First cut the query params.
-            var path = parsedURL.path;
-            var indexOfQuery = path.indexOf("?");
-            if (indexOfQuery !== -1)
-                path = path.substring(0, indexOfQuery);
-
-            // Then take last path component.
-            var lastSlashIndex = path.lastIndexOf("/");
-            if (lastSlashIndex !== -1)
-                this.lastPathComponent = path.substring(lastSlashIndex + 1);
-        }
+        this.lastPathComponent = parsedURL ? parsedURL.lastPathComponent : "";
         this.lastPathComponentLowerCase = this.lastPathComponent.toLowerCase();
     },
 
@@ -303,7 +292,7 @@ WebInspector.Resource.prototype = {
         if (!this._displayName)
             this._displayName = this.displayDomain;
         if (!this._displayName && this.url)
-            this._displayName = this.url.trimURL(WebInspector.mainResource ? WebInspector.mainResource.domain : "");
+            this._displayName = this.url.trimURL(WebInspector.inspectedPageDomain ? WebInspector.inspectedPageDomain : "");
         if (this._displayName === "/")
             this._displayName = this.url;
         return this._displayName;
@@ -322,7 +311,7 @@ WebInspector.Resource.prototype = {
     get displayDomain()
     {
         // WebInspector.Database calls this, so don't access more than this.domain.
-        if (this.domain && (!WebInspector.mainResource || (WebInspector.mainResource && this.domain !== WebInspector.mainResource.domain)))
+        if (this.domain && (!WebInspector.inspectedPageDomain || (WebInspector.inspectedPageDomain && this.domain !== WebInspector.inspectedPageDomain)))
             return this.domain;
         return "";
     },
@@ -854,10 +843,9 @@ WebInspector.Resource.prototype = {
         this._contentTimestamp = timestamp || new Date();
 
         this.dispatchEventToListeners(WebInspector.Resource.Events.RevisionAdded, revision);
-
         if (!restoringHistory)
             this._persistRevision();
-        WebInspector.extensionServer.notifyResourceContentCommitted(this, newContent);
+        WebInspector.resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ResourceContentCommitted, { resource: this, content: newContent });
     },
 
     _persistRevision: function()
@@ -883,7 +871,7 @@ WebInspector.Resource.prototype = {
             this._innerRequestContent();
     },
 
-    searchInContent: function(query, callback)
+    searchInContent: function(query, caseSensitive, isRegex, callback)
     {
         function callbackWrapper(error, searchMatches)
         {
@@ -891,7 +879,7 @@ WebInspector.Resource.prototype = {
         }
 
         if (this.frameId)
-            PageAgent.searchInResource(this.frameId, this.url, query, callbackWrapper);
+            PageAgent.searchInResource(this.frameId, this.url, query, caseSensitive, isRegex, callbackWrapper);
         else
             callback([]);
     },

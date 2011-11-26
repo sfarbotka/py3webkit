@@ -26,12 +26,12 @@
 #ifndef WebPopupMenuProxyQtDesktop_h
 #define WebPopupMenuProxyQtDesktop_h
 
-#include "QtWebComboBox.h"
 #include "WebPopupMenuProxy.h"
-#include <QtCore/QObject>
-#include <QtCore/QWeakPointer>
+#include <QComboBox>
+#include <QObject>
+#include <QWeakPointer>
 
-class QSGItem;
+class QQuickItem;
 
 namespace WebCore {
 class QtWebComboBox;
@@ -39,13 +39,13 @@ class QtWebComboBox;
 
 namespace WebKit {
 
-class WebPopupMenuProxyQtDesktop : public QObject, public WebPopupMenuProxy {
+class WebPopupMenuProxyQtDesktop : public QComboBox, public WebPopupMenuProxy {
     Q_OBJECT
 
 public:
     virtual ~WebPopupMenuProxyQtDesktop();
 
-    static PassRefPtr<WebPopupMenuProxyQtDesktop> create(WebPopupMenuProxy::Client* client, QSGItem* webViewItem)
+    static PassRefPtr<WebPopupMenuProxyQtDesktop> create(WebPopupMenuProxy::Client* client, QQuickItem* webViewItem)
     {
         return adoptRef(new WebPopupMenuProxyQtDesktop(client, webViewItem));
     }
@@ -53,18 +53,16 @@ public:
     virtual void showPopupMenu(const WebCore::IntRect&, WebCore::TextDirection, double pageScaleFactor, const Vector<WebPopupItem>&, const PlatformPopupMenuData&, int32_t selectedIndex);
     virtual void hidePopupMenu();
 
+    virtual bool eventFilter(QObject* watched, QEvent*);
+
 private Q_SLOTS:
     void setSelectedIndex(int);
-    void onPopupMenuHidden();
 
 private:
-    WebPopupMenuProxyQtDesktop(WebPopupMenuProxy::Client*, QSGItem* webViewItem);
+    WebPopupMenuProxyQtDesktop(WebPopupMenuProxy::Client*, QQuickItem* webViewItem);
     void populate(const Vector<WebPopupItem>&);
 
-    // Qt guarded pointer because QWidgets have their own memory management and
-    // when closing the UI the combobox will be deleted before we are.
-    QWeakPointer<WebCore::QtWebComboBox> m_comboBox;
-    QSGItem* m_webViewItem;
+    QQuickItem* m_webViewItem;
     int32_t m_selectedIndex;
 };
 

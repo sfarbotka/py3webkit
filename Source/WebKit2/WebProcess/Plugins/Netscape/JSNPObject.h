@@ -79,20 +79,19 @@ private:
         return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
     }
 
-    virtual JSC::CallType getCallDataVirtual(JSC::CallData&);
     static JSC::CallType getCallData(JSC::JSCell*, JSC::CallData&);
-    virtual JSC::ConstructType getConstructData(JSC::ConstructData&);
+    static JSC::ConstructType getConstructData(JSC::JSCell*, JSC::ConstructData&);
 
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
-    virtual void put(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::JSValue, JSC::PutPropertySlot&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
+    static void put(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::JSValue, JSC::PutPropertySlot&);
 
-    virtual bool deleteProperty(JSC::ExecState*, const JSC::Identifier& propertyName);
-    virtual bool deleteProperty(JSC::ExecState*, unsigned propertyName);
+    static bool deleteProperty(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName);
+    static bool deletePropertyByIndex(JSC::JSCell*, JSC::ExecState*, unsigned propertyName);
 
     bool deleteProperty(JSC::ExecState*, NPIdentifier propertyName);
 
-    virtual void getOwnPropertyNames(JSC::ExecState*, JSC::PropertyNameArray&, JSC::EnumerationMode mode = JSC::ExcludeDontEnumProperties);
+    static void getOwnPropertyNames(JSC::JSObject*, JSC::ExecState*, JSC::PropertyNameArray&, JSC::EnumerationMode);
 
     static JSC::JSValue propertyGetter(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
     static JSC::JSValue methodGetter(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);

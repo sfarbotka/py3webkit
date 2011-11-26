@@ -36,7 +36,7 @@
 #include "FrameLoaderClient.h"
 #include "KURL.h"
 #include <wtf/OwnPtr.h>
-#include "PluginView.h"
+#include "WebCore/plugins/PluginView.h"
 #include "RefCounted.h"
 #include "ResourceError.h"
 #include "ResourceResponse.h"
@@ -162,6 +162,7 @@ public:
     virtual bool shouldStopLoadingForHistoryItem(HistoryItem*) const;
     virtual void didDisplayInsecureContent();
     virtual void didRunInsecureContent(SecurityOrigin*, const KURL&);
+    virtual void didDetectXSS(const KURL&, bool didBlockEntirePage);
 
     virtual ResourceError cancelledError(const ResourceRequest&);
     virtual ResourceError blockedError(const ResourceRequest&);

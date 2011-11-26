@@ -93,10 +93,10 @@ void RenderSVGResourceFilter::removeClientFromCache(RenderObject* client, bool m
     markClientForInvalidation(client, markForInvalidation ? BoundariesInvalidation : ParentOnlyInvalidation);
 }
 
-PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(Filter* filter)
+PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(SVGFilter* filter)
 {
     SVGFilterElement* filterElement = static_cast<SVGFilterElement*>(node());
-    bool primitiveBoundingBoxMode = filterElement->primitiveUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX;
+    FloatRect targetBoundingBox = filter->targetBoundingBox();
 
     // Add effects to the builder
     RefPtr<SVGFilterBuilder> builder = SVGFilterBuilder::create(filter);
@@ -115,7 +115,8 @@ PassRefPtr<SVGFilterBuilder> RenderSVGResourceFilter::buildPrimitives(Filter* fi
             return 0;
         }
         builder->appendEffectToEffectReferences(effect, effectElement->renderer());
-        effectElement->setStandardAttributes(primitiveBoundingBoxMode, effect.get());
+        effectElement->setStandardAttributes(effect.get());
+        effect->setEffectBoundaries(SVGLengthContext::resolveRectangle<SVGFilterPrimitiveStandardAttributes>(effectElement, filterElement->primitiveUnits(), targetBoundingBox));
         builder->add(effectElement->result(), effect);
     }
     return builder.release();
@@ -140,11 +141,7 @@ bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, 
 {
     ASSERT(object);
     ASSERT(context);
-#ifndef NDEBUG
-    ASSERT(resourceMode == ApplyToDefaultMode);
-#else
-    UNUSED_PARAM(resourceMode);
-#endif
+    ASSERT_UNUSED(resourceMode, resourceMode == ApplyToDefaultMode);
 
     // Returning false here, to avoid drawings onto the context. We just want to
     // draw the stored filter output, not the unfiltered object as well.
@@ -160,7 +157,7 @@ bool RenderSVGResourceFilter::applyResource(RenderObject* object, RenderStyle*, 
     FloatRect targetBoundingBox = object->objectBoundingBox();
 
     SVGFilterElement* filterElement = static_cast<SVGFilterElement*>(node());
-    filterData->boundaries = filterElement->filterBoundingBox(targetBoundingBox);
+    filterData->boundaries = SVGLengthContext::resolveRectangle<SVGFilterElement>(filterElement, filterElement->filterUnits(), targetBoundingBox);
     if (filterData->boundaries.isEmpty())
         return false;
 
@@ -263,11 +260,7 @@ void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsCo
 {
     ASSERT(object);
     ASSERT(context);
-#ifndef NDEBUG
-    ASSERT(resourceMode == ApplyToDefaultMode);
-#else
-    UNUSED_PARAM(resourceMode);
-#endif
+    ASSERT_UNUSED(resourceMode, resourceMode == ApplyToDefaultMode);
 
     FilterData* filterData = m_filter.get(object);
     if (!filterData)
@@ -330,7 +323,7 @@ void RenderSVGResourceFilter::postApplyResource(RenderObject* object, GraphicsCo
 FloatRect RenderSVGResourceFilter::resourceBoundingBox(RenderObject* object)
 {
     if (SVGFilterElement* element = static_cast<SVGFilterElement*>(node()))
-        return element->filterBoundingBox(object->objectBoundingBox());
+        return SVGLengthContext::resolveRectangle<SVGFilterElement>(element, element->filterUnits(), object->objectBoundingBox());
 
     return FloatRect();
 }

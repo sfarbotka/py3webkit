@@ -32,20 +32,11 @@ module events {
 
     interface [
         NoStaticTables,
-        CanBeConstructed,
-        CustomConstructor
+        ConstructorTemplate=Event
     ] ErrorEvent : Event {
-
-        readonly attribute DOMString message;
-        readonly attribute DOMString filename;
-        readonly attribute unsigned long lineno;
-
-        void initErrorEvent(in [Optional=CallWithDefaultValue] DOMString typeArg,
-                            in [Optional=CallWithDefaultValue] boolean canBubbleArg,
-                            in [Optional=CallWithDefaultValue] boolean cancelableArg, 
-                            in [Optional=CallWithDefaultValue] DOMString messageArg, 
-                            in [Optional=CallWithDefaultValue] DOMString filenameArg, 
-                            in [Optional=CallWithDefaultValue] unsigned long linenoArg);
+        readonly attribute [InitializedByConstructor] DOMString message;
+        readonly attribute [InitializedByConstructor] DOMString filename;
+        readonly attribute [InitializedByConstructor] unsigned long lineno;
     };
 
 }

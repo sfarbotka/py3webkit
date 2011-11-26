@@ -53,42 +53,48 @@ private:
     PluginView* pluginView();
     const PluginView* pluginView() const;
 
-    void calculateDocumentSize();
     void updateScrollbars();
     void didAddHorizontalScrollbar(WebCore::Scrollbar*);
     void willRemoveHorizontalScrollbar(WebCore::Scrollbar*);
+    void didAddVerticalScrollbar(WebCore::Scrollbar*);
+    void willRemoveVerticalScrollbar(WebCore::Scrollbar*);
     PassRefPtr<WebCore::Scrollbar> createScrollbar(WebCore::ScrollbarOrientation);
     void destroyScrollbar(WebCore::ScrollbarOrientation);
+    void addArchiveResource();
     void pdfDocumentDidLoad();
+    void calculateSizes();
+    void paintBackground(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRect);
+    void paintContent(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRect);
+    void paintControls(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRect);
 
     // Plug-in methods
     virtual bool initialize(const Parameters&);
     virtual void destroy();
-    virtual void paint(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRect);
+    virtual void paint(WebCore::GraphicsContext*, const WebCore::IntRect& dirtyRectInWindowCoordinates);
     virtual void updateControlTints(WebCore::GraphicsContext*);
     virtual PassRefPtr<ShareableBitmap> snapshot();
 #if PLATFORM(MAC)
     virtual PlatformLayer* pluginLayer();
 #endif
     virtual bool isTransparent();
-    virtual void geometryDidChange(const WebCore::IntRect& frameRect, const WebCore::IntRect& clipRect);
+    virtual void geometryDidChange(const WebCore::IntSize& pluginSize, const WebCore::IntRect& clipRect, const WebCore::AffineTransform& pluginToRootViewTransform);
     virtual void visibilityDidChange();
     virtual void frameDidFinishLoading(uint64_t requestID);
     virtual void frameDidFail(uint64_t requestID, bool wasCancelled);
     virtual void didEvaluateJavaScript(uint64_t requestID, const String& result);
-    virtual void streamDidReceiveResponse(uint64_t streamID, const WebCore::KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers);
+    virtual void streamDidReceiveResponse(uint64_t streamID, const WebCore::KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& suggestedFileName);
     virtual void streamDidReceiveData(uint64_t streamID, const char* bytes, int length);
     virtual void streamDidFinishLoading(uint64_t streamID);
     virtual void streamDidFail(uint64_t streamID, bool wasCancelled);
-    virtual void manualStreamDidReceiveResponse(const WebCore::KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers);
+    virtual void manualStreamDidReceiveResponse(const WebCore::KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, const WTF::String& mimeType, const WTF::String& headers, const String& suggestedFileName);
     virtual void manualStreamDidReceiveData(const char* bytes, int length);
     virtual void manualStreamDidFinishLoading();
     virtual void manualStreamDidFail(bool wasCancelled);
-    
     virtual bool handleMouseEvent(const WebMouseEvent&);
     virtual bool handleWheelEvent(const WebWheelEvent&);
     virtual bool handleMouseEnterEvent(const WebMouseEvent&);
     virtual bool handleMouseLeaveEvent(const WebMouseEvent&);
+    virtual bool handleContextMenuEvent(const WebMouseEvent&);
     virtual bool handleKeyboardEvent(const WebKeyboardEvent&);
     virtual void setFocus(bool);
     virtual NPObject* pluginScriptableNPObject();
@@ -96,6 +102,7 @@ private:
     virtual void windowFocusChanged(bool);
     virtual void windowAndViewFramesChanged(const WebCore::IntRect& windowFrameInScreenCoordinates, const WebCore::IntRect& viewFrameInWindowCoordinates);
     virtual void windowVisibilityChanged(bool);
+    virtual void contentsScaleFactorChanged(float);
     virtual uint64_t pluginComplexTextInputIdentifier() const;
     virtual void sendComplexTextInput(const String& textInput);
 #endif
@@ -119,8 +126,8 @@ private:
     virtual WebCore::IntPoint scrollPosition() const;
     virtual WebCore::IntPoint minimumScrollPosition() const;
     virtual WebCore::IntPoint maximumScrollPosition() const;
-    virtual WebCore::LayoutUnit visibleHeight() const;
-    virtual WebCore::LayoutUnit visibleWidth() const;
+    virtual int visibleHeight() const;
+    virtual int visibleWidth() const;
     virtual WebCore::IntSize contentsSize() const;
     virtual WebCore::Scrollbar* horizontalScrollbar() const  { return m_horizontalScrollbar.get(); }
     virtual WebCore::Scrollbar* verticalScrollbar() const { return m_verticalScrollbar.get(); }
@@ -128,12 +135,20 @@ private:
     virtual void disconnectFromPage() { m_page = 0; }
     virtual bool shouldSuspendScrollAnimations() const { return false; } // If we return true, ScrollAnimatorMac will keep cycling a timer forever, waiting for a good time to animate.
     virtual void scrollbarStyleChanged();
+    virtual void zoomAnimatorTransformChanged(float, float, float, ZoomAnimationState) { }
 
-    // In window coordinates.
-    WebCore::IntRect m_frameRect;
+    // FIXME: Implement the other conversion functions; this one is enough to get scrollbar hit testing working.
+    virtual WebCore::IntPoint convertFromContainingViewToScrollbar(const WebCore::Scrollbar*, const WebCore::IntPoint& parentPoint) const;
 
+    WebCore::IntSize m_pluginSize;
+
+    WebCore::KURL m_sourceURL;
+
+    String m_suggestedFilename;
     RetainPtr<CFMutableDataRef> m_dataBuffer;
+
     RetainPtr<CGPDFDocumentRef> m_pdfDocument;
+    Vector<WebCore::IntRect> m_pageBoxes;
     WebCore::IntSize m_pdfDocumentSize; // All pages, including gaps.
 
     RefPtr<WebCore::Scrollbar> m_horizontalScrollbar;

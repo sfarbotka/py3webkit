@@ -24,6 +24,8 @@
  */
 
 #include "config.h"
+
+#include "Assertions.h"
 #include "TestInvocation.h"
 
 #include <QBuffer>
@@ -68,7 +70,7 @@ void TestInvocation::dumpPixelsAndCompareWithExpected(WKImageRef imageRef, WKArr
     QImage image = WKImageCreateQImage(imageRef);
     QCryptographicHash hash(QCryptographicHash::Md5);
     for (unsigned row = 0; row < image.height(); ++row)
-        hash.addData(reinterpret_cast<const char*>(image.constScanLine(row)), image.width() * image.bytesPerLine());
+        hash.addData(reinterpret_cast<const char*>(image.constScanLine(row)), image.bytesPerLine());
 
     QByteArray actualHash = hash.result().toHex();
     ASSERT(actualHash.size() == 32);

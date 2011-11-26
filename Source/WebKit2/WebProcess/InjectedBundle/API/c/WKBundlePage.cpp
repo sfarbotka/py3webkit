@@ -37,7 +37,11 @@
 #include "WebURL.h"
 #include "WebURLRequest.h"
 
+#include <WebCore/AXObjectCache.h>
+#include <WebCore/AccessibilityObject.h>
+#include <WebCore/Frame.h>
 #include <WebCore/KURL.h>
+#include <WebCore/Page.h>
 
 using namespace WebKit;
 
@@ -124,6 +128,54 @@ WKBundlePageGroupRef WKBundlePageGetPageGroup(WKBundlePageRef pageRef)
 WKBundleFrameRef WKBundlePageGetMainFrame(WKBundlePageRef pageRef)
 {
     return toAPI(toImpl(pageRef)->mainWebFrame());
+}
+
+void* WKAccessibilityRootObject(WKBundlePageRef pageRef)
+{
+#if HAVE(ACCESSIBILITY)
+    if (!pageRef)
+        return 0;
+    
+    WebCore::Page* page = toImpl(pageRef)->corePage();
+    if (!page)
+        return 0;
+    
+    WebCore::Frame* core = page->mainFrame();
+    if (!core || !core->document())
+        return 0;
+    
+    WebCore::AXObjectCache::enableAccessibility();
+
+    WebCore::AccessibilityObject* root = core->document()->axObjectCache()->rootObject();
+    if (!root)
+        return 0;
+    
+    return root->wrapper();
+#else
+    return 0;
+#endif
+}
+
+void* WKAccessibilityFocusedObject(WKBundlePageRef pageRef)
+{
+#if HAVE(ACCESSIBILITY)
+    if (!pageRef)
+        return 0;
+    
+    WebCore::Page* page = toImpl(pageRef)->corePage();
+    if (!page)
+        return 0;
+
+    WebCore::AXObjectCache::enableAccessibility();
+
+    WebCore::AccessibilityObject* focusedObject = WebCore::AXObjectCache::focusedUIElementForPage(page);
+    if (!focusedObject)
+        return 0;
+    
+    return focusedObject->wrapper();
+#else
+    return 0;
+#endif
 }
 
 void WKBundlePageStopLoading(WKBundlePageRef pageRef)
@@ -239,6 +291,11 @@ WKImageRef WKBundlePageCreateScaledSnapshotInDocumentCoordinates(WKBundlePageRef
     return toAPI(webImage.release().leakRef());
 }
 
+double WKBundlePageGetBackingScaleFactor(WKBundlePageRef pageRef)
+{
+    return toImpl(pageRef)->deviceScaleFactor();
+}
+
 #if defined(ENABLE_INSPECTOR) && ENABLE_INSPECTOR
 WKBundleInspectorRef WKBundlePageGetInspector(WKBundlePageRef pageRef)
 {
@@ -288,7 +345,7 @@ void WKBundlePageResetTrackedRepaints(WKBundlePageRef pageRef)
 
 WKArrayRef WKBundlePageCopyTrackedRepaintRects(WKBundlePageRef pageRef)
 {
-    return toAPI(toImpl(pageRef)->trackedRepaintRects().releaseRef());
+    return toAPI(toImpl(pageRef)->trackedRepaintRects().leakRef());
 }
 
 WKStringRef WKBundlePageViewportConfigurationAsText(WKBundlePageRef pageRef, int deviceDPI, int deviceWidth, int deviceHeight, int availableWidth, int availableHeight)

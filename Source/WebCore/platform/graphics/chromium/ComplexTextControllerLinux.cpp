@@ -220,13 +220,13 @@ static void setupFontFeatures(const FontFeatureSettings* settings, HB_FaceRec_* 
     if (hbFace->gpos)
         HB_GPOS_Clear_Features(hbFace->gpos);
 
-    HB_UShort scriptIndex;
+    HB_UShort scriptIndex = 0;
     HB_GSUB_Select_Script(hbFace->gsub, HB_MAKE_TAG('D', 'F', 'L', 'T'), &scriptIndex);
     size_t numFeatures = settings->size();
     for (size_t i = 0; i < numFeatures; ++i) {
         if (!settings->at(i).value())
             continue;
-        HB_UShort featureIndex;
+        HB_UShort featureIndex = 0;
         const UChar* tag = settings->at(i).tag().characters();
         HB_UInt feature = HB_MAKE_TAG(tag[0], tag[1], tag[2], tag[3]);
         if (hbFace->gsub && HB_GSUB_Select_Feature(hbFace->gsub, feature, scriptIndex, 0xffff, &featureIndex) == HB_Err_Ok)
@@ -396,7 +396,7 @@ void ComplexTextController::normalizeSpacesAndMirrorChars(const UChar* source, b
         else if (rtl)
             character = u_charMirror(character);
         U16_APPEND(destination, position, length, character, error);
-        ASSERT(!error);
+        ASSERT_UNUSED(error, !error);
         position = nextPosition;
     }
 }
@@ -543,6 +543,29 @@ FloatRect ComplexTextController::selectionRect(const FloatPoint& point, int heig
         return FloatRect(point.x() + fromX, point.y(), toX - fromX, height);
 
     return FloatRect(point.x() + toX, point.y(), fromX - toX, height);
+}
+
+void ComplexTextController::glyphsForRange(int from, int to, int& fromGlyph, int& glyphLength)
+{
+    // Character offsets within the current run. THESE MAY NOT BE IN RANGE and may
+    // be negative, etc. The code below handles this.
+    int fromChar = from - m_item.item.pos;
+    int toChar = to - m_item.item.pos;
+
+    // See if there are any characters in the current run.
+    if (!numCodePoints() || fromChar >= static_cast<int>(numCodePoints()) || toChar <= 0) {
+        fromGlyph = -1;
+        glyphLength = 0;
+        return;
+    }
+
+    // Compute the starting glyph within this span. |from| and |to| are
+    // global offsets that may intersect arbitrarily with our local run.
+    fromGlyph = m_item.log_clusters[fromChar < 0 ? 0 : fromChar];
+    if (toChar >= static_cast<int>(numCodePoints()))
+        glyphLength = length() - fromGlyph;
+    else
+        glyphLength = m_item.log_clusters[toChar] - fromGlyph;
 }
 
 } // namespace WebCore

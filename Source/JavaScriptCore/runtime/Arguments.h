@@ -24,6 +24,7 @@
 #ifndef Arguments_h
 #define Arguments_h
 
+#include "CodeOrigin.h"
 #include "JSActivation.h"
 #include "JSFunction.h"
 #include "JSGlobalObject.h"
@@ -54,6 +55,7 @@ namespace JSC {
         bool overrodeCallee : 1;
         bool overrodeCaller : 1;
         bool isStrictMode : 1;
+        bool isInlineFrame : 1; // If true, all arguments are in the extraArguments buffer.
     };
 
 
@@ -65,6 +67,13 @@ namespace JSC {
         {
             Arguments* arguments = new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame);
             arguments->finishCreation(callFrame);
+            return arguments;
+        }
+        
+        static Arguments* createAndTearOff(JSGlobalData& globalData, CallFrame* callFrame)
+        {
+            Arguments* arguments = new (allocateCell<Arguments>(globalData.heap)) Arguments(callFrame);
+            arguments->finishCreationAndTearOff(callFrame);
             return arguments;
         }
         
@@ -94,7 +103,7 @@ namespace JSC {
 
         void fillArgList(ExecState*, MarkedArgumentBuffer&);
 
-        uint32_t numProvidedArguments(ExecState* exec) const 
+        uint32_t length(ExecState* exec) const 
         {
             if (UNLIKELY(d->overrodeLength))
                 return get(exec, exec->propertyNames().length).toUInt32(exec);
@@ -102,11 +111,12 @@ namespace JSC {
         }
         
         void copyToRegisters(ExecState* exec, Register* buffer, uint32_t maxSize);
-        void copyRegisters(JSGlobalData&);
+        void tearOff(JSGlobalData&);
         bool isTornOff() const { return d->registerArray; }
-        void setActivation(JSGlobalData& globalData, JSActivation* activation)
+        void didTearOffActivation(JSGlobalData& globalData, JSActivation* activation)
         {
-            ASSERT(!d->registerArray);
+            if (isTornOff())
+                return;
             d->activation.set(globalData, this, activation);
             d->registers = &activation->registerAt(0);
         }
@@ -119,23 +129,21 @@ namespace JSC {
     protected:
         static const unsigned StructureFlags = OverridesGetOwnPropertySlot | OverridesVisitChildren | OverridesGetPropertyNames | JSObject::StructureFlags;
 
+        void finishCreationButDontTearOff(CallFrame*);
         void finishCreation(CallFrame*);
+        void finishCreationAndTearOff(CallFrame*);
         void finishCreation(CallFrame*, NoParametersType);
 
     private:
         void getArgumentsData(CallFrame*, JSFunction*&, ptrdiff_t& firstParameterIndex, Register*& argv, int& argc);
-        virtual bool getOwnPropertySlot(ExecState*, const Identifier& propertyName, PropertySlot&);
-        virtual bool getOwnPropertySlot(ExecState*, unsigned propertyName, PropertySlot&);
-        virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
-        virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
-        virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+        static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier& propertyName, PropertySlot&);
+        static bool getOwnPropertySlotByIndex(JSCell*, ExecState*, unsigned propertyName, PropertySlot&);
+        static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor&);
+        static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
         static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
-        virtual void put(ExecState*, unsigned propertyName, JSValue);
-        static void put(JSCell*, ExecState*, unsigned propertyName, JSValue);
-        virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
+        static void putByIndex(JSCell*, ExecState*, unsigned propertyName, JSValue);
         static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
-        virtual bool deleteProperty(ExecState*, unsigned propertyName);
-        static bool deleteProperty(JSCell*, ExecState*, unsigned propertyName);
+        static bool deletePropertyByIndex(JSCell*, ExecState*, unsigned propertyName);
         void createStrictModeCallerIfNecessary(ExecState*);
         void createStrictModeCalleeIfNecessary(ExecState*);
 
@@ -158,6 +166,9 @@ namespace JSC {
 
         int numParameters = function->jsExecutable()->parameterCount();
         argc = callFrame->argumentCountIncludingThis();
+        
+        if (callFrame->isInlineCallFrame())
+            ASSERT(argc == numParameters + 1);
 
         if (argc <= numParameters)
             argv = callFrame->registers() - RegisterFile::CallFrameHeaderSize - numParameters;
@@ -180,7 +191,7 @@ namespace JSC {
     {
     }
     
-    inline void Arguments::finishCreation(CallFrame* callFrame)
+    inline void Arguments::finishCreationButDontTearOff(CallFrame* callFrame)
     {
         Base::finishCreation(callFrame->globalData());
         ASSERT(inherits(&s_info));
@@ -194,6 +205,7 @@ namespace JSC {
         d->numParameters = callee->jsExecutable()->parameterCount();
         d->firstParameterIndex = firstParameterIndex;
         d->numArguments = numArguments;
+        d->isInlineFrame = false;
 
         d->registers = reinterpret_cast<WriteBarrier<Unknown>*>(callFrame->registers());
 
@@ -217,12 +229,106 @@ namespace JSC {
         d->overrodeCallee = false;
         d->overrodeCaller = false;
         d->isStrictMode = callFrame->codeBlock()->isStrictMode();
+    }
+
+    inline void Arguments::finishCreation(CallFrame* callFrame)
+    {
+        ASSERT(!callFrame->isInlineCallFrame());
+        finishCreationButDontTearOff(callFrame);
         if (d->isStrictMode)
-            copyRegisters(callFrame->globalData());
+            tearOff(callFrame->globalData());
+    }
+
+    inline void Arguments::finishCreationAndTearOff(CallFrame* callFrame)
+    {
+        Base::finishCreation(callFrame->globalData());
+        ASSERT(inherits(&s_info));
+        
+        JSFunction* callee;
+
+        ptrdiff_t firstParameterIndex;
+        Register* argv;
+        int numArguments;
+        getArgumentsData(callFrame, callee, firstParameterIndex, argv, numArguments);
+        
+        d->numParameters = callee->jsExecutable()->parameterCount();
+        d->firstParameterIndex = firstParameterIndex;
+        d->numArguments = numArguments;
+        
+        if (d->numParameters) {
+            int registerOffset = d->numParameters + RegisterFile::CallFrameHeaderSize;
+            size_t registerArraySize = d->numParameters;
+            
+            OwnArrayPtr<WriteBarrier<Unknown> > registerArray = adoptArrayPtr(new WriteBarrier<Unknown>[registerArraySize]);
+            if (callFrame->isInlineCallFrame()) {
+                InlineCallFrame* inlineCallFrame = callFrame->inlineCallFrame();
+                for (size_t i = 0; i < registerArraySize; ++i) {
+                    ValueRecovery& recovery = inlineCallFrame->arguments[i + 1];
+                    // In the future we'll support displaced recoveries (indicating that the
+                    // argument was flushed to a different location), but for now we don't do
+                    // that so this code will fail if that were to happen. On the other hand,
+                    // it's much less likely that we'll support in-register recoveries since
+                    // this code does not (easily) have access to registers.
+                    JSValue value;
+                    Register* location = callFrame->registers() + i - registerOffset;
+                    switch (recovery.technique()) {
+                    case AlreadyInRegisterFile:
+                        value = location->jsValue();
+                        break;
+                    case AlreadyInRegisterFileAsUnboxedInt32:
+                        value = jsNumber(location->unboxedInt32());
+                        break;
+                    case AlreadyInRegisterFileAsUnboxedCell:
+                        value = location->unboxedCell();
+                        break;
+                    case AlreadyInRegisterFileAsUnboxedBoolean:
+                        value = jsBoolean(location->unboxedBoolean());
+                        break;
+                    case Constant:
+                        value = recovery.constant();
+                        break;
+                    default:
+                        ASSERT_NOT_REACHED();
+                        break;
+                    }
+                    registerArray[i].set(callFrame->globalData(), this, value);
+                }
+            } else {
+                for (size_t i = 0; i < registerArraySize; ++i)
+                    registerArray[i].set(callFrame->globalData(), this, callFrame->registers()[i - registerOffset].jsValue());
+            }
+            d->registers = registerArray.get() + d->numParameters + RegisterFile::CallFrameHeaderSize;
+            d->registerArray = registerArray.release();
+        }
+        
+        WriteBarrier<Unknown>* extraArguments;
+        if (callFrame->isInlineCallFrame())
+            ASSERT(d->numArguments == d->numParameters);
+        if (d->numArguments <= d->numParameters)
+            extraArguments = 0;
+        else {
+            unsigned numExtraArguments = d->numArguments - d->numParameters;
+            if (numExtraArguments > sizeof(d->extraArgumentsFixedBuffer) / sizeof(WriteBarrier<Unknown>))
+                extraArguments = new WriteBarrier<Unknown>[numExtraArguments];
+            else
+                extraArguments = d->extraArgumentsFixedBuffer;
+            for (unsigned i = 0; i < numExtraArguments; ++i)
+                extraArguments[i].set(callFrame->globalData(), this, argv[d->numParameters + i].jsValue());
+        }
+        
+        d->extraArguments = extraArguments;
+
+        d->callee.set(callFrame->globalData(), this, callee);
+        d->overrodeLength = false;
+        d->overrodeCallee = false;
+        d->overrodeCaller = false;
+        d->isInlineFrame = callFrame->isInlineCallFrame();
+        d->isStrictMode = callFrame->codeBlock()->isStrictMode();
     }
 
     inline void Arguments::finishCreation(CallFrame* callFrame, NoParametersType)
     {
+        ASSERT(!callFrame->isInlineCallFrame());
         Base::finishCreation(callFrame->globalData());
         ASSERT(inherits(&s_info));
         ASSERT(!asFunction(callFrame->callee())->jsExecutable()->parameterCount());
@@ -231,6 +337,7 @@ namespace JSC {
 
         d->numParameters = 0;
         d->numArguments = numArguments;
+        d->isInlineFrame = false;
 
         WriteBarrier<Unknown>* extraArguments;
         if (numArguments > sizeof(d->extraArgumentsFixedBuffer) / sizeof(Register))
@@ -250,10 +357,10 @@ namespace JSC {
         d->overrodeCaller = false;
         d->isStrictMode = callFrame->codeBlock()->isStrictMode();
         if (d->isStrictMode)
-            copyRegisters(callFrame->globalData());
+            tearOff(callFrame->globalData());
     }
 
-    inline void Arguments::copyRegisters(JSGlobalData& globalData)
+    inline void Arguments::tearOff(JSGlobalData& globalData)
     {
         ASSERT(!isTornOff());
 
@@ -268,24 +375,6 @@ namespace JSC {
             registerArray[i].set(globalData, this, d->registers[i - registerOffset].get());
         d->registers = registerArray.get() + registerOffset;
         d->registerArray = registerArray.release();
-    }
-
-    // This JSActivation function is defined here so it can get at Arguments::setRegisters.
-    inline void JSActivation::copyRegisters(JSGlobalData& globalData)
-    {
-        ASSERT(!m_registerArray);
-
-        size_t numLocals = m_numCapturedVars + m_numParametersMinusThis;
-
-        if (!numLocals)
-            return;
-
-        int registerOffset = m_numParametersMinusThis + RegisterFile::CallFrameHeaderSize;
-        size_t registerArraySize = numLocals + RegisterFile::CallFrameHeaderSize;
-
-        OwnArrayPtr<WriteBarrier<Unknown> > registerArray = copyRegisterArray(globalData, m_registers - registerOffset, registerArraySize, m_numParametersMinusThis + 1);
-        WriteBarrier<Unknown>* registers = registerArray.get() + registerOffset;
-        setRegisters(registers, registerArray.release());
     }
 
 } // namespace JSC

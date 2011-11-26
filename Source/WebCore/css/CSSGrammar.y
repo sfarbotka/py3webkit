@@ -100,7 +100,7 @@ static int cssyylex(YYSTYPE* yylval, void* parser)
 
 %}
 
-%expect 54
+%expect 55
 
 %nonassoc LOWEST_PREC
 
@@ -141,6 +141,7 @@ static int cssyylex(YYSTYPE* yylval, void* parser)
 %token WEBKIT_VALUE_SYM
 %token WEBKIT_MEDIAQUERY_SYM
 %token WEBKIT_SELECTOR_SYM
+%token WEBKIT_REGION_STYLE_RULE_SYM
 %token <marginBox> TOPLEFTCORNER_SYM
 %token <marginBox> TOPLEFT_SYM
 %token <marginBox> TOPCENTER_SYM
@@ -219,6 +220,7 @@ static int cssyylex(YYSTYPE* yylval, void* parser)
 %type <ruleList> block_rule_list 
 %type <rule> block_rule
 %type <rule> block_valid_rule
+%type <rule> region
 
 %type <string> maybe_ns_prefix
 
@@ -253,6 +255,7 @@ static int cssyylex(YYSTYPE* yylval, void* parser)
 %type <selector> selector
 %type <selectorList> selector_list
 %type <selectorList> simple_selector_list
+%type <selectorList> region_selector
 %type <selector> selector_with_trailing_whitespace
 %type <selector> class
 %type <selector> attrib
@@ -410,6 +413,7 @@ valid_rule:
   | keyframes
   | namespace
   | import
+  | region
   ;
 
 rule:
@@ -571,11 +575,15 @@ media_list:
         CSSParser* p = static_cast<CSSParser*>(parser);
         $$ = p->createMediaList();
         $$->appendMediaQuery(p->sinkFloatingMediaQuery($1));
+        p->updateLastMediaLine($$);
     }
     | media_list ',' maybe_space media_query {
         $$ = $1;
-        if ($$)
-            $$->appendMediaQuery(static_cast<CSSParser*>(parser)->sinkFloatingMediaQuery($4));
+        if ($$) {
+            CSSParser* p = static_cast<CSSParser*>(parser);
+            $$->appendMediaQuery(p->sinkFloatingMediaQuery($4));
+            p->updateLastMediaLine($$);
+        }
     }
     | media_list error {
         $$ = 0;
@@ -777,6 +785,26 @@ font_face:
     }
 ;
 
+region_selector:
+    selector_list {
+        if ($1) {
+            static_cast<CSSParser*>(parser)->setReusableRegionSelectorVector($1);
+            $$ = static_cast<CSSParser*>(parser)->reusableRegionSelectorVector();
+        }
+        else
+            $$ = 0;
+    }
+;
+
+region:
+    WEBKIT_REGION_STYLE_RULE_SYM WHITESPACE region_selector '{' maybe_space block_rule_list save_block {
+        if ($3)
+            $$ = static_cast<CSSParser*>(parser)->createRegionStylingRule($3, $6);
+        else
+            $$ = 0;
+    }
+;
+
 combinator:
     '+' maybe_space { $$ = CSSSelector::DirectAdjacent; }
   | '~' maybe_space { $$ = CSSSelector::IndirectAdjacent; }
@@ -961,7 +989,7 @@ element_name:
     IDENT {
         CSSParserString& str = $1;
         CSSParser* p = static_cast<CSSParser*>(parser);
-        Document* doc = p->document();
+        Document* doc = p->findDocument();
         if (doc && doc->isHTMLDocument())
             str.lower();
         $$ = str;
@@ -1029,7 +1057,7 @@ attr_name:
     IDENT maybe_space {
         CSSParserString& str = $1;
         CSSParser* p = static_cast<CSSParser*>(parser);
-        Document* doc = p->document();
+        Document* doc = p->findDocument();
         if (doc && doc->isHTMLDocument())
             str.lower();
         $$ = str;
@@ -1441,7 +1469,7 @@ unary_term:
       $$.fValue = $1;
       $$.unit = CSSPrimitiveValue::CSS_REMS;
       CSSParser* p = static_cast<CSSParser*>(parser);
-      if (Document* doc = p->document())
+      if (Document* doc = p->findDocument())
           doc->setUsesRemUnits(true);
   }
   ;
@@ -1452,6 +1480,16 @@ function:
         CSSParserFunction* f = p->createFloatingFunction();
         f->name = $1;
         f->args = adoptPtr(p->sinkFloatingValueList($3));
+        $$.id = 0;
+        $$.unit = CSSParserValue::Function;
+        $$.function = f;
+    } |
+    FUNCTION maybe_space ')' maybe_space {
+        CSSParser* p = static_cast<CSSParser*>(parser);
+        CSSParserFunction* f = p->createFloatingFunction();
+        f->name = $1;
+        CSSParserValueList* valueList = p->createFloatingValueList();
+        f->args = adoptPtr(p->sinkFloatingValueList(valueList));
         $$.id = 0;
         $$.unit = CSSParserValue::Function;
         $$.function = f;

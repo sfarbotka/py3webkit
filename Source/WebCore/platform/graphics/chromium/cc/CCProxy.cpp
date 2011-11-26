@@ -28,7 +28,6 @@
 
 #include "TraceEvent.h"
 #include "cc/CCLayerTreeHost.h"
-#include "cc/CCMainThreadTask.h"
 #include "cc/CCThreadTask.h"
 #include <wtf/MainThread.h>
 
@@ -36,20 +35,44 @@ using namespace WTF;
 
 namespace WebCore {
 
-#ifndef NDEBUG
-
 namespace {
+#ifndef NDEBUG
 bool fakeImplThread = false;
-static WTF::ThreadIdentifier implThreadID;
+#endif
+CCThread* s_mainThread = 0;
+CCThread* s_implThread = 0;
 }
 
+void CCProxy::setMainThread(CCThread* thread)
+{
+    s_mainThread = thread;
+}
+
+CCThread* CCProxy::mainThread()
+{
+    return s_mainThread;
+}
+
+void CCProxy::setImplThread(CCThread* thread)
+{
+    s_implThread = thread;
+}
+
+CCThread* CCProxy::implThread()
+{
+    return s_implThread;
+}
+
+#ifndef NDEBUG
 bool CCProxy::isMainThread()
 {
-    return ::isMainThread() && !fakeImplThread;
+    ASSERT(s_mainThread);
+    return !fakeImplThread && currentThread() == s_mainThread->threadID();
 }
 
 bool CCProxy::isImplThread()
 {
+    WTF::ThreadIdentifier implThreadID = s_implThread ? s_implThread->threadID() : 0;
     return fakeImplThread || currentThread() == implThreadID;
 }
 
@@ -57,12 +80,16 @@ void CCProxy::setImplThread(bool isImplThread)
 {
     fakeImplThread = isImplThread;
 }
+#endif
 
-void CCProxy::setImplThread(WTF::ThreadIdentifier id)
+CCProxy::CCProxy()
 {
-    implThreadID = id;
+    ASSERT(isMainThread());
 }
 
-#endif // !NDEBUG
+CCProxy::~CCProxy()
+{
+    ASSERT(isMainThread());
+}
 
 }

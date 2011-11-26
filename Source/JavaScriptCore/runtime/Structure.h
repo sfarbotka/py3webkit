@@ -26,6 +26,7 @@
 #ifndef Structure_h
 #define Structure_h
 
+#include "ClassInfo.h"
 #include "Identifier.h"
 #include "JSCell.h"
 #include "JSType.h"
@@ -48,13 +49,6 @@ namespace JSC {
     class PropertyNameArrayData;
     class StructureChain;
     class SlotVisitor;
-
-    struct ClassInfo;
-
-    enum EnumerationMode {
-        ExcludeDontEnumProperties,
-        IncludeDontEnumProperties
-    };
 
     class Structure : public JSCell {
     public:
@@ -162,7 +156,17 @@ namespace JSC {
 
         void setEnumerationCache(JSGlobalData&, JSPropertyNameIterator* enumerationCache); // Defined in JSPropertyNameIterator.h.
         JSPropertyNameIterator* enumerationCache(); // Defined in JSPropertyNameIterator.h.
-        void getPropertyNames(JSGlobalData&, PropertyNameArray&, EnumerationMode mode);
+        void getPropertyNamesFromStructure(JSGlobalData&, PropertyNameArray&, EnumerationMode);
+
+        bool staticFunctionsReified()
+        {
+            return m_staticFunctionReified;
+        }
+
+        void setStaticFunctionsReified()
+        {
+            m_staticFunctionReified = true;
+        }
 
         const ClassInfo* classInfo() const { return m_classInfo; }
 
@@ -221,11 +225,18 @@ namespace JSC {
         void despecifyAllFunctions(JSGlobalData&);
 
         PassOwnPtr<PropertyTable> copyPropertyTable(JSGlobalData&, Structure* owner);
+        PassOwnPtr<PropertyTable> copyPropertyTableForPinning(JSGlobalData&, Structure* owner);
         void materializePropertyMap(JSGlobalData&);
         void materializePropertyMapIfNecessary(JSGlobalData& globalData)
         {
             ASSERT(structure()->classInfo() == &s_info);
             if (!m_propertyTable && m_previous)
+                materializePropertyMap(globalData);
+        }
+        void materializePropertyMapIfNecessaryForPinning(JSGlobalData& globalData)
+        {
+            ASSERT(structure()->classInfo() == &s_info);
+            if (!m_propertyTable)
                 materializePropertyMap(globalData);
         }
 
@@ -272,18 +283,11 @@ namespace JSC {
         bool m_isPinnedPropertyTable : 1;
         bool m_hasGetterSetterProperties : 1;
         bool m_hasNonEnumerableProperties : 1;
-#if COMPILER(WINSCW)
-        // Workaround for Symbian WINSCW compiler that cannot resolve unsigned type of the declared 
-        // bitfield, when used as argument in make_pair() function calls in structure.ccp.
-        // This bitfield optimization is insignificant for the Symbian emulator target.
-        unsigned m_attributesInPrevious;
-#else
         unsigned m_attributesInPrevious : 7;
-#endif
         unsigned m_specificFunctionThrashCount : 2;
         unsigned m_preventExtensions : 1;
         unsigned m_didTransition : 1;
-        // 8 free bits
+        unsigned m_staticFunctionReified;
     };
 
     inline size_t Structure::get(JSGlobalData& globalData, const Identifier& propertyName)
@@ -307,7 +311,7 @@ namespace JSC {
         PropertyMapEntry* entry = m_propertyTable->findWithString(name.impl()).first;
         return entry ? entry->offset : notFound;
     }
-
+    
     inline bool JSCell::isObject() const
     {
         return m_structure->isObject();
@@ -346,11 +350,13 @@ namespace JSC {
     ALWAYS_INLINE void MarkStack::internalAppend(JSCell* cell)
     {
         ASSERT(!m_isCheckingForDefaultMarkViolation);
-        ASSERT(cell);
-        if (Heap::testAndSetMarked(cell))
+#if ENABLE(GC_VALIDATION)
+        validate(cell);
+#endif
+        m_visitCount++;
+        if (Heap::testAndSetMarked(cell) || !cell->structure())
             return;
-        if (cell->structure() && cell->structure()->typeInfo().type() >= CompoundType)
-            m_values.append(cell);
+        m_stack.append(cell);
     }
 
     inline StructureTransitionTable::Hash::Key StructureTransitionTable::keyForWeakGCMapFinalizer(void*, Structure* structure)

@@ -27,17 +27,14 @@
 namespace WebCore {
 
 CSSFontFaceRule::CSSFontFaceRule(CSSStyleSheet* parent)
-    : CSSRule(parent)
+    : CSSRule(parent, CSSRule::FONT_FACE_RULE)
 {
 }
 
 CSSFontFaceRule::~CSSFontFaceRule()
 {
-}
-
-void CSSFontFaceRule::setDeclaration(PassRefPtr<CSSMutableStyleDeclaration> style)
-{
-    m_style = style;
+    if (m_style)
+        m_style->setParentRule(0);
 }
 
 String CSSFontFaceRule::cssText() const

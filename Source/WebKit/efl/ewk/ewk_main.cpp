@@ -57,7 +57,7 @@
 #include <libsoup/soup.h>
 #endif
 
-static int _ewk_init_count = 0;
+static int _ewkInitCount = 0;
 
 /**
  * \var     _ewk_log_dom
@@ -69,8 +69,8 @@ static Eina_Bool _ewk_init_body(void);
 
 int ewk_init(void)
 {
-    if (_ewk_init_count)
-        return ++_ewk_init_count;
+    if (_ewkInitCount)
+        return ++_ewkInitCount;
 
     if (!eina_init())
         goto error_eina;
@@ -106,7 +106,7 @@ int ewk_init(void)
         goto error_edje;
     }
 
-    return ++_ewk_init_count;
+    return ++_ewkInitCount;
 
 error_edje:
     ecore_evas_shutdown();
@@ -125,9 +125,9 @@ error_eina:
 
 int ewk_shutdown(void)
 {
-    _ewk_init_count--;
-    if (_ewk_init_count)
-        return _ewk_init_count;
+    _ewkInitCount--;
+    if (_ewkInitCount)
+        return _ewkInitCount;
 
     ecore_evas_shutdown();
     ecore_shutdown();
@@ -176,13 +176,13 @@ Eina_Bool _ewk_init_body(void)
         // Exit now - otherwise you may have some crash later
         int errnowas = errno;
         CRITICAL("Can't access HOME dir (or /tmp) - no place to save databases: %s", strerror(errnowas));
-        return EINA_FALSE;
+        return false;
     }
 
-    WTF::String wkdir = home + "/.webkit";
-    if (WebCore::makeAllDirectories(wkdir)) {
-        ewk_settings_web_database_path_set(wkdir.utf8().data());
-        ewk_settings_cache_directory_path_set(wkdir.utf8().data());
+    WTF::String webkitDirectory = home + "/.webkit";
+    if (WebCore::makeAllDirectories(webkitDirectory)) {
+        ewk_settings_web_database_path_set(webkitDirectory.utf8().data());
+        ewk_settings_application_cache_path_set(webkitDirectory.utf8().data());
     }
 
     // TODO: this should move to WebCore, already reported to webkit-gtk folks:
@@ -197,5 +197,5 @@ Eina_Bool _ewk_init_body(void)
     }
 #endif
 
-    return EINA_TRUE;
+    return true;
 }

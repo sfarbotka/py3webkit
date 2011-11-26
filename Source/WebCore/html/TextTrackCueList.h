@@ -28,8 +28,8 @@
 
 #if ENABLE(VIDEO_TRACK)
 
-#include "PassRefPtr.h"
 #include "TextTrackCue.h"
+#include <wtf/PassRefPtr.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 
@@ -42,16 +42,25 @@ public:
         return adoptRef(new TextTrackCueList);
     }
 
-    unsigned long length() const;
-    TextTrackCue* getCueById(const String&) const;
-    PassRefPtr<TextTrackCueList> activeCues();
+    ~TextTrackCueList() { }
 
-    void append(const PassRefPtr<TextTrackCue>&);
-    void append(Vector<PassRefPtr<TextTrackCue> >&);
-    void remove(const PassRefPtr<TextTrackCue>&);
+    unsigned long length() const;
+    TextTrackCue* item(unsigned index) const;
+    TextTrackCue* getCueById(const String&) const;
+    TextTrackCueList* activeCues();
+
+    bool add(PassRefPtr<TextTrackCue>);
+    bool remove(TextTrackCue*);
+    bool contains(TextTrackCue*) const;
 
 private:
     TextTrackCueList();
+    bool add(PassRefPtr<TextTrackCue>, size_t, size_t);
+    void clear();
+    
+    Vector<RefPtr<TextTrackCue> > m_list;
+    RefPtr<TextTrackCueList> m_activeCues;
+    
 };
 
 } // namespace WebCore

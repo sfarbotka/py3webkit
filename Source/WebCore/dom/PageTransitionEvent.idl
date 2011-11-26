@@ -26,16 +26,9 @@
 module events {
 
     interface [
-        CanBeConstructed,
-        CustomConstructor
+        ConstructorTemplate=Event
     ] PageTransitionEvent : Event {
-
-        readonly attribute boolean persisted;
-
-        void initPageTransitionEvent(in [Optional=CallWithDefaultValue] DOMString typeArg,
-                                     in [Optional=CallWithDefaultValue] boolean canBubbleArg,
-                                     in [Optional=CallWithDefaultValue] boolean cancelableArg,
-                                     in [Optional=CallWithDefaultValue] boolean persisted);
+        readonly attribute [InitializedByConstructor] boolean persisted;
     };
 
 }

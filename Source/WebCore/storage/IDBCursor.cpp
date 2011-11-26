@@ -75,9 +75,9 @@ PassRefPtr<IDBKey> IDBCursor::primaryKey() const
     return m_backend->primaryKey();
 }
 
-PassRefPtr<SerializedScriptValue> IDBCursor::value() const
+PassRefPtr<IDBAny> IDBCursor::value() const
 {
-    return m_backend->value();
+    return IDBAny::create(m_backend->value());
 }
 
 IDBAny* IDBCursor::source() const
@@ -98,11 +98,17 @@ PassRefPtr<IDBRequest> IDBCursor::update(ScriptExecutionContext* context, PassRe
 
 void IDBCursor::continueFunction(PassRefPtr<IDBKey> key, ExceptionCode& ec)
 {
+    if (key && (key->type() == IDBKey::InvalidType)) {
+        ec = IDBDatabaseException::DATA_ERR;
+        return;
+    }
+
     // FIXME: We're not using the context from when continue was called, which means the callback
     //        will be on the original context openCursor was called on. Is this right?
-    if (m_request->resetReadyState(m_transaction.get()))
+    if (m_request->resetReadyState(m_transaction.get())) {
         m_backend->continueFunction(key, m_request, ec);
-    else
+        m_request->setCursor(this);
+    } else
         ec = IDBDatabaseException::NOT_ALLOWED_ERR;
 }
 

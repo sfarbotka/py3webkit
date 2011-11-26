@@ -33,12 +33,13 @@
 namespace WebCore {
 
 FontFeatureValue::FontFeatureValue(const String& tag, int value)
-    : m_tag(tag)
+    : CSSValue(FontFeatureClass)
+    , m_tag(tag)
     , m_value(value)
 {
 }
 
-String FontFeatureValue::cssText() const
+String FontFeatureValue::customCssText() const
 {
     StringBuilder builder;
     builder.append("'");

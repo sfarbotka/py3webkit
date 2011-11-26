@@ -44,8 +44,8 @@
 #include "ScriptCallStack.h"
 #include "ScriptExecutionContext.h"
 #include "Worker.h"
+#include "WorkerDebuggerAgent.h"
 #include "WorkerInspectorController.h"
-#include "WorkerScriptDebugServer.h"
 #include <wtf/MainThread.h>
 
 namespace WebCore {
@@ -118,9 +118,9 @@ public:
 
 private:
     WorkerExceptionTask(const String& errorMessage, int lineNumber, const String& sourceURL, WorkerMessagingProxy* messagingProxy)
-        : m_errorMessage(errorMessage.crossThreadString())
+        : m_errorMessage(errorMessage.isolatedCopy())
         , m_lineNumber(lineNumber)
-        , m_sourceURL(sourceURL.crossThreadString())
+        , m_sourceURL(sourceURL.isolatedCopy())
         , m_messagingProxy(messagingProxy)
     {
     }
@@ -222,14 +222,16 @@ public:
 private:
     PostMessageToPageInspectorTask(WorkerMessagingProxy* messagingProxy, const String& message)
         : m_messagingProxy(messagingProxy)
-        , m_message(message.crossThreadString())
+        , m_message(message.isolatedCopy())
     {
     }
 
     virtual void performTask(ScriptExecutionContext*)
     {
+#if ENABLE(INSPECTOR)
         if (WorkerContextProxy::PageInspector* pageInspector = m_messagingProxy->m_pageInspector)
             pageInspector->dispatchMessageFromWorker(m_message);
+#endif
     }
 
     WorkerMessagingProxy* m_messagingProxy;
@@ -266,9 +268,9 @@ WorkerMessagingProxy::~WorkerMessagingProxy()
            || (m_scriptExecutionContext->isWorkerContext() && currentThread() == static_cast<WorkerContext*>(m_scriptExecutionContext.get())->thread()->threadID()));
 }
 
-void WorkerMessagingProxy::startWorkerContext(const KURL& scriptURL, const String& userAgent, const String& sourceCode)
+void WorkerMessagingProxy::startWorkerContext(const KURL& scriptURL, const String& userAgent, const String& sourceCode, WorkerThreadStartMode startMode)
 {
-    RefPtr<DedicatedWorkerThread> thread = DedicatedWorkerThread::create(scriptURL, userAgent, sourceCode, *this, *this);
+    RefPtr<DedicatedWorkerThread> thread = DedicatedWorkerThread::create(scriptURL, userAgent, sourceCode, *this, *this, startMode);
     workerThreadCreated(thread);
     thread->start();
 }
@@ -354,11 +356,13 @@ void WorkerMessagingProxy::workerObjectDestroyed()
 }
 
 #if ENABLE(INSPECTOR)
+#if ENABLE(JAVASCRIPT_DEBUGGER)
 static void connectToWorkerContextInspectorTask(ScriptExecutionContext* context, bool)
 {
     ASSERT(context->isWorkerContext());
     static_cast<WorkerContext*>(context)->workerInspectorController()->connectFrontend();
 }
+#endif
 
 void WorkerMessagingProxy::connectToInspector(WorkerContextProxy::PageInspector* pageInspector)
 {
@@ -366,34 +370,44 @@ void WorkerMessagingProxy::connectToInspector(WorkerContextProxy::PageInspector*
         return;
     ASSERT(!m_pageInspector);
     m_pageInspector = pageInspector;
-    m_workerThread->runLoop().postTask(createCallbackTask(connectToWorkerContextInspectorTask, true));
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    m_workerThread->runLoop().postTaskForMode(createCallbackTask(connectToWorkerContextInspectorTask, true), WorkerDebuggerAgent::debuggerTaskMode);
+#endif
 }
 
+#if ENABLE(JAVASCRIPT_DEBUGGER)
 static void disconnectFromWorkerContextInspectorTask(ScriptExecutionContext* context, bool)
 {
     ASSERT(context->isWorkerContext());
     static_cast<WorkerContext*>(context)->workerInspectorController()->disconnectFrontend();
 }
+#endif
 
 void WorkerMessagingProxy::disconnectFromInspector()
 {
     m_pageInspector = 0;
     if (m_askedToTerminate)
         return;
-    m_workerThread->runLoop().postTaskForMode(createCallbackTask(disconnectFromWorkerContextInspectorTask, true), WorkerScriptDebugServer::debuggerTaskMode);
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    m_workerThread->runLoop().postTaskForMode(createCallbackTask(disconnectFromWorkerContextInspectorTask, true), WorkerDebuggerAgent::debuggerTaskMode);
+#endif
 }
 
+#if ENABLE(JAVASCRIPT_DEBUGGER)
 static void dispatchOnInspectorBackendTask(ScriptExecutionContext* context, const String& message)
 {
     ASSERT(context->isWorkerContext());
     static_cast<WorkerContext*>(context)->workerInspectorController()->dispatchMessageFromFrontend(message);
 }
+#endif
 
 void WorkerMessagingProxy::sendMessageToInspector(const String& message)
 {
     if (m_askedToTerminate)
         return;
-    m_workerThread->runLoop().postTaskForMode(createCallbackTask(dispatchOnInspectorBackendTask, String(message)), WorkerScriptDebugServer::debuggerTaskMode);
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    m_workerThread->runLoop().postTaskForMode(createCallbackTask(dispatchOnInspectorBackendTask, String(message)), WorkerDebuggerAgent::debuggerTaskMode);
+#endif
 }
 #endif
 

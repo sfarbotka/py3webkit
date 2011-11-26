@@ -31,15 +31,9 @@
 
 #include <wtf/text/StringBuilder.h>
 
-#if ENABLE(CSS3_FLEXBOX)
-
 namespace WebCore {
 
-CSSFlexValue::~CSSFlexValue()
-{
-}
-
-String CSSFlexValue::cssText() const
+String CSSFlexValue::customCssText() const
 {
     StringBuilder result;
     result.append("-webkit-flex(");
@@ -53,5 +47,3 @@ String CSSFlexValue::cssText() const
 }
 
 }
-
-#endif // ENABLE(CSS3_FLEXBOX)

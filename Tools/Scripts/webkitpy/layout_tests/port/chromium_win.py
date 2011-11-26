@@ -29,6 +29,7 @@
 
 """Chromium Win implementation of the Port interface."""
 
+import os
 import logging
 import sys
 
@@ -55,8 +56,6 @@ def os_version(windows_version=None):
 
 
 class ChromiumWinPort(chromium.ChromiumPort):
-    """Chromium Win implementation of the Port class."""
-
     # FIXME: Figure out how to unify this with base.TestConfiguration.all_systems()?
     SUPPORTED_VERSIONS = ('xp', 'vista', 'win7')
 
@@ -85,11 +84,11 @@ class ChromiumWinPort(chromium.ChromiumPort):
         ],
     }
 
-    def __init__(self, port_name=None, windows_version=None, **kwargs):
+    def __init__(self, host, port_name=None, windows_version=None, **kwargs):
         # We're a little generic here because this code is reused by the
         # 'google-chrome' port as well as the 'mock-' and 'dryrun-' ports.
         port_name = port_name or 'chromium-win'
-        chromium.ChromiumPort.__init__(self, port_name=port_name, **kwargs)
+        chromium.ChromiumPort.__init__(self, host, port_name=port_name, **kwargs)
         if port_name.endswith('-win'):
             self._version = os_version(windows_version)
             self._name = port_name + '-' + self._version
@@ -97,38 +96,25 @@ class ChromiumWinPort(chromium.ChromiumPort):
             self._version = port_name[port_name.index('-win-') + len('-win-'):]
             assert self._version in self.SUPPORTED_VERSIONS, "%s is not in %s" % (self._version, self.SUPPORTED_VERSIONS)
         self._operating_system = 'win'
-        self._engage_awesome_windows_hacks()
 
-    def _engage_awesome_windows_hacks(self):
-        try:
-            self._executive.run_command(['svn', 'help'])
-        except OSError, e:
-            try:
-                self._executive.run_command(['svn.bat', 'help'])
-                # Chromium Win uses the depot_tools package, which contains a number
-                # of development tools, including Python and svn. Instead of using a
-                # real svn executable, depot_tools indirects via a batch file, called
-                # svn.bat. This batch file allows depot_tools to auto-update the real
-                # svn executable, which is contained in a subdirectory.
-                #
-                # That's all fine and good, except that subprocess.popen can detect
-                # the difference between a real svn executable and batch file when we
-                # don't provide use shell=True. Rather than use shell=True on Windows,
-                # We hack the svn.bat name into the SVN class.
-                _log.debug('Engaging svn.bat Windows hack.')
-                from webkitpy.common.checkout.scm.svn import SVN
-                SVN.executable_name = 'svn.bat'
-            except OSError, e:
-                _log.debug('Failed to engage svn.bat Windows hack.')
 
     def setup_environ_for_server(self, server_name=None):
-        env = chromium.ChromiumPort.setup_environ_for_server(self)
+        env = chromium.ChromiumPort.setup_environ_for_server(self, server_name)
+
+        # FIXME: lighttpd depends on some environment variable we're not whitelisting.
+        # We should add the variable to an explicit whitelist in base.Port.
+        # FIXME: This is a temporary hack to get the cr-win bot online until
+        # someone from the cr-win port can take a look.
+        for key, value in os.environ.items():
+            if key not in env:
+                env[key] = value
+
         # Put the cygwin directory first in the path to find cygwin1.dll.
         env["PATH"] = "%s;%s" % (self.path_from_chromium_base("third_party", "cygwin", "bin"), env["PATH"])
         # Configure the cygwin directory so that pywebsocket finds proper
         # python executable to run cgi program.
         env["CYGWIN_PATH"] = self.path_from_chromium_base("third_party", "cygwin", "bin")
-        if (sys.platform in ("cygwin", "win32") and self.get_option('register_cygwin')):
+        if self.get_option('register_cygwin'):
             setup_mount = self.path_from_chromium_base("third_party", "cygwin", "setup_mount.bat")
             self._executive.run_command([setup_mount])  # Paths are all absolute, so this does not require a cwd.
         return env
@@ -159,16 +145,7 @@ class ChromiumWinPort(chromium.ChromiumPort):
         p = self.path_from_chromium_base('build', *comps)
         if self._filesystem.exists(p):
             return p
-        p = self.path_from_chromium_base('webkit', *comps)
-        if self._filesystem.exists(p):
-            return p
-        p = self.path_from_chromium_base('chrome', *comps)
-        if self._filesystem.exists(p):
-            return p
-        p = self._filesystem.join(self.path_from_webkit_base(), 'Source', 'WebKit', 'chromium', 'build', *comps)
-        if self._filesystem.exists(p):
-            return p
-        return self._filesystem.join(self.path_from_webkit_base(), 'Source', 'WebKit', 'chromium', *comps)
+        return self._filesystem.join(self.path_from_webkit_base(), 'Source', 'WebKit', 'chromium', 'build', *comps)
 
     def _uses_apache(self):
         return False

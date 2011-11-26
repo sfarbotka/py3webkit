@@ -26,16 +26,16 @@
 #include "TestInterface.h"
 #include "V8DOMWrapper.h"
 #include "WrapperTypeInfo.h"
-#include <wtf/text/StringHash.h>
 #include <v8.h>
 #include <wtf/HashMap.h>
+#include <wtf/text/StringHash.h>
 
 namespace WebCore {
 
 class V8TestInterface {
 public:
-    static const bool hasDependentLifetime = false;
-    static bool HasInstance(v8::Handle<v8::Value> value);
+    static const bool hasDependentLifetime = true;
+    static bool HasInstance(v8::Handle<v8::Value>);
     static v8::Persistent<v8::FunctionTemplate> GetRawTemplate();
     static v8::Persistent<v8::FunctionTemplate> GetTemplate();
     static TestInterface* toNative(v8::Handle<v8::Object> object)
@@ -45,16 +45,23 @@ public:
     inline static v8::Handle<v8::Object> wrap(TestInterface*);
     static void derefObject(void*);
     static WrapperTypeInfo info;
-    static v8::Handle<v8::Value> constructorCallback(const v8::Arguments& args);
+    static ActiveDOMObject* toActiveDOMObject(v8::Handle<v8::Object>);
+    static v8::Handle<v8::Value> constructorCallback(const v8::Arguments&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
+    static v8::Handle<v8::Object> existingWrapper(TestInterface*);
+
 private:
     static v8::Handle<v8::Object> wrapSlow(TestInterface*);
 };
 
+ALWAYS_INLINE v8::Handle<v8::Object> V8TestInterface::existingWrapper(TestInterface* impl)
+{
+    return getActiveDOMObjectMap().get(impl);
+}
 
 v8::Handle<v8::Object> V8TestInterface::wrap(TestInterface* impl)
 {
-        v8::Handle<v8::Object> wrapper = getDOMObjectMap().get(impl);
+        v8::Handle<v8::Object> wrapper = existingWrapper(impl);
         if (!wrapper.IsEmpty())
             return wrapper;
     return V8TestInterface::wrapSlow(impl);
@@ -70,6 +77,7 @@ inline v8::Handle<v8::Value> toV8(PassRefPtr< TestInterface > impl)
 {
     return toV8(impl.get());
 }
+
 }
 
 #endif // V8TestInterface_h

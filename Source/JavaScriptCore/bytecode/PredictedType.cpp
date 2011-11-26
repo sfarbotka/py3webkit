@@ -29,6 +29,8 @@
 #include "config.h"
 #include "PredictedType.h"
 
+#include "JSByteArray.h"
+#include "JSFunction.h"
 #include "ValueProfile.h"
 #include <wtf/BoundsCheckedPointer.h>
 
@@ -44,32 +46,65 @@ const char* predictionToString(PredictedType value)
     static char description[size];
     BoundsCheckedPointer<char> ptr(description, size);
     
+    bool isTop = true;
+    
     if (value & PredictCellOther)
         ptr.strcat("Othercell");
+    else
+        isTop = false;
     
     if (value & PredictObjectOther)
         ptr.strcat("Otherobj");
+    else
+        isTop = false;
     
     if (value & PredictFinalObject)
         ptr.strcat("Final");
+    else
+        isTop = false;
 
     if (value & PredictArray)
         ptr.strcat("Array");
+    else
+        isTop = false;
+    
+    if (value & PredictByteArray)
+        ptr.strcat("Bytearray");
+    else
+        isTop = false;
+    
+    if (value & PredictFunction)
+        ptr.strcat("Function");
+    else
+        isTop = false;
     
     if (value & PredictString)
         ptr.strcat("String");
+    else
+        isTop = false;
     
     if (value & PredictInt32)
         ptr.strcat("Int");
+    else
+        isTop = false;
     
     if (value & PredictDouble)
         ptr.strcat("Double");
+    else
+        isTop = false;
     
     if (value & PredictBoolean)
         ptr.strcat("Bool");
+    else
+        isTop = false;
     
     if (value & PredictOther)
         ptr.strcat("Other");
+    else
+        isTop = false;
+    
+    if (isTop)
+        return "Top";
     
     *ptr++ = 0;
     
@@ -87,6 +122,12 @@ PredictedType predictionFromClassInfo(const ClassInfo* classInfo)
     
     if (classInfo == &JSString::s_info)
         return PredictString;
+    
+    if (classInfo->isSubClassOf(&JSFunction::s_info))
+        return PredictFunction;
+
+    if (classInfo->isSubClassOf(&JSByteArray::s_info))
+        return PredictByteArray;
     
     if (classInfo->isSubClassOf(&JSObject::s_info))
         return PredictObjectOther;
@@ -114,6 +155,7 @@ PredictedType predictionFromValue(JSValue value)
         return predictionFromCell(value.asCell());
     if (value.isBoolean())
         return PredictBoolean;
+    ASSERT(value.isUndefinedOrNull());
     return PredictOther;
 }
 

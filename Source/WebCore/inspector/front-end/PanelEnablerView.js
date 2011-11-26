@@ -30,6 +30,7 @@
 WebInspector.PanelEnablerView = function(identifier, headingText, disclaimerText, buttonTitle)
 {
     WebInspector.View.call(this);
+    this.registerRequiredCSS("panelEnablerView.css");
 
     this.element.addStyleClass("panel-enabler-view");
     this.element.addStyleClass(identifier);
@@ -81,13 +82,6 @@ WebInspector.PanelEnablerView.prototype = {
     _enableButtonCicked: function()
     {
         this.dispatchEventToListeners("enable clicked");
-    },
-
-    show: function(parentElement)
-    {
-        WebInspector.View.prototype.show.call(this, parentElement);
-
-        setTimeout(this.doResize.bind(this), 0);
     },
 
     onResize: function()

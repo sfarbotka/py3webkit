@@ -34,14 +34,16 @@
 WebInspector.ResourcesPanel = function(database)
 {
     WebInspector.Panel.call(this, "resources");
+    this.registerRequiredCSS("resourcesPanel.css");
 
     WebInspector.settings.resourcesLastSelectedItem = WebInspector.settings.createSetting("resourcesLastSelectedItem", {});
 
-    this.createSidebar();
+    this.createSplitViewWithSidebarTree();
     this.sidebarElement.addStyleClass("outline-disclosure");
     this.sidebarElement.addStyleClass("filter-all");
     this.sidebarElement.addStyleClass("children");
     this.sidebarElement.addStyleClass("small");
+
     this.sidebarTreeElement.removeStyleClass("sidebar-tree");
 
     this.resourcesListTreeElement = new WebInspector.StorageCategoryTreeElement(this, WebInspector.UIString("Frames"), "Frames", ["frame-storage-tree-item"]);
@@ -62,10 +64,8 @@ WebInspector.ResourcesPanel = function(database)
     this.applicationCacheListTreeElement = new WebInspector.StorageCategoryTreeElement(this, WebInspector.UIString("Application Cache"), "ApplicationCache", ["application-cache-storage-tree-item"]);
     this.sidebarTree.appendChild(this.applicationCacheListTreeElement);
 
-    this.storageViews = document.createElement("div");
-    this.storageViews.id = "storage-views";
-    this.storageViews.className = "diff-container";
-    this.element.appendChild(this.storageViews);
+    this.storageViews = this.splitView.mainElement;
+    this.storageViews.addStyleClass("diff-container");
 
     this.storageViewStatusBarItemsContainer = document.createElement("div");
     this.storageViewStatusBarItemsContainer.className = "status-bar-items";
@@ -86,6 +86,8 @@ WebInspector.ResourcesPanel = function(database)
     WebInspector.GoToLineDialog.install(this, viewGetter.bind(this));
 
     WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.OnLoad, this._onLoadEventFired, this);
+    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded, this._cachedResourcesLoaded, this);
+    WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.WillLoadCachedResources, this._resetWithFrames, this);
 }
 
 WebInspector.ResourcesPanel.prototype = {
@@ -99,16 +101,20 @@ WebInspector.ResourcesPanel.prototype = {
         return [this.storageViewStatusBarItemsContainer];
     },
 
-    elementsToRestoreScrollPositionsFor: function()
+    wasShown: function()
     {
-        return [this.sidebarElement];
+        WebInspector.Panel.prototype.wasShown.call(this);
+        this._initialize();
     },
 
-    show: function()
+    _initialize: function()
     {
-        WebInspector.Panel.prototype.show.call(this);
-
-        this._populateResourceTree();
+        if (!this._initialized && this.isShowing() && this._cachedResourcesWereLoaded) {
+            this._populateResourceTree();
+            this._populateApplicationCacheTree();
+            this._initDefaultSelection();
+            this._initialized = true;
+        }
     },
 
     _onLoadEventFired: function()
@@ -118,7 +124,7 @@ WebInspector.ResourcesPanel.prototype = {
 
     _initDefaultSelection: function()
     {
-        if (!this._treeElementForFrameId)
+        if (!this._initialized)
             return;
 
         var itemURL = WebInspector.settings.resourcesLastSelectedItem.get();
@@ -131,11 +137,19 @@ WebInspector.ResourcesPanel.prototype = {
             }
         }
 
-        if (WebInspector.mainResource && this.resourcesListTreeElement && this.resourcesListTreeElement.expanded)
-            this.showResource(WebInspector.mainResource);
+        var mainResource = WebInspector.inspectedPageURL && this.resourcesListTreeElement && this.resourcesListTreeElement.expanded && WebInspector.resourceTreeModel.resourceForURL(WebInspector.inspectedPageURL);
+        if (mainResource)
+            this.showResource(mainResource);
     },
 
-    reset: function()
+    _resetWithFrames: function()
+    {
+        this.resourcesListTreeElement.removeChildren();
+        this._treeElementForFrameId = {};
+        this._reset();
+    },
+
+    _reset: function()
     {
         this._origins = {};
         this._domains = {};
@@ -157,15 +171,13 @@ WebInspector.ResourcesPanel.prototype = {
 
         this._cookieViews = {};
 
-        this._applicationCacheView = null;
-        delete this._cachedApplicationCacheViewStatus;
-
         this.databasesListTreeElement.removeChildren();
         this.localStorageListTreeElement.removeChildren();
         this.sessionStorageListTreeElement.removeChildren();
         this.cookieListTreeElement.removeChildren();
-        this.applicationCacheListTreeElement.removeChildren();
-        this.storageViews.removeChildren();
+
+        if (this.visibleView)
+            this.visibleView.detach();
 
         this.storageViewStatusBarItemsContainer.removeChildren();
 
@@ -175,42 +187,33 @@ WebInspector.ResourcesPanel.prototype = {
 
     _populateResourceTree: function()
     {
-        if (this._treeElementForFrameId)
-            return;
-
         this._treeElementForFrameId = {};
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameAdded, this._frameAdded, this);
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, this._frameNavigated, this);
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.FrameDetached, this._frameDetached, this);
         WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, this._resourceAdded, this);
-        WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded, this._cachedResourcesLoaded, this);
-        WebInspector.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.WillLoadCachedResources, this._resetResourcesTree, this);
 
-        function populateFrame(frameId)
+        function populateFrame(frame)
         {
-            var subframes = WebInspector.resourceTreeModel.subframes(frameId);
-            for (var i = 0; i < subframes.length; ++i) {
-                this._frameAdded({data:subframes[i]});
-                populateFrame.call(this, subframes[i].id);
-            }
+            this._frameAdded({data:frame});
+            for (var i = 0; i < frame.childFrames.length; ++i)
+                populateFrame.call(this, frame.childFrames[i]);
 
-            var resources = WebInspector.resourceTreeModel.resources(frameId);
+            var resources = frame.resources();
             for (var i = 0; i < resources.length; ++i)
                 this._resourceAdded({data:resources[i]});
         }
-        populateFrame.call(this, "");
-
-        this._initDefaultSelection();
+        populateFrame.call(this, WebInspector.resourceTreeModel.mainFrame);
     },
 
     _frameAdded: function(event)
     {
         var frame = event.data;
-        var parentFrameId = frame.parentId;
+        var parentFrame = frame.parentFrame;
 
-        var parentTreeElement = parentFrameId ? this._treeElementForFrameId[parentFrameId] : this.resourcesListTreeElement;
+        var parentTreeElement = parentFrame ? this._treeElementForFrameId[parentFrame.id] : this.resourcesListTreeElement;
         if (!parentTreeElement) {
-            console.warn("No frame with id:" + parentFrameId + " to route " + frame.name + "/" + frame.url + " to.")
+            console.warn("No frame to route " + frame.url + " to.")
             return;
         }
 
@@ -221,12 +224,12 @@ WebInspector.ResourcesPanel.prototype = {
 
     _frameDetached: function(event)
     {
-        var frameId = event.data;
-        var frameTreeElement = this._treeElementForFrameId[frameId];
+        var frame = event.data;
+        var frameTreeElement = this._treeElementForFrameId[frame.id];
         if (!frameTreeElement)
             return;
 
-        delete this._treeElementForFrameId[frameId];
+        delete this._treeElementForFrameId[frame.id];
         if (frameTreeElement.parent)
             frameTreeElement.parent.removeChild(frameTreeElement);
     },
@@ -251,22 +254,25 @@ WebInspector.ResourcesPanel.prototype = {
 
     _frameNavigated: function(event)
     {
-        var frameId = event.data.frame.id;
+        var frame = event.data;
+
+        if (!frame.parentFrame)
+            this._reset();
+
+        var frameId = frame.id;
         var frameTreeElement = this._treeElementForFrameId[frameId];
         if (frameTreeElement)
-            frameTreeElement.frameNavigated(event.data.frame);
-    },
+            frameTreeElement.frameNavigated(frame);
 
-    _resetResourcesTree: function()
-    {
-        this.resourcesListTreeElement.removeChildren();
-        this._treeElementForFrameId = {};
-        this.reset();
+        var applicationCacheFrameTreeElement = this._applicationCacheFrameElements[frameId];
+        if (applicationCacheFrameTreeElement)
+            applicationCacheFrameTreeElement.frameNavigated(frame);
     },
 
     _cachedResourcesLoaded: function()
     {
-        this._initDefaultSelection();
+        this._cachedResourcesWereLoaded = true;
+        this._initialize();
     },
 
     addDatabase: function(database)
@@ -290,9 +296,6 @@ WebInspector.ResourcesPanel.prototype = {
 
             var cookieDomainTreeElement = new WebInspector.CookieTreeElement(this, domain);
             this.cookieListTreeElement.appendChild(cookieDomainTreeElement);
-
-            var applicationCacheTreeElement = new WebInspector.ApplicationCacheTreeElement(this, domain);
-            this.applicationCacheListTreeElement.appendChild(applicationCacheTreeElement);
         }
     },
 
@@ -362,7 +365,7 @@ WebInspector.ResourcesPanel.prototype = {
     {
         var view = this._resourceViewForResource(resource);
         if (!view) {
-            this.visibleView.hide();
+            this.visibleView.detach();
             return;
         }
         if (view.searchCanceled)
@@ -480,18 +483,12 @@ WebInspector.ResourcesPanel.prototype = {
         this._innerShowView(view);
     },
 
-    showApplicationCache: function(treeElement, appcacheDomain)
+    showApplicationCache: function(frameId)
     {
-        var view = this._applicationCacheView;
-        if (!view) {
-            view = new WebInspector.ApplicationCacheItemsView(treeElement, appcacheDomain);
-            this._applicationCacheView = view;
-        }
+        if (!this._applicationCacheViews[frameId])
+            this._applicationCacheViews[frameId] = new WebInspector.ApplicationCacheItemsView(this._applicationCacheModel, frameId);
 
-        this._innerShowView(view);
-
-        if ("_cachedApplicationCacheViewStatus" in this)
-            this._applicationCacheView.updateStatus(this._cachedApplicationCacheViewStatus);
+        this._innerShowView(this._applicationCacheViews[frameId]);
     },
 
     showCategoryView: function(categoryName)
@@ -505,9 +502,8 @@ WebInspector.ResourcesPanel.prototype = {
     _innerShowView: function(view)
     {
         if (this.visibleView)
-            this.visibleView.hide();
+            this.visibleView.detach();
 
-        this.addChildView(view);
         view.show(this.storageViews);
         this.visibleView = view;
 
@@ -521,7 +517,7 @@ WebInspector.ResourcesPanel.prototype = {
     {
         if (!this.visibleView)
             return;
-        this.visibleView.hide();
+        this.visibleView.detach();
         delete this.visibleView;
     },
 
@@ -567,23 +563,75 @@ WebInspector.ResourcesPanel.prototype = {
             domStorage._domStorageView.update();
     },
 
-    updateApplicationCacheStatus: function(status)
+    _populateApplicationCacheTree: function()
     {
-        this._cachedApplicationCacheViewStatus = status;
-        if (this._applicationCacheView && this._applicationCacheView === this.visibleView)
-            this._applicationCacheView.updateStatus(status);
+        this._applicationCacheModel = new WebInspector.ApplicationCacheModel();
+        
+        this._applicationCacheViews = {};
+        this._applicationCacheFrameElements = {};
+        this._applicationCacheManifestElements = {};
+        
+        this._applicationCacheModel.addEventListener(WebInspector.ApplicationCacheModel.EventTypes.FrameManifestAdded, this._applicationCacheFrameManifestAdded, this);
+        this._applicationCacheModel.addEventListener(WebInspector.ApplicationCacheModel.EventTypes.FrameManifestRemoved, this._applicationCacheFrameManifestRemoved, this);
+
+        this._applicationCacheModel.addEventListener(WebInspector.ApplicationCacheModel.EventTypes.FrameManifestStatusUpdated, this._applicationCacheFrameManifestStatusChanged, this);
+        this._applicationCacheModel.addEventListener(WebInspector.ApplicationCacheModel.EventTypes.NetworkStateChanged, this._applicationCacheNetworkStateChanged, this);
     },
 
-    updateNetworkState: function(isNowOnline)
+    _applicationCacheFrameManifestAdded: function(event)
     {
-        if (this._applicationCacheView && this._applicationCacheView === this.visibleView)
-            this._applicationCacheView.updateNetworkState(isNowOnline);
+        var frameId = event.data;
+        var manifestURL = this._applicationCacheModel.frameManifestURL(frameId);
+        var status = this._applicationCacheModel.frameManifestStatus(frameId)
+
+        var manifestTreeElement = this._applicationCacheManifestElements[manifestURL]
+        if (!manifestTreeElement) {
+            manifestTreeElement = new WebInspector.ApplicationCacheManifestTreeElement(this, manifestURL);
+            this.applicationCacheListTreeElement.appendChild(manifestTreeElement);
+            this._applicationCacheManifestElements[manifestURL] = manifestTreeElement;
+        }
+
+        var frameTreeElement = new WebInspector.ApplicationCacheFrameTreeElement(this, frameId, manifestURL);
+        manifestTreeElement.appendChild(frameTreeElement);
+        manifestTreeElement.expand();
+        this._applicationCacheFrameElements[frameId] = frameTreeElement;
     },
 
-    updateManifest: function(manifest)
+    _applicationCacheFrameManifestRemoved: function(event)
     {
-        if (this._applicationCacheView && this._applicationCacheView === this.visibleView)
-            this._applicationCacheView.updateManifest(manifest);
+        var frameId = event.data;
+        var frameTreeElement = this._applicationCacheFrameElements[frameId];
+        if (!frameTreeElement)
+            return;
+
+        var manifestURL = frameTreeElement.manifestURL;
+        delete this._applicationCacheFrameElements[frameId];
+        delete this._applicationCacheViews[frameId];
+        frameTreeElement.parent.removeChild(frameTreeElement);
+
+        var manifestTreeElement = this._applicationCacheManifestElements[manifestURL];
+        if (manifestTreeElement.children.length !== 0)
+            return;
+
+        delete this._applicationCacheManifestElements[manifestURL];
+        manifestTreeElement.parent.removeChild(manifestTreeElement);
+    },
+
+    _applicationCacheFrameManifestStatusChanged: function(event)
+    {
+        var frameId = event.data;
+        var status = this._applicationCacheModel.frameManifestStatus(frameId)
+
+        if (this._applicationCacheViews[frameId])
+            this._applicationCacheViews[frameId].updateStatus(status);
+    },
+
+    _applicationCacheNetworkStateChanged: function(event)
+    {
+        var isNowOnline = event.data;
+
+        for (var manifestURL in this._applicationCacheViews)
+            this._applicationCacheViews[manifestURL].updateNetworkState(isNowOnline);
     },
 
     _domStorageForId: function(storageId)
@@ -599,9 +647,9 @@ WebInspector.ResourcesPanel.prototype = {
         return null;
     },
 
-    updateMainViewWidth: function(width)
+    sidebarResized: function(event)
     {
-        this.storageViews.style.left = width + "px";
+        var width = event.data;
         this.storageViewStatusBarItemsContainer.style.left = width + "px";
     },
 
@@ -645,7 +693,7 @@ WebInspector.ResourcesPanel.prototype = {
             }
 
             WebInspector.searchController.updateSearchMatchesCount(totalMatchesCount, this);
-            this._searchController = new WebInspector.ResourcesSearchController(this.resourcesListTreeElement);
+            this._searchController = new WebInspector.ResourcesSearchController(this.resourcesListTreeElement, totalMatchesCount);
 
             if (this.sidebarTree.selectedTreeElement && this.sidebarTree.selectedTreeElement.searchMatchesCount)
                 this.jumpToNextSearchResult();
@@ -693,6 +741,7 @@ WebInspector.ResourcesPanel.prototype = {
                 return; // User has selected another view while we were searching.
             if (this._lastSearchResultIndex != -1)
                 this.visibleView.jumpToSearchResult(this._lastSearchResultIndex);
+            WebInspector.searchController.updateCurrentMatchIndex(searchResult.currentMatchIndex - 1, this);
         }
 
         // Then run SourceFrame search if needed and jump to search result index when done.
@@ -864,8 +913,53 @@ WebInspector.BaseStorageTreeElement.prototype = {
 
         this.titleElement = document.createElement("div");
         this.titleElement.className = "base-storage-tree-element-title";
-        this.titleElement.textContent = this._titleText;
+        this._titleTextNode = document.createTextNode("");
+        this.titleElement.appendChild(this._titleTextNode);
+        this._updateTitle();
+        this._updateSubtitle();
         this.listItemElement.appendChild(this.titleElement);
+    },
+
+    get displayName()
+    {
+        return this._displayName;
+    },
+
+    _updateDisplayName: function()
+    {
+        this._displayName = this._titleText || "";
+        if (this._subtitleText)
+            this._displayName += " (" + this._subtitleText + ")";
+    },
+
+    _updateTitle: function()
+    {
+        this._updateDisplayName();
+        
+        if (!this.titleElement)
+            return;
+
+        this._titleTextNode.textContent = this._titleText || "";
+    },
+
+    _updateSubtitle: function()
+    {
+        this._updateDisplayName();
+        
+        if (!this.titleElement)
+            return;
+
+        if (this._subtitleText) {
+            if (!this._subtitleElement) {
+                this._subtitleElement = document.createElement("span");
+                this._subtitleElement.className = "base-storage-tree-element-subtitle";
+                this.titleElement.appendChild(this._subtitleElement);
+            }
+            this._subtitleElement.textContent = "(" + this._subtitleText + ")";
+        } else if (this._subtitleElement) {
+            this.titleElement.removeChild(this._subtitleElement);
+            delete this._subtitleElement;
+        }
     },
 
     onselect: function()
@@ -889,8 +983,23 @@ WebInspector.BaseStorageTreeElement.prototype = {
     set titleText(titleText)
     {
         this._titleText = titleText;
-        if (this.titleElement)
-            this.titleElement.textContent = this._titleText;
+        this._updateTitle();
+    },
+
+    get subtitleText()
+    {
+        return this._subtitleText;
+    },
+
+    set subtitleText(subtitleText)
+    {
+        this._subtitleText = subtitleText;
+        this._updateSubtitle();
+    },
+
+    get searchMatchesCount()
+    {
+        return 0;
     },
 
     isEventWithinDisclosureTriangle: function(event)
@@ -968,9 +1077,8 @@ WebInspector.FrameTreeElement.prototype = {
         this.removeChildren();
         this._frameId = frame.id;
 
-        var title = frame.name;
-        var subtitle = WebInspector.Resource.displayName(frame.url);
-        this.setTitles(title, subtitle);
+        this.titleText = frame.name;
+        this.subtitleText = WebInspector.Resource.displayName(frame.url);
 
         this._categoryElements = {};
         this._treeElementForResource = {};
@@ -980,51 +1088,16 @@ WebInspector.FrameTreeElement.prototype = {
 
     get itemURL()
     {
-        return "frame://" + encodeURI(this._displayName);
-    },
-
-    onattach: function()
-    {
-        WebInspector.BaseStorageTreeElement.prototype.onattach.call(this);
-        if (this._titleToSetOnAttach || this._subtitleToSetOnAttach) {
-            this.setTitles(this._titleToSetOnAttach, this._subtitleToSetOnAttach);
-            delete this._titleToSetOnAttach;
-            delete this._subtitleToSetOnAttach;
-        }
+        return "frame://" + encodeURI(this.displayName);
     },
 
     onselect: function()
     {
         WebInspector.BaseStorageTreeElement.prototype.onselect.call(this);
-        this._storagePanel.showCategoryView(this._displayName);
+        this._storagePanel.showCategoryView(this.displayName);
 
         this.listItemElement.removeStyleClass("hovered");
         DOMAgent.hideHighlight();
-    },
-
-    get displayName()
-    {
-        return this._displayName;
-    },
-
-    setTitles: function(title, subtitle)
-    {
-        this._displayName = title || "";
-        if (subtitle)
-            this._displayName += " (" + subtitle + ")";
-
-        if (this.parent) {
-            this.titleElement.textContent = title || "";
-            if (subtitle) {
-                var subtitleElement = document.createElement("span");
-                subtitleElement.className = "base-storage-tree-element-subtitle";
-                subtitleElement.textContent = "(" + subtitle + ")";
-                this.titleElement.appendChild(subtitleElement);
-            }
-        } else {
-            this._titleToSetOnAttach = title;
-            this._subtitleToSetOnAttach = subtitle;
-        }
     },
 
     set hovered(hovered)
@@ -1176,6 +1249,7 @@ WebInspector.FrameResourceTreeElement.prototype = {
         var contextMenu = new WebInspector.ContextMenu();
         contextMenu.appendItem(WebInspector.openLinkExternallyLabel(), WebInspector.openResource.bind(WebInspector, this._resource.url, false));
         this._appendOpenInNetworkPanelAction(contextMenu, event);
+        WebInspector.populateResourceContextMenu(contextMenu, this._resource.url);
         this._appendSaveAsAction(contextMenu, event);
         contextMenu.show(event);
     },
@@ -1336,11 +1410,10 @@ WebInspector.FrameResourceTreeElement.prototype = {
         var oldView = this._sourceView;
         var newView = this._createSourceView();
 
-        var oldViewParentNode = oldView.visible ? oldView.element.parentNode : null;
+        var oldViewParentNode = oldView.isShowing() ? oldView.element.parentNode : null;
         newView.inheritScrollPositions(oldView);
 
-        this._storagePanel.removeChildView(this._sourceView);
-        this._storagePanel.addChildView(newView);
+        this._sourceView.detach();
         this._sourceView = newView;
 
         if (oldViewParentNode)
@@ -1474,25 +1547,84 @@ WebInspector.CookieTreeElement.prototype.__proto__ = WebInspector.BaseStorageTre
  * @constructor
  * @extends {WebInspector.BaseStorageTreeElement}
  */
-WebInspector.ApplicationCacheTreeElement = function(storagePanel, appcacheDomain)
+WebInspector.ApplicationCacheManifestTreeElement = function(storagePanel, manifestURL)
 {
-    WebInspector.BaseStorageTreeElement.call(this, storagePanel, null, appcacheDomain ? appcacheDomain : WebInspector.UIString("Local Files"), ["application-cache-storage-tree-item"]);
-    this._appcacheDomain = appcacheDomain;
+    var title = WebInspector.Resource.displayName(manifestURL);
+    WebInspector.BaseStorageTreeElement.call(this, storagePanel, null, title, ["application-cache-storage-tree-item"]);
+    this.tooltip = manifestURL;
+    this._manifestURL = manifestURL;
 }
 
-WebInspector.ApplicationCacheTreeElement.prototype = {
+WebInspector.ApplicationCacheManifestTreeElement.prototype = {
     get itemURL()
     {
-        return "appcache://" + this._appcacheDomain;
+        return "appcache://" + this._manifestURL;
+    },
+
+    get manifestURL()
+    {
+        return this._manifestURL;
     },
 
     onselect: function()
     {
         WebInspector.BaseStorageTreeElement.prototype.onselect.call(this);
-        this._storagePanel.showApplicationCache(this, this._appcacheDomain);
+        this._storagePanel.showCategoryView(this._manifestURL);
     }
 }
-WebInspector.ApplicationCacheTreeElement.prototype.__proto__ = WebInspector.BaseStorageTreeElement.prototype;
+WebInspector.ApplicationCacheManifestTreeElement.prototype.__proto__ = WebInspector.BaseStorageTreeElement.prototype;
+
+/**
+ * @constructor
+ * @extends {WebInspector.BaseStorageTreeElement}
+ */
+WebInspector.ApplicationCacheFrameTreeElement = function(storagePanel, frameId, manifestURL)
+{
+    WebInspector.BaseStorageTreeElement.call(this, storagePanel, null, "", ["frame-storage-tree-item"]);
+    this._frameId = frameId;
+    this._manifestURL = manifestURL;
+    this._refreshTitles();
+}
+
+WebInspector.ApplicationCacheFrameTreeElement.prototype = {
+    get itemURL()
+    {
+        return "appcache://" + this._manifestURL + "/" + encodeURI(this.displayName);
+    },
+
+    get frameId()
+    {
+        return this._frameId;
+    },
+
+    get manifestURL()
+    {
+        return this._manifestURL;
+    },
+
+    _refreshTitles: function()
+    {
+        var frame = WebInspector.resourceTreeModel.frameForId(this._frameId);
+        if (!frame) {
+            this.subtitleText = WebInspector.UIString("new frame");
+            return;
+        }
+        this.titleText = frame.name;
+        this.subtitleText = WebInspector.Resource.displayName(frame.url);
+    },
+
+    frameNavigated: function()
+    {
+        this._refreshTitles();
+    },
+
+    onselect: function()
+    {
+        WebInspector.BaseStorageTreeElement.prototype.onselect.call(this);
+        this._storagePanel.showApplicationCache(this._frameId);
+    }
+}
+WebInspector.ApplicationCacheFrameTreeElement.prototype.__proto__ = WebInspector.BaseStorageTreeElement.prototype;
 
 /**
  * @constructor
@@ -1588,20 +1720,26 @@ WebInspector.StorageCategoryView.prototype.__proto__ = WebInspector.View.prototy
 
 /**
  * @constructor
+ * @param {WebInspector.BaseStorageTreeElement} rootElement
+ * @param {number} matchesCount
  */
-WebInspector.ResourcesSearchController = function(rootElement)
+WebInspector.ResourcesSearchController = function(rootElement, matchesCount)
 {
     this._root = rootElement;
+    this._matchesCount = matchesCount;
     this._traverser = new WebInspector.SearchResultsTreeElementsTraverser(rootElement);
     this._lastTreeElement = null;
     this._lastIndex = -1;
 }
 
 WebInspector.ResourcesSearchController.prototype = {
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} currentTreeElement
+     */
     nextSearchResult: function(currentTreeElement)
     {
         if (!currentTreeElement)
-            return this._searchResult(this._traverser.first(), 0);
+            return this._searchResult(this._traverser.first(), 0, 1);
 
         if (!currentTreeElement.searchMatchesCount)
             return this._searchResult(this._traverser.next(currentTreeElement), 0);
@@ -1610,35 +1748,55 @@ WebInspector.ResourcesSearchController.prototype = {
             return this._searchResult(currentTreeElement, 0);
 
         if (this._lastIndex == currentTreeElement.searchMatchesCount - 1)
-            return this._searchResult(this._traverser.next(currentTreeElement), 0);
+            return this._searchResult(this._traverser.next(currentTreeElement), 0, this._currentMatchIndex % this._matchesCount + 1);
 
-        return this._searchResult(currentTreeElement, this._lastIndex + 1);
+        return this._searchResult(currentTreeElement, this._lastIndex + 1, this._currentMatchIndex + 1);
     },
 
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} currentTreeElement
+     */
     previousSearchResult: function(currentTreeElement)
     {
         if (!currentTreeElement) {
             var treeElement = this._traverser.last();
-            return this._searchResult(treeElement, treeElement.searchMatchesCount - 1);
+            return this._searchResult(treeElement, treeElement.searchMatchesCount - 1, this._matchesCount);
         }
 
-        if (currentTreeElement.searchMatchesCount && this._lastTreeElement === currentTreeElement && this._lastIndex > 0)
-            return this._searchResult(currentTreeElement, this._lastIndex - 1);
+        if (currentTreeElement.searchMatchesCount && this._lastTreeElement === currentTreeElement) {
+            if (this._lastIndex > 0)
+                return this._searchResult(currentTreeElement, this._lastIndex - 1, this._currentMatchIndex - 1);
+            else {
+                var treeElement = this._traverser.previous(currentTreeElement);
+                var currentMatchIndex = this._currentMatchIndex - 1 ? this._currentMatchIndex - 1 : this._matchesCount;
+                return this._searchResult(treeElement, treeElement.searchMatchesCount - 1, currentMatchIndex);
+            }
+        }
 
         var treeElement = this._traverser.previous(currentTreeElement)
         return this._searchResult(treeElement, treeElement.searchMatchesCount - 1);
     },
 
-    _searchResult: function(treeElement, index)
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} treeElement
+     * @param {number} index
+     * @param {number=} currentMatchIndex
+     * @return {Object}
+     */
+    _searchResult: function(treeElement, index, currentMatchIndex)
     {
         this._lastTreeElement = treeElement;
         this._lastIndex = index;
-        return {treeElement: treeElement, index: index};
+        if (!currentMatchIndex)
+            currentMatchIndex = this._traverser.matchIndex(treeElement, index);
+        this._currentMatchIndex = currentMatchIndex;
+        return {treeElement: treeElement, index: index, currentMatchIndex: currentMatchIndex};
     }
 }
 
 /**
  * @constructor
+ * @param {WebInspector.BaseStorageTreeElement} rootElement
  */
 WebInspector.SearchResultsTreeElementsTraverser = function(rootElement)
 {
@@ -1646,49 +1804,96 @@ WebInspector.SearchResultsTreeElementsTraverser = function(rootElement)
 }
 
 WebInspector.SearchResultsTreeElementsTraverser.prototype = {
+    /**
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     first: function()
     {
         return this.next(this._root);
     },
 
+    /**
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     last: function()
     {
         return this.previous(this._root);
     },
 
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} startTreeElement
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     next: function(startTreeElement)
     {
         var treeElement = startTreeElement;
         do {
             treeElement = this._traverseNext(treeElement) || this._root;
-        } while (treeElement != startTreeElement && !this._elementHasSearchResults(treeElement));
+        } while (treeElement != startTreeElement && !this._elementSearchMatchesCount(treeElement));
         return treeElement;
     },
 
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} startTreeElement
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     previous: function(startTreeElement)
     {
         var treeElement = startTreeElement;
         do {
             treeElement = this._traversePrevious(treeElement) || this._lastTreeElement();
-        } while (treeElement != startTreeElement && !this._elementHasSearchResults(treeElement));
+        } while (treeElement != startTreeElement && !this._elementSearchMatchesCount(treeElement));
         return treeElement;
     },
 
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} startTreeElement
+     * @param {number} index
+     * @return {number}
+     */
+    matchIndex: function(startTreeElement, index)
+    {
+        var matchIndex = 1;
+        var treeElement = this._root;
+        while (treeElement != startTreeElement) {
+            matchIndex += this._elementSearchMatchesCount(treeElement);
+            treeElement = this._traverseNext(treeElement) || this._root;
+            if (treeElement === this._root)
+                return 0;
+        }
+        return matchIndex + index;
+    },
+
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} treeElement
+     * @return {number}
+     */
+    _elementSearchMatchesCount: function(treeElement)
+    {
+        return treeElement.searchMatchesCount;
+    },
+
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} treeElement
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     _traverseNext: function(treeElement)
     {
-        return treeElement.traverseNextTreeElement(false, this._root, true);
+        return /** @type {WebInspector.BaseStorageTreeElement} */ treeElement.traverseNextTreeElement(false, this._root, true);
     },
 
-    _elementHasSearchResults: function(treeElement)
-    {
-        return treeElement instanceof WebInspector.FrameResourceTreeElement && treeElement.searchMatchesCount;
-    },
-
+    /**
+     * @param {WebInspector.BaseStorageTreeElement} treeElement
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     _traversePrevious: function(treeElement)
     {
-        return treeElement.traversePreviousTreeElement(false, this._root, true);
+        return /** @type {WebInspector.BaseStorageTreeElement} */ treeElement.traversePreviousTreeElement(false, true);
     },
 
+    /**
+     * @return {WebInspector.BaseStorageTreeElement}
+     */
     _lastTreeElement: function()
     {
         var treeElement = this._root;

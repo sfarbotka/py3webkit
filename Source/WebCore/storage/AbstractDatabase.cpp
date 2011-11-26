@@ -33,9 +33,11 @@
 
 #include "DatabaseAuthorizer.h"
 #include "DatabaseTracker.h"
+#include "ExceptionCode.h"
 #include "Logging.h"
 #include "SQLiteStatement.h"
 #include "SQLiteTransaction.h"
+#include "ScriptCallStack.h"
 #include "ScriptExecutionContext.h"
 #include "SecurityOrigin.h"
 #include <wtf/HashMap.h>
@@ -50,6 +52,11 @@ namespace WebCore {
 
 static const char versionKey[] = "WebKitDatabaseVersionKey";
 static const char infoTableName[] = "__WebKitDatabaseInfoTable__";
+
+static String formatErrorMessage(const char* message, int sqliteErrorCode, const char* sqliteErrorMessage)
+{
+    return String::format("%s (%d %s)", message, sqliteErrorCode, sqliteErrorMessage);
+}
 
 static bool retrieveTextResultFromDatabase(SQLiteDatabase& db, const String& query, String& resultString)
 {
@@ -125,7 +132,7 @@ static inline void updateGuidVersionMap(int guid, String newVersion)
     // FIXME: This is a quite-awkward restriction to have to program with.
 
     // Map null string to empty string (see comment above).
-    guidToVersionMap().set(guid, newVersion.isEmpty() ? String() : newVersion.threadsafeCopy());
+    guidToVersionMap().set(guid, newVersion.isEmpty() ? String() : newVersion.isolatedCopy());
 }
 
 typedef HashMap<int, HashSet<AbstractDatabase*>*> GuidDatabaseMap;
@@ -177,9 +184,9 @@ const char* AbstractDatabase::databaseInfoTableName()
 AbstractDatabase::AbstractDatabase(ScriptExecutionContext* context, const String& name, const String& expectedVersion,
                                    const String& displayName, unsigned long estimatedSize)
     : m_scriptExecutionContext(context)
-    , m_name(name.crossThreadString())
-    , m_expectedVersion(expectedVersion.crossThreadString())
-    , m_displayName(displayName.crossThreadString())
+    , m_name(name.isolatedCopy())
+    , m_expectedVersion(expectedVersion.isolatedCopy())
+    , m_displayName(displayName.isolatedCopy())
     , m_estimatedSize(estimatedSize)
     , m_guid(0)
     , m_opened(false)
@@ -243,17 +250,19 @@ String AbstractDatabase::version() const
     return getCachedVersion();
 }
 
-bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, ExceptionCode& ec)
+bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, ExceptionCode& ec, String& errorMessage)
 {
+    ASSERT(errorMessage.isEmpty());
+
     const int maxSqliteBusyWaitTime = 30000;
 
     if (!m_sqliteDatabase.open(m_filename, true)) {
-        LOG_ERROR("Unable to open database at path %s", m_filename.ascii().data());
+        errorMessage = formatErrorMessage("unable to open database", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
         ec = INVALID_STATE_ERR;
         return false;
     }
     if (!m_sqliteDatabase.turnOnIncrementalAutoVacuum())
-        LOG_ERROR("Unable to turn on incremental auto-vacuum for database %s", m_filename.ascii().data());
+        LOG_ERROR("Unable to turn on incremental auto-vacuum (%d %s)", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
 
     m_sqliteDatabase.setBusyTimeout(maxSqliteBusyWaitTime);
 
@@ -264,7 +273,7 @@ bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, 
         GuidVersionMap::iterator entry = guidToVersionMap().find(m_guid);
         if (entry != guidToVersionMap().end()) {
             // Map null string to empty string (see updateGuidVersionMap()).
-            currentVersion = entry->second.isNull() ? String("") : entry->second.threadsafeCopy();
+            currentVersion = entry->second.isNull() ? String("") : entry->second.isolatedCopy();
             LOG(StorageAPI, "Current cached version for guid %i is %s", m_guid, currentVersion.ascii().data());
 
 #if PLATFORM(CHROMIUM)
@@ -289,7 +298,7 @@ bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, 
             SQLiteTransaction transaction(m_sqliteDatabase);
             transaction.begin();
             if (!transaction.inProgress()) {
-                LOG_ERROR("Unable to begin transaction while opening %s", databaseDebugName().ascii().data());
+                errorMessage = formatErrorMessage("unable to open database, failed to start transaction", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
                 ec = INVALID_STATE_ERR;
                 m_sqliteDatabase.close();
                 return false;
@@ -300,14 +309,14 @@ bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, 
                 m_new = true;
 
                 if (!m_sqliteDatabase.executeCommand("CREATE TABLE " + tableName + " (key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT REPLACE,value TEXT NOT NULL ON CONFLICT FAIL);")) {
-                    LOG_ERROR("Unable to create table %s in database %s", infoTableName, databaseDebugName().ascii().data());
+                    errorMessage = formatErrorMessage("unable to open database, failed to create 'info' table", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
                     ec = INVALID_STATE_ERR;
                     transaction.rollback();
                     m_sqliteDatabase.close();
                     return false;
                 }
             } else if (!getVersionFromDatabase(currentVersion, false)) {
-                LOG_ERROR("Failed to get current version from database %s", databaseDebugName().ascii().data());
+                errorMessage = formatErrorMessage("unable to open database, failed to read current version", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
                 ec = INVALID_STATE_ERR;
                 transaction.rollback();
                 m_sqliteDatabase.close();
@@ -319,7 +328,7 @@ bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, 
             } else if (!m_new || shouldSetVersionInNewDatabase) {
                 LOG(StorageAPI, "Setting version %s in database %s that was just created", m_expectedVersion.ascii().data(), databaseDebugName().ascii().data());
                 if (!setVersionInDatabase(m_expectedVersion, false)) {
-                    LOG_ERROR("Failed to set version %s in database %s", m_expectedVersion.ascii().data(), databaseDebugName().ascii().data());
+                    errorMessage = formatErrorMessage("unable to open database, failed to write current version", m_sqliteDatabase.lastError(), m_sqliteDatabase.lastErrorMsg());
                     ec = INVALID_STATE_ERR;
                     transaction.rollback();
                     m_sqliteDatabase.close();
@@ -340,8 +349,7 @@ bool AbstractDatabase::performOpenAndVerify(bool shouldSetVersionInNewDatabase, 
     // If the expected version isn't the empty string, ensure that the current database version we have matches that version. Otherwise, set an exception.
     // If the expected version is the empty string, then we always return with whatever version of the database we have.
     if ((!m_new || shouldSetVersionInNewDatabase) && m_expectedVersion.length() && m_expectedVersion != currentVersion) {
-        LOG(StorageAPI, "page expects version %s from database %s, which actually has version name %s - openDatabase() call will fail", m_expectedVersion.ascii().data(),
-            databaseDebugName().ascii().data(), currentVersion.ascii().data());
+        errorMessage = "unable to open database, version mismatch, '" + m_expectedVersion + "' does not match the currentVersion of '" + currentVersion + "'";
         ec = INVALID_STATE_ERR;
         m_sqliteDatabase.close();
         return false;
@@ -371,13 +379,13 @@ SecurityOrigin* AbstractDatabase::securityOrigin() const
 String AbstractDatabase::stringIdentifier() const
 {
     // Return a deep copy for ref counting thread safety
-    return m_name.threadsafeCopy();
+    return m_name.isolatedCopy();
 }
 
 String AbstractDatabase::displayName() const
 {
     // Return a deep copy for ref counting thread safety
-    return m_displayName.threadsafeCopy();
+    return m_displayName.isolatedCopy();
 }
 
 unsigned long AbstractDatabase::estimatedSize() const
@@ -388,7 +396,7 @@ unsigned long AbstractDatabase::estimatedSize() const
 String AbstractDatabase::fileName() const
 {
     // Return a deep copy for ref counting thread safety
-    return m_filename.threadsafeCopy();
+    return m_filename.isolatedCopy();
 }
 
 bool AbstractDatabase::getVersionFromDatabase(String& version, bool shouldCacheVersion)
@@ -431,13 +439,13 @@ bool AbstractDatabase::setVersionInDatabase(const String& version, bool shouldCa
 
 void AbstractDatabase::setExpectedVersion(const String& version)
 {
-    m_expectedVersion = version.threadsafeCopy();
+    m_expectedVersion = version.isolatedCopy();
 }
 
 String AbstractDatabase::getCachedVersion() const
 {
     MutexLocker locker(guidMutex());
-    return guidToVersionMap().get(m_guid).threadsafeCopy();
+    return guidToVersionMap().get(m_guid).isolatedCopy();
 }
 
 void AbstractDatabase::setCachedVersion(const String& actualVersion)
@@ -523,8 +531,11 @@ void AbstractDatabase::incrementalVacuumIfNeeded()
 {
     int64_t freeSpaceSize = m_sqliteDatabase.freeSpaceSize();
     int64_t totalSize = m_sqliteDatabase.totalSize();
-    if (totalSize <= 10 * freeSpaceSize)
-        m_sqliteDatabase.runIncrementalVacuumCommand();
+    if (totalSize <= 10 * freeSpaceSize) {
+        int result = m_sqliteDatabase.runIncrementalVacuumCommand();
+        if (result != SQLResultOk)
+            logErrorMessage(formatErrorMessage("error vacuuming database", result, m_sqliteDatabase.lastErrorMsg()));
+    }
 }
 
 void AbstractDatabase::interrupt()
@@ -536,6 +547,11 @@ bool AbstractDatabase::isInterrupted()
 {
     MutexLocker locker(m_sqliteDatabase.databaseMutex());
     return m_sqliteDatabase.isInterrupted();
+}
+
+void AbstractDatabase::logErrorMessage(const String& message)
+{
+    m_scriptExecutionContext->addMessage(OtherMessageSource, LogMessageType, ErrorMessageLevel, message, 0, String(), 0);
 }
 
 } // namespace WebCore

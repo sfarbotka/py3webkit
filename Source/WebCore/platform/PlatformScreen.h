@@ -40,6 +40,8 @@
 #endif
 #endif
 
+typedef uint32_t PlatformDisplayID;
+
 namespace WebCore {
 
     class FloatRect;
@@ -51,6 +53,11 @@ namespace WebCore {
 
     FloatRect screenRect(Widget*);
     FloatRect screenAvailableRect(Widget*);
+
+#if PLATFORM(CHROMIUM)
+    // Measured in frames per second. 0 if the refresh rate is unknown, or not applicable.
+    double screenRefreshRate(Widget*);
+#endif
 
 #if PLATFORM(MAC)
     NSScreen *screenForWindow(NSWindow *);

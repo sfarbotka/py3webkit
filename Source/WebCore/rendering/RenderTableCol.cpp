@@ -58,7 +58,7 @@ void RenderTableCol::styleDidChange(StyleDifference diff, const RenderStyle* old
 
 void RenderTableCol::updateFromElement()
 {
-    int oldSpan = m_span;
+    unsigned oldSpan = m_span;
     Node* n = node();
     if (n && (n->hasTagName(colTag) || n->hasTagName(colgroupTag))) {
         HTMLTableColElement* tc = static_cast<HTMLTableColElement*>(n);
@@ -81,7 +81,7 @@ bool RenderTableCol::canHaveChildren() const
     return style()->display() == TABLE_COLUMN_GROUP;
 }
 
-IntRect RenderTableCol::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderTableCol::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     // For now, just repaint the whole table.
     // FIXME: Find a better way to do this, e.g., need to repaint all the cells that we

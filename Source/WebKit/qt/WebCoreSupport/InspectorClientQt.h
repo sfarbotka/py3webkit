@@ -44,7 +44,6 @@ namespace WebCore {
 class InspectorFrontendClientQt;
 class InspectorServerRequestHandlerQt;
 class Page;
-class RemoteFrontendChannel;
 
 class InspectorClientQt : public InspectorClient {
 public:
@@ -53,6 +52,7 @@ public:
     virtual void inspectorDestroyed();
 
     virtual void openInspectorFrontend(WebCore::InspectorController*);
+    virtual void bringFrontendToFront();
 
     virtual void highlight();
     virtual void hideHighlight();
@@ -61,7 +61,7 @@ public:
 
     void releaseFrontendPage();
 
-    void attachAndReplaceRemoteFrontend(RemoteFrontendChannel *channel);
+    void attachAndReplaceRemoteFrontend(InspectorServerRequestHandlerQt *channel);
     void detachRemoteFrontend();
 
 private:
@@ -69,6 +69,7 @@ private:
     QWebPage* m_frontendWebPage;
     InspectorFrontendClientQt* m_frontendClient;
     bool m_remoteInspector;
+    InspectorServerRequestHandlerQt* m_remoteFrontEndChannel;
 
     friend class InspectorServerRequestHandlerQt;
 };

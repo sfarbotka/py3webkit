@@ -253,7 +253,6 @@ static NSSet *allowedFontFamilySet()
         @"Chalkduster",
         @"Charcoal CY",
         @"Cochin",
-        @"ColorBits",
         @"Comic Sans MS",
         @"Copperplate",
         @"Corsiva Hebrew",
@@ -407,7 +406,6 @@ static void activateTestingFonts()
 
     static const char* fontFileNames[] = {
         "AHEM____.TTF",
-        "ColorBits.ttf",
         "WebKitWeightWatcher100.ttf",
         "WebKitWeightWatcher200.ttf",
         "WebKitWeightWatcher300.ttf",
@@ -587,6 +585,10 @@ static void resetDefaultsToConsistentValues()
     [preferences setUsePreHTML5ParserQuirks:NO];
     [preferences setAsynchronousSpellCheckingEnabled:NO];
     [preferences setHixie76WebSocketProtocolEnabled:YES];
+
+#if ENABLE(WEB_AUDIO)
+    [preferences setWebAudioEnabled:YES];
+#endif
 
     [WebPreferences _setCurrentNetworkLoaderSessionCookieAcceptPolicy:NSHTTPCookieAcceptPolicyOnlyFromMainDocumentDomain];
     
@@ -1079,8 +1081,8 @@ void dump()
         printf("Content-Type: %s\n", [resultMimeType UTF8String]);
 
         if (gLayoutTestController->dumpAsAudio())
-            printf("Content-Transfer-Encoding: base64\n");            
-        
+            printf("Content-Transfer-Encoding: base64\n");
+
         if (resultData) {
             fwrite([resultData bytes], 1, [resultData length], stdout);
 
@@ -1148,6 +1150,7 @@ static void resetWebViewToConsistentStateBeforeTesting()
     [webView makeTextStandardSize:nil];
     [webView resetPageZoom:nil];
     [webView _scaleWebView:1.0 atOrigin:NSZeroPoint];
+    [webView _setCustomBackingScaleFactor:0];
     [webView setTabKeyCyclesThroughElements:YES];
     [webView setPolicyDelegate:nil];
     [policyDelegate setPermissive:NO];

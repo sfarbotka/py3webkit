@@ -1,3 +1,295 @@
+2011-11-26  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r101193.
+        http://trac.webkit.org/changeset/101193
+        https://bugs.webkit.org/show_bug.cgi?id=73158
+
+        Breaks Windows and Qt minimal. (Requested by pfeldman on
+        #webkit).
+
+        * WebCoreSupport/WebInspectorClient.cpp:
+        (WebInspectorClient::inspectorDestroyed):
+        (WebInspectorFrontendClient::disconnectFromBackend):
+        * WebCoreSupport/WebInspectorClient.h:
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/WebInspectorClient.cpp:
+        (WebInspectorClient::inspectorDestroyed):
+        (WebInspectorClient::closeInspectorFrontend):
+        * WebCoreSupport/WebInspectorClient.h:
+
+2011-11-22  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove Inspector::bringToFront from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=72937
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/WebInspectorClient.cpp:
+        (WebInspectorClient::bringFrontendToFront):
+        * WebCoreSupport/WebInspectorClient.h:
+
+2011-11-21  Pavel Feldman  <pfeldman@google.com>
+
+        Not reviewed: an attempt to fix windows build.
+
+        * WebInspector.cpp:
+        (WebInspector::isJavaScriptProfilingEnabled):
+        (WebInspector::setJavaScriptProfilingEnabled):
+
+2011-06-20  Pavel Feldman  <pfeldman@chromium.org>
+
+        Web Inspector: introduce InspectorFrontendAPI for actions initiated from the application menu.
+        https://bugs.webkit.org/show_bug.cgi?id=62985
+
+        Both: inspector protocol and WebCore/InspectorController have a number of unnecessary
+        methods for plumbing the menu action handlers through the WebKit and WebCore.
+        I intend to remove this menu support from the protocol and WebCore/InspectorController API.
+        I am starting with exposing the new front-end API in the WebCore and using it in the WebKit/mac port.
+        WebKit/win and WebKit2 to follow.
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebInspector.cpp:
+        (WebInspector::createInstance):
+        (WebInspector::WebInspector):
+        (WebInspector::webViewClosed):
+        (WebInspector::showConsole):
+        (WebInspector::isDebuggingJavaScript):
+        (WebInspector::toggleDebuggingJavaScript):
+        (WebInspector::isProfilingJavaScript):
+        (WebInspector::toggleProfilingJavaScript):
+        (WebInspector::isJavaScriptProfilingEnabled):
+        (WebInspector::setJavaScriptProfilingEnabled):
+        (WebInspector::isTimelineProfilingEnabled):
+        (WebInspector::setTimelineProfilingEnabled):
+        * WebInspector.h:
+        * WebView.cpp:
+        (WebView::WebView):
+        (WebView::close):
+        (WebView::initWithFrame):
+        (WebView::inspector):
+        * WebView.h:
+
+2011-10-17  Antonio Gomes  <agomes@rim.com>
+
+        Pass a Frame* parameter in EditorClient::respondToChangedSelection
+        https://bugs.webkit.org/show_bug.cgi?id=70248
+
+        Reviewed by Ryosuke Niwa.
+
+        * WebCoreSupport/WebEditorClient.cpp: Make use of the newly added Frame* parameter.
+        (WebEditorClient::respondToChangedSelection):
+        * WebCoreSupport/WebEditorClient.h:
+
+2011-11-15  Jochen Eisinger  <jochen@chromium.org>
+
+        Rename ReferrerPolicy to clarify its meaning
+        https://bugs.webkit.org/show_bug.cgi?id=72420
+
+        Reviewed by Nate Chapin.
+
+        * WebCoreSupport/WebContextMenuClient.cpp:
+        (WebContextMenuClient::searchWithGoogle):
+
+2011-11-15  Anders Carlsson  <andersca@apple.com>
+
+        HostWindow screenToWindow/windowToScreen should be screenToRootView/rootViewToScreen
+        https://bugs.webkit.org/show_bug.cgi?id=72397
+
+        Reviewed by Dan Bernstein.
+
+        * WebCoreSupport/WebChromeClient.cpp:
+        (WebChromeClient::rootViewToScreen):
+        (WebChromeClient::screenToRootView):
+        * WebCoreSupport/WebChromeClient.h:
+
+2011-11-14  Anders Carlsson  <andersca@apple.com>
+
+        HostWindow invalidation functions should use root view coordinates
+        https://bugs.webkit.org/show_bug.cgi?id=72338
+
+        Reviewed by Dan Bernstein.
+
+        * WebCoreSupport/WebChromeClient.cpp:
+        (WebChromeClient::invalidateRootView):
+        (WebChromeClient::invalidateContentsAndRootView):
+        * WebCoreSupport/WebChromeClient.h:
+
+2011-11-07  Adam Barth  <abarth@webkit.org>
+
+        Move static "policy" state from SecurityOrigin.cpp to SecurityPolicy.cpp
+        https://bugs.webkit.org/show_bug.cgi?id=71755
+
+        Reviewed by Eric Seidel.
+
+        * WebView.cpp:
+        (WebView::addOriginAccessWhitelistEntry):
+        (WebView::removeOriginAccessWhitelistEntry):
+        (WebView::resetOriginAccessWhitelists):
+
+2011-11-07  Adam Barth  <abarth@webkit.org>
+
+        Move DomainRelaxationForbidden scheme registry to SchemeRegistry
+        https://bugs.webkit.org/show_bug.cgi?id=71750
+
+        Reviewed by Eric Seidel.
+
+        * WebView.cpp:
+        (WebView::setDomainRelaxationForbiddenForURLScheme):
+
+2011-11-07  Beth Dakin  <bdakin@apple.com>
+
+        https://bugs.webkit.org/show_bug.cgi?id=71490
+        Support uiStateTransitionProgress for scrollbars
+        -and corresponding-
+        <rdar://problem/9849612>
+
+        Reviewed by Sam Weinig.
+
+        Scrollbar::mouseUp() now takes a PlatformMouseEvent as a parameter.
+        * WebScrollBar.cpp:
+        (WebScrollBar::handleMouseEvent):
+
+2011-11-02  Darin Adler  <darin@apple.com>
+
+        Change remaining callers of releaseRef to call leakRef
+        https://bugs.webkit.org/show_bug.cgi?id=71422
+
+        Reviewed by Darin Fisher.
+
+        * WebCache.cpp:
+        (WebCache::statistics):
+        * WebDatabaseManager.cpp:
+        (WebDatabaseManager::origins):
+        (WebDatabaseManager::databasesWithOrigin):
+        * WebHistoryItem.cpp:
+        (WebHistoryItem::redirectURLs):
+        * WebKitClassFactory.cpp:
+        (leakRefFromCreateInstance):
+        (WebKitClassFactory::CreateInstance):
+        * WebScriptWorld.cpp:
+        (WebScriptWorld::standardWorld):
+        Use leakRef.
+
+2011-11-02  Jon Lee  <jonlee@apple.com>
+
+        Expand DragController to provide more information about the dragging session
+        https://bugs.webkit.org/show_bug.cgi?id=71324
+        <rdar://problem/10379175>
+
+        Reviewed by Darin Adler.
+
+        * WebView.cpp:
+        (WebView::DragEnter): Minor refactoring because operation is stored in
+        new DragSession struct.
+        (WebView::DragOver): Ditto.
+
+2011-11-02  Tom Sepez  <tsepez@chromium.org>
+
+        XSSAuditor is silent
+        https://bugs.webkit.org/show_bug.cgi?id=70973
+
+        Reviewed by Adam Barth.
+
+        * WebCoreSupport/WebFrameLoaderClient.cpp:
+        (WebFrameLoaderClient::didDetectXSS):
+        * WebCoreSupport/WebFrameLoaderClient.h:
+
+2011-10-28  Jochen Eisinger  <jochen@chromium.org>
+
+        Rename a number of methods mentioning JavaScript to just Script instead
+        https://bugs.webkit.org/show_bug.cgi?id=71105
+
+        Reviewed by Adam Barth.
+
+        * WebFrame.cpp:
+        (WebFrame::dispatchDidClearWindowObjectInWorld):
+        * WebView.cpp:
+        (WebView::notifyPreferencesChanged):
+
+2011-10-24  Geoffrey Garen  <ggaren@apple.com>
+
+        Build fix: removed some cases of threadsafeCopy() that I missed in
+        my previous patch.
+
+        * WebDatabaseManager.cpp:
+        (DidModifyOriginData::dispatchToMainThread):
+        * WebDownloadCFNet.cpp:
+        (WebDownload::initToResumeWithBundle):
+        * WebIconDatabase.cpp:
+        (WebIconDatabase::didImportIconURLForPageURL):
+
+2011-10-24  Ryosuke Niwa  <rniwa@webkit.org>
+
+        threadsafeCopy has been renamed to isolatedCopy.
+
+        * WebDatabaseManager.cpp:
+        (DidModifyOriginData::dispatchToMainThread):
+
+2011-10-24  Adam Barth  <abarth@webkit.org>
+
+        Attempt to fix Windows build by updating to the new interface.
+
+        * DOMEventsClasses.cpp:
+        (DOMEvent::createInstance):
+
+2011-10-18  Adam Barth  <abarth@webkit.org>
+
+        Always enable ENABLE(XPATH)
+        https://bugs.webkit.org/show_bug.cgi?id=70217
+
+        Reviewed by Eric Seidel.
+
+        * Interfaces/DOMWindow.idl:
+
+2011-10-14  Julien Chaffraix  <jchaffraix@webkit.org>
+
+        Remove layerX / layerY from the Windows API
+        https://bugs.webkit.org/show_bug.cgi?id=70051
+
+        Reviewed by Darin Adler.
+
+        Renamed layerX to unused1 and layerY to unused2 to keep the
+        binary compatibility.
+
+        * DOMEventsClasses.cpp:
+        (DOMUIEvent::unused1):
+        (DOMUIEvent::unused2):
+        * DOMEventsClasses.h:
+        (DOMKeyboardEvent::unused1):
+        (DOMKeyboardEvent::unused2):
+        (DOMMouseEvent::unused1):
+        (DOMMouseEvent::unused2):
+        (DOMWheelEvent::unused1):
+        (DOMWheelEvent::unused2):
+        * Interfaces/DOMEvents.idl:
+
+2011-10-11  Simon Fraser  <simon.fraser@apple.com>
+
+        Make custom scrollbar theme for use in DRT, to reduce pixel diffs between platforms
+        https://bugs.webkit.org/show_bug.cgi?id=68134
+
+        Reviewed by Darin Adler.
+
+        Use ScrollbarThemeMock when the setting to use mock scrollbars is enabled.
+        
+        Make ScrollbarTheme::nativeTheme() private, and add a new static theme() method
+        that reads the setting, and returns the mock theme if set. All callers now use
+        theme() rther than nativeTheme(). Add the new ScrollbarTheme.cpp file to the build.
+
+        * WebScrollBar.cpp:
+        (WebScrollBar::requestedWidth):
+        (WebScrollBar::requestedHeight):
+        * WebView.cpp:
+        (WebView::WebViewWndProc):
+
 2011-10-03  Anders Carlsson  <andersca@apple.com>
 
         Remove custom scrollbar painting hooks

@@ -39,6 +39,9 @@
 @protocol DOMEventListener;
 
 enum {
+#if ENABLE(Condition1)
+    DOM_CONDITIONAL_CONST = 0,
+#endif
     DOM_CONST_VALUE_0 = 0,
     DOM_CONST_VALUE_1 = 1,
     DOM_CONST_VALUE_2 = 2,
@@ -49,7 +52,8 @@ enum {
     DOM_CONST_VALUE_11 = 0xffffffff,
     DOM_CONST_VALUE_12 = 0x01,
     DOM_CONST_VALUE_13 = 0X20,
-    DOM_CONST_VALUE_14 = 0x1abc
+    DOM_CONST_VALUE_14 = 0x1abc,
+    DOM_CONST_JAVASCRIPT = 15
 };
 
 @interface DOMTestObj : DOMObject
@@ -141,7 +145,6 @@ enum {
 - (int)intMethodWithArgs:(int)intArg strArg:(NSString *)strArg objArg:(DOMTestObj *)objArg;
 - (DOMTestObj *)objMethod;
 - (DOMTestObj *)objMethodWithArgs:(int)intArg strArg:(NSString *)strArg objArg:(DOMTestObj *)objArg;
-- (DOMTestObj *)methodThatRequiresAllArgs:(NSString *)strArg objArg:(DOMTestObj *)objArg;
 - (DOMTestObj *)methodThatRequiresAllArgsAndThrows:(NSString *)strArg objArg:(DOMTestObj *)objArg;
 - (void)serializedValue:(NSString *)serializedArg;
 - (void)idbKey:(DOMIDBKey *)key;

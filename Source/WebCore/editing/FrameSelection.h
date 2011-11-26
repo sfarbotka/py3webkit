@@ -126,6 +126,7 @@ public:
     FrameSelection(Frame* = 0);
 
     Element* rootEditableElement() const { return m_selection.rootEditableElement(); }
+    Element* rootEditableElementOrDocumentElement() const;
     bool isContentEditable() const { return m_selection.isContentEditable(); }
     bool isContentRichlyEditable() const { return m_selection.isContentRichlyEditable(); }
      
@@ -278,6 +279,8 @@ private:
     void setCaretVisibility(CaretVisibility);
 
     bool dispatchSelectStart();
+  
+    bool visualWordMovementEnabled() const;
 
     Frame* m_frame;
 

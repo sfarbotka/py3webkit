@@ -66,6 +66,7 @@
         {
             'target_name': 'webkit',
             'type': 'static_library',
+            'variables': { 'enable_wexit_time_destructors': 1, },
             'msvs_guid': '5ECEC9E5-8F23-47B6-93E0-C3B328B3BE65',
             'dependencies': [
                 '../../WebCore/WebCore.gyp/WebCore.gyp:webcore',
@@ -91,6 +92,10 @@
                 'WEBKIT_IMPLEMENTATION=1',
             ],
             'sources': [
+                'bridge/PeerConnectionHandler.cpp',
+                'bridge/PeerConnectionHandlerInternal.cpp',
+                'bridge/PeerConnectionHandlerInternal.h',
+                'public/android/WebInputEventFactory.h',
                 'public/android/WebSandboxSupport.h',
                 'public/android/WebThemeEngine.h',
                 'public/gtk/WebInputEventFactory.h',
@@ -104,7 +109,6 @@
                 'public/mac/WebScreenInfoFactory.h',
                 'public/mac/WebSubstringUtil.h',
                 'public/mac/WebThemeEngine.h',
-                'public/WebAccessibilityCache.h',
                 'public/WebAccessibilityNotification.h',
                 'public/WebAccessibilityObject.h',
                 'public/WebAccessibilityRole.h',
@@ -115,6 +119,8 @@
                 'public/WebAttribute.h',
                 'public/WebAudioBus.h',
                 'public/WebAudioDevice.h',
+                'public/WebAudioSourceProvider.h',
+                'public/WebAudioSourceProviderClient.h',
                 'public/WebAutofillClient.h',
                 'public/WebBindings.h',
                 'public/WebBlob.h',
@@ -141,6 +147,7 @@
                 'public/WebCursorInfo.h',
                 'public/WebDOMEvent.h',
                 'public/WebDOMEventListener.h',
+                'public/WebDOMMessageEvent.h',
                 'public/WebDOMMouseEvent.h',
                 'public/WebDOMMutationEvent.h',
                 'public/WebDOMStringList.h',
@@ -164,6 +171,7 @@
                 'public/WebExceptionCode.h',
                 'public/WebExternalPopupMenu.h',
                 'public/WebExternalPopupMenuClient.h',
+                'public/WebExternalTextureLayer.h',
                 'public/WebFileChooserCompletion.h',
                 'public/WebFileChooserParams.h',
                 'public/WebFileError.h',
@@ -185,6 +193,8 @@
                 'public/WebFontCache.h',
                 'public/WebFormControlElement.h',
                 'public/WebFormElement.h',
+                'public/WebGamepad.h',
+                'public/WebGamepads.h',
                 'public/WebGeolocationClient.h',
                 'public/WebGeolocationClientMock.h',
                 'public/WebGeolocationController.h',
@@ -216,6 +226,8 @@
                 'public/WebIDBTransactionCallbacks.h',
                 'public/WebInputElement.h',
                 'public/WebInputEvent.h',
+                'public/WebIntent.h',
+                'public/WebIntentServiceInfo.h',
                 'public/WebKit.h',
                 'public/WebKitPlatformSupport.h',
                 'public/WebLabelElement.h',
@@ -228,8 +240,9 @@
                 'public/WebMediaPlayer.h',
                 'public/WebMediaPlayerAction.h',
                 'public/WebMediaPlayerClient.h',
-                'public/WebMediaStreamTrack.h',
-                'public/WebMediaStreamTrackList.h',
+                'public/WebMediaStreamDescriptor.h',
+                'public/WebMediaStreamRegistry.h',
+                'public/WebMediaStreamSource.h',
                 'public/WebMenuItemInfo.h',
                 'public/WebMessagePortChannel.h',
                 'public/WebMessagePortChannelClient.h',
@@ -249,6 +262,8 @@
                 'public/WebPageSerializerClient.h',
                 'public/WebPageVisibilityState.h',
                 'public/WebPasswordFormData.h',
+                'public/WebPeerConnectionHandler.h',
+                'public/WebPeerConnectionHandlerClient.h',
                 'public/WebPerformance.h',
                 'public/WebPermissionClient.h',
                 'public/WebPlugin.h',
@@ -263,6 +278,7 @@
                 'public/WebPrivateOwnPtr.h',
                 'public/WebRange.h',
                 'public/WebRect.h',
+                'public/WebReferrerPolicy.h',
                 'public/WebRegularExpression.h',
                 'public/WebRuntimeFeatures.h',
                 'public/WebScrollbar.h',
@@ -279,6 +295,8 @@
                 'public/WebSharedWorker.h',
                 'public/WebSharedWorkerRepository.h',
                 'public/WebSize.h',
+                'public/WebSocket.h',
+                'public/WebSocketClient.h',
                 'public/WebSocketStreamError.h',
                 'public/WebSocketStreamHandle.h',
                 'public/WebSocketStreamHandleClient.h',
@@ -309,6 +327,8 @@
                 'public/WebURLLoaderClient.h',
                 'public/WebURLRequest.h',
                 'public/WebURLResponse.h',
+                'public/WebUserMediaClient.h',
+                'public/WebUserMediaRequest.h',
                 'public/WebVector.h',
                 'public/WebView.h',
                 'public/WebViewClient.h',
@@ -352,10 +372,6 @@
                 'src/ContextMenuClientImpl.cpp',
                 'src/ContextMenuClientImpl.h',
                 'src/DatabaseObserver.cpp',
-                'src/DebuggerAgentImpl.cpp',
-                'src/DebuggerAgentImpl.h',
-                'src/DebuggerAgentManager.cpp',
-                'src/DebuggerAgentManager.h',
                 'src/DeviceOrientationClientProxy.cpp',
                 'src/DeviceOrientationClientProxy.h',
                 'src/DOMUtilitiesPrivate.cpp',
@@ -401,6 +417,7 @@
                 'src/InspectorClientImpl.h',
                 'src/InspectorFrontendClientImpl.cpp',
                 'src/InspectorFrontendClientImpl.h',
+                'src/android/WebInputEventFactory.cpp',
                 'src/linux/WebFontInfo.cpp',
                 'src/linux/WebFontRendering.cpp',
                 'src/linux/WebFontRenderStyle.cpp',
@@ -435,13 +452,12 @@
                 'src/StorageInfoChromium.cpp',
                 'src/StorageNamespaceProxy.cpp',
                 'src/StorageNamespaceProxy.h',
+                'src/UserMediaClientImpl.h',
+                'src/UserMediaClientImpl.cpp',
                 'src/WebTextCheckingCompletionImpl.h',
                 'src/WebTextCheckingCompletionImpl.cpp',
                 'src/VideoFrameChromiumImpl.cpp',
                 'src/VideoFrameChromiumImpl.h',
-                'src/WebAccessibilityCache.cpp',
-                'src/WebAccessibilityCacheImpl.cpp',
-                'src/WebAccessibilityCacheImpl.h',
                 'src/WebAccessibilityObject.cpp',
                 'src/WebAnimationControllerImpl.cpp',
                 'src/WebAnimationControllerImpl.h',
@@ -466,6 +482,7 @@
                 'src/WebDOMEventListener.cpp',
                 'src/WebDOMEventListenerPrivate.cpp',
                 'src/WebDOMEventListenerPrivate.h',
+                'src/WebDOMMessageEvent.cpp',
                 'src/WebDOMMouseEvent.cpp',
                 'src/WebDOMMutationEvent.cpp',
                 'src/WebDOMStringList.cpp',
@@ -486,6 +503,9 @@
                 'src/WebElement.cpp',
                 'src/WebEntities.cpp',
                 'src/WebEntities.h',
+                'src/WebExternalTextureLayer.cpp',
+                'src/WebExternalTextureLayerImpl.cpp',
+                'src/WebExternalTextureLayerImpl.h',
                 'src/WebFileChooserCompletionImpl.cpp',
                 'src/WebFileChooserCompletionImpl.h',
                 'src/WebFileSystemCallbacksImpl.cpp',
@@ -541,6 +561,8 @@
                 'src/WebInputEvent.cpp',
                 'src/WebInputEventConversion.cpp',
                 'src/WebInputEventConversion.h',
+                'src/WebIntent.cpp',
+                'src/WebIntentServiceInfo.cpp',
                 'src/WebKit.cpp',
                 'src/WebLabelElement.cpp',
                 'src/WebLayer.cpp',
@@ -552,8 +574,9 @@
                 'src/WebMediaElement.cpp',
                 'src/WebMediaPlayerClientImpl.cpp',
                 'src/WebMediaPlayerClientImpl.h',
-                'src/WebMediaStreamTrack.cpp',
-                'src/WebMediaStreamTrackList.cpp',
+                'src/WebMediaStreamDescriptor.cpp',
+                'src/WebMediaStreamRegistry.cpp',
+                'src/WebMediaStreamSource.cpp',
                 'src/WebNamedNodeMap.cpp',
                 'src/WebNetworkStateNotifier.cpp',
                 'src/WebNode.cpp',
@@ -592,6 +615,9 @@
                 'src/WebSettingsImpl.h',
                 'src/WebSharedWorkerImpl.cpp',
                 'src/WebSharedWorkerImpl.h',
+                'src/WebSocket.cpp',
+                'src/WebSocketImpl.cpp',
+                'src/WebSocketImpl.h',
                 'src/WebSpeechInputControllerMockImpl.cpp',
                 'src/WebSpeechInputControllerMockImpl.h',
                 'src/WebSpeechInputResult.cpp',
@@ -613,6 +639,7 @@
                 'src/WebURLResponse.cpp',
                 'src/WebURLResponsePrivate.h',
                 'src/WebURLError.cpp',
+                'src/WebUserMediaRequest.cpp',
                 'src/WebViewImpl.cpp',
                 'src/WebViewImpl.h',
                 'src/WebWorkerBase.cpp',
@@ -683,13 +710,13 @@
                             ],
                             'sources!': [
                                 # We should not include files depending on webkit_support.
-                                'tests/CCThreadTest.cpp',
                                 # These tests depend on webkit_support and
                                 # functions defined only in !WEBKIT_IMPLEMENTATION.
                                 'tests/AssociatedURLLoaderTest.cpp',
                                 'tests/CCLayerTreeHostTest.cpp',
                                 'tests/FrameTestHelpers.cpp',
                                 'tests/PopupMenuTest.cpp',
+                                'tests/RenderTableCellTest.cpp',
                                 'tests/WebFrameTest.cpp',
                                 'tests/WebPageNewSerializerTest.cpp',
                                 'tests/WebPageSerializerTest.cpp',
@@ -952,11 +979,9 @@
                 'search_path': [
                     '../../WebCore/inspector/front-end',
                     'src/js',
-                    '<(SHARED_INTERMEDIATE_DIR)/webcore',
                 ],
-                'image_search_path': [
-                    '../../WebCore/inspector/front-end/Images',
-                    'src/js/Images',
+                'js_search_path': [
+                    '<(SHARED_INTERMEDIATE_DIR)/webcore',
                 ],
                 'outputs': ['<(PRODUCT_DIR)/devtools_frontend.zip'],
                 'action': ['python', '<@(_script_name)', '<@(_inspector_html)',
@@ -964,7 +989,7 @@
                                      '--workers-files', '<@(_workers_files)',
                                      '--extension-api-files', '<@(webinspector_extension_api_files)',
                                      '--search-path', '<@(_search_path)',
-                                     '--image-search-path', '<@(_image_search_path)',
+                                     '--js-search-path', '<@(_js_search_path)',
                                      '--output', '<@(_outputs)'],
             }],
         },
@@ -1027,9 +1052,7 @@
             'target_name': 'ImageDiff',
             'type': 'executable',
             'dependencies': [
-                'webkit',
-                '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
-                '<(chromium_src_dir)/webkit/support/webkit_support.gyp:webkit_support',
+                '<(chromium_src_dir)/webkit/support/webkit_support.gyp:webkit_support_gfx',
             ],
             'include_dirs': [
                 '../../JavaScriptCore',
@@ -1038,13 +1061,17 @@
             'sources': [
                 '../../../Tools/DumpRenderTree/chromium/ImageDiff.cpp',
             ],
+            'conditions': [
+                ['OS=="android"', {
+                    'toolsets': ['host'],
+                }],
+            ],
         },
         {
             'target_name': 'DumpRenderTree',
             'type': 'executable',
             'mac_bundle': 1,
             'dependencies': [
-                'ImageDiff',
                 'inspector_resources',
                 'webkit',
                 '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf_config',
@@ -1193,11 +1220,16 @@
                         ['exclude', 'Gtk\\.cpp$']
                     ]
                 }],
-                ['OS!="android"', {
+                ['OS=="android"', {
+                    'dependencies': [
+                        'ImageDiff#host',
+                    ],
+                },{ # OS!="android"
                     'sources/': [
                         ['exclude', '(Android)\\.cpp$']
                     ],
                     'dependencies': [
+                        'ImageDiff',
                         'copy_TestNetscapePlugIn',
                         '<(chromium_src_dir)/third_party/mesa/mesa.gyp:osmesa',
                     ],
@@ -1212,6 +1244,7 @@
                     ],
                     'dependencies': [
                         '../../JavaScriptCore/JavaScriptCore.gyp/JavaScriptCore.gyp:wtf',
+                        '../../WTF/WTF.gyp/WTF.gyp:newwtf',
                     ],
                 }],
                 ['inside_chromium_build==0', {
@@ -1352,7 +1385,7 @@
                 'sources': ['../../../Tools/DumpRenderTree/chromium/LayoutTestHelperWin.cpp'],
             }],
         }],
-        ['os_posix==1 and OS!="mac" and gcc_version==46', {
+        ['os_posix==1 and OS!="mac" and OS!="android" and gcc_version==46', {
             'target_defaults': {
                 # Disable warnings about c++0x compatibility, as some names (such
                 # as nullptr) conflict with upcoming c++0x types.
@@ -1420,6 +1453,7 @@
                         'input_file': '../../WebCore/inspector/front-end/HeapSnapshotWorker.js',
                         'inputs': [
                             '<@(_script_name)',
+                            '<@(_input_file)',
                             '../../WebCore/inspector/front-end/BinarySearch.js',
                             '../../WebCore/inspector/front-end/HeapSnapshot.js',
                             '../../WebCore/inspector/front-end/HeapSnapshotWorkerDispatcher.js',
@@ -1439,6 +1473,7 @@
                         'input_file': '../../WebCore/inspector/front-end/ScriptFormatterWorker.js',
                         'inputs': [
                             '<@(_script_name)',
+                            '<@(_input_file)',
                             '<@(webinspector_uglifyjs_files)'
                         ],
                         'search_path': '../../WebCore/inspector/front-end',

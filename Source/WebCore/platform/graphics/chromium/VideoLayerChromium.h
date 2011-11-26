@@ -50,12 +50,10 @@ public:
 
     virtual PassRefPtr<CCLayerImpl> createCCLayerImpl();
 
-    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*);
+    virtual void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&);
     virtual bool drawsContent() const { return true; }
 
-    // This function is called by VideoFrameProvider. When this method is called
-    // putCurrentFrame() must be called to return the frame currently held.
-    void releaseCurrentFrame();
+    void releaseProvider();
 
     virtual void pushPropertiesTo(CCLayerImpl*);
 
@@ -88,9 +86,9 @@ private:
     Texture m_textures[MaxPlanes];
     unsigned m_planes;
 
-    // This will be null for the entire duration of video playback if hardware
-    // decoding is not being used.
-    VideoFrameChromium* m_currentFrame;
+    unsigned m_nativeTextureId;
+    IntSize m_nativeTextureSize;
+    IntSize m_nativeTextureVisibleSize;
 };
 
 }

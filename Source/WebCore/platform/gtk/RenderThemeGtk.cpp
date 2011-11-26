@@ -525,9 +525,10 @@ bool RenderThemeGtk::paintMediaPlayButton(RenderObject* renderObject, const Pain
     Node* node = renderObject->node();
     if (!node)
         return false;
+    if (!node->isMediaControlElement())
+        return false;
 
-    MediaControlPlayButtonElement* button = static_cast<MediaControlPlayButtonElement*>(node);
-    return paintMediaButton(renderObject, paintInfo.context, rect, button->displayType() == MediaPlayButton ? GTK_STOCK_MEDIA_PLAY : GTK_STOCK_MEDIA_PAUSE);
+    return paintMediaButton(renderObject, paintInfo.context, rect, mediaControlElementType(node) == MediaPlayButton ? GTK_STOCK_MEDIA_PLAY : GTK_STOCK_MEDIA_PAUSE);
 }
 
 bool RenderThemeGtk::paintMediaSeekBackButton(RenderObject* renderObject, const PaintInfo& paintInfo, const IntRect& rect)
@@ -700,12 +701,14 @@ static bool stringByAdoptingFileSystemRepresentation(gchar* systemFilename, Stri
     return true;
 }
 
-String RenderThemeGtk::fileListNameForWidth(const Vector<String>& filenames, const Font& font, int width)
+String RenderThemeGtk::fileListNameForWidth(const Vector<String>& filenames, const Font& font, int width, bool multipleFilesAllowed)
 {
     if (width <= 0)
         return String();
 
     String string = fileButtonNoFileSelectedLabel();
+    if (multipleFilesAllowed)
+        string = fileButtonNoFilesSelectedLabel();
 
     if (filenames.size() == 1) {
         CString systemFilename = fileSystemRepresentation(filenames[0]);

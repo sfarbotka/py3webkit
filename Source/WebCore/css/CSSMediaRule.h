@@ -31,7 +31,6 @@
 namespace WebCore {
 
 class CSSRuleList;
-class MediaList;
 
 class CSSMediaRule : public CSSRule {
 public:
@@ -39,7 +38,7 @@ public:
     {
         return adoptRef(new CSSMediaRule(parent, media, rules));
     }
-    virtual ~CSSMediaRule();
+    ~CSSMediaRule();
 
     MediaList* media() const { return m_lstMedia.get(); }
     CSSRuleList* cssRules() { return m_lstCSSRules.get(); }
@@ -47,17 +46,13 @@ public:
     unsigned insertRule(const String& rule, unsigned index, ExceptionCode&);
     void deleteRule(unsigned index, ExceptionCode&);
 
-    virtual String cssText() const;
+    String cssText() const;
 
     // Not part of the CSSOM
     unsigned append(CSSRule*);
 
 private:
     CSSMediaRule(CSSStyleSheet* parent, PassRefPtr<MediaList>, PassRefPtr<CSSRuleList>);
-
-    virtual bool isMediaRule() const { return true; }
-    // Inherited from CSSRule
-    virtual CSSRuleType type() const { return MEDIA_RULE; }
 
     RefPtr<MediaList> m_lstMedia;
     RefPtr<CSSRuleList> m_lstCSSRules;

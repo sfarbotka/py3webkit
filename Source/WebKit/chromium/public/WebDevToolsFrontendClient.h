@@ -34,6 +34,7 @@
 namespace WebKit {
 
 class WebString;
+struct WebFloatPoint;
 struct WebDevToolsMessageData;
 
 class WebDevToolsFrontendClient {
@@ -42,16 +43,13 @@ public:
 
     virtual void sendFrontendLoaded() { }
     virtual void sendMessageToBackend(const WebString&) { }
-    virtual void sendDebuggerCommandToAgent(const WebString& command) { }
-    virtual void sendDebuggerPauseScript() { }
 
     virtual void activateWindow() { }
     virtual void closeWindow() { }
     virtual void requestDockWindow() { }
     virtual void requestUndockWindow() { }
+    virtual void moveWindowBy(const WebFloatPoint&) { }
     virtual void saveAs(const WebString& fileName, const WebString& content) { }
-
-    virtual bool shouldHideScriptsPanel() { return false; }
 
 protected:
     virtual ~WebDevToolsFrontendClient() {}

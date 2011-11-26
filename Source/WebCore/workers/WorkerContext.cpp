@@ -44,7 +44,7 @@
 #include "ErrorEvent.h"
 #include "Event.h"
 #include "EventException.h"
-#include "InspectorInstrumentation.h"
+#include "InspectorConsoleInstrumentation.h"
 #include "KURL.h"
 #include "MessagePort.h"
 #include "NotImplemented.h"
@@ -82,6 +82,8 @@
 #include "FileSystemCallbacks.h"
 #include "LocalFileSystem.h"
 #include "SyncCallbackHelper.h"
+#else
+#include "ExceptionCode.h"
 #endif
 
 namespace WebCore {
@@ -113,6 +115,7 @@ WorkerContext::WorkerContext(const KURL& url, const String& userAgent, WorkerThr
     , m_workerInspectorController(adoptPtr(new WorkerInspectorController(this)))
 #endif
     , m_closing(false)
+    , m_eventQueue(WorkerEventQueue::create(this))
 {
     setSecurityOrigin(SecurityOrigin::create(url));
     
@@ -295,9 +298,23 @@ void WorkerContext::logExceptionToConsole(const String& errorMessage, int lineNu
     thread()->workerReportingProxy().postExceptionToWorkerObject(errorMessage, lineNumber, sourceURL);
 }
 
-void WorkerContext::addMessage(MessageSource source, MessageType type, MessageLevel level, const String& message, unsigned lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack>)
+void WorkerContext::addMessage(MessageSource source, MessageType type, MessageLevel level, const String& message, unsigned lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack> callStack)
 {
+    if (!isContextThread()) {
+        postTask(AddConsoleMessageTask::create(source, type, level, message));
+        return;
+    }
     thread()->workerReportingProxy().postConsoleMessageToWorkerObject(source, type, level, message, lineNumber, sourceURL);
+    addMessageToWorkerConsole(source, type, level, message, lineNumber, sourceURL, callStack);
+}
+
+void WorkerContext::addMessageToWorkerConsole(MessageSource source, MessageType type, MessageLevel level, const String& message, unsigned lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack> callStack)
+{
+    ASSERT(isContextThread());
+    if (callStack)
+        InspectorInstrumentation::addMessageToConsole(this, source, type, level, message, 0, callStack);
+    else
+        InspectorInstrumentation::addMessageToConsole(this, source, type, level, message, lineNumber, sourceURL);
 }
 
 #if ENABLE(NOTIFICATIONS)
@@ -502,6 +519,11 @@ void WorkerContext::notifyObserversOfStop()
         observer->notifyStop();
         iter = m_workerObservers.begin();
     }
+}
+
+WorkerEventQueue* WorkerContext::eventQueue() const
+{
+    return m_eventQueue.get();
 }
 
 } // namespace WebCore

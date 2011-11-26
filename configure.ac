@@ -2,14 +2,14 @@ AC_PREREQ(2.59)
 
 m4_define([webkit_major_version], [1])
 m4_define([webkit_minor_version], [7])
-m4_define([webkit_micro_version], [0])
+m4_define([webkit_micro_version], [2])
 
 # This is the version we'll be using as part of our User-Agent string
 # e.g., AppleWebKit/$(webkit_user_agent_version) ...
 #
 # Sourced from Source/WebCore/Configurations/Version.xcconfig
 m4_define([webkit_user_agent_major_version], [535])
-m4_define([webkit_user_agent_minor_version], [4])
+m4_define([webkit_user_agent_minor_version], [10])
 
 AC_INIT([WebKit],[webkit_major_version.webkit_minor_version.webkit_micro_version],[http://bugs.webkit.org/])
 
@@ -38,10 +38,10 @@ AC_CONFIG_SRCDIR([Source/WebCore/config.h])
 
 dnl # Libtool library version, not to confuse with API version
 dnl # see http://www.gnu.org/software/libtool/manual/html_node/Libtool-versioning.html
-LIBWEBKITGTK_VERSION=11:0:11
+LIBWEBKITGTK_VERSION=11:2:11
 AC_SUBST([LIBWEBKITGTK_VERSION])
 
-AM_INIT_AUTOMAKE([foreign subdir-objects tar-ustar])
+AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz no-dist-gzip tar-ustar])
 
 # Use AM_SILENT_RULES if present
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -114,6 +114,9 @@ if test "$os_win32" = "no"; then
 AC_CHECK_HEADERS([pthread.h],
                  AC_DEFINE([HAVE_PTHREAD_H],[1],[Define if pthread exists]),
                  AC_MSG_ERROR([pthread support is required to build WebKit]))
+AC_CHECK_LIB(pthread, pthread_rwlock_init,
+                 AC_DEFINE([HAVE_PTHREAD_RWLOCK],[1],[Define if pthread rwlock is present]),
+                 AC_MSG_WARN([pthread rwlock support is not available]))
 fi
 
 # check for libjpeg the way Gtk does it.
@@ -277,6 +280,7 @@ SQLITE_REQUIRED_VERSION=3.0
 GSTREAMER_REQUIRED_VERSION=0.10
 GSTREAMER_PLUGINS_BASE_REQUIRED_VERSION=0.10.30
 ENCHANT_REQUIRED_VERSION=0.22
+LIBFFTW_REQUIRED_VERSION=3.2.2
 
 # Available modules
 #
@@ -402,9 +406,8 @@ AC_MSG_RESULT([$enable_3d_rendering])
 # check whether to enable WebGL support
 AC_MSG_CHECKING([whether to enable WebGL support])
 AC_ARG_ENABLE(webgl,
-              AC_HELP_STRING([--enable-webgl],
-                             [enable support for WebGL (experimental) [default=no]]),
-              [], [enable_webgl="no"])
+              AC_HELP_STRING([--enable-webgl], [enable support for WebGL [default=yes]]),
+              [], [if test "$with_target" = "x11"; then enable_webgl="yes"; else enable_webgl="no"; fi])
 AC_MSG_RESULT([$enable_webgl])
 
 if test "$enable_webgl" = "yes"; then
@@ -437,6 +440,14 @@ AC_ARG_ENABLE(meter_tag,
                              [enable HTML5 meter [default=yes]]),
               [],[enable_meter_tag="yes"])
 AC_MSG_RESULT([$enable_meter_tag])
+
+# check whether to enable HTML5 Microdata support
+AC_MSG_CHECKING([whether to enable HTML5 Microdata support])
+AC_ARG_ENABLE(microdata,
+              AC_HELP_STRING([--enable-microdata],
+                             [enable HTML5 microdata support [default=no]]),
+              [],[enable_microdata="no"])
+AC_MSG_RESULT([$enable_microdata])
 
 # check whether to enable page visibility API.
 AC_MSG_CHECKING([whether to enable Page Visibility API support])
@@ -583,8 +594,8 @@ fi
 AC_MSG_CHECKING([whether to enable HTML5 video track support])
 AC_ARG_ENABLE(video_track,
               AC_HELP_STRING([--enable-video-track],
-                             [enable HTML5 video track support [default=yes]]),
-              [],[enable_video_track="yes"])
+                             [enable HTML5 video track support [default=no]]),
+              [],[enable_video_track="no"])
 AC_MSG_RESULT([$enable_video_track])
 
 # check whether to enable media source support
@@ -619,22 +630,6 @@ AC_ARG_ENABLE(media_stream,
               [],[enable_media_stream="no"])
 AC_MSG_RESULT([$enable_media_stream])
 
-# check whether to enable XHTML-MP support
-AC_MSG_CHECKING([whether to enable XHTML-MP support])
-AC_ARG_ENABLE(xhtmlmp,
-              AC_HELP_STRING([--enable-xhtmlmp],
-                             [enable support for XHTML-MP [default=no]]),
-              [],[enable_xhtmlmp="no"])
-AC_MSG_RESULT([$enable_xhtmlmp])
-
-# check whether to enable XPath support
-AC_MSG_CHECKING([whether to enable XPath support])
-AC_ARG_ENABLE(xpath,
-              AC_HELP_STRING([--enable-xpath],
-                             [enable support for XPath [default=yes]]),
-              [],[enable_xpath="yes"])
-AC_MSG_RESULT([$enable_xpath])
-
 # check whether to enable XSLT support
 AC_MSG_CHECKING([whether to enable XSLT support])
 AC_ARG_ENABLE(xslt,
@@ -650,14 +645,6 @@ AC_ARG_ENABLE(geolocation,
                              [enable support for geolocation [default=no]]),
               [],[enable_geolocation="no"])
 AC_MSG_RESULT([$enable_geolocation])
-
-# check whether to enable client-based geolocation support
-AC_MSG_CHECKING([whether to enable client-based geolocation support])
-AC_ARG_ENABLE(client_based_geolocation,
-              AC_HELP_STRING([--enable-client-based-geolocation],
-                             [enable support for client-based geolocation [default=no]]),
-              [],[enable_client_based_geolocation="no"])
-AC_MSG_RESULT([$enable_client_based_geolocation])
 
 # check whether to enable MathML support
 AC_MSG_CHECKING([whether to enable MathML support])
@@ -1078,10 +1065,11 @@ if test "$os_win32" = "no"; then
 fi
 
 # check if gstreamer is available
-if test "$enable_video" = "yes"; then
+if test "$enable_video" = "yes" || test "$enable_web_audio" = "yes"; then
    PKG_CHECK_MODULES([GSTREAMER],
                      [gstreamer-0.10 >= $GSTREAMER_REQUIRED_VERSION
                      gstreamer-app-0.10
+                     gstreamer-audio-0.10
                      gstreamer-base-0.10
                      gstreamer-interfaces-0.10
                      gstreamer-pbutils-0.10
@@ -1091,6 +1079,17 @@ if test "$enable_video" = "yes"; then
 
    AC_SUBST([GSTREAMER_CFLAGS])
    AC_SUBST([GSTREAMER_LIBS])
+fi
+
+# check if libfftw is available
+if test "$enable_web_audio" = "yes"; then
+   PKG_CHECK_MODULES([LIBFFTW],
+                     [fftw3 >= $LIBFFTW_REQUIRED_VERSION
+                     fftw3f >= $LIBFFTW_REQUIRED_VERSION],
+                     [have_fftw=yes])
+
+    AC_SUBST([LIBFFTW_CFLAGS])
+    AC_SUBST([LIBFFTW_LIBS])
 fi
 
 # check for code coverage support
@@ -1166,6 +1165,9 @@ AM_CONDITIONAL([USE_PANGO], [test "$with_font_backend" = "pango"])
 # GStreamer feature conditional
 AM_CONDITIONAL([USE_GSTREAMER], [test "$have_gstreamer" = "yes"])
 
+# Web Audio feature conditional
+AM_CONDITIONAL([USE_WEBAUDIO_FFTW], [test "$have_fftw" = "yes"])
+
 # WebKit feature conditionals
 AM_CONDITIONAL([ENABLE_PYTHON_BINDINGS],[test "$enable_python_bindings" = "yes"])
 AM_CONDITIONAL([ENABLE_DEBUG],[test "$enable_debug_features" = "yes"])
@@ -1173,6 +1175,7 @@ AM_CONDITIONAL([ENABLE_3D_RENDERING],[test "$enable_3d_rendering" = "yes"])
 AM_CONDITIONAL([ENABLE_WEBGL],[test "$enable_webgl" = "yes"])
 AM_CONDITIONAL([ENABLE_BLOB],[test "$enable_blob" = "yes"])
 AM_CONDITIONAL([ENABLE_METER_TAG],[test "$enable_meter_tag" = "yes"])
+AM_CONDITIONAL([ENABLE_MICRODATA],[test "$enable_microdata" = "yes"])
 AM_CONDITIONAL([ENABLE_PAGE_VISIBILITY_API],[test "$enable_page_visibility_api" = "yes"])
 AM_CONDITIONAL([ENABLE_PROGRESS_TAG],[test "$enable_progress_tag" = "yes"])
 AM_CONDITIONAL([ENABLE_CHANNEL_MESSAGING],[test "$enable_channel_messaging" = "yes"])
@@ -1181,7 +1184,6 @@ AM_CONDITIONAL([ENABLE_GAMEPAD],[test "$enable_gamepad" = "yes"])
 AM_CONDITIONAL([ENABLE_DIRECTORY_UPLOAD],[test "$enable_directory_upload" = "yes"])
 AM_CONDITIONAL([ENABLE_DATAGRID],[test "$enable_datagrid" = "yes"])
 AM_CONDITIONAL([ENABLE_DATA_TRANSFER_ITEMS],[test "$enable_data_transfer_items" = "yes"])
-AM_CONDITIONAL([ENABLE_DOM_STORAGE],[test "$enable_dom_storage" = "yes"])
 AM_CONDITIONAL([ENABLE_SQL_DATABASE],[test "$enable_sql_database" = "yes"])
 AM_CONDITIONAL([ENABLE_DATALIST],[test "$enable_datalist" = "yes"])
 AM_CONDITIONAL([ENABLE_DETAILS],[test "$enable_details" = "yes"])
@@ -1193,12 +1195,9 @@ AM_CONDITIONAL([ENABLE_IMAGE_RESIZER],[test "$enable_image_resizer" = "yes"])
 AM_CONDITIONAL([ENABLE_INDEXED_DATABASE],[test "$enable_indexed_database" = "yes"])
 AM_CONDITIONAL([ENABLE_INPUT_COLOR],[test "$enable_input_color" = "yes"])
 AM_CONDITIONAL([ENABLE_INPUT_SPEECH],[test "$enable_input_speech" = "yes"])
-AM_CONDITIONAL([ENABLE_XHTMLMP],[test "$enable_xhtmlmp" = "yes"])
-AM_CONDITIONAL([ENABLE_XPATH],[test "$enable_xpath" = "yes"])
 AM_CONDITIONAL([ENABLE_XSLT],[test "$enable_xslt" = "yes"])
 AM_CONDITIONAL([ENABLE_FILTERS],[test "$enable_filters" = "yes"])
 AM_CONDITIONAL([ENABLE_GEOLOCATION], [test "$enable_geolocation" = "yes"])
-AM_CONDITIONAL([ENABLE_CLIENT_BASED_GEOLOCATION], [test "$enable_client_based_geolocation" = "yes"])
 AM_CONDITIONAL([ENABLE_MATHML], [test "$enable_mathml" = "yes"])
 AM_CONDITIONAL([ENABLE_MHTML], [test "$enable_mhtml" = "yes"])
 AM_CONDITIONAL([ENABLE_VIDEO],[test "$enable_video" = "yes"])
@@ -1241,10 +1240,6 @@ GNUmakefile
 
 AC_CONFIG_FILES([
 Source/WebKit/gtk/webkit/webkitversion.h
-Source/WebKit/gtk/docs/GNUmakefile
-Source/WebKit/gtk/docs/version.xml
-Source/WebKit2/UIProcess/API/gtk/docs/GNUmakefile
-Source/WebKit2/UIProcess/API/gtk/docs/version.xml
 ])
 
 AC_CONFIG_FILES([
@@ -1280,6 +1275,7 @@ Build configuration:
  Font backend                                             : $with_font_backend
  Optimized memory allocator                               : $enable_fast_malloc
  JavaScript Engine                                        : $with_jsengine
+
 Features:
  3D Rendering                                             : $enable_3d_rendering
  WebGL                                                    : $enable_webgl
@@ -1291,7 +1287,6 @@ Features:
  JIT compilation                                          : $enable_jit
  Filters support                                          : $enable_filters
  Geolocation support                                      : $enable_geolocation
- Client-based geolocation support                         : $enable_client_based_geolocation
  JavaScript debugger/profiler support                     : $enable_javascript_debugger
  Gamepad support                                          : $enable_gamepad
  MathML support                                           : $enable_mathml
@@ -1299,6 +1294,7 @@ Features:
  Media statistics                                         : $enable_media_statistics
  HTML5 channel messaging support                          : $enable_channel_messaging
  HTML5 meter element support                              : $enable_meter_tag
+ HTML5 microdata support                                  : $enable_microdata
  Page Visibility API support                              : $enable_page_visibility_api
  HTML5 progress element support                           : $enable_progress_tag
  HTML5 client-side session and persistent storage support : $enable_dom_storage
@@ -1325,8 +1321,6 @@ Features:
  Web Sockets support                                      : $enable_web_sockets
  Web Timing support                                       : $enable_web_timing
  Web Workers support                                      : $enable_workers
- XHTML-MP support                                         : $enable_xhtmlmp
- XPATH support                                            : $enable_xpath
  XSLT support                                             : $enable_xslt
  Spellcheck support                                       : $enable_spellcheck
  Animation API                                            : $enable_animation_api
@@ -1341,6 +1335,7 @@ GTK+ configuration:
  GDK target                                               : $with_target
  Hildon UI extensions                                     : $with_hildon
  Introspection support                                    : $enable_introspection
+ Generate documentation                                   : $enable_gtk_doc
  Python bindings                                          : $enable_python_bindings
 "
 if test "$with_unicode_backend" = "glib"; then

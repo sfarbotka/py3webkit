@@ -23,6 +23,7 @@
 
 #include "WebLayerTreeInfo.h"
 
+#include "Arguments.h"
 #include "SharedMemory.h"
 #include "WebCoreArgumentCoders.h"
 
@@ -33,35 +34,18 @@ namespace WebKit {
 void WebLayerInfo::encode(CoreIPC::ArgumentEncoder* encoder) const
 {
     // We have to divide it to several lines, because CoreIPC::In/Out takes a maximum of 10 arguments.
-    encoder->encode(CoreIPC::In(id, name, parent, children, flags, replica, mask));
-    encoder->encode(CoreIPC::In(pos, size, transform, opacity, anchorPoint, childrenTransform, contentsRect));
-    encoder->encode(imageBackingStore ? imageBackingStore->size() : IntSize());
-
-    if (!imageBackingStore)
-        return;
-
-    ShareableBitmap::Handle imageHandle;
-    if (imageBackingStore->createHandle(imageHandle))
-        imageHandle.encode(encoder);
+    encoder->encode(CoreIPC::In(id, name, parent, children, flags, replica, mask, imageBackingStoreID));
+    encoder->encode(CoreIPC::In(pos, size, transform, opacity, anchorPoint, childrenTransform, contentsRect, animations));
 }
 
 bool WebLayerInfo::decode(CoreIPC::ArgumentDecoder* decoder, WebLayerInfo& info)
 {
     // We have to divide it to several lines, because CoreIPC::In/Out takes a maximum of 10 arguments.
-    if (!decoder->decode(CoreIPC::Out(info.id, info.name, info.parent, info.children, info.flags, info.replica, info.mask)))
+    if (!decoder->decode(CoreIPC::Out(info.id, info.name, info.parent, info.children, info.flags, info.replica, info.mask, info.imageBackingStoreID)))
         return false;
-    if (!decoder->decode(CoreIPC::Out(info.pos, info.size, info.transform, info.opacity, info.anchorPoint, info.childrenTransform, info.contentsRect)))
+    if (!decoder->decode(CoreIPC::Out(info.pos, info.size, info.transform, info.opacity, info.anchorPoint, info.childrenTransform, info.contentsRect, info.animations)))
         return false;
 
-    IntSize imageBackingStoreSize;
-    if (!decoder->decode(imageBackingStoreSize))
-        return false;
-    if (imageBackingStoreSize.isEmpty())
-        return true;
-
-    ShareableBitmap::Handle imageHandle;
-    if (ShareableBitmap::Handle::decode(decoder, imageHandle))
-        info.imageBackingStore = ShareableBitmap::create(imageHandle);
     return true;
 }
 
@@ -83,6 +67,32 @@ void WebLayerUpdateInfo::encode(CoreIPC::ArgumentEncoder* encoder) const
 bool WebLayerUpdateInfo::decode(CoreIPC::ArgumentDecoder* decoder, WebLayerUpdateInfo& info)
 {
     return decoder->decode(CoreIPC::Out(info.layerID, info.rect, info.bitmapHandle));
+}
+
+void WebLayerAnimation::encode(CoreIPC::ArgumentEncoder* encoder) const
+{
+    encoder->encodeEnum(operation);
+    encoder->encode(keyframeList);
+    encoder->encode(CoreIPC::In(name, startTime, boxSize));
+
+    if (operation == WebLayerAnimation::AddAnimation)
+        encoder->encode(animation);
+}
+
+bool WebLayerAnimation::decode(CoreIPC::ArgumentDecoder* decoder, WebLayerAnimation& info)
+{
+    if (!decoder->decodeEnum(info.operation))
+        return false;
+    if (!decoder->decode(info.keyframeList))
+        return false;
+    if (!decoder->decode(CoreIPC::Out(info.name, info.startTime, info.boxSize)))
+        return false;
+
+    if (info.operation == WebLayerAnimation::AddAnimation)
+        if (!decoder->decode(info.animation))
+            return false;
+
+    return true;
 }
 
 }

@@ -45,7 +45,11 @@
 #include "FileSystem.h"
 
 #include <QApplication>
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+#include <QStandardPaths>
+#else
 #include <QDesktopServices>
+#endif
 #include <QDir>
 #include <QHash>
 #include <QSharedData>
@@ -83,36 +87,6 @@ public:
     void apply();
     WebCore::Settings* settings;
 };
-
-typedef QHash<int, QPixmap> WebGraphicHash;
-Q_GLOBAL_STATIC(WebGraphicHash, _graphics)
-
-static void earlyClearGraphics()
-{
-    _graphics()->clear();
-}
-
-static WebGraphicHash* graphics()
-{
-    WebGraphicHash* hash = _graphics();
-
-    if (hash->isEmpty()) {
-
-        // prevent ~QPixmap running after ~QApplication (leaks native pixmaps)
-        qAddPostRoutine(earlyClearGraphics);
-
-        hash->insert(QWebSettings::MissingImageGraphic, QPixmap(QLatin1String(":webkit/resources/missingImage.png")));
-        hash->insert(QWebSettings::MissingPluginGraphic, QPixmap(QLatin1String(":webkit/resources/nullPlugin.png")));
-        hash->insert(QWebSettings::DefaultFrameIconGraphic, QPixmap(QLatin1String(":webkit/resources/urlIcon.png")));
-        hash->insert(QWebSettings::TextAreaSizeGripCornerGraphic, QPixmap(QLatin1String(":webkit/resources/textAreaResizeCorner.png")));
-        hash->insert(QWebSettings::DeleteButtonGraphic, QPixmap(QLatin1String(":webkit/resources/deleteButton.png")));
-        hash->insert(QWebSettings::InputSpeechButtonGraphic, QPixmap(QLatin1String(":webkit/resources/inputSpeech.png")));
-        hash->insert(QWebSettings::SearchCancelButtonGraphic, QApplication::style()->standardPixmap(QStyle::SP_DialogCloseButton));
-        hash->insert(QWebSettings::SearchCancelButtonPressedGraphic, QApplication::style()->standardPixmap(QStyle::SP_DialogCloseButton));
-    }
-
-    return hash;
-}
 
 Q_GLOBAL_STATIC(QList<QWebSettingsPrivate*>, allSettings);
 
@@ -167,9 +141,13 @@ void QWebSettingsPrivate::apply()
                                       global->attributes.value(QWebSettings::AutoLoadImages));
         settings->setLoadsImagesAutomatically(value);
 
+        value = attributes.value(QWebSettings::DnsPrefetchEnabled,
+                                 global->attributes.value(QWebSettings::DnsPrefetchEnabled));
+        settings->setDNSPrefetchingEnabled(value);
+
         value = attributes.value(QWebSettings::JavascriptEnabled,
                                       global->attributes.value(QWebSettings::JavascriptEnabled));
-        settings->setJavaScriptEnabled(value);
+        settings->setScriptEnabled(value);
 #if USE(ACCELERATED_COMPOSITING)
         value = attributes.value(QWebSettings::AcceleratedCompositingEnabled,
                                       global->attributes.value(QWebSettings::AcceleratedCompositingEnabled));
@@ -273,7 +251,7 @@ void QWebSettingsPrivate::apply()
                                       global->attributes.value(QWebSettings::XSSAuditingEnabled));
         settings->setXSSAuditorEnabled(value);
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
         value = attributes.value(QWebSettings::TiledBackingStoreEnabled,
                                       global->attributes.value(QWebSettings::TiledBackingStoreEnabled));
         settings->setTiledBackingStoreEnabled(value);
@@ -747,6 +725,21 @@ QWebPluginDatabase *QWebSettings::pluginDatabase()
 }
 */
 
+static const char* resourceNameForWebGraphic(QWebSettings::WebGraphic type)
+{
+    switch (type) {
+    case QWebSettings::MissingImageGraphic: return "missingImage";
+    case QWebSettings::MissingPluginGraphic: return "nullPlugin";
+    case QWebSettings::DefaultFrameIconGraphic: return "urlIcon";
+    case QWebSettings::TextAreaSizeGripCornerGraphic: return "textAreaResizeCorner";
+    case QWebSettings::DeleteButtonGraphic: return "deleteButton";
+    case QWebSettings::InputSpeechButtonGraphic: return "inputSpeech";
+    case QWebSettings::SearchCancelButtonGraphic: return "searchCancelButton";
+    case QWebSettings::SearchCancelButtonPressedGraphic: return "searchCancelButtonPressed";
+    }
+    return 0;
+}
+
 /*!
     Sets \a graphic to be drawn when QtWebKit needs to draw an image of the
     given \a type.
@@ -758,11 +751,7 @@ QWebPluginDatabase *QWebSettings::pluginDatabase()
 */
 void QWebSettings::setWebGraphic(WebGraphic type, const QPixmap& graphic)
 {
-    WebGraphicHash* h = graphics();
-    if (graphic.isNull())
-        h->remove(type);
-    else
-        h->insert(type, graphic);
+    WebCore::Image::setPlatformResource(resourceNameForWebGraphic(type), graphic);
 }
 
 /*!
@@ -773,7 +762,13 @@ void QWebSettings::setWebGraphic(WebGraphic type, const QPixmap& graphic)
 */
 QPixmap QWebSettings::webGraphic(WebGraphic type)
 {
-    return graphics()->value(type);
+    RefPtr<WebCore::Image> img = WebCore::Image::loadPlatformResource(resourceNameForWebGraphic(type));
+    if (!img)
+        return QPixmap();
+    QPixmap* pixmap = img->nativeImageForCurrentFrame();
+    if (!pixmap)
+        return QPixmap();
+    return *pixmap;
 }
 
 /*!
@@ -1129,7 +1124,11 @@ void QWebSettings::enablePersistentStorage(const QString& path)
 
     if (path.isEmpty()) {
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+        storagePath = QStandardPaths::writableLocation(QStandardPaths::DataLocation);
+#else
         storagePath = QDesktopServices::storageLocation(QDesktopServices::DataLocation);
+#endif
         if (storagePath.isEmpty())
             storagePath = WebCore::pathByAppendingComponent(QDir::homePath(), QCoreApplication::applicationName());
     } else

@@ -55,6 +55,7 @@ namespace WebCore {
     class IDBVersionChangeRequest;
     class JavaScriptAudioNode;
     class LocalMediaStream;
+    class MediaController;
     class MediaStream;
     class MessagePort;
     class Node;
@@ -64,6 +65,8 @@ namespace WebCore {
     class ScriptExecutionContext;
     class SharedWorker;
     class SharedWorkerContext;
+    class TextTrack;
+    class TextTrackCue;
     class WebSocket;
     class Worker;
     class XMLHttpRequest;
@@ -100,58 +103,11 @@ namespace WebCore {
         void ref() { refEventTarget(); }
         void deref() { derefEventTarget(); }
 
-        virtual EventSource* toEventSource();
-        virtual MessagePort* toMessagePort();
+        virtual const AtomicString& interfaceName() const = 0;
+        virtual ScriptExecutionContext* scriptExecutionContext() const = 0;
+
         virtual Node* toNode();
         virtual DOMWindow* toDOMWindow();
-        virtual XMLHttpRequest* toXMLHttpRequest();
-        virtual XMLHttpRequestUpload* toXMLHttpRequestUpload();
-        virtual DOMApplicationCache* toDOMApplicationCache();
-#if ENABLE(SVG)
-        virtual SVGElementInstance* toSVGElementInstance();
-#endif
-#if ENABLE(WORKERS)
-        virtual Worker* toWorker();
-        virtual DedicatedWorkerContext* toDedicatedWorkerContext();
-#endif
-#if ENABLE(SHARED_WORKERS)
-        virtual SharedWorker* toSharedWorker();
-        virtual SharedWorkerContext* toSharedWorkerContext();
-#endif
-
-#if ENABLE(WEB_AUDIO)
-        virtual AudioContext* toAudioContext();
-        virtual JavaScriptAudioNode* toJavaScriptAudioNode();
-#endif
-
-#if ENABLE(WEB_SOCKETS)
-        virtual WebSocket* toWebSocket();
-#endif
-
-#if ENABLE(NOTIFICATIONS)
-        virtual Notification* toNotification();
-#endif
-#if ENABLE(BLOB)
-        virtual FileReader* toFileReader();
-#endif
-#if ENABLE(FILE_SYSTEM)
-        virtual FileWriter* toFileWriter();
-#endif
-
-#if ENABLE(INDEXED_DATABASE)
-        virtual IDBDatabase* toIDBDatabase();
-        virtual IDBRequest* toIDBRequest();
-        virtual IDBTransaction* toIDBTransaction();
-        virtual IDBVersionChangeRequest* toIDBVersionChangeRequest();
-#endif
-
-#if ENABLE(MEDIA_STREAM)
-        virtual MediaStream* toMediaStream();
-        virtual LocalMediaStream* toLocalMediaStream();
-        virtual PeerConnection* toPeerConnection();
-#endif
-
-        virtual ScriptExecutionContext* scriptExecutionContext() const = 0;
 
         virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
         virtual bool removeEventListener(const AtomicString& eventType, EventListener*, bool useCapture);

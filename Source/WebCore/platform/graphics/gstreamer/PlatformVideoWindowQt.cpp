@@ -23,13 +23,15 @@
 #include "HTMLVideoElement.h"
 #include "PlatformVideoWindowPrivate.h"
 
-#include <QApplication>
+#include <QGuiApplication>
 #include <QDesktopWidget>
 #include <QKeyEvent>
 #include <QPalette>
 using namespace WebCore;
 
+#ifndef QT_NO_CURSOR
 static const int gHideMouseCursorDelay = 3000;
+#endif
 
 FullScreenVideoWindow::FullScreenVideoWindow()
     : QWidget(0, Qt::Window)
@@ -40,8 +42,10 @@ FullScreenVideoWindow::FullScreenVideoWindow()
     setAttribute(Qt::WA_NoSystemBackground, true);
     setAttribute(Qt::WA_PaintOnScreen, true);
 
+#ifndef QT_NO_CURSOR
     m_cursorTimer.setSingleShot(true);
     connect(&m_cursorTimer, SIGNAL(timeout()), this, SLOT(hideCursor()));
+#endif
 }
 
 void FullScreenVideoWindow::setVideoElement(HTMLVideoElement* element)
@@ -51,10 +55,14 @@ void FullScreenVideoWindow::setVideoElement(HTMLVideoElement* element)
 
 void FullScreenVideoWindow::closeEvent(QCloseEvent*)
 {
+#ifndef QT_NO_CURSOR
     m_cursorTimer.stop();
+#endif
     setMouseTracking(false);
     releaseMouse();
-    QApplication::restoreOverrideCursor();
+#ifndef QT_NO_CURSOR
+    QGuiApplication::restoreOverrideCursor();
+#endif
 }
 
 void FullScreenVideoWindow::keyPressEvent(QKeyEvent* ev)
@@ -96,13 +104,17 @@ void FullScreenVideoWindow::showFullScreen()
 
 void FullScreenVideoWindow::hideCursor()
 {
-    QApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
+#ifndef QT_NO_CURSOR
+    QGuiApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
+#endif
 }
 
 void FullScreenVideoWindow::showCursor()
 {
-    QApplication::restoreOverrideCursor();
+#ifndef QT_NO_CURSOR
+    QGuiApplication::restoreOverrideCursor();
     m_cursorTimer.start(gHideMouseCursorDelay);
+#endif
 }
 
 

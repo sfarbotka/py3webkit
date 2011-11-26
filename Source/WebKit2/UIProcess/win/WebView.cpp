@@ -46,6 +46,7 @@
 #include <Commctrl.h>
 #include <WebCore/BitmapInfo.h>
 #include <WebCore/Cursor.h>
+#include <WebCore/DragSession.h>
 #include <WebCore/Editor.h>
 #include <WebCore/FloatRect.h>
 #if USE(CG)
@@ -1079,7 +1080,7 @@ void WebView::setScrollOffsetOnNextResize(const IntSize& scrollOffset)
     m_nextResizeScrollOffset = scrollOffset;
 }
 
-void WebView::setViewportArguments(const WebCore::ViewportArguments&)
+void WebView::didChangeViewportProperties(const WebCore::ViewportArguments&)
 {
 }
 
@@ -1428,8 +1429,10 @@ PassRefPtr<WebContextMenuProxy> WebView::createContextMenuProxy(WebPageProxy* pa
     return WebContextMenuProxyWin::create(m_window, page);
 }
 
-void WebView::setFindIndicator(PassRefPtr<FindIndicator> prpFindIndicator, bool fadeOut)
+void WebView::setFindIndicator(PassRefPtr<FindIndicator> prpFindIndicator, bool fadeOut, bool animate)
 {
+    UNUSED_PARAM(animate);
+
     if (!m_findIndicatorCallback)
         return;
 
@@ -1641,7 +1644,7 @@ WebCore::DragOperation WebView::keyStateToDragOperation(DWORD grfKeyState) const
     // IDropTarget::DragOver. Note, grfKeyState is the current 
     // state of the keyboard modifier keys on the keyboard. See:
     // <http://msdn.microsoft.com/en-us/library/ms680129(VS.85).aspx>.
-    DragOperation operation = m_page->dragOperation();
+    DragOperation operation = m_page->dragSession().operation;
 
     if ((grfKeyState & (MK_CONTROL | MK_SHIFT)) == (MK_CONTROL | MK_SHIFT))
         operation = DragOperationLink;
@@ -1665,7 +1668,7 @@ HRESULT STDMETHODCALLTYPE WebView::DragEnter(IDataObject* pDataObject, DWORD grf
     ::ScreenToClient(m_window, (LPPOINT)&localpt);
     DragData data(pDataObject, IntPoint(localpt.x, localpt.y), IntPoint(pt.x, pt.y), keyStateToDragOperation(grfKeyState));
     m_page->dragEntered(&data);
-    *pdwEffect = dragOperationToDragCursor(m_page->dragOperation());
+    *pdwEffect = dragOperationToDragCursor(m_page->dragSession().operation);
 
     m_lastDropEffect = *pdwEffect;
     m_dragData = pDataObject;
@@ -1683,7 +1686,7 @@ HRESULT STDMETHODCALLTYPE WebView::DragOver(DWORD grfKeyState, POINTL pt, DWORD*
         ::ScreenToClient(m_window, (LPPOINT)&localpt);
         DragData data(m_dragData.get(), IntPoint(localpt.x, localpt.y), IntPoint(pt.x, pt.y), keyStateToDragOperation(grfKeyState));
         m_page->dragUpdated(&data);
-        *pdwEffect = dragOperationToDragCursor(m_page->dragOperation());
+        *pdwEffect = dragOperationToDragCursor(m_page->dragSession().operation);
     } else
         *pdwEffect = DROPEFFECT_NONE;
 

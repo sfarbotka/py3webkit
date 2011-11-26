@@ -31,8 +31,10 @@
 #include "RenderStyleConstants.h"
 #include "ScriptWrappable.h"
 #include "TreeShared.h"
+#include "WebKitMutationObserver.h"
 #include <wtf/Forward.h>
 #include <wtf/ListHashSet.h>
+#include <wtf/text/AtomicString.h>
 
 #if USE(JSC)
 namespace JSC {
@@ -46,6 +48,7 @@ namespace WebCore {
 class Attribute;
 class ClassNodeList;
 class ContainerNode;
+class DOMSettableTokenList;
 class Document;
 class DynamicNodeList;
 class Element;
@@ -80,6 +83,10 @@ class SVGUseElement;
 class TagNodeList;
 class TreeScope;
 
+#if ENABLE(MICRODATA)
+class HTMLPropertiesCollection;
+#endif
+
 typedef int ExceptionCode;
 
 const int nodeStyleChangeShift = 25;
@@ -94,7 +101,7 @@ enum StyleChangeType {
     SyntheticStyleChange = 3 << nodeStyleChangeShift
 };
 
-class Node : public EventTarget, public TreeShared<ContainerNode>, public ScriptWrappable {
+class Node : public EventTarget, public ScriptWrappable, public TreeShared<ContainerNode> {
     friend class Document;
     friend class TreeScope;
 
@@ -188,6 +195,8 @@ public:
     
     Node* lastDescendant() const;
     Node* firstDescendant() const;
+
+    virtual bool isActiveNode() const { return false; }
     
     // Other methods (not part of DOM)
 
@@ -340,6 +349,7 @@ public:
     virtual Node* focusDelegate();
 
     bool isContentEditable();
+    bool isContentRichlyEditable();
 
     bool rendererIsEditable() const { return rendererIsEditable(Editable); }
     bool rendererIsRichlyEditable() const { return rendererIsEditable(RichlyEditable); }
@@ -516,6 +526,7 @@ public:
     void notifyLocalNodeListsAttributeChanged();
     void notifyLocalNodeListsLabelChanged();
     void removeCachedClassNodeList(ClassNodeList*, const String&);
+
     void removeCachedNameNodeList(NameNodeList*, const String&);
     void removeCachedTagNodeList(TagNodeList*, const AtomicString&);
     void removeCachedTagNodeList(TagNodeList*, const QualifiedName&);
@@ -531,10 +542,10 @@ public:
 
     unsigned short compareDocumentPosition(Node*);
 
-    virtual Node* toNode() { return this; }
-
+    virtual Node* toNode();
     virtual HTMLInputElement* toInputElement();
 
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const;
 
     virtual bool addEventListener(const AtomicString& eventType, PassRefPtr<EventListener>, bool useCapture);
@@ -579,6 +590,24 @@ public:
 
     virtual EventTargetData* eventTargetData();
     virtual EventTargetData* ensureEventTargetData();
+
+#if ENABLE(MICRODATA)
+    void itemTypeAttributeChanged();
+
+    DOMSettableTokenList* itemProp();
+    DOMSettableTokenList* itemRef();
+    DOMSettableTokenList* itemType();
+    HTMLPropertiesCollection* properties();
+#endif
+
+#if ENABLE(MUTATION_OBSERVERS)
+    void getRegisteredMutationObserversOfType(HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>&, WebKitMutationObserver::MutationType, const AtomicString& attributeName = nullAtom);
+    MutationObserverRegistration* registerMutationObserver(PassRefPtr<WebKitMutationObserver>);
+    void unregisterMutationObserver(MutationObserverRegistration*);
+    void registerTransientMutationObserver(MutationObserverRegistration*);
+    void unregisterTransientMutationObserver(MutationObserverRegistration*);
+    void notifyMutationObserversNodeWillDetach();
+#endif // ENABLE(MUTATION_OBSERVERS)
 
 private:
     enum NodeFlags {
@@ -703,11 +732,17 @@ private:
 
     void trackForDebugging();
 
+#if ENABLE(MUTATION_OBSERVERS)
+    Vector<OwnPtr<MutationObserverRegistration> >* mutationObserverRegistry();
+    HashSet<MutationObserverRegistration*>* transientMutationObserverRegistry();
+    void collectMatchingObserversForMutation(HashMap<WebKitMutationObserver*, MutationRecordDeliveryOptions>&, Node* fromNode, WebKitMutationObserver::MutationType, const AtomicString& attributeName);
+#endif
+
+    mutable uint32_t m_nodeFlags;
     Document* m_document;
     Node* m_previous;
     Node* m_next;
     RenderObject* m_renderer;
-    mutable uint32_t m_nodeFlags;
 
 protected:
     bool isParsingChildrenFinished() const { return getFlag(IsParsingChildrenFinishedFlag); }
@@ -732,6 +767,12 @@ protected:
     bool hasRareSVGData() const { return getFlag(HasSVGRareDataFlag); }
     void setHasRareSVGData() { setFlag(HasSVGRareDataFlag); }
     void clearHasRareSVGData() { clearFlag(HasSVGRareDataFlag); }
+#endif
+
+#if ENABLE(MICRODATA)
+    void setItemProp(const String&);
+    void setItemRef(const String&);
+    void setItemType(const String&);
 #endif
 };
 

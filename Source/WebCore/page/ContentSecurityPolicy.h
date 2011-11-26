@@ -26,6 +26,7 @@
 #ifndef ContentSecurityPolicy_h
 #define ContentSecurityPolicy_h
 
+#include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
@@ -72,11 +73,13 @@ private:
     bool parseDirective(const UChar* begin, const UChar* end, String& name, String& value);
     void parseReportURI(const String&);
     void addDirective(const String& name, const String& value);
+    void applySandboxPolicy(const String& sandboxPolicy);
 
     PassOwnPtr<CSPDirective> createCSPDirective(const String& name, const String& value);
 
     CSPDirective* operativeDirective(CSPDirective*) const;
     void reportViolation(const String& directiveText, const String& consoleMessage) const;
+    void logUnrecognizedDirective(const String& name) const;
     bool checkEval(CSPDirective*) const;
 
     bool checkInlineAndReportViolation(CSPDirective*, const String& consoleMessage) const;
@@ -98,6 +101,7 @@ private:
     OwnPtr<CSPDirective> m_fontSrc;
     OwnPtr<CSPDirective> m_mediaSrc;
     OwnPtr<CSPDirective> m_connectSrc;
+    bool m_haveSandboxPolicy;
     Vector<KURL> m_reportURLs;
 };
 

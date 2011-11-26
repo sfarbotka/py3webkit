@@ -74,7 +74,7 @@ static EncodedJSValue JSC_HOST_CALL constructImage(ExecState* exec)
         HTMLImageElement::createForJSConstructor(document, optionalWidth, optionalHeight))));
 }
 
-ConstructType JSImageConstructor::getConstructData(ConstructData& constructData)
+ConstructType JSImageConstructor::getConstructData(JSCell*, ConstructData& constructData)
 {
     constructData.native.function = constructImage;
     return ConstructTypeHost;

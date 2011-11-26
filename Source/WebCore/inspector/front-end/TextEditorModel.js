@@ -68,6 +68,13 @@ WebInspector.TextEditorModel = function()
     this._lineBreak = "\n";
 }
 
+WebInspector.TextEditorModel.Indent = {
+    TwoSpaces: "  ",
+    FourSpaces: "    ",
+    EightSpaces: "        ",
+    TabCharacter: "\t"
+}
+
 WebInspector.TextEditorModel.prototype = {
     set changeListener(changeListener)
     {
@@ -304,3 +311,5 @@ WebInspector.TextEditorModel.prototype = {
         this._undoStack = [];
     }
 }
+
+WebInspector.settings.textEditorIndent = WebInspector.settings.createSetting("textEditorIndent", WebInspector.TextEditorModel.Indent.FourSpaces);

@@ -413,7 +413,7 @@ bool wxWebView::Create(wxWindow* parent, int id, const wxPoint& position,
     settings->setFixedFontFamily("Courier New");
     settings->setSansSerifFontFamily("Arial");
     settings->setStandardFontFamily("Times New Roman");
-    settings->setJavaScriptEnabled(true);
+    settings->setScriptEnabled(true);
 
 #if ENABLE(SQL_DATABASE)
     SetDatabasesEnabled(true);
@@ -584,6 +584,14 @@ void wxWebView::LoadURL(const wxString& url)
 {
     if (m_mainFrame)
         m_mainFrame->LoadURL(url);
+}
+
+wxString wxWebView::GetMainFrameURL() const
+{
+    if (m_mainFrame)
+        return m_mainFrame->GetURL();
+    
+    return wxEmptyString;
 }
 
 bool wxWebView::GoBack()

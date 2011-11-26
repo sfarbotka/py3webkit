@@ -75,14 +75,9 @@ void ObjectPrototype::finishCreation(JSGlobalData& globalData, JSGlobalObject*)
     ASSERT(inherits(&s_info));
 }
 
-void ObjectPrototype::put(ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
-{
-    put(this, exec, propertyName, value, slot);
-}
-
 void ObjectPrototype::put(JSCell* cell, ExecState* exec, const Identifier& propertyName, JSValue value, PutPropertySlot& slot)
 {
-    ObjectPrototype* thisObject = static_cast<ObjectPrototype*>(cell);
+    ObjectPrototype* thisObject = jsCast<ObjectPrototype*>(cell);
     JSNonFinalObject::put(cell, exec, propertyName, value, slot);
 
     if (thisObject->m_hasNoPropertiesWithUInt32Names) {
@@ -92,21 +87,22 @@ void ObjectPrototype::put(JSCell* cell, ExecState* exec, const Identifier& prope
     }
 }
 
-bool ObjectPrototype::getOwnPropertySlot(ExecState* exec, unsigned propertyName, PropertySlot& slot)
+bool ObjectPrototype::getOwnPropertySlotByIndex(JSCell* cell, ExecState* exec, unsigned propertyName, PropertySlot& slot)
 {
-    if (m_hasNoPropertiesWithUInt32Names)
+    ObjectPrototype* thisObject = jsCast<ObjectPrototype*>(cell);
+    if (thisObject->m_hasNoPropertiesWithUInt32Names)
         return false;
-    return JSNonFinalObject::getOwnPropertySlot(exec, propertyName, slot);
+    return JSNonFinalObject::getOwnPropertySlotByIndex(thisObject, exec, propertyName, slot);
 }
 
-bool ObjectPrototype::getOwnPropertySlot(ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
+bool ObjectPrototype::getOwnPropertySlot(JSCell* cell, ExecState* exec, const Identifier& propertyName, PropertySlot &slot)
 {
-    return getStaticFunctionSlot<JSNonFinalObject>(exec, ExecState::objectPrototypeTable(exec), this, propertyName, slot);
+    return getStaticFunctionSlot<JSNonFinalObject>(exec, ExecState::objectPrototypeTable(exec), jsCast<ObjectPrototype*>(cell), propertyName, slot);
 }
 
-bool ObjectPrototype::getOwnPropertyDescriptor(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
+bool ObjectPrototype::getOwnPropertyDescriptor(JSObject* object, ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
-    return getStaticFunctionDescriptor<JSNonFinalObject>(exec, ExecState::objectPrototypeTable(exec), this, propertyName, descriptor);
+    return getStaticFunctionDescriptor<JSNonFinalObject>(exec, ExecState::objectPrototypeTable(exec), jsCast<ObjectPrototype*>(object), propertyName, descriptor);
 }
 
 // ------------------------------ Functions --------------------------------
@@ -151,7 +147,7 @@ EncodedJSValue JSC_HOST_CALL objectProtoFuncDefineGetter(ExecState* exec)
     CallData callData;
     if (getCallData(exec->argument(1), callData) == CallTypeNone)
         return throwVMError(exec, createSyntaxError(exec, "invalid getter usage"));
-    thisObject->defineGetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
+    thisObject->methodTable()->defineGetter(thisObject, exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)), 0);
     return JSValue::encode(jsUndefined());
 }
 
@@ -164,7 +160,7 @@ EncodedJSValue JSC_HOST_CALL objectProtoFuncDefineSetter(ExecState* exec)
     CallData callData;
     if (getCallData(exec->argument(1), callData) == CallTypeNone)
         return throwVMError(exec, createSyntaxError(exec, "invalid setter usage"));
-    thisObject->defineSetter(exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)));
+    thisObject->methodTable()->defineSetter(thisObject, exec, Identifier(exec, exec->argument(0).toString(exec)), asObject(exec->argument(1)), 0);
     return JSValue::encode(jsUndefined());
 }
 
@@ -218,7 +214,8 @@ EncodedJSValue JSC_HOST_CALL objectProtoFuncToString(ExecState* exec)
     JSValue thisValue = exec->hostThisValue();
     if (thisValue.isUndefinedOrNull())
         return JSValue::encode(jsNontrivialString(exec, thisValue.isUndefined() ? "[object Undefined]" : "[object Null]"));
-    return JSValue::encode(jsMakeNontrivialString(exec, "[object ", thisValue.toObject(exec)->className(), "]"));
+    JSObject* thisObject = thisValue.toObject(exec);
+    return JSValue::encode(jsMakeNontrivialString(exec, "[object ", thisObject->methodTable()->className(thisObject), "]"));
 }
 
 } // namespace JSC

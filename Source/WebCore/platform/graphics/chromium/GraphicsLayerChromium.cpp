@@ -191,6 +191,9 @@ void GraphicsLayerChromium::setSize(const FloatSize& size)
 
 void GraphicsLayerChromium::setTransform(const TransformationMatrix& transform)
 {
+    // Call this method first to assign contents scale to LayerChromium so the painter can apply the scale transform.
+    updateContentsScale();
+
     if (transform == m_transform)
         return;
 
@@ -307,8 +310,10 @@ void GraphicsLayerChromium::setReplicatedByLayer(GraphicsLayer* layer)
 
 void GraphicsLayerChromium::setContentsNeedsDisplay()
 {
-    if (m_contentsLayer)
+    if (m_contentsLayer) {
         m_contentsLayer->setNeedsDisplay();
+        m_contentsLayer->contentChanged();
+    }
 }
 
 void GraphicsLayerChromium::setNeedsDisplay()
@@ -569,6 +574,8 @@ void GraphicsLayerChromium::updateLayerPreserves3D()
         // Set the old layer to opacity of 1. Further down we will set the opacity on the transform layer.
         m_layer->setOpacity(1);
 
+        m_layer->setContentsScale(contentsScale());
+
         // Move this layer to be a child of the transform layer.
         if (m_layer->parent())
             m_layer->parent()->replaceChild(m_layer.get(), m_transformLayer.get());
@@ -632,6 +639,15 @@ void GraphicsLayerChromium::updateContentsRect()
     m_contentsLayer->setBounds(IntSize(m_contentsRect.width(), m_contentsRect.height()));
 }
 
+void GraphicsLayerChromium::updateContentsScale()
+{
+    // If page scale is already applied then there's no need to apply it again.
+    if (appliesPageScale() || !m_layer)
+        return;
+
+    m_layer->setContentsScale(contentsScale());
+}
+
 void GraphicsLayerChromium::setupContentsLayer(LayerChromium* contentsLayer)
 {
     if (contentsLayer == m_contentsLayer)
@@ -662,10 +678,24 @@ void GraphicsLayerChromium::setupContentsLayer(LayerChromium* contentsLayer)
     updateNames();
 }
 
+float GraphicsLayerChromium::contentsScale() const
+{
+    if (!appliesPageScale())
+        return pageScaleFactor() * deviceScaleFactor();
+    return 1;
+}
+
 // This function simply mimics the operation of GraphicsLayerCA
 void GraphicsLayerChromium::updateOpacityOnLayer()
 {
     primaryLayer()->setOpacity(m_opacity);
+}
+
+void GraphicsLayerChromium::deviceOrPageScaleFactorChanged()
+{
+    updateContentsScale();
+    if (m_layer)
+        m_layer->pageScaleChanged();
 }
 
 bool GraphicsLayerChromium::drawsContent() const

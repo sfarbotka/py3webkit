@@ -348,7 +348,7 @@ void JavaJSObject::setMember(jstring memberName, jobject value) const
 
     JSLock lock(SilenceAssertionsOnly);
     PutPropertySlot slot;
-    _imp->put(exec, Identifier(exec, JavaString(memberName).impl()), convertJObjectToValue(exec, value), slot);
+    _imp->methodTable()->put(_imp, exec, Identifier(exec, JavaString(memberName).impl()), convertJObjectToValue(exec, value), slot);
 }
 
 
@@ -362,7 +362,7 @@ void JavaJSObject::removeMember(jstring memberName) const
 
     ExecState* exec = rootObject->globalObject()->globalExec();
     JSLock lock(SilenceAssertionsOnly);
-    _imp->deleteProperty(exec, Identifier(exec, JavaString(memberName).impl()));
+    _imp->methodTable()->deleteProperty(_imp, exec, Identifier(exec, JavaString(memberName).impl()));
 }
 
 
@@ -393,7 +393,7 @@ void JavaJSObject::setSlot(jint index, jobject value) const
 
     ExecState* exec = rootObject->globalObject()->globalExec();
     JSLock lock(SilenceAssertionsOnly);
-    _imp->put(exec, (unsigned)index, convertJObjectToValue(exec, value));
+    _imp->methodTable()->putByIndex(_imp, exec, (unsigned)index, convertJObjectToValue(exec, value));
 }
 
 

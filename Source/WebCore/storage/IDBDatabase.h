@@ -30,7 +30,6 @@
 #include "DOMStringList.h"
 #include "Event.h"
 #include "EventTarget.h"
-#include "ExceptionCode.h"
 #include "IDBDatabaseBackendInterface.h"
 #include "IDBDatabaseCallbacksImpl.h"
 #include "IDBObjectStore.h"
@@ -47,12 +46,15 @@ namespace WebCore {
 class IDBVersionChangeRequest;
 class ScriptExecutionContext;
 
+typedef int ExceptionCode;
+
 class IDBDatabase : public RefCounted<IDBDatabase>, public EventTarget, public ActiveDOMObject {
 public:
     static PassRefPtr<IDBDatabase> create(ScriptExecutionContext*, PassRefPtr<IDBDatabaseBackendInterface>);
     ~IDBDatabase();
 
-    void setSetVersionTransaction(IDBTransaction*);
+    void setVersionChangeTransaction(IDBTransaction*);
+    void clearVersionChangeTransaction(IDBTransaction*);
 
     // Implement the IDL
     String name() const { return m_backend->name(); }
@@ -61,11 +63,9 @@ public:
 
     // FIXME: Try to modify the code generator so this is unneeded.
     PassRefPtr<IDBObjectStore> createObjectStore(const String& name, ExceptionCode& ec) { return createObjectStore(name, OptionsObject(), ec); }
-    PassRefPtr<IDBTransaction> transaction(ScriptExecutionContext* context, ExceptionCode& ec) { return transaction(context, 0, ec); }
-    PassRefPtr<IDBTransaction> transaction(ScriptExecutionContext* context, PassRefPtr<DOMStringList> storeNames, ExceptionCode& ec) { return transaction(context, storeNames, IDBTransaction::READ_ONLY, ec); }
-    PassRefPtr<IDBTransaction> transaction(ScriptExecutionContext*, PassRefPtr<DOMStringList>, unsigned short mode, ExceptionCode&);
-
     PassRefPtr<IDBObjectStore> createObjectStore(const String& name, const OptionsObject&, ExceptionCode&);
+    PassRefPtr<IDBTransaction> transaction(ScriptExecutionContext*, PassRefPtr<DOMStringList>, unsigned short mode, ExceptionCode&);
+    PassRefPtr<IDBTransaction> transaction(ScriptExecutionContext*, const String&, unsigned short mode, ExceptionCode&);
     void deleteObjectStore(const String& name, ExceptionCode&);
     PassRefPtr<IDBVersionChangeRequest> setVersion(ScriptExecutionContext*, const String& version, ExceptionCode&);
     void close();
@@ -78,13 +78,12 @@ public:
     virtual void onVersionChange(const String& requestedVersion);
 
     // ActiveDOMObject
-    virtual bool hasPendingActivity() const;
-    virtual void stop();
+    virtual bool hasPendingActivity() const OVERRIDE;
+    virtual void stop() OVERRIDE;
 
     // EventTarget
-    virtual IDBDatabase* toIDBDatabase() { return this; }
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const;
-
 
     void open();
     void enqueueEvent(PassRefPtr<Event>);
@@ -104,10 +103,10 @@ private:
     virtual EventTargetData* ensureEventTargetData();
 
     RefPtr<IDBDatabaseBackendInterface> m_backend;
-    RefPtr<IDBTransaction> m_setVersionTransaction;
+    RefPtr<IDBTransaction> m_versionChangeTransaction;
 
-    bool m_noNewTransactions;
-    bool m_stopped;
+    bool m_closePending;
+    bool m_contextStopped;
 
     EventTargetData m_eventTargetData;
 

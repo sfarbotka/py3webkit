@@ -29,6 +29,12 @@
 
 namespace WebCore {
 
+static const unsigned unsetColumnIndex = 0x7FFFFFFF;
+static const unsigned maxColumnIndex = 0x7FFFFFFE; // 2,147,483,646
+
+static const unsigned unsetRowIndex = 0x7FFFFFFF;
+static const unsigned maxRowIndex = 0x7FFFFFFE; // 2,147,483,646
+
 class RenderTableCell : public RenderBlock {
 public:
     explicit RenderTableCell(Node*);
@@ -37,16 +43,40 @@ public:
     int cellIndex() const { return 0; }
     void setCellIndex(int) { }
 
-    int colSpan() const { return m_columnSpan; }
-    void setColSpan(int c) { m_columnSpan = c; }
+    unsigned colSpan() const;
+    unsigned rowSpan() const;
 
-    int rowSpan() const { return m_rowSpan; }
-    void setRowSpan(int r) { m_rowSpan = r; }
+    // Called from HTMLTableCellElement.
+    void colSpanOrRowSpanChanged();
 
-    int col() const { return m_column; }
-    void setCol(int col) { m_column = col; }
-    int row() const { return m_row; }
-    void setRow(int row) { m_row = row; }
+    void setCol(unsigned column)
+    {
+        if (UNLIKELY(column > maxColumnIndex))
+            CRASH();
+
+        m_column = column;
+    }
+
+    unsigned col() const
+    {
+        ASSERT(m_column != unsetColumnIndex);
+        return m_column;
+    }
+
+    void setRow(unsigned row)
+    {
+        if (UNLIKELY(row > maxRowIndex))
+            CRASH();
+
+        m_row = row;
+    }
+
+    bool rowWasSet() const { return m_row != unsetRowIndex; }
+    unsigned row() const
+    {
+        ASSERT(rowWasSet());
+        return m_row;
+    }
 
     RenderTableSection* section() const { return toRenderTableSection(parent()->parent()); }
     RenderTable* table() const { return toRenderTable(parent()->parent()->parent()); }
@@ -55,7 +85,7 @@ public:
 
     virtual void computePreferredLogicalWidths();
 
-    void updateLogicalWidth(int);
+    void updateLogicalWidth(LayoutUnit);
 
     virtual LayoutUnit borderLeft() const;
     virtual LayoutUnit borderRight() const;
@@ -89,15 +119,13 @@ public:
     void collectBorderValues(RenderTable::CollapsedBorderValues&) const;
     static void sortBorderValues(RenderTable::CollapsedBorderValues&);
 
-    virtual void updateFromElement();
-
     virtual void layout();
 
     virtual void paint(PaintInfo&, const LayoutPoint&);
 
     void paintBackgroundsBehindCell(PaintInfo&, const LayoutPoint&, RenderObject* backgroundObject);
 
-    int cellBaselinePosition() const;
+    LayoutUnit cellBaselinePosition() const;
 
     void setIntrinsicPaddingBefore(int p) { m_intrinsicPaddingBefore = p; }
     void setIntrinsicPaddingAfter(int p) { m_intrinsicPaddingAfter = p; }
@@ -118,7 +146,7 @@ public:
     virtual LayoutUnit paddingBefore(bool includeIntrinsicPadding = true) const;
     virtual LayoutUnit paddingAfter(bool includeIntrinsicPadding = true) const;
 
-    void setOverrideHeightFromRowHeight(int);
+    void setOverrideHeightFromRowHeight(LayoutUnit);
 
     virtual void scrollbarsChanged(bool horizontalScrollbarChanged, bool verticalScrollbarChanged);
 
@@ -126,7 +154,6 @@ public:
     void setCellWidthChanged(bool b = true) { m_cellWidthChanged = b; }
 
 protected:
-    virtual void styleWillChange(StyleDifference, const RenderStyle* newStyle);
     virtual void styleDidChange(StyleDifference, const RenderStyle* oldStyle);
 
 private:
@@ -142,16 +169,15 @@ private:
     virtual void paintMask(PaintInfo&, const LayoutPoint&);
 
     virtual LayoutSize offsetFromContainer(RenderObject*, const LayoutPoint&) const;
-    virtual IntRect clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const;
-    virtual void computeRectForRepaint(RenderBoxModelObject* repaintContainer, IntRect&, bool fixed = false) const;
+    virtual LayoutRect clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const;
+    virtual void computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect&, bool fixed = false) const;
 
     void paintCollapsedBorder(GraphicsContext*, const LayoutRect&);
 
-    int m_row;
-    int m_column;
-    int m_rowSpan;
-    int m_columnSpan : 31;
+    unsigned m_row : 31;
     bool m_cellWidthChanged : 1;
+    unsigned m_column : 31;
+    bool m_hasAssociatedTableCellElement : 1;
     int m_intrinsicPaddingBefore;
     int m_intrinsicPaddingAfter;
 };

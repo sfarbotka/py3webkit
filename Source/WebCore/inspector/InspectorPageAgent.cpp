@@ -73,6 +73,7 @@ namespace WebCore {
 
 namespace PageAgentState {
 static const char pageAgentEnabled[] = "resourceAgentEnabled";
+static const char pageAgentScriptsToEvaluateOnLoad[] = "pageAgentScriptsToEvaluateOnLoad";
 }
 
 static bool decodeSharedBuffer(PassRefPtr<SharedBuffer> buffer, const String& textEncodingName, String* result)
@@ -185,18 +186,9 @@ PassOwnPtr<InspectorPageAgent> InspectorPageAgent::create(InstrumentingAgents* i
 // static
 void InspectorPageAgent::resourceContent(ErrorString* errorString, Frame* frame, const KURL& url, String* result, bool* base64Encoded)
 {
-    if (!frame) {
-        *errorString = "No frame to get resource content for";
+    DocumentLoader* loader = assertDocumentLoader(errorString, frame);
+    if (!loader)
         return;
-    }
-
-    FrameLoader* frameLoader = frame->loader();
-    DocumentLoader* loader = frameLoader->documentLoader();
-
-    if (!loader) {
-        *errorString = "No documentLoader for frame to get resource content for";
-        return;
-    }
 
     RefPtr<SharedBuffer> buffer;
     bool success = false;
@@ -275,6 +267,7 @@ InspectorPageAgent::InspectorPageAgent(InstrumentingAgents* instrumentingAgents,
     , m_injectedScriptManager(injectedScriptManager)
     , m_state(state)
     , m_frontend(0)
+    , m_lastScriptIdentifier(0)
 {
 }
 
@@ -310,18 +303,34 @@ void InspectorPageAgent::disable(ErrorString*)
     m_instrumentingAgents->setInspectorPageAgent(0);
 }
 
-void InspectorPageAgent::addScriptToEvaluateOnLoad(ErrorString*, const String& source)
+void InspectorPageAgent::addScriptToEvaluateOnLoad(ErrorString*, const String& source, String* identifier)
 {
-    m_scriptsToEvaluateOnLoad.append(source);
+    RefPtr<InspectorObject> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    if (!scripts) {
+        scripts = InspectorObject::create();
+        m_state->setObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad, scripts);
+    }
+    // Assure we don't override existing ids -- m_lastScriptIdentifier could get out of sync WRT actual
+    // scripts once we restored the scripts from the cookie during navigation.
+    do {
+        *identifier = String::number(++m_lastScriptIdentifier);
+    } while (scripts->find(*identifier) != scripts->end());
+    scripts->setString(*identifier, source);
 }
 
-void InspectorPageAgent::removeAllScriptsToEvaluateOnLoad(ErrorString*)
+void InspectorPageAgent::removeScriptToEvaluateOnLoad(ErrorString* error, const String& identifier)
 {
-    m_scriptsToEvaluateOnLoad.clear();
+    RefPtr<InspectorObject> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    if (!scripts || scripts->find(identifier) == scripts->end()) {
+        *error = "Script not found";
+        return;
+    }
+    scripts->remove(identifier);
 }
 
-void InspectorPageAgent::reload(ErrorString*, const bool* const optionalIgnoreCache)
+void InspectorPageAgent::reload(ErrorString*, const bool* const optionalIgnoreCache, const String* optionalScriptToEvaluateOnLoad)
 {
+    m_pendingScriptToEvaluateOnLoadOnce = optionalScriptToEvaluateOnLoad ? *optionalScriptToEvaluateOnLoad : "";
     m_page->mainFrame()->loader()->reload(optionalIgnoreCache ? *optionalIgnoreCache : false);
 }
 
@@ -463,11 +472,10 @@ void InspectorPageAgent::getResourceTree(ErrorString*, RefPtr<InspectorObject>* 
 
 void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, String* content, bool* base64Encoded)
 {
-    Frame* frame = frameForId(frameId);
-    if (!frame) {
-        *errorString = "No frame for given id found";
+    Frame* frame = assertFrame(errorString, frameId);
+    if (!frame)
         return;
-    }
+
     resourceContent(errorString, frame, KURL(ParsedURLString, url), content, base64Encoded);
 }
 
@@ -484,9 +492,12 @@ static bool textContentForCachedResource(CachedResource* cachedResource, String*
     return false;
 }
 
-void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, RefPtr<InspectorArray>* results)
+void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const bool* const optionalCaseSensitive, const bool* const optionalIsRegex, RefPtr<InspectorArray>* results)
 {
     *results = InspectorArray::create();
+
+    bool isRegex = optionalIsRegex ? *optionalIsRegex : false;
+    bool caseSensitive = optionalCaseSensitive ? *optionalCaseSensitive : false;
 
     Frame* frame = frameForId(frameId);
     KURL kurl(ParsedURLString, url);
@@ -503,13 +514,14 @@ void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, c
 
     if (!success) {
         CachedResource* resource = cachedResource(frame, kurl);
-        success = textContentForCachedResource(resource, &content);
+        if (resource)
+            success = textContentForCachedResource(resource, &content);
     }
 
     if (!success)
         return;
 
-    *results = ContentSearchUtils::searchInTextByLines(query, content);
+    *results = ContentSearchUtils::searchInTextByLines(content, query, caseSensitive, isRegex);
 }
 
 static PassRefPtr<InspectorObject> buildObjectForSearchResult(const String& frameId, const String& url, int matchesCount)
@@ -559,13 +571,20 @@ void InspectorPageAgent::didClearWindowObjectInWorld(Frame* frame, DOMWrapperWor
     if (frame == m_page->mainFrame())
         m_injectedScriptManager->discardInjectedScripts();
 
-    if (m_scriptsToEvaluateOnLoad.size()) {
-        ScriptState* scriptState = mainWorldScriptState(frame);
-        for (Vector<String>::iterator it = m_scriptsToEvaluateOnLoad.begin();
-             it != m_scriptsToEvaluateOnLoad.end(); ++it) {
-            m_injectedScriptManager->injectScript(*it, scriptState);
+    if (!m_frontend)
+        return;
+
+    RefPtr<InspectorObject> scripts = m_state->getObject(PageAgentState::pageAgentScriptsToEvaluateOnLoad);
+    if (scripts) {
+        InspectorObject::const_iterator end = scripts->end();
+        for (InspectorObject::const_iterator it = scripts->begin(); it != end; ++it) {
+            String scriptText;
+            if (it->second->asString(&scriptText))
+                m_injectedScriptManager->injectScript(scriptText, mainWorldScriptState(frame));
         }
     }
+    if (!m_scriptToEvaluateOnLoadOnce.isEmpty())
+        m_injectedScriptManager->injectScript(m_scriptToEvaluateOnLoadOnce, mainWorldScriptState(frame));
 }
 
 void InspectorPageAgent::domContentEventFired()
@@ -580,6 +599,10 @@ void InspectorPageAgent::loadEventFired()
 
 void InspectorPageAgent::frameNavigated(DocumentLoader* loader)
 {
+    if (loader->frame() == m_page->mainFrame()) {
+        m_scriptToEvaluateOnLoadOnce = m_pendingScriptToEvaluateOnLoadOnce;
+        m_pendingScriptToEvaluateOnLoadOnce = String();
+    }
     m_frontend->frameNavigated(buildObjectForFrame(loader->frame()), loaderId(loader));
 }
 
@@ -626,6 +649,26 @@ String InspectorPageAgent::loaderId(DocumentLoader* loader)
         m_loaderToIdentifier.set(loader, identifier);
     }
     return identifier;
+}
+
+Frame* InspectorPageAgent::assertFrame(ErrorString* errorString, String frameId)
+{
+    Frame* frame = frameForId(frameId);
+    if (!frame)
+        *errorString = "No frame for given id found";
+
+    return frame;
+}
+
+// static
+DocumentLoader* InspectorPageAgent::assertDocumentLoader(ErrorString* errorString, Frame* frame)
+{
+    FrameLoader* frameLoader = frame->loader();
+    DocumentLoader* documentLoader = frameLoader ? frameLoader->documentLoader() : 0;
+    if (!documentLoader)
+        *errorString = "No documentLoader for given frame found";
+
+    return documentLoader;
 }
 
 void InspectorPageAgent::loaderDetachedFromFrame(DocumentLoader* loader)

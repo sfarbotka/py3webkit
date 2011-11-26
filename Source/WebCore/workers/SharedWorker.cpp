@@ -49,7 +49,7 @@ inline SharedWorker::SharedWorker(ScriptExecutionContext* context)
 {
 }
 
-PassRefPtr<SharedWorker> SharedWorker::create(const String& url, const String& name, ScriptExecutionContext* context, ExceptionCode& ec)
+PassRefPtr<SharedWorker> SharedWorker::create(ScriptExecutionContext* context, const String& url, const String& name, ExceptionCode& ec)
 {
     RefPtr<SharedWorker> worker = adoptRef(new SharedWorker(context));
 
@@ -71,6 +71,11 @@ PassRefPtr<SharedWorker> SharedWorker::create(const String& url, const String& n
 
 SharedWorker::~SharedWorker()
 {
+}
+
+const AtomicString& SharedWorker::interfaceName() const
+{
+    return eventNames().interfaceForSharedWorker;
 }
 
 } // namespace WebCore

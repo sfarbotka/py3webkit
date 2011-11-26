@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef CSSTimingFunctionValue_h
@@ -33,18 +33,15 @@ namespace WebCore {
 
 class CSSTimingFunctionValue : public CSSValue {
 public:
-    virtual String cssText() const = 0;
-
-    virtual bool isLinearTimingFunctionValue() const { return false; }
-    virtual bool isCubicBezierTimingFunctionValue() const { return false; }
-    virtual bool isStepsTimingFunctionValue() const { return false; }
+    bool isLinearTimingFunctionValue() const { return classType() == LinearTimingFunctionClass; }
+    bool isCubicBezierTimingFunctionValue() const { return classType() == CubicBezierTimingFunctionClass; }
+    bool isStepsTimingFunctionValue() const { return classType() == StepsTimingFunctionClass; }
 
 protected:
-    CSSTimingFunctionValue()
+    CSSTimingFunctionValue(ClassType classType)
+        : CSSValue(classType)
     {
     }
-
-    virtual bool isTimingFunctionValue() const { return true; }
 };
 
 class CSSLinearTimingFunctionValue : public CSSTimingFunctionValue {
@@ -53,23 +50,24 @@ public:
     {
         return adoptRef(new CSSLinearTimingFunctionValue);
     }
-    
+
+    String customCssText() const;
+
 private:
     CSSLinearTimingFunctionValue()
+        : CSSTimingFunctionValue(LinearTimingFunctionClass)
     {
     }
-
-    virtual String cssText() const;
-
-    virtual bool isLinearTimingFunctionValue() const { return true; }
 };
-    
+
 class CSSCubicBezierTimingFunctionValue : public CSSTimingFunctionValue {
 public:
     static PassRefPtr<CSSCubicBezierTimingFunctionValue> create(double x1, double y1, double x2, double y2)
     {
         return adoptRef(new CSSCubicBezierTimingFunctionValue(x1, y1, x2, y2));
     }
+
+    String customCssText() const;
 
     double x1() const { return m_x1; }
     double y1() const { return m_y1; }
@@ -78,16 +76,13 @@ public:
 
 private:
     CSSCubicBezierTimingFunctionValue(double x1, double y1, double x2, double y2)
-        : m_x1(x1)
+        : CSSTimingFunctionValue(CubicBezierTimingFunctionClass)
+        , m_x1(x1)
         , m_y1(y1)
         , m_x2(x2)
         , m_y2(y2)
     {
     }
-
-    virtual String cssText() const;
-
-    virtual bool isCubicBezierTimingFunctionValue() const { return true; }
 
     double m_x1;
     double m_y1;
@@ -104,22 +99,21 @@ public:
 
     int numberOfSteps() const { return m_steps; }
     bool stepAtStart() const { return m_stepAtStart; }
-    
+
+    String customCssText() const;
+
 private:
     CSSStepsTimingFunctionValue(int steps, bool stepAtStart)
-        : m_steps(steps)
+        : CSSTimingFunctionValue(StepsTimingFunctionClass)
+        , m_steps(steps)
         , m_stepAtStart(stepAtStart)
     {
     }
 
-    virtual String cssText() const;
-
-    virtual bool isStepsTimingFunctionValue() const { return true; }
-
     int m_steps;
     bool m_stepAtStart;
 };
-    
+
 } // namespace
 
 #endif

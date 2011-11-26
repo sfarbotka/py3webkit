@@ -60,7 +60,7 @@ PassRefPtr<Scrollbar> Scrollbar::createNativeScrollbar(ScrollableArea* scrollabl
 
 int Scrollbar::maxOverlapBetweenPages()
 {
-    static int maxOverlapBetweenPages = ScrollbarTheme::nativeTheme()->maxOverlapBetweenPages();
+    static int maxOverlapBetweenPages = ScrollbarTheme::theme()->maxOverlapBetweenPages();
     return maxOverlapBetweenPages;
 }
 
@@ -88,7 +88,7 @@ Scrollbar::Scrollbar(ScrollableArea* scrollableArea, ScrollbarOrientation orient
     , m_suppressInvalidation(false)
 {
     if (!m_theme)
-        m_theme = ScrollbarTheme::nativeTheme();
+        m_theme = ScrollbarTheme::theme();
 
     m_theme->registerScrollbar(this);
 
@@ -346,7 +346,7 @@ bool Scrollbar::mouseMoved(const PlatformMouseEvent& evt)
     if (m_pressedPart != NoPart)
         m_pressedPos = (orientation() == HorizontalScrollbar ? convertFromContainingWindow(evt.pos()).x() : convertFromContainingWindow(evt.pos()).y());
 
-    ScrollbarPart part = theme()->hitTest(this, evt);    
+    ScrollbarPart part = theme()->hitTest(this, evt);
     if (part != m_hoveredPart) {
         if (m_pressedPart != NoPart) {
             if (part == m_pressedPart) {
@@ -368,18 +368,34 @@ bool Scrollbar::mouseMoved(const PlatformMouseEvent& evt)
     return true;
 }
 
+void Scrollbar::mouseEntered()
+{
+    if (m_scrollableArea)
+        m_scrollableArea->scrollAnimator()->mouseEnteredScrollbar(this);
+}
+
 bool Scrollbar::mouseExited()
 {
+    if (m_scrollableArea)
+        m_scrollableArea->scrollAnimator()->mouseExitedScrollbar(this);
     setHoveredPart(NoPart);
     return true;
 }
 
-bool Scrollbar::mouseUp()
+bool Scrollbar::mouseUp(const PlatformMouseEvent& mouseEvent)
 {
     setPressedPart(NoPart);
     m_pressedPos = 0;
     m_draggingDocument = false;
     stopTimerIfNeeded();
+
+    if (m_scrollableArea) {
+        // m_hoveredPart won't be updated until the next mouseMoved or mouseDown, so we have to hit test
+        // to really know if the mouse has exited the scrollbar on a mouseUp.
+        ScrollbarPart part = theme()->hitTest(this, mouseEvent);
+        if (part == NoPart)
+            m_scrollableArea->scrollAnimator()->mouseExitedScrollbar(this);
+    }
 
     if (parent() && parent()->isFrameView())
         static_cast<FrameView*>(parent())->frame()->eventHandler()->setMousePressed(false);

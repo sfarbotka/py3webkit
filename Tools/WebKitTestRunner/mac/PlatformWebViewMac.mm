@@ -23,21 +23,42 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
 #include "PlatformWebView.h"
+
+#import <WebKit2/WKImageCG.h>
+#import <WebKit2/WKViewPrivate.h>
+#import <wtf/RetainPtr.h>
+
+@interface WebKitTestRunnerWindow : NSWindow {
+    WTR::PlatformWebView* _platformWebView;
+}
+@property (nonatomic, assign) WTR::PlatformWebView* platformWebView;
+@end
+
+@implementation WebKitTestRunnerWindow
+@synthesize platformWebView = _platformWebView;
+
+- (BOOL)isKeyWindow
+{
+    return _platformWebView ? _platformWebView->windowIsKey() : YES;
+}
+@end
 
 namespace WTR {
 
 PlatformWebView::PlatformWebView(WKContextRef contextRef, WKPageGroupRef pageGroupRef)
+    : m_windowIsKey(true)
 {
     NSRect rect = NSMakeRect(0, 0, 800, 600);
     m_view = [[WKView alloc] initWithFrame:rect contextRef:contextRef pageGroupRef:pageGroupRef];
 
     NSRect windowRect = NSOffsetRect(rect, -10000, [(NSScreen *)[[NSScreen screens] objectAtIndex:0] frame].size.height - rect.size.height + 10000);
-    m_window = [[NSWindow alloc] initWithContentRect:windowRect styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+    m_window = [[WebKitTestRunnerWindow alloc] initWithContentRect:windowRect styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+    m_window.platformWebView = this;
     [m_window setColorSpace:[NSColorSpace genericRGBColorSpace]];
     [[m_window contentView] addSubview:m_view];
     [m_window orderBack:nil];
-    [m_window setAutodisplay:NO];
     [m_window setReleasedWhenClosed:NO];
 }
 
@@ -48,6 +69,7 @@ void PlatformWebView::resizeTo(unsigned width, unsigned height)
 
 PlatformWebView::~PlatformWebView()
 {
+    m_window.platformWebView = 0;
     [m_window close];
     [m_window release];
     [m_view release];
@@ -60,7 +82,8 @@ WKPageRef PlatformWebView::page()
 
 void PlatformWebView::focus()
 {
-    // Implement.
+    [m_window makeFirstResponder:m_view];
+    setWindowIsKey(true);
 }
 
 WKRect PlatformWebView::windowFrame()
@@ -103,6 +126,13 @@ void PlatformWebView::removeChromeInputField()
 void PlatformWebView::makeWebViewFirstResponder()
 {
     [m_window makeFirstResponder:m_view];
+}
+
+WKRetainPtr<WKImageRef> PlatformWebView::windowSnapshotImage()
+{
+    [m_view display];
+    RetainPtr<CGImageRef> windowSnapshotImage(AdoptCF, CGWindowListCreateImage(CGRectNull, kCGWindowListOptionIncludingWindow, [m_window windowNumber], kCGWindowImageBoundsIgnoreFraming | kCGWindowImageShouldBeOpaque));
+    return adoptWK(WKImageCreateFromCGImage(windowSnapshotImage.get(), 0));
 }
 
 } // namespace WTR

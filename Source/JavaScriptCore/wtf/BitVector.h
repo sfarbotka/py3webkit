@@ -29,6 +29,10 @@
 #include <wtf/Assertions.h>
 #include <wtf/StdLibExtras.h>
 
+#ifndef NDEBUG
+#include <stdio.h>
+#endif
+
 namespace WTF {
 
 // This is a space-efficient, resizeable bitvector class. In the common case it
@@ -36,15 +40,16 @@ namespace WTF {
 // to a single chunk of out-of-line allocated storage to store an arbitrary number
 // of bits.
 //
-// - The bitvector needs to be resized manually (just call ensureSize()).
-//
 // - The bitvector remembers the bound of how many bits can be stored, but this
 //   may be slightly greater (by as much as some platform-specific constant)
 //   than the last argument passed to ensureSize().
 //
+// - The bitvector can resize itself automatically (set, clear, get) or can be used
+//   in a manual mode, which is faster (quickSet, quickClear, quickGet, ensureSize).
+//
 // - Accesses ASSERT that you are within bounds.
 //
-// - Bits are not automatically initialized to zero.
+// - Bits are automatically initialized to zero.
 //
 // On the other hand, this BitVector class may not be the fastest around, since
 // it does conditionals on every get/set/clear. But it is great if you need to
@@ -58,7 +63,18 @@ public:
     {
     }
     
-    BitVector(const BitVector& other);
+    explicit BitVector(size_t numBits)
+        : m_bitsOrPointer(makeInlineBits(0))
+    {
+        ensureSize(numBits);
+    }
+    
+    BitVector(const BitVector& other)
+        : m_bitsOrPointer(makeInlineBits(0))
+    {
+        (*this) = other;
+    }
+
     
     ~BitVector()
     {
@@ -67,7 +83,14 @@ public:
         OutOfLineBits::destroy(outOfLineBits());
     }
     
-    BitVector& operator=(const BitVector& other);
+    BitVector& operator=(const BitVector& other)
+    {
+        if (isInline() && other.isInline())
+            m_bitsOrPointer = other.m_bitsOrPointer;
+        else
+            setSlow(other);
+        return *this;
+    }
 
     size_t size() const
     {
@@ -88,22 +111,50 @@ public:
     
     void clearAll();
 
-    bool get(size_t bit) const
+    bool quickGet(size_t bit) const
     {
         ASSERT(bit < size());
-        return !!(bits()[bit / bitsInPointer()] & (static_cast<uintptr_t>(1) << (bit & (bitsInPointer() - 1))));
+        return !!(bits()[bit / bitsInPointer()] & (static_cast<uintptr_t>(1) << ((bit & (bitsInPointer() - 1)) + 1)));
+    }
+    
+    void quickSet(size_t bit)
+    {
+        ASSERT(bit < size());
+        bits()[bit / bitsInPointer()] |= (static_cast<uintptr_t>(1) << ((bit & (bitsInPointer() - 1)) + 1));
+    }
+    
+    void quickClear(size_t bit)
+    {
+        ASSERT(bit < size());
+        bits()[bit / bitsInPointer()] &= ~(static_cast<uintptr_t>(1) << ((bit & (bitsInPointer() - 1)) + 1));
+    }
+    
+    void quickSet(size_t bit, bool value)
+    {
+        if (value)
+            quickSet(bit);
+        else
+            quickClear(bit);
+    }
+    
+    bool get(size_t bit) const
+    {
+        if (bit >= size())
+            return false;
+        return quickGet(bit);
     }
     
     void set(size_t bit)
     {
-        ASSERT(bit < size());
-        bits()[bit / bitsInPointer()] |= (static_cast<uintptr_t>(1) << (bit & (bitsInPointer() - 1)));
+        ensureSize(bit + 1);
+        quickSet(bit);
     }
     
     void clear(size_t bit)
     {
-        ASSERT(bit < size());
-        bits()[bit / bitsInPointer()] &= ~(static_cast<uintptr_t>(1) << (bit & (bitsInPointer() - 1)));
+        if (bit >= size())
+            return;
+        quickClear(bit);
     }
     
     void set(size_t bit, bool value)
@@ -113,6 +164,10 @@ public:
         else
             clear(bit);
     }
+    
+#ifndef NDEBUG
+    void dump(FILE* out);
+#endif
     
 private:
     static unsigned bitsInPointer()
@@ -132,8 +187,8 @@ private:
     
     static uintptr_t makeInlineBits(uintptr_t bits)
     {
-        ASSERT(!(bits & (static_cast<uintptr_t>(1) << maxInlineBits())));
-        return bits | (static_cast<uintptr_t>(1) << maxInlineBits());
+        ASSERT(!(bits & static_cast<uintptr_t>(1)));
+        return bits | static_cast<uintptr_t>(1);
     }
     
     class OutOfLineBits {
@@ -156,12 +211,13 @@ private:
         size_t m_numBits;
     };
     
-    bool isInline() const { return m_bitsOrPointer >> maxInlineBits(); }
+    bool isInline() const { return m_bitsOrPointer & static_cast<uintptr_t>(1); }
     
     const OutOfLineBits* outOfLineBits() const { return bitwise_cast<const OutOfLineBits*>(m_bitsOrPointer); }
     OutOfLineBits* outOfLineBits() { return bitwise_cast<OutOfLineBits*>(m_bitsOrPointer); }
     
     void resizeOutOfLine(size_t numBits);
+    void setSlow(const BitVector& other);
     
     uintptr_t* bits()
     {
@@ -176,7 +232,10 @@ private:
             return &m_bitsOrPointer;
         return outOfLineBits()->bits();
     }
-    
+
+    // The low bit of m_bitsOrPointer is a flag indicating whether this field is
+    // inline bits or a pointer to out of line bits. If the flag is set, the field
+    // is inline bits. This works because the low bit in a pointer is always unset.
     uintptr_t m_bitsOrPointer;
 };
 

@@ -53,6 +53,7 @@ namespace WebCore {
 
 class CCLayerImpl;
 class CCLayerTreeHost;
+class CCTextureUpdater;
 class GraphicsContext3D;
 
 class CCLayerDelegate {
@@ -95,13 +96,13 @@ public:
     const IntSize& bounds() const { return m_bounds; }
     virtual IntSize contentBounds() const { return bounds(); }
 
-    void setMasksToBounds(bool masksToBounds) { m_masksToBounds = masksToBounds; }
+    void setMasksToBounds(bool masksToBounds) { m_masksToBounds = masksToBounds; setNeedsCommit(); }
     bool masksToBounds() const { return m_masksToBounds; }
 
     void setName(const String&);
     const String& name() const { return m_name; }
 
-    void setMaskLayer(LayerChromium* maskLayer) { m_maskLayer = maskLayer; }
+    void setMaskLayer(LayerChromium* maskLayer) { m_maskLayer = maskLayer; setNeedsCommit(); }
     LayerChromium* maskLayer() const { return m_maskLayer.get(); }
 
     void setNeedsDisplay(const FloatRect& dirtyRect);
@@ -121,6 +122,8 @@ public:
     void setSublayerTransform(const TransformationMatrix& transform) { m_sublayerTransform = transform; setNeedsCommit(); }
     const TransformationMatrix& sublayerTransform() const { return m_sublayerTransform; }
 
+    TransformationMatrix zoomAnimatorTransform() const { return TransformationMatrix(); }
+
     void setTransform(const TransformationMatrix& transform) { m_transform = transform; setNeedsCommit(); }
     const TransformationMatrix& transform() const { return m_transform; }
 
@@ -130,12 +133,12 @@ public:
     const IntPoint& scrollPosition() const { return m_scrollPosition; }
     void setScrollPosition(const IntPoint& scrollPosition) { m_scrollPosition = scrollPosition; }
 
-    const IntSize& maxScrollPosition() const {return m_maxScrollPosition; }
-    void setMaxScrollPosition(const IntSize& maxScrollPosition) { m_maxScrollPosition = maxScrollPosition; }
+    bool scrollable() const { return m_scrollable; }
+    void setScrollable(bool scrollable) { m_scrollable = true;  setNeedsCommit(); }
 
     IntSize scrollDelta() const { return IntSize(); }
 
-    bool scrollable() const { return !maxScrollPosition().isZero(); }
+    float pageScaleDelta() const { return 1; }
 
     bool doubleSided() const { return m_doubleSided; }
     void setDoubleSided(bool doubleSided) { m_doubleSided = doubleSided; setNeedsCommit(); }
@@ -143,8 +146,8 @@ public:
     void setPreserves3D(bool preserve3D) { m_preserves3D = preserve3D; }
     bool preserves3D() const { return m_preserves3D; }
 
-    void setUsesLayerScissor(bool usesLayerScissor) { m_usesLayerScissor = usesLayerScissor; }
-    bool usesLayerScissor() const { return m_usesLayerScissor; }
+    void setUsesLayerClipping(bool usesLayerClipping) { m_usesLayerClipping = usesLayerClipping; }
+    bool usesLayerClipping() const { return m_usesLayerClipping; }
 
     void setIsNonCompositedContent(bool isNonCompositedContent) { m_isNonCompositedContent = isNonCompositedContent; }
     bool isNonCompositedContent() const { return m_isNonCompositedContent; }
@@ -159,11 +162,13 @@ public:
     // These methods typically need to be overwritten by derived classes.
     virtual bool drawsContent() const { return false; }
     virtual void paintContentsIfDirty() { }
-    virtual void updateCompositorResources(GraphicsContext3D*, TextureAllocator*) { }
-    virtual void setIsMask(bool) {}
+    virtual void updateCompositorResources(GraphicsContext3D*, CCTextureUpdater&) { }
+    virtual void setIsMask(bool) { }
     virtual void unreserveContentsTexture() { }
     virtual void bindContentsTexture() { }
+    virtual void pageScaleChanged() { m_pageScaleDirty = true; }
     virtual void protectVisibleTileTextures() { }
+    virtual bool needsContentsScale() const { return false; }
 
     // These exist just for debugging (via drawDebugBorder()).
     void setDebugBorderColor(const Color&);
@@ -182,8 +187,8 @@ public:
 
     float drawOpacity() const { return m_drawOpacity; }
     void setDrawOpacity(float opacity) { m_drawOpacity = opacity; }
-    const IntRect& scissorRect() const { return m_scissorRect; }
-    void setScissorRect(const IntRect& rect) { m_scissorRect = rect; }
+    const IntRect& clipRect() const { return m_clipRect; }
+    void setClipRect(const IntRect& clipRect) { m_clipRect = clipRect; }
     RenderSurfaceChromium* targetRenderSurface() const { return m_targetRenderSurface; }
     void setTargetRenderSurface(RenderSurfaceChromium* surface) { m_targetRenderSurface = surface; }
     const TransformationMatrix& drawTransform() const { return m_drawTransform; }
@@ -192,9 +197,12 @@ public:
     void setScreenSpaceTransform(const TransformationMatrix& matrix) { m_screenSpaceTransform = matrix; }
     const IntRect& drawableContentRect() const { return m_drawableContentRect; }
     void setDrawableContentRect(const IntRect& rect) { m_drawableContentRect = rect; }
+    float contentsScale() const { return m_contentsScale; }
+    void setContentsScale(float);
 
     // Returns true if any of the layer's descendants has content to draw.
     bool descendantDrawsContent();
+    virtual void contentChanged() { }
 
     CCLayerTreeHost* layerTreeHost() const { return m_layerTreeHost.get(); }
     void cleanupResourcesRecursive();
@@ -208,7 +216,15 @@ protected:
     // hold context-dependent resources such as textures.
     virtual void cleanupResources();
 
+    void setNeedsCommit();
+
+    // The dirty rect is the union of damaged regions that need repainting/updating.
     FloatRect m_dirtyRect;
+
+    // The update rect is the region of the compositor resource that was actually updated by the compositor.
+    // For layers that may do updating outside the compositor's control (i.e. plugin layers), this information
+    // is not available and the update rect will remain empty.
+    FloatRect m_updateRect;
 
     RefPtr<LayerChromium> m_maskLayer;
 
@@ -219,8 +235,6 @@ protected:
     int m_layerId;
 
 private:
-    void setNeedsCommit();
-
     void setParent(LayerChromium*);
     bool hasAncestor(LayerChromium*) const;
 
@@ -244,7 +258,7 @@ private:
     IntSize m_bounds;
     IntRect m_visibleLayerRect;
     IntPoint m_scrollPosition;
-    IntSize m_maxScrollPosition;
+    bool m_scrollable;
     FloatPoint m_position;
     FloatPoint m_anchorPoint;
     Color m_backgroundColor;
@@ -255,7 +269,7 @@ private:
     bool m_masksToBounds;
     bool m_opaque;
     bool m_doubleSided;
-    bool m_usesLayerScissor;
+    bool m_usesLayerClipping;
     bool m_isNonCompositedContent;
     bool m_preserves3D;
 
@@ -268,13 +282,16 @@ private:
     // Transient properties.
     OwnPtr<RenderSurfaceChromium> m_renderSurface;
     float m_drawOpacity;
-    IntRect m_scissorRect;
+    IntRect m_clipRect;
     RenderSurfaceChromium* m_targetRenderSurface;
     TransformationMatrix m_drawTransform;
     TransformationMatrix m_screenSpaceTransform;
     IntRect m_drawableContentRect;
+    float m_contentsScale;
 
     String m_name;
+
+    bool m_pageScaleDirty;
 };
 
 void sortLayers(Vector<RefPtr<LayerChromium> >::iterator, Vector<RefPtr<LayerChromium> >::iterator, void*);

@@ -46,8 +46,10 @@ class InjectedScriptManager;
 class InspectorDebuggerAgent;
 #endif
 class InspectorBackendDispatcher;
+class InspectorConsoleAgent;
 class InspectorFrontend;
 class InspectorFrontendChannel;
+class InspectorConsoleAgent;
 class InspectorInstrumentation;
 class InspectorRuntimeAgent;
 class InspectorState;
@@ -66,6 +68,9 @@ public:
     void disconnectFrontend();
     void restoreInspectorStateFromCookie(const String& inspectorCookie);
     void dispatchMessageFromFrontend(const String&);
+#if ENABLE(JAVASCRIPT_DEBUGGER)
+    void resume();
+#endif
 
 private:
     friend InstrumentingAgents* instrumentationForWorkerContext(WorkerContext*);
@@ -79,6 +84,7 @@ private:
     OwnPtr<InspectorDebuggerAgent> m_debuggerAgent;
 #endif
     OwnPtr<InspectorRuntimeAgent> m_runtimeAgent;
+    OwnPtr<InspectorConsoleAgent> m_consoleAgent;
 
     OwnPtr<InspectorFrontendChannel> m_frontendChannel;
     OwnPtr<InspectorFrontend> m_frontend;

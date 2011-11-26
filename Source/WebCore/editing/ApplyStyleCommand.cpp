@@ -79,7 +79,7 @@ static bool hasNoAttributeOrOnlyStyleAttribute(const StyledElement* element, Sho
         return true;
 
     unsigned matchedAttributes = 0;
-    if (element->fastGetAttribute(classAttr) == styleSpanClassString())
+    if (element->getAttribute(classAttr) == styleSpanClassString())
         matchedAttributes++;
     if (element->hasAttribute(styleAttr) && (shouldStyleAttributeBeEmpty == AllowNonEmptyStyleAttribute
         || !element->inlineStyleDecl() || element->inlineStyleDecl()->isEmpty()))
@@ -390,11 +390,11 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(EditingStyle* style)
         float desiredFontSize = max(MinimumFontSize, startingFontSizes.get(node) + style->fontSizeDelta());
         RefPtr<CSSValue> value = inlineStyleDecl->getPropertyCSSValue(CSSPropertyFontSize);
         if (value) {
-            inlineStyleDecl->removeProperty(CSSPropertyFontSize, true);
+            inlineStyleDecl->removeProperty(CSSPropertyFontSize);
             currentFontSize = computedFontSize(node);
         }
         if (currentFontSize != desiredFontSize) {
-            inlineStyleDecl->setProperty(CSSPropertyFontSize, String::number(desiredFontSize) + "px", false, false);
+            inlineStyleDecl->setProperty(CSSPropertyFontSize, String::number(desiredFontSize) + "px", false);
             setNodeAttribute(element.get(), styleAttr, inlineStyleDecl->cssText());
         }
         if (inlineStyleDecl->isEmpty()) {
@@ -935,9 +935,9 @@ void ApplyStyleCommand::applyInlineStyleToPushDown(Node* node, EditingStyle* sty
         return;
 
     RefPtr<EditingStyle> newInlineStyle = style;
-    if (node->isHTMLElement() && static_cast<HTMLElement*>(node)->inlineStyleDecl()) {
+    if (node->isHTMLElement() && toHTMLElement(node)->inlineStyleDecl()) {
         newInlineStyle = style->copy();
-        newInlineStyle->mergeInlineStyleOfElement(static_cast<HTMLElement*>(node), EditingStyle::OverrideValues);
+        newInlineStyle->mergeInlineStyleOfElement(toHTMLElement(node), EditingStyle::OverrideValues);
     }
 
     // Since addInlineStyleIfNeeded can't add styles to block-flow render objects, add style attribute instead.
@@ -1188,41 +1188,6 @@ bool ApplyStyleCommand::isValidCaretPositionInTextNode(const Position& position)
     return offsetInText > caretMinOffset(node) && offsetInText < caretMaxOffset(node);
 }
 
-static bool areIdenticalElements(Node *first, Node *second)
-{
-    // check that tag name and all attribute names and values are identical
-
-    if (!first->isElementNode())
-        return false;
-    
-    if (!second->isElementNode())
-        return false;
-
-    Element *firstElement = static_cast<Element *>(first);
-    Element *secondElement = static_cast<Element *>(second);
-    
-    if (!firstElement->tagQName().matches(secondElement->tagQName()))
-        return false;
-
-    NamedNodeMap *firstMap = firstElement->attributes();
-    NamedNodeMap *secondMap = secondElement->attributes();
-
-    unsigned firstLength = firstMap->length();
-
-    if (firstLength != secondMap->length())
-        return false;
-
-    for (unsigned i = 0; i < firstLength; i++) {
-        Attribute *attribute = firstMap->attributeItem(i);
-        Attribute *secondAttribute = secondMap->getAttributeItem(attribute->name());
-
-        if (!secondAttribute || attribute->value() != secondAttribute->value())
-            return false;
-    }
-    
-    return true;
-}
-
 bool ApplyStyleCommand::mergeStartWithPreviousIfIdentical(const Position& start, const Position& end)
 {
     Node* startNode = start.containerNode();
@@ -1414,7 +1379,7 @@ void ApplyStyleCommand::addInlineStyleIfNeeded(EditingStyle* style, PassRefPtr<N
 
     if (styleChange.cssStyle().length()) {
         if (styleContainer) {
-            CSSMutableStyleDeclaration* existingStyle = toHTMLElement(styleContainer)->inlineStyleDecl();
+            CSSMutableStyleDeclaration* existingStyle = styleContainer->inlineStyleDecl();
             if (existingStyle)
                 setNodeAttribute(styleContainer, styleAttr, existingStyle->cssText() + styleChange.cssStyle());
             else

@@ -34,7 +34,6 @@
 #if ENABLE(SQL_DATABASE)
 
 #include "AbstractDatabase.h"
-#include "ExceptionCode.h"
 #include "PlatformString.h"
 #include <wtf/Forward.h>
 #ifndef NDEBUG
@@ -48,6 +47,8 @@ class SQLTransactionSync;
 class SQLTransactionSyncCallback;
 class ScriptExecutionContext;
 class SecurityOrigin;
+
+typedef int ExceptionCode;
 
 // Instances of this class should be created and used only on the worker's context thread.
 class DatabaseSync : public AbstractDatabase {
@@ -63,10 +64,23 @@ public:
     virtual void markAsDeletedAndClose();
     virtual void closeImmediately();
 
+    const String& lastErrorMessage() const { return m_lastErrorMessage; }
+    void setLastErrorMessage(const String& message) { m_lastErrorMessage = message; }
+    void setLastErrorMessage(const char* message, int sqliteCode)
+    {
+        setLastErrorMessage(String::format("%s (%d)", message, sqliteCode));
+    }
+    void setLastErrorMessage(const char* message, int sqliteCode, const char* sqliteMessage)
+    {
+        setLastErrorMessage(String::format("%s (%d, %s)", message, sqliteCode, sqliteMessage));
+    }
+
 private:
     DatabaseSync(ScriptExecutionContext*, const String& name, const String& expectedVersion,
                  const String& displayName, unsigned long estimatedSize);
     void runTransaction(PassRefPtr<SQLTransactionSyncCallback>, bool readOnly, ExceptionCode&);
+
+    String m_lastErrorMessage;
 };
 
 } // namespace WebCore

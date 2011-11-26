@@ -40,8 +40,8 @@ public:
     }
 
     static JSC::JSObject* createPrototype(JSC::ExecState*, JSC::JSGlobalObject*);
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
     static const JSC::ClassInfo s_info;
 
     static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
@@ -50,15 +50,32 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::ExecState*, JSC::JSGlobalObject*);
-    TestMediaQueryListListener* impl() const { return m_impl.get(); }
+    TestMediaQueryListListener* impl() const { return m_impl; }
+    void releaseImpl() { m_impl->deref(); m_impl = 0; }
 
 private:
-    RefPtr<TestMediaQueryListListener> m_impl;
+    TestMediaQueryListListener* m_impl;
 protected:
     JSTestMediaQueryListListener(JSC::Structure*, JSDOMGlobalObject*, PassRefPtr<TestMediaQueryListListener>);
     void finishCreation(JSC::JSGlobalData&);
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | Base::StructureFlags;
 };
+
+class JSTestMediaQueryListListenerOwner : public JSC::WeakHandleOwner {
+    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&);
+    virtual void finalize(JSC::Handle<JSC::Unknown>, void* context);
+};
+
+inline JSC::WeakHandleOwner* wrapperOwner(DOMWrapperWorld*, TestMediaQueryListListener*)
+{
+    DEFINE_STATIC_LOCAL(JSTestMediaQueryListListenerOwner, jsTestMediaQueryListListenerOwner, ());
+    return &jsTestMediaQueryListListenerOwner;
+}
+
+inline void* wrapperContext(DOMWrapperWorld* world, TestMediaQueryListListener*)
+{
+    return world;
+}
 
 JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestMediaQueryListListener*);
 TestMediaQueryListListener* toTestMediaQueryListListener(JSC::JSValue);
@@ -75,8 +92,8 @@ public:
     }
 
     static const JSC::ClassInfo s_info;
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
     static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
     {
         return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
@@ -86,6 +103,31 @@ private:
     JSTestMediaQueryListListenerPrototype(JSC::JSGlobalData& globalData, JSC::JSGlobalObject*, JSC::Structure* structure) : JSC::JSNonFinalObject(globalData, structure) { }
 protected:
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | Base::StructureFlags;
+};
+
+class JSTestMediaQueryListListenerConstructor : public DOMConstructorObject {
+private:
+    JSTestMediaQueryListListenerConstructor(JSC::Structure*, JSDOMGlobalObject*);
+    void finishCreation(JSC::ExecState*, JSDOMGlobalObject*);
+
+public:
+    typedef DOMConstructorObject Base;
+    static JSTestMediaQueryListListenerConstructor* create(JSC::ExecState* exec, JSC::Structure* structure, JSDOMGlobalObject* globalObject)
+    {
+        JSTestMediaQueryListListenerConstructor* ptr = new (JSC::allocateCell<JSTestMediaQueryListListenerConstructor>(*exec->heap())) JSTestMediaQueryListListenerConstructor(structure, globalObject);
+        ptr->finishCreation(exec, globalObject);
+        return ptr;
+    }
+
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static const JSC::ClassInfo s_info;
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
+    {
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
+    }
+protected:
+    static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::ImplementsHasInstance | DOMConstructorObject::StructureFlags;
 };
 
 // Functions

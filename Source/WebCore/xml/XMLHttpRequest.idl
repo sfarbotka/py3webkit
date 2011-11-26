@@ -30,8 +30,9 @@ module xml {
 
     interface [
         ActiveDOMObject,
-        CanBeConstructed,
-        CustomConstructor,
+        Constructor,
+        CallWith=ScriptExecutionContext,
+        V8CustomConstructor,
         CustomMarkFunction,
         EventTarget,
         NoStaticTables
@@ -62,18 +63,24 @@ module xml {
 
         attribute boolean withCredentials
             setter raises(DOMException);
-        // void open(in DOMString method, in DOMString url);
-        // void open(in DOMString method, in DOMString url, in boolean async);
-        // void open(in DOMString method, in DOMString url, in boolean async, in DOMString user);
-        [Custom] void open(in DOMString method, in DOMString url, in boolean async, in DOMString user, in DOMString password)
+
+        [Custom] void open(in DOMString method, in DOMString url, in [Optional] boolean async, in [Optional] DOMString user, in [Optional] DOMString password)
             raises(DOMException);
 
         void setRequestHeader(in DOMString header, in DOMString value)
             raises(DOMException);
 
-        // void send();
-        // void send(in DOMString data);
+        [Custom] void send()
+            raises(DOMException);
+        [Custom] void send(in ArrayBuffer data)
+            raises(DOMException);
+        [Conditional=BLOB, Custom] void send(in Blob data)
+            raises(DOMException);
         [Custom] void send(in Document data)
+            raises(DOMException);
+        [Custom] void send(in DOMString data)
+            raises(DOMException);
+        [Custom] void send(in DOMFormData data)
             raises(DOMException);
 
         void abort();

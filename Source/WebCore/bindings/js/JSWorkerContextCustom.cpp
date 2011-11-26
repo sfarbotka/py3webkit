@@ -55,7 +55,7 @@ namespace WebCore {
 
 void JSWorkerContext::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSWorkerContext* thisObject = static_cast<JSWorkerContext*>(cell);
+    JSWorkerContext* thisObject = jsCast<JSWorkerContext*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
@@ -72,7 +72,7 @@ void JSWorkerContext::visitChildren(JSCell* cell, SlotVisitor& visitor)
 bool JSWorkerContext::getOwnPropertySlotDelegate(ExecState* exec, const Identifier& propertyName, PropertySlot& slot)
 {
     // Look for overrides before looking at any of our own properties.
-    if (JSGlobalObject::getOwnPropertySlot(exec, propertyName, slot))
+    if (JSGlobalObject::getOwnPropertySlot(this, exec, propertyName, slot))
         return true;
     return false;
 }
@@ -80,7 +80,7 @@ bool JSWorkerContext::getOwnPropertySlotDelegate(ExecState* exec, const Identifi
 bool JSWorkerContext::getOwnPropertyDescriptorDelegate(ExecState* exec, const Identifier& propertyName, PropertyDescriptor& descriptor)
 {
     // Look for overrides before looking at any of our own properties.
-    if (JSGlobalObject::getOwnPropertyDescriptor(exec, propertyName, descriptor))
+    if (JSGlobalObject::getOwnPropertyDescriptor(this, exec, propertyName, descriptor))
         return true;
     return false;
 }

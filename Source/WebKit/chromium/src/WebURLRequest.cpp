@@ -241,7 +241,11 @@ void WebURLRequest::setReportLoadTiming(bool reportLoadTiming)
 
 WebURLRequest::TargetType WebURLRequest::targetType() const
 {
-    return static_cast<TargetType>(m_private->m_resourceRequest->targetType());
+    // FIXME: Temporary special case until downstream chromium.org knows of the new TargetTypes.
+    TargetType targetType = static_cast<TargetType>(m_private->m_resourceRequest->targetType());
+    if (targetType == TargetIsTextTrack || targetType == TargetIsUnspecified)
+        return TargetIsSubresource;
+    return targetType;
 }
 
 bool WebURLRequest::hasUserGesture() const
@@ -303,7 +307,7 @@ void WebURLRequest::setDownloadToFile(bool downloadToFile)
 WebURLRequest::ExtraData* WebURLRequest::extraData() const
 {
     RefPtr<ResourceRequest::ExtraData> data = m_private->m_resourceRequest->extraData();
-    if (!data.get())
+    if (!data)
         return 0;
     return static_cast<ExtraDataContainer*>(data.get())->extraData();
 }

@@ -3,6 +3,7 @@
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  * Copyright (C) 2004, 2005, 2006, 2007, 2008 Apple Inc. All rights reserved.
  * Copyright (C) 2009 Torch Mobile Inc. All rights reserved. (http://www.torchmobile.com/)
+ * Copyright (C) 2011 Motorola Mobility. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -27,6 +28,7 @@
 #include "Attribute.h"
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
+#include "ChildListMutationScope.h"
 #include "DocumentFragment.h"
 #include "Event.h"
 #include "EventListener.h"
@@ -49,6 +51,10 @@
 #include "markup.h"
 #include <wtf/StdLibExtras.h>
 #include <wtf/text/CString.h>
+
+#if ENABLE(MICRODATA)
+#include "MicroDataItemValue.h"
+#endif
 
 namespace WebCore {
 
@@ -195,6 +201,15 @@ void HTMLElement::parseMappedAttribute(Attribute* attr)
             addCSSProperty(attr, CSSPropertyWebkitUserSelect, CSSValueNone);
         } else if (equalIgnoringCase(value, "false"))
             addCSSProperty(attr, CSSPropertyWebkitUserDrag, CSSValueNone);
+#if ENABLE(MICRODATA)
+    } else if (attr->name() == itempropAttr) {
+        setItemProp(attr->value());
+    } else if (attr->name() == itemrefAttr) {
+        setItemRef(attr->value());
+    } else if (attr->name() == itemtypeAttr) {
+        setItemType(attr->value());
+        itemTypeAttributeChanged();
+#endif
     }
 // standard events
     else if (attr->name() == onclickAttr) {
@@ -313,6 +328,10 @@ static inline bool hasOneTextChild(ContainerNode* node)
 
 static void replaceChildrenWithFragment(HTMLElement* element, PassRefPtr<DocumentFragment> fragment, ExceptionCode& ec)
 {
+#if ENABLE(MUTATION_OBSERVERS)
+    ChildListMutationScope mutation(element);
+#endif
+
     if (!fragment->firstChild()) {
         element->removeChildren();
         return;
@@ -334,6 +353,10 @@ static void replaceChildrenWithFragment(HTMLElement* element, PassRefPtr<Documen
 
 static void replaceChildrenWithText(HTMLElement* element, const String& text, ExceptionCode& ec)
 {
+#if ENABLE(MUTATION_OBSERVERS)
+    ChildListMutationScope mutation(element);
+#endif
+
     if (hasOneTextChild(element)) {
         static_cast<Text*>(element->firstChild())->setData(text, ec);
         return;
@@ -400,7 +423,7 @@ void HTMLElement::setOuterHTML(const String& html, ExceptionCode& ec)
         ec = NO_MODIFICATION_ALLOWED_ERR;
         return;
     }
-    RefPtr<HTMLElement> parent = static_cast<HTMLElement*>(p);
+    RefPtr<HTMLElement> parent = toHTMLElement(p);
     RefPtr<Node> prev = previousSibling();
     RefPtr<Node> next = nextSibling();
 
@@ -700,9 +723,9 @@ void HTMLElement::setContentEditable(Attribute* attr)
         addCSSProperty(attr, CSSPropertyWebkitLineBreak, CSSValueAfterWhiteSpace);
     } else if (equalIgnoringCase(enabled, "false")) {
         addCSSProperty(attr, CSSPropertyWebkitUserModify, CSSValueReadOnly);
-        attr->decl()->removeProperty(CSSPropertyWordWrap, false);
-        attr->decl()->removeProperty(CSSPropertyWebkitNbspMode, false);
-        attr->decl()->removeProperty(CSSPropertyWebkitLineBreak, false);
+        attr->decl()->removeProperty(CSSPropertyWordWrap);
+        attr->decl()->removeProperty(CSSPropertyWebkitNbspMode);
+        attr->decl()->removeProperty(CSSPropertyWebkitLineBreak);
     } else if (equalIgnoringCase(enabled, "plaintext-only")) {
         addCSSProperty(attr, CSSPropertyWebkitUserModify, CSSValueReadWritePlaintextOnly);
         addCSSProperty(attr, CSSPropertyWordWrap, CSSValueBreakWord);
@@ -751,17 +774,9 @@ void HTMLElement::click()
     dispatchSimulatedClick(0, false, false);
 }
 
-// accessKeyAction is used by the accessibility support code
-// to send events to elements that our JavaScript caller does
-// does not.  The elements JS is interested in have subclasses
-// that override this method to direct the click appropriately.
-// Here in the base class, then, we only send the click if
-// the caller wants it to go to any HTMLElement, and we say
-// to send the mouse events in addition to the click.
-void HTMLElement::accessKeyAction(bool sendToAnyElement)
+void HTMLElement::accessKeyAction(bool sendMouseEvents)
 {
-    if (sendToAnyElement)
-        dispatchSimulatedClick(0, true);
+    dispatchSimulatedClick(0, sendMouseEvents);
 }
 
 String HTMLElement::title() const
@@ -790,13 +805,8 @@ bool HTMLElement::rendererIsNeeded(const NodeRenderingContext& context)
 {
     if (hasLocalName(noscriptTag)) {
         Frame* frame = document()->frame();
-#if ENABLE(XHTMLMP)
-        if (!document()->shouldProcessNoscriptElement())
-            return false;
-#else
         if (frame && frame->script()->canExecuteScripts(NotAboutToExecuteScript))
             return false;
-#endif        
     } else if (hasLocalName(noembedTag)) {
         Frame* frame = document()->frame();
         if (frame && frame->loader()->subframeLoader()->allowPlugins(NotAboutToInstantiatePlugin))
@@ -871,8 +881,8 @@ TextDirection HTMLElement::directionality(Node** strongDirectionalityTextNode) c
     if (HTMLTextFormControlElement* textElement = toTextFormControl(const_cast<HTMLElement*>(this))) {
         bool hasStrongDirectionality;
         Unicode::Direction textDirection = textElement->value().defaultWritingDirection(&hasStrongDirectionality);
-        if (hasStrongDirectionality && strongDirectionalityTextNode)
-            *strongDirectionalityTextNode = textElement;
+        if (strongDirectionalityTextNode)
+            *strongDirectionalityTextNode = hasStrongDirectionality ? textElement : 0;
         return (textDirection == Unicode::LeftToRight) ? LTR : RTL;
     }
 
@@ -975,6 +985,49 @@ void HTMLElement::adjustDirectionalityIfNeededAfterChildrenChanged(Node* beforeC
         }
     }
 }
+
+bool HTMLElement::isURLAttribute(Attribute* attribute) const
+{
+#if ENABLE(MICRODATA)
+    return attribute->name() == itemidAttr;
+#else
+    UNUSED_PARAM(attribute);
+    return false;
+#endif
+}
+
+#if ENABLE(MICRODATA)
+void HTMLElement::setItemValue(const String& value, ExceptionCode& ec)
+{
+    if (!hasAttribute(itempropAttr) || hasAttribute(itemscopeAttr)) {
+        ec = INVALID_ACCESS_ERR;
+        return;
+    }
+
+    setItemValueText(value, ec);
+}
+
+PassRefPtr<MicroDataItemValue> HTMLElement::itemValue() const
+{
+    if (!hasAttribute(itempropAttr))
+        return 0;
+
+    if (hasAttribute(itemscopeAttr))
+        return MicroDataItemValue::createFromNode(const_cast<HTMLElement* const>(this));
+
+    return MicroDataItemValue::createFromString(itemValueText());
+}
+
+String HTMLElement::itemValueText() const
+{
+    return textContent(true);
+}
+
+void HTMLElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setTextContent(value, ec);
+}
+#endif
 
 } // namespace WebCore
 

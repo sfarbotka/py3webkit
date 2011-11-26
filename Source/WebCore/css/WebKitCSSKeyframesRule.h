@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef WebKitCSSKeyframesRule_h
@@ -51,14 +51,14 @@ public:
 
     ~WebKitCSSKeyframesRule();
 
-    String name() const;
+    String name() const { return m_name; }
     void setName(const String&);
-    
+
     // This version of setName does not call styleSheetChanged to avoid
     // unnecessary work. It assumes callers will either make that call
     // themselves, or know that it will get called later.
     void setNameInternal(const String& name)
-    {   
+    {
         m_name = AtomicString(name);
     }
 
@@ -68,23 +68,19 @@ public:
     void deleteRule(const String& key);
     WebKitCSSKeyframeRule* findRule(const String& key);
 
-    virtual String cssText() const;
+    String cssText() const;
 
-    /* not part of the DOM */
-    unsigned length() const;
-    WebKitCSSKeyframeRule*        item(unsigned index);
-    const WebKitCSSKeyframeRule*  item(unsigned index) const;
-    void append(WebKitCSSKeyframeRule* rule);
+    // Not part of the CSSOM.
+    unsigned length() const { return m_lstCSSRules->length(); }
+    WebKitCSSKeyframeRule* item(unsigned index);
+    const WebKitCSSKeyframeRule* item(unsigned index) const;
+    void append(WebKitCSSKeyframeRule*);
 
 private:
     WebKitCSSKeyframesRule(CSSStyleSheet* parent);
 
-    virtual bool isKeyframesRule() const { return true; }
-    // Inherited from CSSRule
-    virtual CSSRuleType type() const { return WEBKIT_KEYFRAMES_RULE; }
-
     int findRuleIndex(const String& key) const;
-    
+
     RefPtr<CSSRuleList> m_lstCSSRules;
     AtomicString m_name;
 };

@@ -24,9 +24,6 @@
  */
 
 #include "config.h"
-
-#if ENABLE(XPATH)
-
 #include "JSXPathResult.h"
 
 #include "JSDOMBinding.h"
@@ -39,7 +36,7 @@ namespace WebCore {
 
 void JSXPathResult::visitChildren(JSCell* cell, SlotVisitor& visitor)
 {
-    JSXPathResult* thisObject = static_cast<JSXPathResult*>(cell);
+    JSXPathResult* thisObject = jsCast<JSXPathResult*>(cell);
     ASSERT_GC_OBJECT_INHERITS(thisObject, &s_info);
     COMPILE_ASSERT(StructureFlags & OverridesVisitChildren, OverridesVisitChildrenWithoutSettingFlag);
     ASSERT(thisObject->structure()->typeInfo().overridesVisitChildren());
@@ -56,5 +53,3 @@ void JSXPathResult::visitChildren(JSCell* cell, SlotVisitor& visitor)
 }
 
 } // namespace WebCore
-
-#endif // ENABLE(XPATH)

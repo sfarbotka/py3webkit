@@ -27,7 +27,7 @@
 #define WebGLRenderingContext_h
 
 #include "CanvasRenderingContext.h"
-#include "ExceptionCode.h"
+#include "DrawingBuffer.h"
 #include "Float32Array.h"
 #include "GraphicsContext3D.h"
 #include "Int32Array.h"
@@ -40,18 +40,6 @@
 
 namespace WebCore {
 
-class WebGLActiveInfo;
-class WebGLBuffer;
-class WebGLContextAttributes;
-class WebGLExtension;
-class WebGLFramebuffer;
-class WebGLObject;
-class WebGLProgram;
-class WebGLRenderbuffer;
-class WebGLShader;
-class WebGLTexture;
-class WebGLUniformLocation;
-class WebKitLoseContext;
 class HTMLImageElement;
 class HTMLVideoElement;
 class ImageBuffer;
@@ -60,7 +48,23 @@ class IntSize;
 class OESStandardDerivatives;
 class OESTextureFloat;
 class OESVertexArrayObject;
+class WebGLActiveInfo;
+class WebGLBuffer;
+class WebGLContextAttributes;
+class WebGLDebugRendererInfo;
+class WebGLDebugShaders;
+class WebGLExtension;
+class WebGLFramebuffer;
+class WebGLObject;
+class WebGLProgram;
+class WebGLRenderbuffer;
+class WebGLShader;
+class WebGLTexture;
+class WebGLUniformLocation;
 class WebGLVertexArrayObjectOES;
+class WebKitLoseContext;
+
+typedef int ExceptionCode;
 
 class WebGLRenderingContext : public CanvasRenderingContext {
 public:
@@ -290,7 +294,7 @@ public:
 
     GraphicsContext3D* graphicsContext3D() const { return m_context.get(); }
 #if USE(ACCELERATED_COMPOSITING)
-    virtual PlatformLayer* platformLayer() const { return m_context->platformLayer(); }
+    virtual PlatformLayer* platformLayer() const;
 #endif
 
     void reshape(int width, int height);
@@ -306,6 +310,7 @@ public:
   private:
     friend class WebGLObject;
     friend class OESVertexArrayObject;
+    friend class WebGLDebugShaders;
 
     WebGLRenderingContext(HTMLCanvasElement*, PassRefPtr<GraphicsContext3D>, GraphicsContext3D::Attributes);
     void initializeNewContext();
@@ -354,6 +359,10 @@ public:
 #endif
 
     RefPtr<GraphicsContext3D> m_context;
+
+    // Optional structure for rendering to a DrawingBuffer, instead of directly
+    // to the back-buffer of m_context.
+    RefPtr<DrawingBuffer> m_drawingBuffer;
 
     class WebGLRenderingContextRestoreTimer : public TimerBase {
     public:
@@ -474,6 +483,8 @@ public:
     OwnPtr<OESStandardDerivatives> m_oesStandardDerivatives;
     OwnPtr<OESVertexArrayObject> m_oesVertexArrayObject;
     OwnPtr<WebKitLoseContext> m_webkitLoseContext;
+    OwnPtr<WebGLDebugRendererInfo> m_webglDebugRendererInfo;
+    OwnPtr<WebGLDebugShaders> m_webglDebugShaders;
 
     // Helpers for getParameter and others
     WebGLGetInfo getBooleanParameter(GC3Denum);
@@ -520,6 +531,9 @@ public:
 
     // Helper function to get the bound framebuffer's height.
     int getBoundFramebufferHeight();
+
+    // Helper function to verify limits on the length of uniform and attribute locations.
+    bool validateLocationLength(const String&);
 
     // Helper function to check if size is non-negative.
     // Generate GL error and return false for negative inputs; otherwise, return true.
@@ -621,6 +635,10 @@ public:
     void loseContext();
     // Helper for restoration after context lost.
     void maybeRestoreContext(LostContextMode);
+
+    // Determine if we are running privileged code in the browser, for example,
+    // a Safari or Chrome extension.
+    bool allowPrivilegedExtensions() const;
 
     friend class WebGLStateRestorer;
 };

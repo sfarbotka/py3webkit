@@ -49,6 +49,7 @@
 #include <WebCore/Editor.h>
 #include <WebCore/FrameLoaderTypes.h>
 #include <WebCore/IntRect.h>
+#include <WebCore/PlatformScreen.h>
 #include <WebCore/ScrollTypes.h>
 #include <WebCore/WebCoreKeyboardUIMode.h>
 #include <wtf/HashMap.h>
@@ -59,6 +60,10 @@
 
 #if PLATFORM(QT)
 #include "ArgumentCodersQt.h"
+#endif
+
+#if PLATFORM(GTK)
+#include "ArgumentCodersGtk.h"
 #endif
 
 #if ENABLE(TOUCH_EVENTS)
@@ -252,12 +257,17 @@ public:
     double pageZoomFactor() const;
     void setPageZoomFactor(double);
     void setPageAndTextZoomFactors(double pageZoomFactor, double textZoomFactor);
+    void windowScreenDidChange(uint64_t);
 
     void scalePage(double scale, const WebCore::IntPoint& origin);
     double pageScaleFactor() const;
 
     void setUseFixedLayout(bool);
+    bool useFixedLayout() const { return m_useFixedLayout; }
     void setFixedLayoutSize(const WebCore::IntSize&);
+
+    void setPaginationMode(uint32_t /* WebCore::Page::Pagination::Mode */);
+    void setGapBetweenPages(double);
 
     bool drawsBackground() const { return m_drawsBackground; }
     bool drawsTransparentBackground() const { return m_drawsTransparentBackground; }
@@ -299,14 +309,13 @@ public:
     GeolocationPermissionRequestManager& geolocationPermissionRequestManager() { return m_geolocationPermissionRequestManager; }
 
     void pageDidScroll();
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     void pageDidRequestScroll(const WebCore::IntPoint&);
     void setFixedVisibleContentRect(const WebCore::IntRect&);
-
-    bool resizesToContentsEnabled() const { return !m_resizesToContentsLayoutSize.isEmpty(); }
-    WebCore::IntSize resizesToContentsLayoutSize() const { return m_resizesToContentsLayoutSize; }
-    void setResizesToContentsUsingLayoutSize(const WebCore::IntSize& targetLayoutSize);
+    void setResizesToContentsUsingLayoutSize(const WebCore::IntSize&);
     void resizeToContentsIfNeeded();
+    void setViewportSize(const WebCore::IntSize&);
+    WebCore::IntSize viewportSize() const { return m_viewportSize; }
 #endif
 
     WebContextMenu* contextMenu();
@@ -396,7 +405,7 @@ public:
     void clearSelection();
 #if PLATFORM(WIN)
     void performDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, const WebCore::DragDataMap&, uint32_t flags);
-#elif PLATFORM(QT)
+#elif PLATFORM(QT) || PLATFORM(GTK)
     void performDragControllerAction(uint64_t action, WebCore::DragData);
 #else
     void performDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, const WTF::String& dragStorageName, uint32_t flags, const SandboxExtension::Handle&);
@@ -417,6 +426,8 @@ public:
 
     void didChangeScrollOffsetForMainFrame();
 
+    void mainFrameDidLayout();
+
     bool canRunBeforeUnloadConfirmPanel() const { return m_canRunBeforeUnloadConfirmPanel; }
     void setCanRunBeforeUnloadConfirmPanel(bool canRunBeforeUnloadConfirmPanel) { m_canRunBeforeUnloadConfirmPanel = canRunBeforeUnloadConfirmPanel; }
 
@@ -426,6 +437,7 @@ public:
     void runModal();
 
     void setDeviceScaleFactor(float);
+    float deviceScaleFactor() const;
 
     void setMemoryCacheMessagesEnabled(bool);
 
@@ -503,6 +515,7 @@ private:
 #endif
 #if ENABLE(TOUCH_EVENTS)
     void touchEvent(const WebTouchEvent&);
+    void touchEventSyncForTesting(const WebTouchEvent&, bool& handled);
 #endif
     void contextMenuHidden() { m_isShowingContextMenu = false; }
 
@@ -597,6 +610,7 @@ private:
 
     WebCore::IntSize m_viewSize;
     OwnPtr<DrawingArea> m_drawingArea;
+    bool m_useFixedLayout;
 
     bool m_drawsBackground;
     bool m_drawsTransparentBackground;
@@ -653,8 +667,9 @@ private:
     InjectedBundlePageFullScreenClient m_fullScreenClient;
 #endif
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     WebCore::IntSize m_resizesToContentsLayoutSize;
+    WebCore::IntSize m_viewportSize;
 #endif
 
     FindController m_findController;
@@ -687,6 +702,8 @@ private:
 
     bool m_cachedMainFrameIsPinnedToLeftSide;
     bool m_cachedMainFrameIsPinnedToRightSide;
+
+    unsigned m_cachedPageCount;
 
     bool m_isShowingContextMenu;
 

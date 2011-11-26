@@ -30,6 +30,7 @@ SET(WebKit_INCLUDE_DIRECTORIES
     "${WEBCORE_DIR}/rendering/style"
     "${WEBCORE_DIR}/storage"
     "${WEBCORE_DIR}/svg"
+    "${WEBCORE_DIR}/svg/graphics"
     "${WEBCORE_DIR}/svg/properties"
     "${JAVASCRIPTCORE_DIR}"
     "${JAVASCRIPTCORE_DIR}/ForwardingHeaders"
@@ -63,7 +64,6 @@ SET(WebKit_LIBRARIES
     ${WebCore_LIBRARY_NAME}
 )
 
-STRING(TOLOWER ${PORT} WEBKIT_PORT_DIR)
 INCLUDE_IF_EXISTS(${WEBKIT_DIR}/${WEBKIT_PORT_DIR}/CMakeLists${PORT}.txt)
 
 ADD_DEFINITIONS(-DBUILDING_WebKit)

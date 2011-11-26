@@ -37,8 +37,10 @@
 #include "RenderSVGContainer.h"
 #include "RenderSVGResourceMarker.h"
 #include "RenderSVGResourceSolidColor.h"
+#include "SVGPathData.h"
 #include "SVGRenderSupport.h"
 #include "SVGResources.h"
+#include "SVGResourcesCache.h"
 #include "SVGStyledTransformableElement.h"
 #include "SVGTransformList.h"
 #include "SVGURIReference.h"
@@ -117,7 +119,7 @@ void RenderSVGPath::layout()
     bool needsPathUpdate = m_needsPathUpdate;
     if (needsPathUpdate) {
         m_path.clear();
-        element->toPathData(m_path);
+        updatePathFromGraphicsElement(element, m_path);
         m_needsPathUpdate = false;
         updateCachedBoundariesInParents = true;
     }
@@ -162,7 +164,8 @@ bool RenderSVGPath::shouldStrokeZeroLengthSubpath() const
 FloatRect RenderSVGPath::zeroLengthSubpathRect() const
 {
     SVGElement* svgElement = static_cast<SVGElement*>(node());
-    float strokeWidth = style()->svgStyle()->strokeWidth().value(svgElement);
+    SVGLengthContext lengthContext(svgElement);
+    float strokeWidth = style()->svgStyle()->strokeWidth().value(lengthContext);
     return FloatRect(m_fillBoundingBox.x() - strokeWidth / 2, m_fillBoundingBox.y() - strokeWidth / 2, strokeWidth, strokeWidth);
 }
 
@@ -344,7 +347,8 @@ FloatRect RenderSVGPath::calculateMarkerBoundsIfNeeded()
     if (!markerStart && !markerMid && !markerEnd)
         return FloatRect();
 
-    return m_markerLayoutInfo.calculateBoundaries(markerStart, markerMid, markerEnd, svgStyle->strokeWidth().value(svgElement), m_path);
+    SVGLengthContext lengthContext(svgElement);
+    return m_markerLayoutInfo.calculateBoundaries(markerStart, markerMid, markerEnd, svgStyle->strokeWidth().value(lengthContext), m_path);
 }
 
 void RenderSVGPath::updateCachedBoundaries()
@@ -357,7 +361,7 @@ void RenderSVGPath::updateCachedBoundaries()
     }
 
     // Cache _unclipped_ fill bounding box, used for calculations in resources
-    m_fillBoundingBox = m_path.boundingRect();
+    m_fillBoundingBox = m_path.fastBoundingRect();
 
     // Spec(11.4): Any zero length subpath shall not be stroked if the ‘stroke-linecap’ property has a value of butt
     // but shall be stroked if the ‘stroke-linecap’ property has a value of round or square

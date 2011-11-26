@@ -32,6 +32,7 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSConsoleCustom.cpp
     bindings/js/JSCoordinatesCustom.cpp
     bindings/js/JSCustomVoidCallback.cpp
+    bindings/js/JSCustomXPathNSResolver.cpp
     bindings/js/JSDictionary.cpp
     bindings/js/JSDOMBinding.cpp
     bindings/js/JSDOMFormDataCustom.cpp
@@ -51,10 +52,8 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSDocumentCustom.cpp
     bindings/js/JSElementCustom.cpp
     bindings/js/JSErrorHandler.cpp
-    bindings/js/JSEventConstructors.cpp
     bindings/js/JSEventCustom.cpp
     bindings/js/JSEventListener.cpp
-    bindings/js/JSEventSourceCustom.cpp
     bindings/js/JSEventTarget.cpp
     bindings/js/JSExceptionBase.cpp
     bindings/js/JSFloat32ArrayCustom.cpp
@@ -72,6 +71,7 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSHTMLFrameSetElementCustom.cpp
     bindings/js/JSHTMLInputElementCustom.cpp
     bindings/js/JSHTMLLinkElementCustom.cpp
+    bindings/js/JSHTMLMediaElementCustom.cpp
     bindings/js/JSHTMLObjectElementCustom.cpp
     bindings/js/JSHTMLOptionsCollectionCustom.cpp
     bindings/js/JSHTMLOutputElementCustom.cpp
@@ -95,19 +95,19 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSMessageChannelCustom.cpp
     bindings/js/JSMessageEventCustom.cpp
     bindings/js/JSMessagePortCustom.cpp
+    bindings/js/JSMutationCallbackCustom.cpp
     bindings/js/JSNamedNodeMapCustom.cpp
-    bindings/js/JSNavigatorCustom.cpp
     bindings/js/JSNodeCustom.cpp
     bindings/js/JSNodeFilterCondition.cpp
     bindings/js/JSNodeFilterCustom.cpp
     bindings/js/JSNodeIteratorCustom.cpp
     bindings/js/JSNodeListCustom.cpp
     bindings/js/JSOptionConstructor.cpp
-    bindings/js/JSPeerConnectionCustom.cpp
     bindings/js/JSPluginElementFunctions.cpp
     bindings/js/JSPopStateEventCustom.cpp
     bindings/js/JSProcessingInstructionCustom.cpp
     bindings/js/JSScriptProfileNodeCustom.cpp
+    bindings/js/JSStorageCustom.cpp
     bindings/js/JSStyleSheetCustom.cpp
     bindings/js/JSStyleSheetListCustom.cpp
     bindings/js/JSTextCustom.cpp
@@ -121,10 +121,11 @@ LIST(APPEND WebCore_SOURCES
     bindings/js/JSWebKitAnimationListCustom.cpp
     bindings/js/JSWebKitCSSKeyframeRuleCustom.cpp
     bindings/js/JSWebKitCSSKeyframesRuleCustom.cpp
-    bindings/js/JSWebKitCSSMatrixCustom.cpp
+    bindings/js/JSWebKitMutationObserverCustom.cpp
     bindings/js/JSWebKitPointCustom.cpp
     bindings/js/JSXMLHttpRequestCustom.cpp
     bindings/js/JSXMLHttpRequestUploadCustom.cpp
+    bindings/js/JSXPathResultCustom.cpp
     bindings/js/JSXSLTProcessorCustom.cpp
     bindings/js/JavaScriptCallFrame.cpp
     bindings/js/PageScriptDebugServer.cpp
@@ -166,18 +167,18 @@ IF (ENABLE_BLOB)
     )
 ENDIF ()
 
+IF (ENABLE_REQUEST_ANIMATION_FRAME)
+    LIST(APPEND WebCore_SOURCES
+        bindings/js/JSRequestAnimationFrameCallbackCustom.cpp
+    )
+ENDIF ()
+
 IF (ENABLE_SQL_DATABASE)
     LIST(APPEND WebCore_SOURCES
         bindings/js/JSCustomSQLStatementErrorCallback.cpp
         bindings/js/JSSQLResultSetRowListCustom.cpp
         bindings/js/JSSQLTransactionCustom.cpp
         bindings/js/JSSQLTransactionSyncCustom.cpp
-    )
-ENDIF ()
-
-IF (ENABLE_DOM_STORAGE)
-    LIST(APPEND WebCore_SOURCES
-        bindings/js/JSStorageCustom.cpp
     )
 ENDIF ()
 
@@ -212,14 +213,6 @@ IF (ENABLE_SHARED_WORKERS)
     )
 ENDIF ()
 
-IF (ENABLE_XPATH)
-    LIST(APPEND WebCore_SOURCES
-        bindings/js/JSCustomXPathNSResolver.cpp
-        bindings/js/JSXPathResultCustom.cpp
-    )
-ENDIF ()
-
-
 IF (ENABLE_NOTIFICATIONS)
     LIST(APPEND WebCore_SOURCES
         bindings/js/JSDesktopNotificationsCustom.cpp
@@ -246,12 +239,6 @@ ENDIF ()
 IF (ENABLE_VIDEO)
     LIST(APPEND WebCore_SOURCES
         bindings/js/JSAudioConstructor.cpp
-    )
-ENDIF ()
-
-IF (ENABLE_MEDIA_STREAM)
-    LIST(APPEND WebCore_SOURCES
-        bindings/js/JSNavigatorCustom.cpp
     )
 ENDIF ()
 

@@ -145,9 +145,9 @@ public:
     // the setFixedVisibleContentRect instead for the mainframe, though this must be updated manually, e.g just before resuming the page
     // which usually will happen when panning, pinching and rotation ends, or when scale or position are changed manually.
     virtual IntRect visibleContentRect(bool includeScrollbars = false) const;
-    void setFixedVisibleContentRect(const IntRect& visibleContentRect) { m_fixedVisibleContentRect = visibleContentRect; }
-    LayoutUnit visibleWidth() const { return visibleContentRect().width(); }
-    LayoutUnit visibleHeight() const { return visibleContentRect().height(); }
+    virtual void setFixedVisibleContentRect(const IntRect& visibleContentRect) { m_fixedVisibleContentRect = visibleContentRect; }
+    int visibleWidth() const { return visibleContentRect().width(); }
+    int visibleHeight() const { return visibleContentRect().height(); }
 
     // Functions for getting/setting the size webkit should use to layout the contents. By default this is the same as the visible
     // content size. Explicitly setting a layout size value will cause webkit to layout the contents using this size instead.
@@ -196,6 +196,11 @@ public:
     // This gives us a means of blocking painting on our scrollbars until the first layout has occurred.
     void setScrollbarsSuppressed(bool suppressed, bool repaintOnUnsuppress = false);
     bool scrollbarsSuppressed() const { return m_scrollbarsSuppressed; }
+
+    IntPoint rootViewToContents(const IntPoint&) const;
+    IntPoint contentsToRootView(const IntPoint&) const;
+    IntRect rootViewToContents(const IntRect&) const;
+    IntRect contentsToRootView(const IntRect&) const;
 
     // Event coordinates are assumed to be in the coordinate space of a window that contains
     // the entire widget hierarchy. It is up to the platform to decide what the precise definition
@@ -314,7 +319,6 @@ protected:
     virtual void scrollContentsSlowPath(const IntRect& updateRect);
 
     void setScrollOrigin(const IntPoint&, bool updatePositionAtAll, bool updatePositionSynchronously);
-    IntPoint scrollOrigin() const { return m_scrollOrigin; }
 
     // Subclassed by FrameView to check the writing-mode of the document.
     virtual bool isVerticalDocument() const { return true; }

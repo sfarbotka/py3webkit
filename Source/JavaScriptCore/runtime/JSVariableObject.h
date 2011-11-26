@@ -48,14 +48,14 @@ namespace JSC {
 
         SymbolTable& symbolTable() const { return *m_symbolTable; }
 
-        virtual void putWithAttributes(ExecState*, const Identifier&, JSValue, unsigned attributes) = 0;
+        virtual ~JSVariableObject();
 
-        virtual bool deleteProperty(ExecState*, const Identifier&);
+        static NO_RETURN_DUE_TO_ASSERT void putWithAttributes(JSObject*, ExecState*, const Identifier&, JSValue, unsigned attributes);
+
         static bool deleteProperty(JSCell*, ExecState*, const Identifier&);
-        virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
+        static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
         
-        virtual bool isVariableObject() const;
-        virtual bool isDynamicScope(bool& requiresDynamicChecks) const = 0;
+        bool isDynamicScope(bool& requiresDynamicChecks) const;
 
         WriteBarrier<Unknown>& registerAt(int index) const { return m_registers[index]; }
 
@@ -64,7 +64,7 @@ namespace JSC {
 
         static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue prototype)
         {
-            return Structure::create(globalData, globalObject, prototype, TypeInfo(ObjectType, StructureFlags), &s_info);
+            return Structure::create(globalData, globalObject, prototype, TypeInfo(VariableObjectType, StructureFlags), &s_info);
         }
         
     protected:

@@ -480,6 +480,17 @@ JSStringRef AccessibilityUIElement::stringAttributeValue(JSStringRef attribute)
     return 0;
 }
 
+AccessibilityUIElement AccessibilityUIElement::uiElementAttributeValue(JSStringRef attribute) const
+{
+    BEGIN_AX_OBJC_EXCEPTIONS
+    id uiElement = [m_element accessibilityAttributeValue:[NSString stringWithJSStringRef:attribute]];
+    return AccessibilityUIElement(uiElement);
+    END_AX_OBJC_EXCEPTIONS
+    
+    return 0;
+}
+
+
 double AccessibilityUIElement::numberAttributeValue(JSStringRef attribute)
 {
     BEGIN_AX_OBJC_EXCEPTIONS
@@ -1106,6 +1117,24 @@ AccessibilityUIElement AccessibilityUIElement::cellForColumnAndRow(unsigned col,
     return 0;
 }
 
+AccessibilityUIElement AccessibilityUIElement::horizontalScrollbar() const
+{
+    BEGIN_AX_OBJC_EXCEPTIONS
+    return AccessibilityUIElement([m_element accessibilityAttributeValue:NSAccessibilityHorizontalScrollBarAttribute]);
+    END_AX_OBJC_EXCEPTIONS    
+    
+    return 0;
+}
+
+AccessibilityUIElement AccessibilityUIElement::verticalScrollbar() const
+{
+    BEGIN_AX_OBJC_EXCEPTIONS
+    return AccessibilityUIElement([m_element accessibilityAttributeValue:NSAccessibilityVerticalScrollBarAttribute]);
+    END_AX_OBJC_EXCEPTIONS        
+
+    return 0;
+}
+
 JSStringRef AccessibilityUIElement::selectedTextRange()
 {
     NSRange range = NSMakeRange(NSNotFound, 0);
@@ -1228,6 +1257,12 @@ bool AccessibilityUIElement::isSelectable() const
 }
 
 bool AccessibilityUIElement::isMultiSelectable() const
+{
+    // FIXME: implement
+    return false;
+}
+
+bool AccessibilityUIElement::isSelectedOptionActive() const
 {
     // FIXME: implement
     return false;

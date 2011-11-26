@@ -69,15 +69,15 @@ namespace WebCore {
 
         // HostWindow methods.
 
-        virtual void invalidateWindow(const IntRect&, bool);
-        virtual void invalidateContentsAndWindow(const IntRect&, bool);
+        virtual void invalidateRootView(const IntRect&, bool) OVERRIDE;
+        virtual void invalidateContentsAndRootView(const IntRect&, bool) OVERRIDE;
         virtual void invalidateContentsForSlowScroll(const IntRect&, bool);
         virtual void scroll(const IntSize&, const IntRect&, const IntRect&);
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
         virtual void delegatedScrollRequested(const IntPoint& scrollPoint);
 #endif
-        virtual IntPoint screenToWindow(const IntPoint&) const;
-        virtual IntRect windowToScreen(const IntRect&) const;
+        virtual IntPoint screenToRootView(const IntPoint&) const OVERRIDE;
+        virtual IntRect rootViewToScreen(const IntRect&) const OVERRIDE;
         virtual PlatformPageClient platformPageClient() const;
         virtual void scrollbarsModeDidChange() const;
         virtual void setCursor(const Cursor&);
@@ -157,8 +157,8 @@ namespace WebCore {
 
 #if ENABLE(INPUT_COLOR)
         void openColorChooser(ColorChooser*, const Color&);
-        void cleanupColorChooser();
-        void setSelectedColorInColorChooser(const Color&);
+        void cleanupColorChooser(ColorChooser*);
+        void setSelectedColorInColorChooser(ColorChooser*, const Color&);
 #endif
 
         void runOpenPanel(Frame*, PassRefPtr<FileChooser>);
@@ -167,7 +167,7 @@ namespace WebCore {
         void enumerateChosenDirectory(FileChooser*);
 #endif
 
-        void dispatchViewportDataDidChange(const ViewportArguments&) const;
+        void dispatchViewportPropertiesDidChange(const ViewportArguments&) const;
 
         bool requiresFullscreenForVideoPlayback();
 

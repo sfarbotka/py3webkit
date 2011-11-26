@@ -32,7 +32,6 @@
 #if ENABLE(SQL_DATABASE)
 
 #include "AbstractDatabase.h"
-#include "ExceptionCode.h"
 #include "PlatformString.h"
 
 #include <wtf/Deque.h>
@@ -49,6 +48,8 @@ class SQLTransactionClient;
 class SQLTransactionCoordinator;
 class SQLTransactionErrorCallback;
 class VoidCallback;
+
+typedef int ExceptionCode;
 
 class Database : public AbstractDatabase {
 public:
@@ -94,8 +95,8 @@ private:
     void runTransaction(PassRefPtr<SQLTransactionCallback>, PassRefPtr<SQLTransactionErrorCallback>,
                         PassRefPtr<VoidCallback> successCallback, bool readOnly);
 
-    bool openAndVerifyVersion(bool setVersionInNewDatabase, ExceptionCode&);
-    virtual bool performOpenAndVerify(bool setVersionInNewDatabase, ExceptionCode&);
+    bool openAndVerifyVersion(bool setVersionInNewDatabase, ExceptionCode&, String& errorMessage);
+    virtual bool performOpenAndVerify(bool setVersionInNewDatabase, ExceptionCode&, String& errorMessage);
 
     void inProgressTransactionCompleted();
     void scheduleTransaction();

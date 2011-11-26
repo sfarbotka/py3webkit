@@ -83,9 +83,9 @@ public:
     void removeNodePreservingChildren(Node*);
 
 private:
-    PassRefPtr<StyledElement> insertFragmentForTestRendering(Node* context);
+    PassRefPtr<StyledElement> insertFragmentForTestRendering(Node* rootEditableNode);
     void removeUnrenderedNodes(Node*);
-    void restoreTestRenderingNodesToFragment(StyledElement*);
+    void restoreAndRemoveTestRenderingNodesToFragment(StyledElement*);
     void removeInterchangeNodes(Node*);
     
     void insertNodeBefore(PassRefPtr<Node> node, Node* refNode);
@@ -156,35 +156,36 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
         return;
     }
 
-    RefPtr<Node> styleNode = selection.base().deprecatedNode();
-    RefPtr<StyledElement> holder = insertFragmentForTestRendering(styleNode.get());
+    RefPtr<StyledElement> holder = insertFragmentForTestRendering(editableRoot.get());
     if (!holder) {
         removeInterchangeNodes(m_fragment.get());
         return;
     }
     
     RefPtr<Range> range = VisibleSelection::selectionFromContentsOfNode(holder.get()).toNormalizedRange();
-    String text = plainText(range.get());
+    String text = plainText(range.get(), TextIteratorEmitsOriginalText);
+
+    removeInterchangeNodes(holder.get());
+    removeUnrenderedNodes(holder.get());
+    restoreAndRemoveTestRenderingNodesToFragment(holder.get());
+
     // Give the root a chance to change the text.
     RefPtr<BeforeTextInsertedEvent> evt = BeforeTextInsertedEvent::create(text);
     ExceptionCode ec = 0;
     editableRoot->dispatchEvent(evt, ec);
     ASSERT(ec == 0);
     if (text != evt->text() || !editableRoot->rendererIsRichlyEditable()) {
-        restoreTestRenderingNodesToFragment(holder.get());
-        removeNode(holder);
+        restoreAndRemoveTestRenderingNodesToFragment(holder.get());
 
         m_fragment = createFragmentFromText(selection.toNormalizedRange().get(), evt->text());
         if (!m_fragment->firstChild())
             return;
-        holder = insertFragmentForTestRendering(styleNode.get());
+
+        holder = insertFragmentForTestRendering(editableRoot.get());
+        removeInterchangeNodes(holder.get());
+        removeUnrenderedNodes(holder.get());
+        restoreAndRemoveTestRenderingNodesToFragment(holder.get());
     }
-    
-    removeInterchangeNodes(holder.get());
-    
-    removeUnrenderedNodes(holder.get());
-    restoreTestRenderingNodesToFragment(holder.get());
-    removeNode(holder);
 }
 
 bool ReplacementFragment::isEmpty() const
@@ -242,43 +243,24 @@ void ReplacementFragment::insertNodeBefore(PassRefPtr<Node> node, Node* refNode)
     ASSERT(ec == 0);
 }
 
-PassRefPtr<StyledElement> ReplacementFragment::insertFragmentForTestRendering(Node* context)
+PassRefPtr<StyledElement> ReplacementFragment::insertFragmentForTestRendering(Node* rootEditableElement)
 {
-    HTMLElement* body = m_document->body();
-    if (!body)
-        return 0;
-
     RefPtr<StyledElement> holder = createDefaultParagraphElement(m_document.get());
     
     ExceptionCode ec = 0;
 
-    // Copy the whitespace and user-select style from the context onto this element.
-    // Walk up past <br> elements which may be placeholders and might have their own specified styles.
-    // FIXME: We should examine other style properties to see if they would be appropriate to consider during the test rendering.
-    Node* n = context;
-    while (n && (!n->isElementNode() || n->hasTagName(brTag)))
-        n = n->parentNode();
-    if (n) {
-        RefPtr<CSSComputedStyleDeclaration> conFontStyle = computedStyle(n);
-        CSSStyleDeclaration* style = holder->style();
-        style->setProperty(CSSPropertyWhiteSpace, conFontStyle->getPropertyValue(CSSPropertyWhiteSpace), false, ec);
-        ASSERT(ec == 0);
-        style->setProperty(CSSPropertyWebkitUserSelect, conFontStyle->getPropertyValue(CSSPropertyWebkitUserSelect), false, ec);
-        ASSERT(ec == 0);
-    }
-    
     holder->appendChild(m_fragment, ec);
     ASSERT(ec == 0);
-    
-    body->appendChild(holder.get(), ec);
+
+    rootEditableElement->appendChild(holder.get(), ec);
     ASSERT(ec == 0);
-    
+
     m_document->updateLayoutIgnorePendingStylesheets();
-    
+
     return holder.release();
 }
 
-void ReplacementFragment::restoreTestRenderingNodesToFragment(StyledElement* holder)
+void ReplacementFragment::restoreAndRemoveTestRenderingNodesToFragment(StyledElement* holder)
 {
     if (!holder)
         return;
@@ -290,6 +272,8 @@ void ReplacementFragment::restoreTestRenderingNodesToFragment(StyledElement* hol
         m_fragment->appendChild(node.get(), ec);
         ASSERT(ec == 0);
     }
+
+    removeNode(holder);
 }
 
 void ReplacementFragment::removeUnrenderedNodes(Node* holder)
@@ -512,10 +496,23 @@ void ReplaceSelectionCommand::removeRedundantStylesAndKeepStyleSpanInline(Insert
             if (isStyleSpanOrSpanWithOnlyStyleAttribute(element)) {
                 insertedNodes.willRemoveNodePreservingChildren(element);
                 removeNodePreservingChildren(element);
+                continue;
             } else
                 removeNodeAttribute(element, styleAttr);
         } else if (newInlineStyle->style()->length() != inlineStyle->length())
             setNodeAttribute(element, styleAttr, newInlineStyle->style()->cssText());
+
+        // FIXME: Tolerate differences in id, class, and style attributes.
+        if (isNonTableCellHTMLBlockElement(element) && areIdenticalElements(element, element->parentNode())
+            && VisiblePosition(firstPositionInNode(element->parentNode())) == VisiblePosition(firstPositionInNode(element))
+            && VisiblePosition(lastPositionInNode(element->parentNode())) == VisiblePosition(lastPositionInNode(element))) {
+            insertedNodes.willRemoveNodePreservingChildren(element);
+            removeNodePreservingChildren(element);
+            continue;
+        }
+
+        if (element->parentNode()->rendererIsRichlyEditable())
+            removeNodeAttribute(element, contenteditableAttr);
 
         // WebKit used to not add display: inline and float: none on copy.
         // Keep this code around for backward compatibility
@@ -746,7 +743,7 @@ static bool isInlineNodeWithStyle(const Node* node)
     // We can skip over elements whose class attribute is
     // one of our internal classes.
     const HTMLElement* element = static_cast<const HTMLElement*>(node);
-    AtomicString classAttributeValue = element->getAttribute(classAttr);
+    const AtomicString& classAttributeValue = element->getAttribute(classAttr);
     if (classAttributeValue == AppleTabSpanClass
         || classAttributeValue == AppleConvertedSpace
         || classAttributeValue == ApplePasteAsQuotation)
@@ -976,8 +973,6 @@ void ReplaceSelectionCommand::doApply()
         node = next;
     }
 
-    removeRedundantStylesAndKeepStyleSpanInline(insertedNodes);
-
     removeUnrenderedTextNodesAtEnds(insertedNodes);
 
     if (!handledStyleSpans)
@@ -1003,6 +998,8 @@ void ReplaceSelectionCommand::doApply()
             removeNode(nodeToRemove);
         }
     }
+
+    removeRedundantStylesAndKeepStyleSpanInline(insertedNodes);
 
     // Setup m_startOfInsertedContent and m_endOfInsertedContent. This should be the last two lines of code that access insertedNodes.
     m_startOfInsertedContent = firstPositionInOrBeforeNode(insertedNodes.firstNodeInserted());
@@ -1149,17 +1146,18 @@ void ReplaceSelectionCommand::addSpacesForSmartReplace()
 
     Position startDownstream = startOfInsertedContent.deepEquivalent().downstream();
     Node* startNode = startDownstream.computeNodeAfterPosition();
-    if (startDownstream.anchorType() == Position::PositionIsOffsetInAnchor)
+    unsigned startOffset = 0;
+    if (startDownstream.anchorType() == Position::PositionIsOffsetInAnchor) {
         startNode = startDownstream.containerNode();
+        startOffset = startDownstream.offsetInContainerNode();
+    }
 
     bool needsLeadingSpace = !isStartOfParagraph(startOfInsertedContent) && !isCharacterSmartReplaceExempt(startOfInsertedContent.previous().characterAfter(), true);
     if (needsLeadingSpace && startNode) {
         bool collapseWhiteSpace = !startNode->renderer() || startNode->renderer()->style()->collapseWhiteSpace();
         if (startNode->isTextNode()) {
-            Text* text = static_cast<Text*>(startNode);
-            // FIXME: we shouldn't always be inserting the space at the beginning
-            insertTextIntoNode(text, 0, collapseWhiteSpace ? nonBreakingSpaceString() : " ");
-            if (m_endOfInsertedContent.containerNode() == text && m_endOfInsertedContent.offsetInContainerNode())
+            insertTextIntoNode(static_cast<Text*>(startNode), startOffset, collapseWhiteSpace ? nonBreakingSpaceString() : " ");
+            if (m_endOfInsertedContent.containerNode() == startNode && m_endOfInsertedContent.offsetInContainerNode())
                 m_endOfInsertedContent.moveToOffset(m_endOfInsertedContent.offsetInContainerNode() + 1);
         } else {
             RefPtr<Node> node = document()->createEditingTextNode(collapseWhiteSpace ? nonBreakingSpaceString() : " ");

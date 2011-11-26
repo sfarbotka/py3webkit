@@ -39,16 +39,23 @@
 #include "webkit/support/webkit_support_gfx.h"
 #include <algorithm>
 #include <iterator>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <vector>
-#include <wtf/OwnArrayPtr.h>
-#include <wtf/Vector.h>
 
 #if OS(WINDOWS)
 #include <windows.h>
 #define PATH_MAX MAX_PATH
 #endif
+
+// Define macro here to make ImageDiff independent of JavaScriptCore.
+#define ASSERT(assertion) do \
+    if (!(assertion)) { \
+        fprintf(stderr, "ASSERT failed at %s:%s: " #assertion ".", __FILE__, __LINE__); \
+        exit(1); \
+    } \
+while (0)
 
 using namespace std;
 
@@ -71,8 +78,8 @@ static const int statusDifferent = 1;
 static const int statusError = 2;
 
 // Color codes.
-static const uint32_t rgbaRed = 0x000000ff;
-static const uint32_t rgbaAlpha = 0xff000000;
+static const unsigned int rgbaRed = 0x000000ff;
+static const unsigned int rgbaAlpha = 0xff000000;
 
 class Image {
 public:
@@ -97,14 +104,18 @@ public:
         if (!byteLength)
             return false;
 
-        OwnArrayPtr<unsigned char> source = adoptArrayPtr(new unsigned char[byteLength]);
-        if (fread(source.get(), 1, byteLength, stdin) != byteLength)
+        unsigned char* source = new unsigned char[byteLength];
+        if (fread(source, 1, byteLength, stdin) != byteLength) {
+            delete [] source;
             return false;
+        }
 
-        if (!webkit_support::DecodePNG(source.get(), byteLength, &m_data, &m_width, &m_height)) {
+        if (!webkit_support::DecodePNG(source, byteLength, &m_data, &m_width, &m_height)) {
+            delete [] source;
             clear();
             return false;
         }
+        delete [] source;
         return true;
     }
 
@@ -139,19 +150,19 @@ public:
     }
 
     // Returns the RGBA value of the pixel at the given location
-    const uint32_t pixelAt(int x, int y) const
+    const unsigned int pixelAt(int x, int y) const
     {
         ASSERT(x >= 0 && x < m_width);
         ASSERT(y >= 0 && y < m_height);
-        return *reinterpret_cast<const uint32_t*>(&(m_data[(y * m_width + x) * 4]));
+        return *reinterpret_cast<const unsigned int*>(&(m_data[(y * m_width + x) * 4]));
     }
 
-    void setPixelAt(int x, int y, uint32_t color) const
+    void setPixelAt(int x, int y, unsigned int color) const
     {
         ASSERT(x >= 0 && x < m_width);
         ASSERT(y >= 0 && y < m_height);
         void* addr = &const_cast<unsigned char*>(&m_data.front())[(y * m_width + x) * 4];
-        *reinterpret_cast<uint32_t*>(addr) = color;
+        *reinterpret_cast<unsigned int*>(addr) = color;
     }
 
 private:
@@ -195,24 +206,24 @@ float percentageDifferent(const Image& baseline, const Image& actual)
     return static_cast<float>(pixelsDifferent) / totalPixels * 100;
 }
 
-inline uint32_t maxOf3(uint32_t a, uint32_t b, uint32_t c)
+inline unsigned int maxOf3(unsigned int a, unsigned int b, unsigned int c)
 {
     if (a < b)
         return std::max(b, c);
     return std::max(a, c);
 }
 
-inline uint32_t getRedComponent(uint32_t color)
+inline unsigned int getRedComponent(unsigned int color)
 {
     return (color << 24) >> 24;
 }
 
-inline uint32_t getGreenComponent(uint32_t color)
+inline unsigned int getGreenComponent(unsigned int color)
 {
     return (color << 16) >> 24;
 }
 
-inline uint32_t getBlueComponent(uint32_t color)
+inline unsigned int getBlueComponent(unsigned int color)
 {
     return (color << 8) >> 24;
 }
@@ -227,20 +238,20 @@ float weightedPercentageDifferent(const Image& baseline, const Image& actual)
     float weightedPixelsDifferent = 0;
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            uint32_t actualColor = actual.pixelAt(x, y);
-            uint32_t baselineColor = baseline.pixelAt(x, y);
+            unsigned int actualColor = actual.pixelAt(x, y);
+            unsigned int baselineColor = baseline.pixelAt(x, y);
             if (baselineColor != actualColor) {
-                uint32_t actualR = getRedComponent(actualColor);
-                uint32_t actualG = getGreenComponent(actualColor);
-                uint32_t actualB = getBlueComponent(actualColor);
-                uint32_t baselineR = getRedComponent(baselineColor);
-                uint32_t baselineG = getGreenComponent(baselineColor);
-                uint32_t baselineB = getBlueComponent(baselineColor);
-                uint32_t deltaR = std::max(actualR, baselineR)
+                unsigned int actualR = getRedComponent(actualColor);
+                unsigned int actualG = getGreenComponent(actualColor);
+                unsigned int actualB = getBlueComponent(actualColor);
+                unsigned int baselineR = getRedComponent(baselineColor);
+                unsigned int baselineG = getGreenComponent(baselineColor);
+                unsigned int baselineB = getBlueComponent(baselineColor);
+                unsigned int deltaR = std::max(actualR, baselineR)
                     - std::min(actualR, baselineR);
-                uint32_t deltaG = std::max(actualG, baselineG)
+                unsigned int deltaG = std::max(actualG, baselineG)
                     - std::min(actualG, baselineG);
-                uint32_t deltaB = std::max(actualB, baselineB)
+                unsigned int deltaB = std::max(actualB, baselineB)
                     - std::min(actualB, baselineB);
                 weightedPixelsDifferent +=
                     static_cast<float>(maxOf3(deltaR, deltaG, deltaB)) / 255;
@@ -380,15 +391,15 @@ bool createImageDiff(const Image& image1, const Image& image2, Image* out)
     // FIXME: do something with the extra pixels if the image sizes are different.
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            uint32_t basePixel = image1.pixelAt(x, y);
+            unsigned int basePixel = image1.pixelAt(x, y);
             if (basePixel != image2.pixelAt(x, y)) {
                 // Set differing pixels red.
                 out->setPixelAt(x, y, rgbaRed | rgbaAlpha);
                 same = false;
             } else {
                 // Set same pixels as faded.
-                uint32_t alpha = basePixel & rgbaAlpha;
-                uint32_t newPixel = basePixel - ((alpha / 2) & rgbaAlpha);
+                unsigned int alpha = basePixel & rgbaAlpha;
+                unsigned int newPixel = basePixel - ((alpha / 2) & rgbaAlpha);
                 out->setPixelAt(x, y, newPixel);
             }
         }
@@ -449,7 +460,7 @@ int diffImages(const char* file1, const char* file2, const char* outFile,
 
 int main(int argc, const char* argv[])
 {
-    Vector<const char*> values;
+    std::vector<const char*> values;
     bool pollStdin = false;
     bool generateDiff = false;
     bool shouldWritePercentages = false;
@@ -464,7 +475,7 @@ int main(int argc, const char* argv[])
         else if (!strcmp(argv[i], optionWeightedIntensity))
             comparator = weightedPercentageDifferent;
         else
-            values.append(argv[i]);
+            values.push_back(argv[i]);
     }
 
     if (pollStdin) {

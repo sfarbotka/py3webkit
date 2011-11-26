@@ -63,8 +63,11 @@ WebInspector.Panel.prototype = {
 
     show: function()
     {
-        WebInspector.View.prototype.show.call(this);
+        WebInspector.View.prototype.show.call(this, WebInspector.inspectorView.element);
+    },
 
+    wasShown: function()
+    {
         var statusBarItems = this.statusBarItems;
         if (statusBarItems) {
             this._statusBarItemContainer = document.createElement("div");
@@ -76,22 +79,16 @@ WebInspector.Panel.prototype = {
         if ("_toolbarItem" in this)
             this._toolbarItem.addStyleClass("toggled-on");
 
-        WebInspector.currentFocusElement = this.defaultFocusedElement;
-
-        this.restoreSidebarWidth();
-        WebInspector.extensionServer.notifyPanelShown(this.name);
+        WebInspector.setCurrentFocusElement(this.defaultFocusedElement);
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.View.prototype.hide.call(this);
-
         if (this._statusBarItemContainer && this._statusBarItemContainer.parentNode)
             this._statusBarItemContainer.parentNode.removeChild(this._statusBarItemContainer);
         delete this._statusBarItemContainer;
         if ("_toolbarItem" in this)
             this._toolbarItem.removeStyleClass("toggled-on");
-        WebInspector.extensionServer.notifyPanelHidden(this.name);
     },
 
     reset: function()
@@ -102,12 +99,6 @@ WebInspector.Panel.prototype = {
     get defaultFocusedElement()
     {
         return this.sidebarTreeElement || this.element;
-    },
-
-    attach: function()
-    {
-        if (!this.element.parentNode)
-            document.getElementById("main-panels").appendChild(this.element);
     },
 
     searchCanceled: function()
@@ -131,31 +122,40 @@ WebInspector.Panel.prototype = {
 
     /**
      * @param {Element=} parentElement
-     * @param {Element=} resizerParentElement
+     * @param {string=} position
+     * @param {number=} defaultWidth
      */
-    createSidebar: function(parentElement, resizerParentElement)
+    createSplitView: function(parentElement, position, defaultWidth)
     {
-        if (this.sidebarElement)
+        if (this.splitView)
             return;
 
         if (!parentElement)
             parentElement = this.element;
 
-        if (!resizerParentElement)
-            resizerParentElement = parentElement;
+        this.splitView = new WebInspector.SplitView(position || WebInspector.SplitView.SidebarPosition.Left, this._sidebarWidthSettingName(), defaultWidth);
+        this.splitView.show(parentElement);
+        this.splitView.addEventListener(WebInspector.SplitView.EventTypes.Resized, this.sidebarResized.bind(this));
 
-        this.sidebarElement = document.createElement("div");
-        this.sidebarElement.className = "sidebar";
-        parentElement.appendChild(this.sidebarElement);
+        this.sidebarElement = this.splitView.sidebarElement;
+    },
 
-        this.sidebarResizeElement = document.createElement("div");
-        this.sidebarResizeElement.className = "sidebar-resizer-vertical";
-        this.sidebarResizeElement.addEventListener("mousedown", this._startSidebarDragging.bind(this), false);
-        resizerParentElement.appendChild(this.sidebarResizeElement);
+    /**
+     * @param {Element=} parentElement
+     * @param {string=} position
+     * @param {number=} defaultWidth
+     */
+    createSplitViewWithSidebarTree: function(parentElement, position, defaultWidth)
+    {
+        if (this.splitView)
+            return;
+
+        this.createSplitView(parentElement, position);
 
         this.sidebarTreeElement = document.createElement("ol");
         this.sidebarTreeElement.className = "sidebar-tree";
-        this.sidebarElement.appendChild(this.sidebarTreeElement);
+        this.splitView.sidebarElement.appendChild(this.sidebarTreeElement);
+        this.splitView.sidebarElement.addStyleClass("sidebar");
 
         this.sidebarTree = new TreeOutline(this.sidebarTreeElement);
         this.sidebarTree.panel = this;
@@ -164,75 +164,6 @@ WebInspector.Panel.prototype = {
     _sidebarWidthSettingName: function()
     {
         return this._panelName + "SidebarWidth";
-    },
-
-    _startSidebarDragging: function(event)
-    {
-        WebInspector.elementDragStart(this.sidebarResizeElement, this._sidebarDragging.bind(this), this._endSidebarDragging.bind(this), event, "ew-resize");
-    },
-
-    _sidebarDragging: function(event)
-    {
-        this.updateSidebarWidth(event.pageX);
-
-        event.preventDefault();
-    },
-
-    _endSidebarDragging: function(event)
-    {
-        WebInspector.elementDragEnd(event);
-        this.saveSidebarWidth();
-    },
-
-    updateSidebarWidth: function(width)
-    {
-        if (!this.sidebarElement)
-            return;
-
-        if (this.sidebarElement.offsetWidth <= 0) {
-            // The stylesheet hasn't loaded yet or the window is closed,
-            // so we can't calculate what is need. Return early.
-            return;
-        }
-
-        if (!("_currentSidebarWidth" in this))
-            this._currentSidebarWidth = this.sidebarElement.offsetWidth;
-
-        if (typeof width === "undefined")
-            width = this._currentSidebarWidth;
-
-        var maxWidth = window.innerWidth / 2;
-        if (!maxWidth)
-            maxWidth = width;
-        width = Number.constrain(width, Preferences.minSidebarWidth, maxWidth);
-
-        this._currentSidebarWidth = width;
-        this.setSidebarWidth(width);
-        this.updateMainViewWidth(width);
-        this.doResize();
-    },
-
-    setSidebarWidth: function(width)
-    {
-        this.sidebarElement.style.width = width + "px";
-        this.sidebarResizeElement.style.left = (width - 3) + "px";
-    },
-
-    preferredSidebarWidth: function()
-    {
-        return WebInspector.settings[this._sidebarWidthSettingName()].get();
-    },
-
-    restoreSidebarWidth: function()
-    {
-        this.updateSidebarWidth(this.preferredSidebarWidth());
-    },
-
-    saveSidebarWidth: function()
-    {
-        if (!this.sidebarElement)
-            return;
-        WebInspector.settings[this._sidebarWidthSettingName()].set(this.sidebarElement.offsetWidth);
     },
 
     // Should be implemented by ancestors.
@@ -245,7 +176,7 @@ WebInspector.Panel.prototype = {
     {
     },
 
-    updateMainViewWidth: function(width)
+    sidebarResized: function(width)
     {
     },
 

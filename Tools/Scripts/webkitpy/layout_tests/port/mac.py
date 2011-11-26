@@ -74,8 +74,8 @@ class MacPort(ApplePort):
         # MacPort objects just to test our version parsing.
         return os_version(os_version_string)
 
-    def __init__(self, **kwargs):
-        ApplePort.__init__(self, **kwargs)
+    def __init__(self, host, **kwargs):
+        ApplePort.__init__(self, host, **kwargs)
         self._operating_system = 'mac'
         self._leak_detector = LeakDetector(self)
         if self.get_option("leaks"):
@@ -102,6 +102,7 @@ class MacPort(ApplePort):
                 env['MallocStackLogging'] = '1'
             if self.get_option('guard_malloc'):
                 env['DYLD_INSERT_LIBRARIES'] = '/usr/lib/libgmalloc.dylib'
+        env['XML_CATALOG_FILES'] = ''  # work around missing /etc/catalog <rdar://problem/4292995>
         return env
 
     # Belongs on a Platform object.
@@ -111,6 +112,10 @@ class MacPort(ApplePort):
     # Belongs on a Platform object.
     def is_snowleopard(self):
         return self._version == "snowleopard"
+
+    # Belongs on a Platform object.
+    def is_lion(self):
+        return self._version == "lion"
 
     # Belongs on a Platform object.
     def is_crash_reporter(self, process_name):
@@ -139,12 +144,9 @@ class MacPort(ApplePort):
         leaks_files = self._leak_detector.leaks_files_in_directory(self.results_directory())
         if not leaks_files:
             return
-        total_bytes_string, unique_leaks = self._leak_detector.parse_leak_files(leaks_files)
-        # old-run-webkit-tests used to print the "total leaks" count, but that would
-        # require re-parsing each of the leaks files (which we could do at some later point if that would be useful.)
-        # Tools/BuildSlaveSupport/build.webkit.org-config/master.cfg greps for "leaks found".
-        # master.cfg will need an update if these strings change.
-        _log.info("leaks found for a total of %s!" % total_bytes_string)
+        total_bytes_string, unique_leaks = self._leak_detector.count_total_bytes_and_unique_leaks(leaks_files)
+        total_leaks = self._leak_detector.count_total_leaks(leaks_files)
+        _log.info("%s total leaks found for a total of %s!" % (total_leaks, total_bytes_string))
         _log.info("%s unique leaks found!" % unique_leaks)
 
     def _check_port_build(self):

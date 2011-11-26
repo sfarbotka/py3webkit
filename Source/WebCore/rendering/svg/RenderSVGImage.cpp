@@ -43,6 +43,7 @@
 #include "SVGPreserveAspectRatio.h"
 #include "SVGRenderSupport.h"
 #include "SVGResources.h"
+#include "SVGResourcesCache.h"
 
 namespace WebCore {
 
@@ -66,6 +67,7 @@ void RenderSVGImage::layout()
 
     LayoutRepainter repainter(*this, checkForRepaintDuringLayout() && selfNeedsLayout());
     SVGImageElement* image = static_cast<SVGImageElement*>(node());
+    m_imageResource->setContainerSizeForRenderer(enclosingIntRect(m_objectBoundingBox).size());
 
     bool transformOrBoundariesUpdate = m_needsTransformUpdate || m_updateCachedRepaintRect;
     if (m_needsTransformUpdate) {
@@ -96,7 +98,8 @@ void RenderSVGImage::updateFromElement()
     SVGImageElement* image = static_cast<SVGImageElement*>(node());
 
     FloatRect oldBoundaries = m_objectBoundingBox;
-    m_objectBoundingBox = FloatRect(image->x().value(image), image->y().value(image), image->width().value(image), image->height().value(image));
+    SVGLengthContext lengthContext(image);
+    m_objectBoundingBox = FloatRect(image->x().value(lengthContext), image->y().value(lengthContext), image->width().value(lengthContext), image->height().value(lengthContext));
     if (m_objectBoundingBox != oldBoundaries) {
         m_updateCachedRepaintRect = true;
         setNeedsLayout(true);

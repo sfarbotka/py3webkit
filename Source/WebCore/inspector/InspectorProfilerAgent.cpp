@@ -62,16 +62,17 @@ static const char* const UserInitiatedProfileName = "org.webkit.profiles.user-in
 static const char* const CPUProfileType = "CPU";
 static const char* const HeapProfileType = "HEAP";
 
-PassOwnPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(InstrumentingAgents* instrumentingAgents, InspectorConsoleAgent* consoleAgent, Page* inspectedPage, InspectorState* inspectorState)
+PassOwnPtr<InspectorProfilerAgent> InspectorProfilerAgent::create(InstrumentingAgents* instrumentingAgents, InspectorConsoleAgent* consoleAgent, Page* inspectedPage, InspectorState* inspectorState, InjectedScriptManager* injectedScriptManager)
 {
-    return adoptPtr(new InspectorProfilerAgent(instrumentingAgents, consoleAgent, inspectedPage, inspectorState));
+    return adoptPtr(new InspectorProfilerAgent(instrumentingAgents, consoleAgent, inspectedPage, inspectorState, injectedScriptManager));
 }
 
-InspectorProfilerAgent::InspectorProfilerAgent(InstrumentingAgents* instrumentingAgents, InspectorConsoleAgent* consoleAgent, Page* inspectedPage, InspectorState* inspectorState)
+InspectorProfilerAgent::InspectorProfilerAgent(InstrumentingAgents* instrumentingAgents, InspectorConsoleAgent* consoleAgent, Page* inspectedPage, InspectorState* inspectorState, InjectedScriptManager* injectedScriptManager)
     : m_instrumentingAgents(instrumentingAgents)
     , m_consoleAgent(consoleAgent)
     , m_inspectedPage(inspectedPage)
     , m_inspectorState(inspectorState)
+    , m_injectedScriptManager(injectedScriptManager)
     , m_frontend(0)
     , m_enabled(false)
     , m_recordingUserInitiatedProfile(false)
@@ -241,7 +242,7 @@ void InspectorProfilerAgent::removeProfile(ErrorString*, const String& type, uns
 
 void InspectorProfilerAgent::resetState()
 {
-    stopUserInitiatedProfiling();
+    stop();
     m_profiles.clear();
     m_snapshots.clear();
     m_currentUserInitiatedProfileNumber = 1;
@@ -267,7 +268,7 @@ void InspectorProfilerAgent::setFrontend(InspectorFrontend* frontend)
 void InspectorProfilerAgent::clearFrontend()
 {
     m_frontend = 0;
-    stopUserInitiatedProfiling();
+    stop();
 }
 
 void InspectorProfilerAgent::restore()
@@ -278,7 +279,7 @@ void InspectorProfilerAgent::restore()
     // Revisit this.
     resetFrontendProfiles();
     if (m_inspectorState->getBoolean(ProfilerAgentState::userInitiatedProfiling))
-        startUserInitiatedProfiling();
+        start();
 }
 
 void InspectorProfilerAgent::restoreEnablement()
@@ -289,7 +290,7 @@ void InspectorProfilerAgent::restoreEnablement()
     }
 }
 
-void InspectorProfilerAgent::startUserInitiatedProfiling()
+void InspectorProfilerAgent::start(ErrorString*)
 {
     if (m_recordingUserInitiatedProfile)
         return;
@@ -310,7 +311,7 @@ void InspectorProfilerAgent::startUserInitiatedProfiling()
     m_inspectorState->setBoolean(ProfilerAgentState::userInitiatedProfiling, true);
 }
 
-void InspectorProfilerAgent::stopUserInitiatedProfiling(bool ignoreProfile)
+void InspectorProfilerAgent::stop(ErrorString*)
 {
     if (!m_recordingUserInitiatedProfile)
         return;
@@ -324,12 +325,8 @@ void InspectorProfilerAgent::stopUserInitiatedProfiling(bool ignoreProfile)
     ScriptState* scriptState = 0;
 #endif
     RefPtr<ScriptProfile> profile = ScriptProfiler::stop(scriptState, title);
-    if (profile) {
-        if (!ignoreProfile)
-            addProfile(profile, 0, String());
-        else
-            addProfileFinishedMessageToConsole(profile, 0, String());
-    }
+    if (profile)
+        addProfile(profile, 0, String());
     toggleRecordButton(false);
     m_inspectorState->setBoolean(ProfilerAgentState::userInitiatedProfiling, false);
 }
@@ -376,6 +373,15 @@ void InspectorProfilerAgent::toggleRecordButton(bool isProfiling)
 {
     if (m_frontend)
         m_frontend->setRecordingProfile(isProfiling);
+}
+
+void InspectorProfilerAgent::getObjectByHeapObjectId(ErrorString* error, int id, RefPtr<InspectorObject>* result)
+{
+    RefPtr<InspectorValue> heapObject = ScriptProfiler::objectByHeapObjectId(id, m_injectedScriptManager);
+    if (!heapObject->isNull())
+        heapObject->asObject(result);
+    else
+        *error = "Object is not available.";
 }
 
 } // namespace WebCore

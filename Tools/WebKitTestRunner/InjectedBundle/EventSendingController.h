@@ -31,7 +31,7 @@
 #include <WebKit2/WKGeometry.h>
 #include <wtf/PassRefPtr.h>
 
-#if !PLATFORM(MAC) && !PLATFORM(QT)
+#if !PLATFORM(MAC) && !PLATFORM(QT) && !PLATFORM(GTK)
 #define USE_WEBPROCESS_EVENT_SIMULATION
 #endif
 
@@ -61,6 +61,18 @@ public:
     void zoomPageIn();
     void zoomPageOut();
     void scalePageBy(double scale, double x, double y);
+
+#if ENABLE(TOUCH_EVENTS)
+    // Touch events.
+    void addTouchPoint(int x, int y);
+    void updateTouchPoint(int index, int x, int y);
+    void setTouchModifier(const JSStringRef &modifier, bool enable);
+    void touchStart();
+    void touchMove();
+    void touchEnd();
+    void clearTouchPoints();
+    void releaseTouchPoint(int index);
+#endif
 
 private:
     EventSendingController();

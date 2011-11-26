@@ -115,7 +115,7 @@ static bool isDeletableElement(const Node* node)
         // Allow blocks that have background images
         if (style->hasBackgroundImage()) {
             for (const FillLayer* background = style->backgroundLayers(); background; background = background->next()) {
-                if (background->image() && background->image()->canRender(1))
+                if (background->image() && background->image()->canRender(renderer, 1))
                     return true;
             }
         }
@@ -284,7 +284,7 @@ void DeleteButtonController::show(HTMLElement* element)
     if (!enabled() || !element || !element->inDocument() || !isDeletableElement(element))
         return;
 
-    if (!m_frame->editor()->shouldShowDeleteInterface(toHTMLElement(element)))
+    if (!m_frame->editor()->shouldShowDeleteInterface(element))
         return;
 
     // we rely on the renderer having current information, so we should update the layout if needed

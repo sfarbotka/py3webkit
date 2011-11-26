@@ -23,16 +23,18 @@
 #include "CSSStyleRule.h"
 
 #include "CSSMutableStyleDeclaration.h"
+#include "CSSPageRule.h"
 #include "CSSParser.h"
 #include "CSSSelector.h"
 #include "CSSStyleSheet.h"
 #include "Document.h"
+#include "StyledElement.h"
 #include "StyleSheet.h"
 
 namespace WebCore {
 
-CSSStyleRule::CSSStyleRule(CSSStyleSheet* parent, int sourceLine)
-    : CSSRule(parent)
+CSSStyleRule::CSSStyleRule(CSSStyleSheet* parent, int sourceLine, CSSRule::Type type)
+    : CSSRule(parent, type)
     , m_sourceLine(sourceLine)
 {
 }
@@ -40,11 +42,14 @@ CSSStyleRule::CSSStyleRule(CSSStyleSheet* parent, int sourceLine)
 CSSStyleRule::~CSSStyleRule()
 {
     if (m_style)
-        m_style->setParent(0);
+        m_style->setParentRule(0);
 }
 
 String CSSStyleRule::selectorText() const
 {
+    if (isPageRule())
+        return static_cast<const CSSPageRule*>(this)->pageSelectorText();
+
     String str;
     for (CSSSelector* s = selectorList().first(); s; s = CSSSelectorList::next(s)) {
         if (s != selectorList().first())
@@ -57,15 +62,14 @@ String CSSStyleRule::selectorText() const
 void CSSStyleRule::setSelectorText(const String& selectorText)
 {
     Document* doc = 0;
-    StyleSheet* ownerStyleSheet = m_style->stylesheet();
-    if (ownerStyleSheet) {
-        if (ownerStyleSheet->isCSSStyleSheet())
-            doc = static_cast<CSSStyleSheet*>(ownerStyleSheet)->document();
-        if (!doc)
-            doc = ownerStyleSheet->ownerNode() ? ownerStyleSheet->ownerNode()->document() : 0;
+
+    if (CSSStyleSheet* styleSheet = m_style->parentStyleSheet())
+        doc = styleSheet->findDocument();
+
+    if (!doc && m_style->isElementStyleDeclaration()) {
+        if (StyledElement* element = static_cast<CSSElementStyleDeclaration*>(m_style.get())->element())
+            doc = element->document();
     }
-    if (!doc)
-        doc = m_style->node() ? m_style->node()->document() : 0;
 
     if (!doc)
         return;
@@ -93,17 +97,6 @@ String CSSStyleRule::cssText() const
     result += "}";
 
     return result;
-}
-
-bool CSSStyleRule::parseString(const String& /*string*/, bool /*strict*/)
-{
-    // FIXME
-    return false;
-}
-
-void CSSStyleRule::setDeclaration(PassRefPtr<CSSMutableStyleDeclaration> style)
-{
-    m_style = style;
 }
 
 void CSSStyleRule::addSubresourceStyleURLs(ListHashSet<KURL>& urls)

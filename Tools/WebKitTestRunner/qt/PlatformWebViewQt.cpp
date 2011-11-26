@@ -27,48 +27,50 @@
 #include "config.h"
 
 #include "PlatformWebView.h"
-#include "qdesktopwebview.h"
+#include "qquickwebpage_p.h"
+#include "qquickwebview_p.h"
 
 #include <QApplication>
 #include <QDeclarativeProperty>
-#include <QSGView>
+#include <QQuickView>
+#include <qwindowsysteminterface_qpa.h>
 
 namespace WTR {
 
-class WrapperWindow : public QSGView {
+class WrapperWindow : public QQuickView {
     Q_OBJECT
 public:
-    WrapperWindow(QSGItem* view)
-        : QSGView(QUrl("data:text/plain,import QtQuick 2.0\nItem { objectName: 'root' }"))
+    WrapperWindow(QQuickWebView* view)
+        : QQuickView(QUrl("data:text/plain,import QtQuick 2.0\nItem { objectName: 'root' }"))
         , m_view(view)
     {
-        connect(this, SIGNAL(statusChanged(QSGView::Status)), SLOT(handleStatusChanged(QSGView::Status)));
+        connect(this, SIGNAL(statusChanged(QQuickView::Status)), SLOT(handleStatusChanged(QQuickView::Status)));
     }
 
 private slots:
-    void handleStatusChanged(QSGView::Status status)
+    void handleStatusChanged(QQuickView::Status status)
     {
-        if (status != QSGView::Ready)
+        if (status != QQuickView::Ready)
             return;
 
         setGeometry(0, 0, 800, 600);
-        setResizeMode(QSGView::SizeRootObjectToView);
+        setResizeMode(QQuickView::SizeRootObjectToView);
 
         m_view->setParentItem(rootObject());
         QDeclarativeProperty::write(m_view, "anchors.fill", qVariantFromValue(rootObject()));
 
-        QFocusEvent ev(QEvent::WindowActivate);
-        QApplication::sendEvent(m_view, &ev);
-        m_view->setFocus(Qt::OtherFocusReason);
+        QWindowSystemInterface::handleWindowActivated(this);
+        m_view->page()->setFocus(true);
     }
 
 private:
-    QSGItem* m_view;
+    QQuickWebView* m_view;
 };
 
 PlatformWebView::PlatformWebView(WKContextRef contextRef, WKPageGroupRef pageGroupRef)
-    : m_view(new QDesktopWebView(contextRef, pageGroupRef))
+    : m_view(new QQuickWebView(contextRef, pageGroupRef))
     , m_window(new WrapperWindow(m_view))
+    , m_windowIsKey(true)
 {
 }
 
@@ -110,12 +112,12 @@ void PlatformWebView::setWindowFrame(WKRect wkRect)
 
 bool PlatformWebView::sendEvent(QEvent* event)
 {
-    return QCoreApplication::sendEvent(m_view, event);
+    return QCoreApplication::sendEvent(m_view->page(), event);
 }
 
 void PlatformWebView::postEvent(QEvent* event)
 {
-    QCoreApplication::postEvent(m_view, event);
+    QCoreApplication::postEvent(m_view->page(), event);
 }
 
 void PlatformWebView::addChromeInputField()
@@ -128,6 +130,13 @@ void PlatformWebView::removeChromeInputField()
 
 void PlatformWebView::makeWebViewFirstResponder()
 {
+}
+
+WKRetainPtr<WKImageRef> PlatformWebView::windowSnapshotImage()
+{
+    // FIXME: implement to capture pixels in the UI process,
+    // which may be necessary to capture things like 3D transforms.
+    return 0;
 }
 
 } // namespace WTR

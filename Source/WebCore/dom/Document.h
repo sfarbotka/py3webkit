@@ -33,17 +33,21 @@
 #include "CollectionType.h"
 #include "Color.h"
 #include "DOMTimeStamp.h"
+#include "DocumentEventQueue.h"
 #include "DocumentTiming.h"
 #include "IconURL.h"
 #include "IntRect.h"
 #include "LayoutTypes.h"
 #include "PageVisibilityState.h"
+#include "PlatformScreen.h"
 #include "QualifiedName.h"
 #include "ScriptExecutionContext.h"
+#include "SecurityPolicy.h"
 #include "StringWithDirection.h"
 #include "Timer.h"
 #include "TreeScope.h"
 #include "ViewportArguments.h"
+#include "WebKitMutationObserver.h"
 #include <wtf/Deque.h>
 #include <wtf/FixedArray.h>
 #include <wtf/OwnPtr.h>
@@ -80,7 +84,6 @@ class Element;
 class EntityReference;
 class Event;
 class EventListener;
-class EventQueue;
 class FontData;
 class FormAssociatedElement;
 class Frame;
@@ -128,6 +131,10 @@ class TextResourceDecoder;
 class DocumentParser;
 class TreeWalker;
 class XMLHttpRequest;
+class XPathEvaluator;
+class XPathExpression;
+class XPathNSResolver;
+class XPathResult;
 
 #if ENABLE(SVG)
 class SVGDocumentExtensions;
@@ -135,13 +142,6 @@ class SVGDocumentExtensions;
 
 #if ENABLE(XSLT)
 class TransformSource;
-#endif
-
-#if ENABLE(XPATH)
-class XPathEvaluator;
-class XPathExpression;
-class XPathNSResolver;
-class XPathResult;
 #endif
 
 #if ENABLE(DASHBOARD_SUPPORT)
@@ -156,6 +156,10 @@ class TouchList;
 #if ENABLE(REQUEST_ANIMATION_FRAME)
 class RequestAnimationFrameCallback;
 class ScriptedAnimationController;
+#endif
+
+#if ENABLE(MICRODATA)
+class MicroDataItemList;
 #endif
 
 typedef int ExceptionCode;
@@ -320,6 +324,8 @@ public:
 
     ViewportArguments viewportArguments() const { return m_viewportArguments; }
 
+    SecurityPolicy::ReferrerPolicy referrerPolicy() const { return m_referrerPolicy; }
+
     DocumentType* doctype() const { return m_docType.get(); }
 
     DOMImplementation* implementation();
@@ -340,6 +346,7 @@ public:
     PassRefPtr<Attr> createAttribute(const String& name, ExceptionCode&);
     PassRefPtr<Attr> createAttributeNS(const String& namespaceURI, const String& qualifiedName, ExceptionCode&, bool shouldIgnoreNamespaceChecks = false);
     PassRefPtr<EntityReference> createEntityReference(const String& name, ExceptionCode&);
+    PassRefPtr<Node> importNode(Node* importedNode, ExceptionCode& ec) { return importNode(importedNode, true, ec); }
     PassRefPtr<Node> importNode(Node* importedNode, bool deep, ExceptionCode&);
     virtual PassRefPtr<Element> createElementNS(const String& namespaceURI, const String& qualifiedName, ExceptionCode&);
     PassRefPtr<Element> createElement(const QualifiedName&, bool createdByParser);
@@ -440,11 +447,6 @@ public:
 #endif
     virtual bool isPluginDocument() const { return false; }
     virtual bool isMediaDocument() const { return false; }
-#if ENABLE(XHTMLMP)
-    bool isXHTMLMPDocument() const; 
-    bool shouldProcessNoscriptElement() const { return m_shouldProcessNoScriptElement; }
-    void setShouldProcessNoscriptElement(bool shouldDo) { m_shouldProcessNoScriptElement = shouldDo; }
-#endif
     virtual bool isFrameSet() const { return false; }
     
     PassRefPtr<CSSPrimitiveValueCache> cssPrimitiveValueCache() const;
@@ -550,7 +552,7 @@ public:
     PassRefPtr<RenderStyle> styleForElementIgnoringPendingStylesheets(Element*);
     PassRefPtr<RenderStyle> styleForPage(int pageIndex);
 
-    void retireCustomFont(FontData*);
+    void registerCustomFont(FontData*);
 
     // Returns true if page box (margin boxes and page borders) is visible.
     bool isPageBoxVisible(int pageIndex);
@@ -566,6 +568,10 @@ public:
 
     virtual void attach();
     virtual void detach();
+
+    // Override ScriptExecutionContext methods to do additional work
+    virtual void suspendActiveDOMObjects(ActiveDOMObject::ReasonForSuspension) OVERRIDE;
+    virtual void resumeActiveDOMObjects() OVERRIDE;
 
     RenderArena* renderArena() { return m_renderArena.get(); }
 
@@ -605,6 +611,8 @@ public:
     void setURL(const KURL&);
 
     const KURL& baseURL() const { return m_baseURL; }
+    void setBaseURLOverride(const KURL&);
+    const KURL& baseURLOverride() const { return m_baseURLOverride; }
     const String& baseTarget() const { return m_baseTarget; }
     void processBaseElement();
 
@@ -775,6 +783,15 @@ public:
     void addListenerType(ListenerType listenerType) { m_listenerTypes = m_listenerTypes | listenerType; }
     void addListenerTypeIfNeeded(const AtomicString& eventType);
 
+#if ENABLE(MUTATION_OBSERVERS)
+    bool hasSubtreeMutationObserverOfType(WebKitMutationObserver::MutationType type) const
+    {
+        return m_subtreeMutationObserverTypes & type;
+    }
+    bool hasSubtreeMutationObserver() const { return m_subtreeMutationObserverTypes; }
+    void addSubtreeMutationObserverTypes(MutationObserverOptions types) { m_subtreeMutationObserverTypes |= types; }
+#endif
+
     CSSStyleDeclaration* getOverrideStyle(Element*, const String& pseudoElt);
 
     int nodeAbsIndex(Node*);
@@ -791,6 +808,7 @@ public:
      */
     void processHttpEquiv(const String& equiv, const String& content);
     void processViewport(const String& features);
+    void processReferrerPolicy(const String& policy);
 
     // Returns the owning element in the parent document.
     // Returns 0 if this is the top level document.
@@ -900,7 +918,6 @@ public:
 
     void setDocType(PassRefPtr<DocumentType>);
 
-#if ENABLE(XPATH)
     // XPathEvaluator methods
     PassRefPtr<XPathExpression> createExpression(const String& expression,
                                                  XPathNSResolver* resolver,
@@ -912,8 +929,7 @@ public:
                                      unsigned short type,
                                      XPathResult* result,
                                      ExceptionCode& ec);
-#endif // ENABLE(XPATH)
-    
+
     enum PendingSheetLayout { NoLayoutWithPendingSheets, DidLayoutWithPendingSheets, IgnoreLayoutWithPendingSheets };
 
     bool didLayoutWithPendingStylesheets() const { return m_pendingSheetLayout == DidLayoutWithPendingSheets; }
@@ -944,6 +960,8 @@ public:
 
     virtual void suspendScriptedAnimationControllerCallbacks();
     virtual void resumeScriptedAnimationControllerCallbacks();
+    
+    void windowScreenDidChange(PlatformDisplayID);
 
     virtual void finishedParsing();
 
@@ -1002,7 +1020,7 @@ public:
     // Explicitly override the security origin for this document.
     // Note: It is dangerous to change the security origin of a document
     //       that already contains content.
-    void setSecurityOrigin(SecurityOrigin*);
+    void setSecurityOrigin(PassRefPtr<SecurityOrigin>);
 
     void updateURLForPushOrReplaceState(const KURL&);
     void statePopped(SerializedScriptValue*);
@@ -1029,7 +1047,7 @@ public:
     void enqueuePageshowEvent(PageshowEventPersistence);
     void enqueueHashchangeEvent(const String& oldURL, const String& newURL);
     void enqueuePopstateEvent(PassRefPtr<SerializedScriptValue> stateObject);
-    EventQueue* eventQueue() const { return m_eventQueue.get(); }
+    virtual DocumentEventQueue* eventQueue() const { return m_eventQueue.get(); }
 
     void addMediaCanStartListener(MediaCanStartListener*);
     void removeMediaCanStartListener(MediaCanStartListener*);
@@ -1098,7 +1116,14 @@ public:
     void didRemoveWheelEventHandler();
     
     bool visualUpdatesAllowed() const;
+
+#if ENABLE(MICRODATA)
+    PassRefPtr<NodeList> getItems(const String& typeNames);
+    void removeCachedMicroDataItemList(MicroDataItemList*, const String&);
+#endif
     
+    bool isInDocumentWrite() { return m_writeRecursionDepth > 0; }
+
 protected:
     Document(Frame*, const KURL&, bool isXHTML, bool isHTML);
 
@@ -1140,7 +1165,7 @@ private:
 
     void createStyleSelector();
 
-    void deleteRetiredCustomFonts();
+    void deleteCustomFonts();
 
     PassRefPtr<NodeList> handleZeroPadding(const HitTestRequest&, HitTestResult&) const;
 
@@ -1155,7 +1180,7 @@ private:
     OwnPtr<CSSStyleSelector> m_styleSelector;
     bool m_didCalculateStyleSelector;
     bool m_hasDirtyStyleSelector;
-    Vector<OwnPtr<FontData> > m_retiredCustomFonts;
+    Vector<OwnPtr<FontData> > m_customFonts;
 
     mutable RefPtr<CSSPrimitiveValueCache> m_cssPrimitiveValueCache;
 
@@ -1167,6 +1192,7 @@ private:
     // Document URLs.
     KURL m_url; // Document.URL: The URL from which this document was retrieved.
     KURL m_baseURL; // Node.baseURI: The URL to use when resolving relative URLs.
+    KURL m_baseURLOverride; // An alternative base URL that takes precedence ove m_baseURL (but not m_baseElementURL).
     KURL m_baseElementURL; // The URL set by the <base> element.
     KURL m_cookieURL; // The URL to use for cookie access.
     KURL m_firstPartyForCookies; // The policy URL for third-party cookie blocking.
@@ -1229,6 +1255,10 @@ private:
     HashSet<Range*> m_ranges;
 
     unsigned short m_listenerTypes;
+
+#if ENABLE(MUTATION_OBSERVERS)
+    MutationObserverOptions m_subtreeMutationObserverTypes;
+#endif
 
     RefPtr<StyleSheetList> m_styleSheets; // All of the stylesheets that are currently in effect for our media type and stylesheet set.
     
@@ -1317,10 +1347,6 @@ private:
 
     String m_contentLanguage;
 
-#if ENABLE(XHTMLMP)
-    bool m_shouldProcessNoScriptElement;
-#endif
-
     RenderObject* m_savedRenderer;
     
     RefPtr<TextResourceDecoder> m_decoder;
@@ -1333,14 +1359,12 @@ private:
     FixedArray<CollectionCache, NumUnnamedDocumentCachedTypes> m_collectionInfo;
     FixedArray<NamedCollectionMap, NumNamedDocumentCachedTypes> m_nameCollectionInfo;
 
-#if ENABLE(XPATH)
     RefPtr<XPathEvaluator> m_xpathEvaluator;
-#endif
-    
+
 #if ENABLE(SVG)
     OwnPtr<SVGDocumentExtensions> m_svgExtensions;
 #endif
-    
+
 #if ENABLE(DASHBOARD_SUPPORT)
     Vector<DashboardRegionValue> m_dashboardRegions;
     bool m_hasDashboardRegions;
@@ -1370,7 +1394,7 @@ private:
 
     bool m_usingGeolocation;
 
-    RefPtr<EventQueue> m_eventQueue;
+    RefPtr<DocumentEventQueue> m_eventQueue;
 
     RefPtr<DocumentWeakReference> m_weakReference;
 
@@ -1393,6 +1417,8 @@ private:
     Timer<Document> m_loadEventDelayTimer;
 
     ViewportArguments m_viewportArguments;
+
+    SecurityPolicy::ReferrerPolicy m_referrerPolicy;
 
     bool m_directionSetOnDocumentElement;
     bool m_writingModeSetOnDocumentElement;
@@ -1417,11 +1443,11 @@ inline bool Node::isDocumentNode() const
 }
 
 inline Node::Node(Document* document, ConstructionType type)
-    : m_document(document)
+    : m_nodeFlags(type)
+    , m_document(document)
     , m_previous(0)
     , m_next(0)
     , m_renderer(0)
-    , m_nodeFlags(type)
 {
     if (m_document)
         m_document->guardRef();

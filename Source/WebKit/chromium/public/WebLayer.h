@@ -26,8 +26,9 @@
 #ifndef WebLayer_h
 #define WebLayer_h
 
-#include "WebCommon.h"
-#include "WebPrivatePtr.h"
+#include "WebColor.h"
+#include "platform/WebCommon.h"
+#include "platform/WebPrivatePtr.h"
 
 class SkMatrix44;
 namespace WebCore { class LayerChromium; }
@@ -39,16 +40,17 @@ struct WebSize;
 
 class WebLayer {
 public:
-    static WebLayer create(WebLayerClient*);
+    WEBKIT_EXPORT static WebLayer create(WebLayerClient*);
 
     WebLayer() { }
     WebLayer(const WebLayer& layer) { assign(layer); }
-    virtual ~WebLayer();
+    virtual ~WebLayer() { reset(); }
     WebLayer& operator=(const WebLayer& layer)
     {
         assign(layer);
         return *this;
     }
+    bool isNull() { return m_private.isNull(); }
     WEBKIT_EXPORT void reset();
     WEBKIT_EXPORT void assign(const WebLayer&);
     WEBKIT_EXPORT bool equals(const WebLayer&) const;
@@ -90,6 +92,9 @@ public:
 
     WEBKIT_EXPORT void setTransform(const SkMatrix44&);
     WEBKIT_EXPORT SkMatrix44 transform() const;
+
+    WEBKIT_EXPORT void setDebugBorderColor(const WebColor&);
+    WEBKIT_EXPORT void setDebugBorderWidth(float);
 
     template<typename T> T to()
     {

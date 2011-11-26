@@ -38,7 +38,7 @@
 #include <cstdio>
 #include <wtf/PassOwnPtr.h>
 
-#if PLATFORM(MAC) || PLATFORM(QT)
+#if PLATFORM(MAC) || PLATFORM(QT) || PLATFORM(GTK)
 #include "EventSenderProxy.h"
 #endif
 
@@ -74,7 +74,7 @@ TestController::TestController(int argc, const char* argv[])
     , m_didPrintWebProcessCrashedMessage(false)
     , m_shouldExitWhenWebProcessCrashes(true)
     , m_beforeUnloadReturnValue(true)
-#if PLATFORM(MAC) || PLATFORM(QT)
+#if PLATFORM(MAC) || PLATFORM(QT) || PLATFORM(GTK)
     , m_eventSenderProxy(new EventSenderProxy(this))
 #endif
 {
@@ -128,14 +128,29 @@ static unsigned long long exceededDatabaseQuota(WKPageRef, WKFrameRef, WKSecurit
 
 void TestController::runModal(WKPageRef page, const void* clientInfo)
 {
-    runModal(static_cast<PlatformWebView*>(const_cast<void*>(clientInfo)));
+    PlatformWebView* view = static_cast<PlatformWebView*>(const_cast<void*>(clientInfo));
+    view->setWindowIsKey(false);
+    runModal(view);
+    view->setWindowIsKey(true);
 }
 
 static void closeOtherPage(WKPageRef page, const void* clientInfo)
 {
     WKPageClose(page);
-    const PlatformWebView* view = static_cast<const PlatformWebView*>(clientInfo);
+    PlatformWebView* view = static_cast<PlatformWebView*>(const_cast<void*>(clientInfo));
     delete view;
+}
+
+static void focus(WKPageRef page, const void* clientInfo)
+{
+    PlatformWebView* view = static_cast<PlatformWebView*>(const_cast<void*>(clientInfo));
+    view->setWindowIsKey(true);
+}
+
+static void unfocus(WKPageRef page, const void* clientInfo)
+{
+    PlatformWebView* view = static_cast<PlatformWebView*>(const_cast<void*>(clientInfo));
+    view->setWindowIsKey(false);
 }
 
 WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKURLRequestRef, WKDictionaryRef, WKEventModifiers, WKEventMouseButton, const void*)
@@ -152,8 +167,8 @@ WKPageRef TestController::createOtherPage(WKPageRef oldPage, WKURLRequestRef, WK
         0, // showPage
         closeOtherPage,
         0, // takeFocus
-        0, // focus
-        0, // unfocus
+        focus,
+        unfocus,
         0, // runJavaScriptAlert        
         0, // runJavaScriptConfirm
         0, // runJavaScriptPrompt
@@ -350,7 +365,7 @@ void TestController::initialize(int argc, const char* argv[])
         0, // didStartProvisionalLoadForFrame
         0, // didReceiveServerRedirectForProvisionalLoadForFrame
         0, // didFailProvisionalLoadWithErrorForFrame
-        0, // didCommitLoadForFrame
+        didCommitLoadForFrame,
         0, // didFinishDocumentLoadForFrame
         didFinishLoadForFrame,
         0, // didFailLoadWithErrorForFrame
@@ -359,8 +374,8 @@ void TestController::initialize(int argc, const char* argv[])
         0, // didFirstLayoutForFrame
         0, // didFirstVisuallyNonEmptyLayoutForFrame
         0, // didRemoveFrameFromHierarchy
+        0, // didFailToInitializePlugin
         0, // didDisplayInsecureContentForFrame
-        0, // didRunInsecureContentForFrame
         0, // canAuthenticateAgainstProtectionSpaceInFrame
         0, // didReceiveAuthenticationChallengeInFrame
         0, // didStartProgress
@@ -371,7 +386,8 @@ void TestController::initialize(int argc, const char* argv[])
         processDidCrash,
         0, // didChangeBackForwardList
         0, // shouldGoToBackForwardListItem
-        0  // didFailToInitializePlugin
+        0, // didRunInsecureContentForFrame
+        0  // didDetectXSSForFrame
     };
     WKPageSetPageLoaderClient(m_mainWebView->page(), &pageLoaderClient);
 }
@@ -431,6 +447,9 @@ bool TestController::resetStateToConsistentValues()
     // in the case that a test using the chrome input field failed, be sure to clean up for the next test
     m_mainWebView->removeChromeInputField();
     m_mainWebView->focus();
+
+    // Re-set to the default backing scale factor by setting the custom scale factor to 0.
+    WKPageSetCustomBackingScaleFactor(m_mainWebView->page(), 0);
 
     // Reset main page back to about:blank
     m_doneResetting = false;
@@ -522,7 +541,7 @@ void TestController::didReceiveMessageFromInjectedBundle(WKStringRef messageName
 
 WKRetainPtr<WKTypeRef> TestController::didReceiveSynchronousMessageFromInjectedBundle(WKStringRef messageName, WKTypeRef messageBody)
 {
-#if PLATFORM(MAC) || PLATFORM(QT)
+#if PLATFORM(MAC) || PLATFORM(QT) || PLATFORM(GTK)
     if (WKStringIsEqualToUTF8CString(messageName, "EventSender")) {
         ASSERT(WKGetTypeID(messageBody) == WKDictionaryGetTypeID());
         WKDictionaryRef messageBodyDictionary = static_cast<WKDictionaryRef>(messageBody);
@@ -547,6 +566,7 @@ WKRetainPtr<WKTypeRef> TestController::didReceiveSynchronousMessageFromInjectedB
             return 0;
         }
 
+#if PLATFORM(MAC) || PLATFORM(QT) || PLATFORM(GTK)
         if (WKStringIsEqualToUTF8CString(subMessageName, "MouseDown") || WKStringIsEqualToUTF8CString(subMessageName, "MouseUp")) {
             WKRetainPtr<WKStringRef> buttonKey = adoptWK(WKStringCreateWithUTF8CString("Button"));
             unsigned button = static_cast<unsigned>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, buttonKey.get()))));
@@ -599,7 +619,78 @@ WKRetainPtr<WKTypeRef> TestController::didReceiveSynchronousMessageFromInjectedB
             m_eventSenderProxy->leapForward(time);
             return 0;
         }
+#endif
 
+#if ENABLE(TOUCH_EVENTS)
+        if (WKStringIsEqualToUTF8CString(subMessageName, "AddTouchPoint")) {
+            WKRetainPtr<WKStringRef> xKey = adoptWK(WKStringCreateWithUTF8CString("X"));
+            int x = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, xKey.get()))));
+
+            WKRetainPtr<WKStringRef> yKey = adoptWK(WKStringCreateWithUTF8CString("Y"));
+            int y = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, yKey.get()))));
+
+            m_eventSenderProxy->addTouchPoint(x, y);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "UpdateTouchPoint")) {
+            WKRetainPtr<WKStringRef> indexKey = adoptWK(WKStringCreateWithUTF8CString("Index"));
+            int index = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, indexKey.get()))));
+
+            WKRetainPtr<WKStringRef> xKey = adoptWK(WKStringCreateWithUTF8CString("X"));
+            int x = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, xKey.get()))));
+
+            WKRetainPtr<WKStringRef> yKey = adoptWK(WKStringCreateWithUTF8CString("Y"));
+            int y = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, yKey.get()))));
+
+            m_eventSenderProxy->updateTouchPoint(index, x, y);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "SetTouchModifier")) {
+            WKRetainPtr<WKStringRef> modifierKey = adoptWK(WKStringCreateWithUTF8CString("Modifier"));
+            WKEventModifiers modifier = static_cast<WKEventModifiers>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, modifierKey.get()))));
+
+            WKRetainPtr<WKStringRef> enableKey = adoptWK(WKStringCreateWithUTF8CString("Enable"));
+            bool enable = static_cast<bool>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, enableKey.get()))));
+
+            m_eventSenderProxy->setTouchModifier(modifier, enable);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "TouchStart")) {
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->touchStart();
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "TouchMove")) {
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->touchMove();
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "TouchEnd")) {
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), true);
+            m_eventSenderProxy->touchEnd();
+            WKPageSetShouldSendEventsSynchronously(mainWebView()->page(), false);
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "ClearTouchPoints")) {
+            m_eventSenderProxy->clearTouchPoints();
+            return 0;
+        }
+
+        if (WKStringIsEqualToUTF8CString(subMessageName, "ReleaseTouchPoint")) {
+            WKRetainPtr<WKStringRef> indexKey = adoptWK(WKStringCreateWithUTF8CString("Index"));
+            int index = static_cast<int>(WKUInt64GetValue(static_cast<WKUInt64Ref>(WKDictionaryGetItemForKey(messageBodyDictionary, indexKey.get()))));
+            m_eventSenderProxy->releaseTouchPoint(index);
+            return 0;
+        }
+#endif
         ASSERT_NOT_REACHED();
     }
 #endif
@@ -607,6 +698,11 @@ WKRetainPtr<WKTypeRef> TestController::didReceiveSynchronousMessageFromInjectedB
 }
 
 // WKPageLoaderClient
+
+void TestController::didCommitLoadForFrame(WKPageRef page, WKFrameRef frame, WKTypeRef, const void* clientInfo)
+{
+    static_cast<TestController*>(const_cast<void*>(clientInfo))->didCommitLoadForFrame(page, frame);
+}
 
 void TestController::didFinishLoadForFrame(WKPageRef page, WKFrameRef frame, WKTypeRef, const void* clientInfo)
 {
@@ -616,6 +712,14 @@ void TestController::didFinishLoadForFrame(WKPageRef page, WKFrameRef frame, WKT
 void TestController::processDidCrash(WKPageRef page, const void* clientInfo)
 {
     static_cast<TestController*>(const_cast<void*>(clientInfo))->processDidCrash();
+}
+
+void TestController::didCommitLoadForFrame(WKPageRef page, WKFrameRef frame)
+{
+    if (!WKFrameIsMainFrame(frame))
+        return;
+
+    mainWebView()->focus();
 }
 
 void TestController::didFinishLoadForFrame(WKPageRef page, WKFrameRef frame)

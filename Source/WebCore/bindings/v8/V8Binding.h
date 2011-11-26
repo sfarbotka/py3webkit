@@ -38,6 +38,7 @@
 #include "V8DOMWrapper.h"
 #include "V8GCController.h"
 #include "V8HiddenPropertyName.h"
+#include <wtf/Noncopyable.h>
 #include <wtf/text/AtomicString.h>
 
 #include <v8.h>
@@ -87,7 +88,7 @@ namespace WebCore {
         RefPtr<StringImpl> m_lastStringImpl;
     };
 
-    class AllowAllocation;
+    class ConstructorMode;
 
 #ifndef NDEBUG
     typedef HashMap<v8::Value*, GlobalHandleInfo*> GlobalHandleMap;
@@ -143,6 +144,10 @@ namespace WebCore {
         // DOMDataStore is owned outside V8BindingPerIsolateData.
         void setDOMDataStore(DOMDataStore* store) { m_domDataStore = store; }
 
+        int recursionLevel() const { return m_recursionLevel; }
+        void incrementRecursionLevel() { ++m_recursionLevel; }
+        void decrementRecursionLevel() { --m_recursionLevel; }
+
 #ifndef NDEBUG
         GlobalHandleMap& globalHandleMap() { return m_globalHandleMap; }
 #endif
@@ -163,30 +168,44 @@ namespace WebCore {
 
         V8HiddenPropertyName m_hiddenPropertyName;
 
-        bool m_currentAllocationsAllowed;
-        friend class AllowAllocation;
+        bool m_constructorMode;
+        friend class ConstructorMode;
+
+        int m_recursionLevel;
 
 #ifndef NDEBUG
         GlobalHandleMap m_globalHandleMap;
 #endif
     };
 
-    class AllowAllocation {
+    class V8RecursionScope {
+        WTF_MAKE_NONCOPYABLE(V8RecursionScope);
     public:
-        AllowAllocation()
+        V8RecursionScope() { V8BindingPerIsolateData::current()->incrementRecursionLevel(); }
+        ~V8RecursionScope() { V8BindingPerIsolateData::current()->decrementRecursionLevel(); }
+    };
+
+    class ConstructorMode {
+    public:
+        enum Mode {
+            WrapExistingObject,
+            CreateNewObject
+        };
+
+        ConstructorMode()
         {
             V8BindingPerIsolateData* data = V8BindingPerIsolateData::current();
-            m_previous = data->m_currentAllocationsAllowed;
-            data->m_currentAllocationsAllowed = true;
+            m_previous = data->m_constructorMode;
+            data->m_constructorMode = WrapExistingObject;
         }
 
-        ~AllowAllocation()
+        ~ConstructorMode()
         {
             V8BindingPerIsolateData* data = V8BindingPerIsolateData::current();
-            data->m_currentAllocationsAllowed = m_previous;
+            data->m_constructorMode = m_previous;
         }
 
-        static bool current() { return V8BindingPerIsolateData::current()->m_currentAllocationsAllowed; }
+        static bool current() { return V8BindingPerIsolateData::current()->m_constructorMode; }
 
     private:
         bool m_previous;
@@ -203,7 +222,7 @@ namespace WebCore {
     {
         if (function.IsEmpty())
             return v8::Local<v8::Object>();
-        AllowAllocation allow;
+        ConstructorMode constructorMode;
         return function->NewInstance();
     }
 
@@ -211,7 +230,7 @@ namespace WebCore {
     {
         if (objectTemplate.IsEmpty())
             return v8::Local<v8::Object>();
-        AllowAllocation allow;
+        ConstructorMode constructorMode;
         return objectTemplate->NewInstance();
     }
 
@@ -219,7 +238,7 @@ namespace WebCore {
     {
         if (function.IsEmpty())
             return v8::Local<v8::Object>();
-        AllowAllocation allow;
+        ConstructorMode constructorMode;
         return function->NewInstance(argc, argv);
     }
 
@@ -344,6 +363,15 @@ namespace WebCore {
 
     v8::Handle<v8::Value> v8StringOrFalse(const String& str);
 
+    template <class T> v8::Handle<v8::Value> v8NumberArray(const Vector<T>& values)
+    {
+        size_t size = values.size();
+        v8::Local<v8::Array> result = v8::Array::New(size);
+        for (size_t i = 0; i < size; ++i)
+            result->Set(i, v8::Number::New(values[i]));
+        return result;
+    }
+
     double toWebCoreDate(v8::Handle<v8::Value> object);
 
     v8::Handle<v8::Value> v8DateOrNull(double value);
@@ -373,6 +401,22 @@ namespace WebCore {
     v8::Persistent<v8::FunctionTemplate> getToStringTemplate();
 
     String int32ToWebCoreString(int value);
+
+    template <class T> Vector<T> v8NumberArrayToVector(v8::Handle<v8::Value> value)
+    {
+        v8::Local<v8::Value> v8Value(v8::Local<v8::Value>::New(value));
+        if (!v8Value->IsArray())
+            return Vector<T>();
+
+        Vector<T> result;
+        v8::Local<v8::Array> v8Array = v8::Local<v8::Array>::Cast(v8Value);
+        size_t length = v8Array->Length();
+        for (size_t i = 0; i < length; ++i) {
+            v8::Local<v8::Value> indexedValue = v8Array->Get(v8::Integer::New(i));
+            result.append(static_cast<T>(indexedValue->NumberValue()));
+        }
+        return result;
+    }
 
     PassRefPtr<DOMStringList> v8ValueToWebCoreDOMStringList(v8::Handle<v8::Value>);
 

@@ -50,6 +50,17 @@ ViewportAttributes computeViewportAttributes(ViewportArguments args, int desktop
 
     ASSERT(availableWidth > 0 && availableHeight > 0);
 
+    float autoDPI = deviceDPI;
+
+    switch (args.type) {
+    case ViewportArguments::Implicit:
+        autoDPI = deviceDPI;
+        break;
+    case ViewportArguments::ViewportMeta:
+        autoDPI = 160;
+        break;
+    }
+
     switch (int(args.targetDensityDpi)) {
     case ViewportArguments::ValueDeviceDPI:
         args.targetDensityDpi = deviceDPI;
@@ -58,6 +69,8 @@ ViewportAttributes computeViewportAttributes(ViewportArguments args, int desktop
         args.targetDensityDpi = 120;
         break;
     case ViewportArguments::ValueAuto:
+        args.targetDensityDpi = autoDPI;
+        break;
     case ViewportArguments::ValueMediumDPI:
         args.targetDensityDpi = 160;
         break;
@@ -134,7 +147,7 @@ ViewportAttributes computeViewportAttributes(ViewportArguments args, int desktop
             result.initialScale = availableWidth / args.width;
         if (args.height != ViewportArguments::ValueAuto) {
             // if 'auto', the initial-scale will be negative here and thus ignored.
-            result.initialScale = max(result.initialScale, availableHeight / args.height);
+            result.initialScale = max<float>(result.initialScale, availableHeight / args.height);
         }
     }
 
@@ -162,20 +175,33 @@ ViewportAttributes computeViewportAttributes(ViewportArguments args, int desktop
         height = width * availableHeight / availableWidth;
 
     // Extend width and height to fill the visual viewport for the resolved initial-scale.
-    width = max(width, availableWidth / result.initialScale);
-    height = max(height, availableHeight / result.initialScale);
+    width = max<float>(width, availableWidth / result.initialScale);
+    height = max<float>(height, availableHeight / result.initialScale);
     result.layoutSize.setWidth(static_cast<int>(roundf(width)));
     result.layoutSize.setHeight(static_cast<int>(roundf(height)));
 
-    // Update minimum scale factor, to never allow zooming out more than viewport
-    result.minimumScale = max(result.minimumScale, max(availableWidth / width, availableHeight / height));
-
     result.userScalable = args.userScalable;
-    // Make maximum and minimum scale equal to the initial scale if user is not allowed to zoom in/out.
-    if (!args.userScalable)
-        result.maximumScale = result.minimumScale = result.initialScale;
 
     return result;
+}
+
+void restrictMinimumScaleFactorToViewportSize(ViewportAttributes& result, IntSize visibleViewport)
+{
+    float availableWidth = visibleViewport.width();
+    float availableHeight = visibleViewport.height();
+
+    if (result.devicePixelRatio != 1.0) {
+        availableWidth /= result.devicePixelRatio;
+        availableHeight /= result.devicePixelRatio;
+    }
+
+    result.minimumScale = max<float>(result.minimumScale, max(availableWidth / result.layoutSize.width(), availableHeight / result.layoutSize.height()));
+}
+
+void restrictScaleFactorToInitialScaleIfNotUserScalable(ViewportAttributes& result)
+{
+    if (!result.userScalable)
+        result.maximumScale = result.minimumScale = result.initialScale;
 }
 
 static float numericPrefix(const String& keyString, const String& valueString, Document* document, bool* ok)

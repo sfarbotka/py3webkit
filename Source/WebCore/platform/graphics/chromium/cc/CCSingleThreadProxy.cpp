@@ -30,8 +30,7 @@
 #include "LayerRendererChromium.h"
 #include "TraceEvent.h"
 #include "cc/CCLayerTreeHost.h"
-#include "cc/CCMainThreadTask.h"
-#include "cc/CCScrollController.h"
+#include "cc/CCTextureUpdater.h"
 #include <wtf/CurrentTime.h>
 
 using namespace WTF;
@@ -49,6 +48,7 @@ CCSingleThreadProxy::CCSingleThreadProxy(CCLayerTreeHost* layerTreeHost)
     , m_numFailedRecreateAttempts(0)
     , m_graphicsContextLost(false)
     , m_timesRecreateShouldFail(0)
+    , m_nextFrameIsNewlyCommittedFrame(false)
 {
     TRACE_EVENT("CCSingleThreadProxy::CCSingleThreadProxy", this, 0);
     ASSERT(CCProxy::isMainThread());
@@ -57,7 +57,7 @@ CCSingleThreadProxy::CCSingleThreadProxy(CCLayerTreeHost* layerTreeHost)
 void CCSingleThreadProxy::start()
 {
     DebugScopedSetImplThread impl;
-    m_layerTreeHostImpl = m_layerTreeHost->createLayerTreeHostImpl();
+    m_layerTreeHostImpl = m_layerTreeHost->createLayerTreeHostImpl(this);
 }
 
 CCSingleThreadProxy::~CCSingleThreadProxy()
@@ -138,37 +138,62 @@ void CCSingleThreadProxy::loseCompositorContext(int numTimes)
     m_timesRecreateShouldFail = numTimes - 1;
 }
 
-void CCSingleThreadProxy::setNeedsCommit()
+void CCSingleThreadProxy::setNeedsAnimate()
+{
+    // CCThread-only feature
+    ASSERT_NOT_REACHED();
+}
+
+void CCSingleThreadProxy::doCommit()
 {
     ASSERT(CCProxy::isMainThread());
     // Commit immediately
     {
         DebugScopedSetImplThread impl;
         m_layerTreeHostImpl->beginCommit();
-        m_layerTreeHost->commitToOnCCThread(m_layerTreeHostImpl.get());
+
+        m_layerTreeHost->beginCommitOnImplThread(m_layerTreeHostImpl.get());
+        CCTextureUpdater updater(m_layerTreeHostImpl->contentsTextureAllocator());
+        m_layerTreeHost->updateCompositorResources(m_layerTreeHostImpl->context(), updater);
+        while (updater.update(m_layerTreeHostImpl->context(), 1)) { }
+        m_layerTreeHostImpl->setVisible(m_layerTreeHost->visible());
+        m_layerTreeHost->finishCommitOnImplThread(m_layerTreeHostImpl.get());
+
         m_layerTreeHostImpl->commitComplete();
 
 #if !ASSERT_DISABLED
         // In the single-threaded case, the scroll deltas should never be
         // touched on the impl layer tree.
-        OwnPtr<CCScrollUpdateSet> scrollInfo = m_layerTreeHostImpl->processScrollDeltas();
-        ASSERT(!scrollInfo->size());
+        OwnPtr<CCScrollAndScaleSet> scrollInfo = m_layerTreeHostImpl->processScrollDeltas();
+        ASSERT(!scrollInfo->scrolls.size());
 #endif
     }
     m_layerTreeHost->commitComplete();
+    m_nextFrameIsNewlyCommittedFrame = true;
 }
 
-void CCSingleThreadProxy::setNeedsCommitThenRedraw()
+void CCSingleThreadProxy::setNeedsCommit()
 {
     ASSERT(CCProxy::isMainThread());
-    m_layerTreeHost->setNeedsCommitThenRedraw();
+    m_layerTreeHost->setNeedsCommit();
 }
 
 void CCSingleThreadProxy::setNeedsRedraw()
 {
     // FIXME: Once we move render_widget scheduling into this class, we can
     // treat redraw requests more efficiently than commitAndRedraw requests.
-    setNeedsCommitThenRedraw();
+    setNeedsCommit();
+}
+
+void CCSingleThreadProxy::setVisible(bool visible)
+{
+    if (!visible) {
+        DebugScopedSetImplThread impl;
+        m_layerTreeHost->didBecomeInvisibleOnImplThread(m_layerTreeHostImpl.get());
+        m_layerTreeHostImpl->setVisible(false);
+        return;
+    }
+    setNeedsCommit();
 }
 
 void CCSingleThreadProxy::stop()
@@ -177,7 +202,7 @@ void CCSingleThreadProxy::stop()
     ASSERT(CCProxy::isMainThread());
     {
         DebugScopedSetImplThread impl;
-        m_layerTreeHost->deleteContentsTexturesOnCCThread(m_layerTreeHostImpl->contentsTextureAllocator());
+        m_layerTreeHost->deleteContentsTexturesOnImplThread(m_layerTreeHostImpl->contentsTextureAllocator());
         m_layerTreeHostImpl.clear();
     }
     m_layerTreeHost = 0;
@@ -192,12 +217,18 @@ void CCSingleThreadProxy::compositeImmediately()
     commitIfNeeded();
 
     if (doComposite())
-        m_layerTreeHostImpl->present();
+        m_layerTreeHostImpl->swapBuffers();
 }
 
 bool CCSingleThreadProxy::recreateContextIfNeeded()
 {
     ASSERT(CCProxy::isMainThread());
+
+    if (!m_graphicsContextLost && m_layerTreeHostImpl->isContextLost()) {
+        m_graphicsContextLost = true;
+        m_numFailedRecreateAttempts = 0;
+    }
+
     if (!m_graphicsContextLost)
         return true;
     RefPtr<GraphicsContext3D> context;
@@ -211,7 +242,7 @@ bool CCSingleThreadProxy::recreateContextIfNeeded()
         bool ok;
         {
             DebugScopedSetImplThread impl;
-            m_layerTreeHost->deleteContentsTexturesOnCCThread(m_layerTreeHostImpl->contentsTextureAllocator());
+            m_layerTreeHost->deleteContentsTexturesOnImplThread(m_layerTreeHostImpl->contentsTextureAllocator());
             ok = m_layerTreeHostImpl->initializeLayerRenderer(context);
             if (ok)
                 m_layerRendererCapabilitiesForMainThread = m_layerTreeHostImpl->layerRendererCapabilities();
@@ -227,7 +258,7 @@ bool CCSingleThreadProxy::recreateContextIfNeeded()
     // in the context-lost machinery.
     m_numFailedRecreateAttempts++;
     if (m_numFailedRecreateAttempts < 5) {
-        setNeedsCommitThenRedraw();
+        setNeedsCommit();
         return false;
     }
 
@@ -241,17 +272,9 @@ void CCSingleThreadProxy::commitIfNeeded()
 {
     ASSERT(CCProxy::isMainThread());
 
-    // Update
     m_layerTreeHost->updateLayers();
 
-    // Commit
-    {
-        DebugScopedSetImplThread impl;
-        m_layerTreeHostImpl->beginCommit();
-        m_layerTreeHost->commitToOnCCThread(m_layerTreeHostImpl.get());
-        m_layerTreeHostImpl->commitComplete();
-    }
-    m_layerTreeHost->commitComplete();
+    doCommit();
 }
 
 bool CCSingleThreadProxy::doComposite()
@@ -260,6 +283,8 @@ bool CCSingleThreadProxy::doComposite()
 
     {
       DebugScopedSetImplThread impl;
+      double frameDisplayTimeMs = monotonicallyIncreasingTime() * 1000.0;
+      m_layerTreeHostImpl->animate(frameDisplayTimeMs);
       m_layerTreeHostImpl->drawLayers();
     }
 
@@ -272,8 +297,13 @@ bool CCSingleThreadProxy::doComposite()
         // and request a repaint yet again.
         m_graphicsContextLost = true;
         m_numFailedRecreateAttempts = 0;
-        setNeedsCommitThenRedraw();
+        setNeedsCommit();
         return false;
+    }
+
+    if (m_nextFrameIsNewlyCommittedFrame) {
+        m_nextFrameIsNewlyCommittedFrame = false;
+        m_layerTreeHost->didCommitAndDrawFrame();
     }
 
     return true;

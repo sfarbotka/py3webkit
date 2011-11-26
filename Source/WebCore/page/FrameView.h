@@ -27,6 +27,7 @@
 
 #include "AdjustViewSizeOrNot.h"
 #include "Color.h"
+#include "LayoutTypes.h"
 #include "PaintPhase.h"
 #include "ScrollView.h"
 #include <wtf/Forward.h>
@@ -88,7 +89,7 @@ public:
     virtual void didAddHorizontalScrollbar(Scrollbar*);
     virtual void willRemoveHorizontalScrollbar(Scrollbar*);
 
-    virtual void setContentsSize(const LayoutSize&);
+    virtual void setContentsSize(const IntSize&);
 
     void layout(bool allowSubtree = true);
     bool didFirstLayout() const;
@@ -160,15 +161,18 @@ public:
 
     void adjustViewSize();
     
-    virtual LayoutRect windowClipRect(bool clipToContents = true) const;
-    LayoutRect windowClipRectForLayer(const RenderLayer*, bool clipToLayerContents) const;
+    virtual IntRect windowClipRect(bool clipToContents = true) const;
+    IntRect windowClipRectForLayer(const RenderLayer*, bool clipToLayerContents) const;
 
-    virtual LayoutRect windowResizerRect() const;
+    virtual IntRect windowResizerRect() const;
 
-    void setScrollPosition(const LayoutPoint&);
+    virtual void setFixedVisibleContentRect(const IntRect&) OVERRIDE;
+    void setScrollPosition(const IntPoint&);
     void scrollPositionChangedViaPlatformWidget();
     virtual void repaintFixedElementsAfterScrolling();
     virtual bool shouldRubberBandInDirection(ScrollDirection) const;
+
+    virtual void zoomAnimatorTransformChanged(float, float, float, ZoomAnimationState);
 
     String mediaType() const;
     void setMediaType(const String&);
@@ -188,9 +192,9 @@ public:
 
     // Functions for querying the current scrolled position, negating the effects of overhang
     // and adjusting for page scale.
-    LayoutUnit scrollXForFixedPosition() const;
-    LayoutUnit scrollYForFixedPosition() const;
-    LayoutSize scrollOffsetForFixedPosition() const;
+    int scrollXForFixedPosition() const;
+    int scrollYForFixedPosition() const;
+    IntSize scrollOffsetForFixedPosition() const;
 
     void beginDeferredRepaints();
     void endDeferredRepaints();
@@ -215,15 +219,15 @@ public:
     void addWidgetToUpdate(RenderEmbeddedObject*);
     void removeWidgetToUpdate(RenderEmbeddedObject*);
 
-    virtual void paintContents(GraphicsContext*, const LayoutRect& damageRect);
+    virtual void paintContents(GraphicsContext*, const IntRect& damageRect);
     void setPaintBehavior(PaintBehavior);
     PaintBehavior paintBehavior() const;
     bool isPainting() const;
     bool hasEverPainted() const { return m_lastPaintTime; }
     void setNodeToDraw(Node*);
 
-    virtual void paintOverhangAreas(GraphicsContext*, const LayoutRect& horizontalOverhangArea, const LayoutRect& verticalOverhangArea, const LayoutRect& dirtyRect);
-    virtual void paintScrollCorner(GraphicsContext*, const LayoutRect& cornerRect);
+    virtual void paintOverhangAreas(GraphicsContext*, const IntRect& horizontalOverhangArea, const IntRect& verticalOverhangArea, const IntRect& dirtyRect);
+    virtual void paintScrollCorner(GraphicsContext*, const IntRect& cornerRect);
 
     Color documentBackgroundColor() const;
 
@@ -264,10 +268,10 @@ public:
     void scrollElementToRect(Element*, const IntRect&);
 
     // Methods to convert points and rects between the coordinate space of the renderer, and this view.
-    virtual LayoutRect convertFromRenderer(const RenderObject*, const LayoutRect&) const;
-    virtual LayoutRect convertToRenderer(const RenderObject*, const LayoutRect&) const;
-    virtual LayoutPoint convertFromRenderer(const RenderObject*, const LayoutPoint&) const;
-    virtual LayoutPoint convertToRenderer(const RenderObject*, const LayoutPoint&) const;
+    virtual IntRect convertFromRenderer(const RenderObject*, const IntRect&) const;
+    virtual IntRect convertToRenderer(const RenderObject*, const IntRect&) const;
+    virtual IntPoint convertFromRenderer(const RenderObject*, const IntPoint&) const;
+    virtual IntPoint convertToRenderer(const RenderObject*, const IntPoint&) const;
 
     bool isFrameViewScrollCorner(RenderScrollbarPart* scrollCorner) const { return m_scrollCorner == scrollCorner; }
 
@@ -282,7 +286,7 @@ public:
     // On each repaint the delay increses by this amount
     static void setRepaintThrottlingDeferredRepaintDelayIncrementDuringLoading(double p);
 
-    virtual LayoutPoint currentMousePosition() const;
+    virtual IntPoint currentMousePosition() const;
 
     // FIXME: Remove this method once plugin loading is decoupled from layout.
     void flushAnyPendingPostLayoutTasks();
@@ -301,8 +305,8 @@ public:
     const Vector<IntRect>& trackedRepaintRects() const { return m_trackedRepaintRects; }
 
 protected:
-    virtual bool scrollContentsFastPath(const IntSize& scrollDelta, const LayoutRect& rectToScroll, const LayoutRect& clipRect);
-    virtual void scrollContentsSlowPath(const LayoutRect& updateRect);
+    virtual bool scrollContentsFastPath(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect);
+    virtual void scrollContentsSlowPath(const IntRect& updateRect);
 
     virtual bool isVerticalDocument() const;
     virtual bool isFlippedDocument() const;
@@ -332,27 +336,27 @@ private:
     void forceLayoutParentViewIfNeeded();
     void performPostLayoutTasks();
 
-    virtual void repaintContentRectangle(const LayoutRect&, bool immediate);
+    virtual void repaintContentRectangle(const IntRect&, bool immediate);
     virtual void contentsResized();
     virtual void visibleContentsResized();
 
     // Override ScrollView methods to do point conversion via renderers, in order to
     // take transforms into account.
-    virtual LayoutRect convertToContainingView(const LayoutRect&) const;
-    virtual LayoutRect convertFromContainingView(const LayoutRect&) const;
-    virtual LayoutPoint convertToContainingView(const LayoutPoint&) const;
-    virtual LayoutPoint convertFromContainingView(const LayoutPoint&) const;
+    virtual IntRect convertToContainingView(const IntRect&) const;
+    virtual IntRect convertFromContainingView(const IntRect&) const;
+    virtual IntPoint convertToContainingView(const IntPoint&) const;
+    virtual IntPoint convertFromContainingView(const IntPoint&) const;
 
     // ScrollableArea interface
-    virtual void invalidateScrollbarRect(Scrollbar*, const LayoutRect&);
+    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&);
     virtual bool isActive() const;
-    virtual void getTickmarks(Vector<LayoutRect>&) const;
-    virtual void scrollTo(const LayoutSize&);
+    virtual void getTickmarks(Vector<IntRect>&) const;
+    virtual void scrollTo(const IntSize&);
     virtual void didStartRubberBand(const IntSize&) const;
     virtual void didCompleteRubberBand(const IntSize&) const;
     virtual void didStartAnimatedScroll() const;
     virtual void didCompleteAnimatedScroll() const;
-    virtual void setVisibleScrollerThumbRect(const LayoutRect&);
+    virtual void setVisibleScrollerThumbRect(const IntRect&);
     virtual bool isOnActivePage() const;
     virtual ScrollableArea* enclosingScrollableArea() const;
 

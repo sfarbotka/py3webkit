@@ -28,9 +28,10 @@
 
 
 import logging
+import re
 import time
 
-from webkitpy.layout_tests.layout_package import test_result_writer
+from webkitpy.layout_tests.controllers import test_result_writer
 from webkitpy.layout_tests.port.driver import DriverInput, DriverOutput
 from webkitpy.layout_tests.models import test_expectations
 from webkitpy.layout_tests.models import test_failures
@@ -60,6 +61,12 @@ class SingleTestRunner:
         self._reference_filename = None
 
         fs = port._filesystem
+        if test_input.ref_file:
+            self._is_reftest = True
+            self._reference_filename = fs.join(self._port.layout_tests_dir(), test_input.ref_file)
+            self._is_mismatch_reftest = test_input.is_mismatch_reftest
+            return
+
         reftest_expected_filename = port.reftest_expected_filename(self._test_name)
         if fs.exists(reftest_expected_filename):
             self._is_reftest = True
@@ -106,21 +113,17 @@ class SingleTestRunner:
         image_hash = None
         if self._should_fetch_expected_checksum():
             image_hash = self._port.expected_checksum(self._test_name)
-        return DriverInput(self._test_name, self._timeout, image_hash)
+        return DriverInput(self._test_name, self._timeout, image_hash, self._is_reftest)
 
     def run(self):
-        if self._options.new_baseline or self._options.reset_results:
-            if self._is_reftest:
-                # Returns a dummy TestResult. We don't have to rebase for reftests.
-                return TestResult(self._test_name)
-            else:
-                return self._run_rebaseline()
         if self._is_reftest:
-            if self._port.get_option('pixel_tests'):
-                return self._run_reftest()
-            result = TestResult(self._test_name)
-            result.type = test_expectations.SKIP
-            return result
+            if self._port.get_option('no_ref_tests') or self._options.new_baseline or self._options.reset_results:
+                result = TestResult(self._test_name)
+                result.type = test_expectations.SKIP
+                return result
+            return self._run_reftest()
+        if self._options.new_baseline or self._options.reset_results:
+            return self._run_rebaseline()
         return self._run_compare_test()
 
     def _run_compare_test(self):
@@ -141,17 +144,16 @@ class SingleTestRunner:
         self._overwrite_baselines(driver_output)
         return TestResult(self._test_name, failures, driver_output.test_time, driver_output.has_stderr())
 
+    _render_tree_dump_pattern = re.compile(r"^layer at \(\d+,\d+\) size \d+x\d+\n")
+
     def _add_missing_baselines(self, test_result, driver_output):
+        missingImage = test_result.has_failure_matching_types(test_failures.FailureMissingImage, test_failures.FailureMissingImageHash)
         if test_result.has_failure_matching_types(test_failures.FailureMissingResult):
-            # FIXME: We seem to be putting new text results in non-platform
-            # specific directories even when they're rendertree dumps. Maybe
-            # we should have a different kind of failure for render tree dumps
-            # than for text tests?
-            self._save_baseline_data(driver_output.text, ".txt", generate_new_baseline=False)
+            self._save_baseline_data(driver_output.text, ".txt", SingleTestRunner._render_tree_dump_pattern.match(driver_output.text))
         if test_result.has_failure_matching_types(test_failures.FailureMissingAudio):
             self._save_baseline_data(driver_output.audio, ".wav", generate_new_baseline=False)
-        if test_result.has_failure_matching_types(test_failures.FailureMissingImage, test_failures.FailureMissingImageHash):
-            self._save_baseline_data(driver_output.image, ".png", generate_new_baseline=False)
+        if missingImage:
+            self._save_baseline_data(driver_output.image, ".png", generate_new_baseline=True)
 
     def _overwrite_baselines(self, driver_output):
         # Although all DumpRenderTree output should be utf-8,
@@ -182,8 +184,7 @@ class SingleTestRunner:
             relative_dir = fs.dirname(self._test_name)
             baseline_path = port.baseline_path()
             output_dir = fs.join(baseline_path, relative_dir)
-            output_file = fs.basename(fs.splitext(self._test_name)[0] +
-                "-expected" + modifier)
+            output_file = fs.basename(fs.splitext(self._test_name)[0] + "-expected" + modifier)
             fs.maybe_make_directory(output_dir)
             output_path = fs.join(output_dir, output_file)
         else:
@@ -285,7 +286,7 @@ class SingleTestRunner:
     def _run_reftest(self):
         driver_output1 = self._driver.run_test(self._driver_input())
         reference_test_name = self._port.relative_test_filename(self._reference_filename)
-        driver_output2 = self._driver.run_test(DriverInput(reference_test_name, self._timeout, driver_output1.image_hash))
+        driver_output2 = self._driver.run_test(DriverInput(reference_test_name, self._timeout, driver_output1.image_hash, self._is_reftest))
         test_result = self._compare_output_with_reference(driver_output1, driver_output2)
 
         test_result_writer.write_test_result(self._port, self._test_name, driver_output1, driver_output2, test_result.failures)
@@ -303,9 +304,11 @@ class SingleTestRunner:
         if failures:
             return TestResult(self._test_name, failures, total_test_time, has_stderr)
 
+        assert(driver_output1.image_hash or driver_output2.image_hash)
+
         if self._is_mismatch_reftest:
             if driver_output1.image_hash == driver_output2.image_hash:
-                failures.append(test_failures.FailureReftestMismatchDidNotOccur())
+                failures.append(test_failures.FailureReftestMismatchDidNotOccur(self._reference_filename))
         elif driver_output1.image_hash != driver_output2.image_hash:
-            failures.append(test_failures.FailureReftestMismatch())
+            failures.append(test_failures.FailureReftestMismatch(self._reference_filename))
         return TestResult(self._test_name, failures, total_test_time, has_stderr)

@@ -40,9 +40,8 @@ public:
     }
 
     static JSC::JSObject* createPrototype(JSC::ExecState*, JSC::JSGlobalObject*);
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
-    virtual void put(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::JSValue, JSC::PutPropertySlot&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
     static void put(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::JSValue, JSC::PutPropertySlot&);
     static const JSC::ClassInfo s_info;
 
@@ -64,15 +63,32 @@ public:
     // Custom functions
     JSC::JSValue customMethod(JSC::ExecState*);
     JSC::JSValue customMethodWithArgs(JSC::ExecState*);
-    TestObj* impl() const { return m_impl.get(); }
+    TestObj* impl() const { return m_impl; }
+    void releaseImpl() { m_impl->deref(); m_impl = 0; }
 
 private:
-    RefPtr<TestObj> m_impl;
+    TestObj* m_impl;
 protected:
     JSTestObj(JSC::Structure*, JSDOMGlobalObject*, PassRefPtr<TestObj>);
     void finishCreation(JSC::JSGlobalData&);
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::OverridesVisitChildren | Base::StructureFlags;
 };
+
+class JSTestObjOwner : public JSC::WeakHandleOwner {
+    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&);
+    virtual void finalize(JSC::Handle<JSC::Unknown>, void* context);
+};
+
+inline JSC::WeakHandleOwner* wrapperOwner(DOMWrapperWorld*, TestObj*)
+{
+    DEFINE_STATIC_LOCAL(JSTestObjOwner, jsTestObjOwner, ());
+    return &jsTestObjOwner;
+}
+
+inline void* wrapperContext(DOMWrapperWorld* world, TestObj*)
+{
+    return world;
+}
 
 JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestObj*);
 TestObj* toTestObj(JSC::JSValue);
@@ -89,8 +105,8 @@ public:
     }
 
     static const JSC::ClassInfo s_info;
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
     static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
     {
         return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
@@ -102,6 +118,33 @@ protected:
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::OverridesVisitChildren | Base::StructureFlags;
 };
 
+class JSTestObjConstructor : public DOMConstructorObject {
+private:
+    JSTestObjConstructor(JSC::Structure*, JSDOMGlobalObject*);
+    void finishCreation(JSC::ExecState*, JSDOMGlobalObject*);
+
+public:
+    typedef DOMConstructorObject Base;
+    static JSTestObjConstructor* create(JSC::ExecState* exec, JSC::Structure* structure, JSDOMGlobalObject* globalObject)
+    {
+        JSTestObjConstructor* ptr = new (JSC::allocateCell<JSTestObjConstructor>(*exec->heap())) JSTestObjConstructor(structure, globalObject);
+        ptr->finishCreation(exec, globalObject);
+        return ptr;
+    }
+
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static const JSC::ClassInfo s_info;
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
+    {
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
+    }
+protected:
+    static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::ImplementsHasInstance | DOMConstructorObject::StructureFlags;
+    static JSC::EncodedJSValue JSC_HOST_CALL constructJSTestObj(JSC::ExecState*);
+    static JSC::ConstructType getConstructData(JSC::JSCell*, JSC::ConstructData&);
+};
+
 // Functions
 
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionVoidMethod(JSC::ExecState*);
@@ -110,7 +153,6 @@ JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionIntMethod(JSC::ExecS
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionIntMethodWithArgs(JSC::ExecState*);
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionObjMethod(JSC::ExecState*);
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionObjMethodWithArgs(JSC::ExecState*);
-JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionMethodThatRequiresAllArgs(JSC::ExecState*);
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionMethodThatRequiresAllArgsAndThrows(JSC::ExecState*);
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionSerializedValue(JSC::ExecState*);
 JSC::EncodedJSValue JSC_HOST_CALL jsTestObjPrototypeFunctionIdbKey(JSC::ExecState*);
@@ -220,6 +262,9 @@ JSC::JSValue jsTestObjHash(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&
 JSC::JSValue jsTestObjConstructor(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 // Constants
 
+#if ENABLE(Condition1)
+JSC::JSValue jsTestObjCONDITIONAL_CONST(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
+#endif
 JSC::JSValue jsTestObjCONST_VALUE_0(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 JSC::JSValue jsTestObjCONST_VALUE_1(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 JSC::JSValue jsTestObjCONST_VALUE_2(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
@@ -231,6 +276,7 @@ JSC::JSValue jsTestObjCONST_VALUE_11(JSC::ExecState*, JSC::JSValue, const JSC::I
 JSC::JSValue jsTestObjCONST_VALUE_12(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 JSC::JSValue jsTestObjCONST_VALUE_13(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 JSC::JSValue jsTestObjCONST_VALUE_14(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
+JSC::JSValue jsTestObjCONST_JAVASCRIPT(JSC::ExecState*, JSC::JSValue, const JSC::Identifier&);
 
 } // namespace WebCore
 

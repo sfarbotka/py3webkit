@@ -26,134 +26,22 @@
 #ifndef DFGNode_h
 #define DFGNode_h
 
-#include "DFGStructureSet.h"
-#include <wtf/BoundsCheckedPointer.h>
 #include <wtf/Platform.h>
-#include <wtf/UnionFind.h>
-
-// Emit various logging information for debugging, including dumping the dataflow graphs.
-#define ENABLE_DFG_DEBUG_VERBOSE 0
-// Emit dumps during propagation, in addition to just after.
-#define ENABLE_DFG_DEBUG_PROPAGATION_VERBOSE 0
-// Emit logging for OSR exit value recoveries at every node, not just nodes that
-// actually has speculation checks.
-#define ENABLE_DFG_VERBOSE_VALUE_RECOVERIES 0
-// Enable generation of dynamic checks into the instruction stream.
-#if !ASSERT_DISABLED
-#define ENABLE_DFG_JIT_ASSERT 1
-#else
-#define ENABLE_DFG_JIT_ASSERT 0
-#endif
-// Consistency check contents compiler data structures.
-#define ENABLE_DFG_CONSISTENCY_CHECK 0
-// Emit a breakpoint into the head of every generated function, to aid debugging in GDB.
-#define ENABLE_DFG_JIT_BREAK_ON_EVERY_FUNCTION 0
-// Emit a breakpoint into the head of every generated node, to aid debugging in GDB.
-#define ENABLE_DFG_JIT_BREAK_ON_EVERY_BLOCK 0
-// Emit a breakpoint into the head of every generated node, to aid debugging in GDB.
-#define ENABLE_DFG_JIT_BREAK_ON_EVERY_NODE 0
-// Emit a breakpoint into the speculation failure code.
-#define ENABLE_DFG_JIT_BREAK_ON_SPECULATION_FAILURE 0
-// Log every speculation failure.
-#define ENABLE_DFG_VERBOSE_SPECULATION_FAILURE 0
-// Disable the DFG JIT without having to touch Platform.h!
-#define DFG_DEBUG_LOCAL_DISBALE 0
-// Enable OSR entry from baseline JIT.
-#define ENABLE_DFG_OSR_ENTRY ENABLE_DFG_JIT
-// Generate stats on how successful we were in making use of the DFG jit, and remaining on the hot path.
-#define ENABLE_DFG_SUCCESS_STATS 0
-
 
 #if ENABLE(DFG_JIT)
 
 #include "CodeBlock.h"
+#include "CodeOrigin.h"
+#include "DFGCommon.h"
+#include "DFGOperands.h"
+#include "DFGVariableAccessData.h"
 #include "JSValue.h"
 #include "PredictedType.h"
 #include "ValueProfile.h"
+#include <wtf/BoundsCheckedPointer.h>
 #include <wtf/Vector.h>
 
 namespace JSC { namespace DFG {
-
-// Type for a virtual register number (spill location).
-// Using an enum to make this type-checked at compile time, to avert programmer errors.
-enum VirtualRegister { InvalidVirtualRegister = -1 };
-COMPILE_ASSERT(sizeof(VirtualRegister) == sizeof(int), VirtualRegister_is_32bit);
-
-// Type for a reference to another node in the graph.
-typedef uint32_t NodeIndex;
-static const NodeIndex NoNode = UINT_MAX;
-
-// Information used to map back from an exception to any handler/source information,
-// and to implement OSR.
-// (Presently implemented as a bytecode index).
-class CodeOrigin {
-public:
-    CodeOrigin()
-        : m_bytecodeIndex(std::numeric_limits<uint32_t>::max())
-    {
-    }
-    
-    explicit CodeOrigin(uint32_t bytecodeIndex)
-        : m_bytecodeIndex(bytecodeIndex)
-    {
-    }
-    
-    bool isSet() const { return m_bytecodeIndex != std::numeric_limits<uint32_t>::max(); }
-    
-    uint32_t bytecodeIndex() const
-    {
-        ASSERT(isSet());
-        return m_bytecodeIndex;
-    }
-    
-private:
-    uint32_t m_bytecodeIndex;
-};
-
-class VariableAccessData: public UnionFind<VariableAccessData> {
-public:
-    VariableAccessData()
-        : m_local(static_cast<VirtualRegister>(std::numeric_limits<int>::min()))
-        , m_prediction(PredictNone)
-    {
-    }
-    
-    VariableAccessData(VirtualRegister local)
-        : m_local(local)
-        , m_prediction(PredictNone)
-    {
-    }
-    
-    VirtualRegister local()
-    {
-        ASSERT(m_local == find()->m_local);
-        return m_local;
-    }
-    
-    int operand()
-    {
-        return static_cast<int>(local());
-    }
-    
-    bool predict(PredictedType prediction)
-    {
-        return mergePrediction(find()->m_prediction, prediction);
-    }
-    
-    PredictedType prediction()
-    {
-        return find()->m_prediction;
-    }
-    
-private:
-    // This is slightly space-inefficient, since anything we're unified with
-    // will have the same operand and should have the same prediction. But
-    // putting them here simplifies the code, and we don't expect DFG space
-    // usage for variable access nodes do be significant.
-
-    VirtualRegister m_local;
-    PredictedType m_prediction;
-};
 
 struct StructureTransitionData {
     Structure* previousStructure;
@@ -190,6 +78,11 @@ static inline bool nodeCanTruncateInteger(ArithNodeFlags flags)
 static inline bool nodeCanIgnoreNegativeZero(ArithNodeFlags flags)
 {
     return !(flags & NodeNeedsNegZero);
+}
+
+static inline bool nodeMayOverflow(ArithNodeFlags flags)
+{
+    return !!(flags & NodeMayOverflow);
 }
 
 static inline bool nodeCanSpeculateInteger(ArithNodeFlags flags)
@@ -269,8 +162,12 @@ static inline const char* arithNodeFlagsAsString(ArithNodeFlags flags)
 
 // This macro defines a set of information about all known node types, used to populate NodeId, NodeType below.
 #define FOR_EACH_DFG_OP(macro) \
-    /* Nodes for constants. */\
+    /* A constant in the CodeBlock's constant pool. */\
     macro(JSConstant, NodeResultJS) \
+    \
+    /* A constant not in the CodeBlock's constant pool. Uses get patched to jumps that exit the */\
+    /* code block. */\
+    macro(WeakJSConstant, NodeResultJS) \
     \
     /* Nodes for handling functions (both as call and as construct). */\
     macro(ConvertThis, NodeResultJS) \
@@ -282,9 +179,15 @@ static inline const char* arithNodeFlagsAsString(ArithNodeFlags flags)
     macro(SetLocal, 0) \
     macro(Phantom, NodeMustGenerate) \
     macro(Phi, 0) \
+    macro(Flush, NodeMustGenerate) \
     \
     /* Marker for arguments being set. */\
     macro(SetArgument, 0) \
+    \
+    /* Hint that inlining begins here. No code is generated for this node. It's only */\
+    /* used for copying OSR data into inline frame data, to support reification of */\
+    /* call frames of inlined functions. */\
+    macro(InlineStart, 0) \
     \
     /* Nodes for bitwise operations. */\
     macro(BitAnd, NodeResultInt32) \
@@ -321,7 +224,7 @@ static inline const char* arithNodeFlagsAsString(ArithNodeFlags flags)
     /* PutByValAlias indicates a 'put' aliases a prior write to the same property. */\
     /* Since a put to 'length' may invalidate optimizations here, */\
     /* this must be the directly subsequent property put. */\
-    macro(GetByVal, NodeResultJS | NodeMustGenerate) \
+    macro(GetByVal, NodeResultJS | NodeMustGenerate | NodeMightClobber) \
     macro(PutByVal, NodeMustGenerate | NodeClobbersWorld) \
     macro(PutByValAlias, NodeMustGenerate | NodeClobbersWorld) \
     macro(GetById, NodeResultJS | NodeMustGenerate | NodeClobbersWorld) \
@@ -334,8 +237,8 @@ static inline const char* arithNodeFlagsAsString(ArithNodeFlags flags)
     macro(PutByOffset, NodeMustGenerate | NodeClobbersWorld) \
     macro(GetArrayLength, NodeResultInt32) \
     macro(GetStringLength, NodeResultInt32) \
+    macro(GetByteArrayLength, NodeResultInt32) \
     macro(GetMethod, NodeResultJS | NodeMustGenerate) \
-    macro(CheckMethod, NodeResultJS | NodeMustGenerate) \
     macro(GetScopeChain, NodeResultJS) \
     macro(GetScopedVar, NodeResultJS | NodeMustGenerate) \
     macro(PutScopedVar, NodeMustGenerate | NodeClobbersWorld) \
@@ -502,9 +405,14 @@ struct Node {
         return op == JSConstant;
     }
     
+    bool isWeakConstant()
+    {
+        return op == WeakJSConstant;
+    }
+    
     bool hasConstant()
     {
-        return isConstant() || hasMethodCheckData();
+        return isConstant() || isWeakConstant();
     }
 
     unsigned constantNumber()
@@ -513,20 +421,26 @@ struct Node {
         return m_opInfo;
     }
     
-    // NOTE: this only works for JSConstant nodes.
-    JSValue valueOfJSConstantNode(CodeBlock* codeBlock)
+    JSCell* weakConstant()
     {
+        return bitwise_cast<JSCell*>(m_opInfo);
+    }
+    
+    JSValue valueOfJSConstant(CodeBlock* codeBlock)
+    {
+        if (op == WeakJSConstant)
+            return JSValue(weakConstant());
         return codeBlock->constantRegister(FirstConstantRegisterIndex + constantNumber()).get();
     }
 
     bool isInt32Constant(CodeBlock* codeBlock)
     {
-        return isConstant() && valueOfJSConstantNode(codeBlock).isInt32();
+        return isConstant() && valueOfJSConstant(codeBlock).isInt32();
     }
     
     bool isDoubleConstant(CodeBlock* codeBlock)
     {
-        bool result = isConstant() && valueOfJSConstantNode(codeBlock).isDouble();
+        bool result = isConstant() && valueOfJSConstant(codeBlock).isDouble();
         if (result)
             ASSERT(!isInt32Constant(codeBlock));
         return result;
@@ -534,14 +448,14 @@ struct Node {
     
     bool isNumberConstant(CodeBlock* codeBlock)
     {
-        bool result = isConstant() && valueOfJSConstantNode(codeBlock).isNumber();
+        bool result = isConstant() && valueOfJSConstant(codeBlock).isNumber();
         ASSERT(result == (isInt32Constant(codeBlock) || isDoubleConstant(codeBlock)));
         return result;
     }
     
     bool isBooleanConstant(CodeBlock* codeBlock)
     {
-        return isConstant() && valueOfJSConstantNode(codeBlock).isBoolean();
+        return isConstant() && valueOfJSConstant(codeBlock).isBoolean();
     }
     
     bool hasVariableAccessData()
@@ -551,6 +465,7 @@ struct Node {
         case SetLocal:
         case Phi:
         case SetArgument:
+        case Flush:
             return true;
         default:
             return false;
@@ -564,6 +479,7 @@ struct Node {
     
     VariableAccessData* variableAccessData()
     {
+        ASSERT(hasVariableAccessData());
         return reinterpret_cast<VariableAccessData*>(m_opInfo)->find();
     }
     
@@ -572,7 +488,7 @@ struct Node {
         return variableAccessData()->local();
     }
 
-#if !ASSERT_DISABLED
+#ifndef NDEBUG
     bool hasIdentifier()
     {
         switch (op) {
@@ -580,7 +496,6 @@ struct Node {
         case PutById:
         case PutByIdDirect:
         case GetMethod:
-        case CheckMethod:
         case Resolve:
         case ResolveBase:
         case ResolveBaseStrictPut:
@@ -755,13 +670,37 @@ struct Node {
         return op & NodeIsTerminal;
     }
 
-    unsigned takenBytecodeOffset()
+    unsigned takenBytecodeOffsetDuringParsing()
     {
         ASSERT(isBranch() || isJump());
         return m_opInfo;
     }
 
-    unsigned notTakenBytecodeOffset()
+    unsigned notTakenBytecodeOffsetDuringParsing()
+    {
+        ASSERT(isBranch());
+        return m_opInfo2;
+    }
+    
+    void setTakenBlockIndex(BlockIndex blockIndex)
+    {
+        ASSERT(isBranch() || isJump());
+        m_opInfo = blockIndex;
+    }
+    
+    void setNotTakenBlockIndex(BlockIndex blockIndex)
+    {
+        ASSERT(isBranch());
+        m_opInfo2 = blockIndex;
+    }
+    
+    BlockIndex takenBlockIndex()
+    {
+        ASSERT(isBranch() || isJump());
+        return m_opInfo;
+    }
+    
+    BlockIndex notTakenBlockIndex()
     {
         ASSERT(isBranch());
         return m_opInfo2;
@@ -802,17 +741,6 @@ struct Node {
         return mergePrediction(m_opInfo2, prediction);
     }
     
-    bool hasMethodCheckData()
-    {
-        return op == CheckMethod;
-    }
-    
-    unsigned methodCheckDataIndex()
-    {
-        ASSERT(hasMethodCheckData());
-        return m_opInfo2;
-    }
-
     bool hasFunctionCheckData()
     {
         return op == CheckFunction;
@@ -877,7 +805,7 @@ struct Node {
 
     bool shouldGenerate()
     {
-        return m_refCount && op != Phi;
+        return m_refCount && op != Phi && op != Flush;
     }
 
     unsigned refCount()
@@ -984,6 +912,11 @@ struct Node {
         return isArrayPrediction(prediction());
     }
     
+    bool shouldSpeculateByteArray()
+    {
+        return !!(prediction() & PredictByteArray);
+    }
+    
     bool shouldSpeculateArrayOrOther()
     {
         return isArrayOrOtherPrediction(prediction());
@@ -1001,7 +934,7 @@ struct Node {
     
     static bool shouldSpeculateInteger(Node& op1, Node& op2)
     {
-        return !(op1.shouldNotSpeculateInteger() || op2.shouldNotSpeculateInteger()) && (op1.shouldSpeculateInteger() || op2.shouldSpeculateInteger());
+        return op1.shouldSpeculateInteger() && op2.shouldSpeculateInteger();
     }
     
     static bool shouldSpeculateNumber(Node& op1, Node& op2)
@@ -1025,6 +958,21 @@ struct Node {
     {
         return nodeCanSpeculateInteger(arithNodeFlags());
     }
+    
+#ifndef NDEBUG
+    void dumpChildren(FILE* out)
+    {
+        if (child1() == NoNode)
+            return;
+        fprintf(out, "@%u", child1());
+        if (child2() == NoNode)
+            return;
+        fprintf(out, ", @%u", child2());
+        if (child3() == NoNode)
+            return;
+        fprintf(out, ", @%u", child3());
+    }
+#endif
     
     // This enum value describes the type of the node.
     NodeType op;

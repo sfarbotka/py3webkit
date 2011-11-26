@@ -36,10 +36,10 @@ VPATH = \
     $(WebCore)/fileapi \
     $(WebCore)/html \
     $(WebCore)/html/canvas \
+    $(WebCore)/html/track \
     $(WebCore)/inspector \
     $(WebCore)/loader/appcache \
     $(WebCore)/notifications \
-    $(WebCore)/p2p \
     $(WebCore)/page \
     $(WebCore)/plugins \
     $(WebCore)/storage \
@@ -127,9 +127,7 @@ DOM_CLASSES = \
     DOMURL \
     DOMWindow \
     DataTransferItem \
-    DataTransferItem \
-    DataTransferItems \
-    DataTransferItems \
+    DataTransferItemList \
     DataView \
     Database \
     DatabaseCallback \
@@ -181,6 +179,7 @@ DOM_CLASSES = \
     Geolocation \
     Geoposition \
     HTMLAllCollection \
+    HTMLPropertiesCollection \
     HTMLAnchorElement \
     HTMLAppletElement \
     HTMLAreaElement \
@@ -277,19 +276,14 @@ DOM_CLASSES = \
     Internals \
     JavaScriptAudioNode \
     KeyboardEvent \
-    LocalMediaStream \
     Location \
     LowPass2FilterNode \
+    MediaController \
     MediaElementAudioSourceNode \
     MediaError \
     MediaList \
     MediaQueryList \
     MediaQueryListListener \
-    MediaStream \
-    MediaStreamEvent \
-    MediaStreamList \
-    MediaStreamTrack \
-    MediaStreamTrackList \
     MemoryInfo \
     MessageChannel \
     MessageEvent \
@@ -297,13 +291,11 @@ DOM_CLASSES = \
     Metadata \
     MetadataCallback \
     MouseEvent \
+    MutationCallback \
     MutationEvent \
     MutationRecord \
     NamedNodeMap \
     Navigator \
-    NavigatorUserMediaError \
-    NavigatorUserMediaErrorCallback \
-    NavigatorUserMediaSuccessCallback \
     Node \
     NodeFilter \
     NodeIterator \
@@ -318,7 +310,6 @@ DOM_CLASSES = \
     OperationNotAllowedException \
     OverflowEvent \
     PageTransitionEvent \
-    PeerConnection \
     Performance \
     PerformanceNavigation \
     PerformanceTiming \
@@ -501,7 +492,6 @@ DOM_CLASSES = \
     ScriptProfileNode \
     SharedWorker \
     SharedWorkerContext \
-    SignalingCallback \
     SpeechInputEvent \
     SpeechInputResult \
     SpeechInputResultList \
@@ -519,10 +509,15 @@ DOM_CLASSES = \
     Text \
     TextEvent \
     TextMetrics \
+    TextTrack \
+    TextTrackCue \
+    TextTrackCueList \
+    TextTrackList \
     TimeRanges \
     Touch \
     TouchEvent \
     TouchList \
+    TrackEvent \
     TreeWalker \
     UIEvent \
     Uint16Array \
@@ -553,6 +548,7 @@ DOM_CLASSES = \
     WebKitCSSTransformValue \
     WebKitFlags \
     WebKitLoseContext \
+    WebKitMutationObserver \
     WebKitPoint \
     WebKitTransitionEvent \
     WebSocket \
@@ -593,6 +589,9 @@ all : \
     CSSPropertyNames.h \
     CSSValueKeywords.h \
     ColorData.cpp \
+    EventFactory.cpp \
+    EventTargetInterfaces.h \
+    ExceptionCodeDescription.cpp \
     HTMLElementFactory.cpp \
     HTMLEntityTable.cpp \
     HTMLNames.cpp \
@@ -785,6 +784,10 @@ ifeq ($(findstring ENABLE_METER_TAG,$(FEATURE_DEFINES)), ENABLE_METER_TAG)
     HTML_FLAGS := $(HTML_FLAGS) ENABLE_METER_TAG=1
 endif
 
+ifeq ($(findstring ENABLE_MICRODATA,$(FEATURE_DEFINES)), ENABLE_MICRODATA)
+    HTML_FLAGS := $(HTML_FLAGS) ENABLE_MICRODATA=1
+endif
+
 ifeq ($(findstring ENABLE_PROGRESS_TAG,$(FEATURE_DEFINES)), ENABLE_PROGRESS_TAG)
     HTML_FLAGS := $(HTML_FLAGS) ENABLE_PROGRESS_TAG=1
 endif
@@ -849,6 +852,19 @@ XLinkNames.cpp : dom/make_names.pl svg/xlinkattrs.in
 
 # --------
  
+# Register event constructors and targets
+
+EventFactory.cpp EventHeaders.h EventInterfaces.h : dom/make_event_factory.pl dom/EventFactory.in
+	perl -I $(WebCore)/bindings/scripts $< --input $(WebCore)/dom/EventFactory.in
+
+EventTargetHeaders.h EventTargetInterfaces.h : dom/make_event_factory.pl dom/EventTargetFactory.in
+	perl -I $(WebCore)/bindings/scripts $< --input $(WebCore)/dom/EventTargetFactory.in
+
+ExceptionCodeDescription.cpp ExceptionCodeDescription.h ExceptionHeaders.h ExceptionInterfaces.h : dom/make_dom_exceptions.pl dom/DOMExceptions.in
+	perl -I $(WebCore)/bindings/scripts $< --input $(WebCore)/dom/DOMExceptions.in
+
+# --------
+ 
 # MathML tag and attribute names, and element factory
 
 MathMLElementFactory.cpp MathMLNames.cpp : dom/make_names.pl mathml/mathtags.in mathml/mathattrs.in
@@ -874,7 +890,6 @@ IDL_INCLUDES = \
     $(WebCore)/fileapi \
     $(WebCore)/html \
     $(WebCore)/css \
-    $(WebCore)/p2p \
     $(WebCore)/page \
     $(WebCore)/notifications \
     $(WebCore)/xml \
@@ -894,15 +909,12 @@ all : InspectorProtocolVersion.h
 InspectorProtocolVersion.h : Inspector.json inspector/generate-inspector-protocol-version
 	python $(WebCore)/inspector/generate-inspector-protocol-version -o InspectorProtocolVersion.h $(WebCore)/inspector/Inspector.json
 
-Inspector.idl : Inspector.json inspector/generate-inspector-idl
-	python $(WebCore)/inspector/generate-inspector-idl -o Inspector.idl $(WebCore)/inspector/Inspector.json
-
 all : InspectorFrontend.h
 
-INSPECTOR_GENERATOR_SCRIPTS = $(GENERATE_SCRIPTS) inspector/CodeGeneratorInspector.pm
+INSPECTOR_GENERATOR_SCRIPTS = inspector/CodeGeneratorInspector.py
 
-InspectorFrontend.h : Inspector.idl $(INSPECTOR_GENERATOR_SCRIPTS)
-	$(call generator_script, $(INSPECTOR_GENERATOR_SCRIPTS)) --outputDir . --defines "$(FEATURE_DEFINES) LANGUAGE_JAVASCRIPT" --generator Inspector $<
+InspectorFrontend.h : Inspector.json $(INSPECTOR_GENERATOR_SCRIPTS)
+	python $(WebCore)/inspector/CodeGeneratorInspector.py $(WebCore)/inspector/Inspector.json --output_h_dir . --output_cpp_dir . --defines "$(FEATURE_DEFINES) LANGUAGE_JAVASCRIPT"
 
 all : InjectedScriptSource.h
 

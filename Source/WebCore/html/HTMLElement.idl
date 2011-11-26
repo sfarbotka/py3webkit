@@ -37,6 +37,7 @@ module html {
                  attribute boolean           draggable;
                  attribute [Reflect] DOMString webkitdropzone;
                  attribute [Reflect] boolean hidden;
+                 attribute [Reflect] DOMString accessKey;
 
         // Extensions
                  attribute [ConvertNullToNullString] DOMString innerHTML
@@ -65,6 +66,24 @@ module html {
         readonly attribute boolean isContentEditable;
 
                  attribute boolean spellcheck;
+
+                 attribute [Conditional=MICRODATA, Reflect] boolean itemScope;
+        readonly attribute [Conditional=MICRODATA] DOMSettableTokenList itemType;
+                 attribute [Conditional=MICRODATA, Reflect, URL] DOMString itemId;
+
+        readonly attribute [Conditional=MICRODATA] DOMSettableTokenList itemRef;
+        readonly attribute [Conditional=MICRODATA] DOMSettableTokenList itemProp;
+
+#if defined(ENABLE_MICRODATA) && ENABLE_MICRODATA
+        readonly attribute [Conditional=MICRODATA] HTMLPropertiesCollection properties;
+#endif
+
+#if !defined(LANGUAGE_CPP) || !LANGUAGE_CPP
+#if !defined(LANGUAGE_OBJECTIVE_C) || !LANGUAGE_OBJECTIVE_C
+                 attribute [Conditional=MICRODATA, Custom] DOMObject itemValue
+                     setter raises(DOMException);
+#endif
+#endif
 
 #if defined(LANGUAGE_OBJECTIVE_C) && LANGUAGE_OBJECTIVE_C
         readonly attribute DOMString titleDisplayString;

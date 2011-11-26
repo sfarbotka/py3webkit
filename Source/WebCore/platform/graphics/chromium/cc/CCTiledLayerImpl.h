@@ -59,12 +59,20 @@ public:
     // Used when texture format does not match native color format.
     typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexSwizzleAlpha> ProgramSwizzle;
 
+    // Same as above but ignoring alpha and writing out 1.0 for the alpha channel.
+    typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexOpaque> ProgramOpaque;
+    typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexSwizzleOpaque> ProgramSwizzleOpaque;
+
     // Shader program that produces anti-aliased layer edges.
     typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexClampAlphaAA> ProgramAA;
     typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexClampSwizzleAlphaAA> ProgramSwizzleAA;
 
-private:
+protected:
     explicit CCTiledLayerImpl(int id);
+    // Exposed for testing.
+    bool hasTileAt(int, int) const;
+
+private:
 
     virtual const char* layerTypeAsString() const { return "ContentLayer"; }
 

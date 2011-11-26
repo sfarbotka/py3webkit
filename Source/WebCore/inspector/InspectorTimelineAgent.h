@@ -68,7 +68,6 @@ public:
 
     void start(ErrorString*, int* maxCallStackDepth);
     void stop(ErrorString*);
-    bool started() const;
 
     int id() const { return m_id; }
 
@@ -141,11 +140,11 @@ private:
         
     InspectorTimelineAgent(InstrumentingAgents*, InspectorState*);
 
-    void pushCurrentRecord(PassRefPtr<InspectorObject>, const String& type);
+    void pushCurrentRecord(PassRefPtr<InspectorObject>, const String& type, bool captureCallStack);
     void setHeapSizeStatistic(InspectorObject* record);
         
     void didCompleteCurrentRecord(const String& type);
-    void appendRecord(PassRefPtr<InspectorObject> data, const String& type);
+    void appendRecord(PassRefPtr<InspectorObject> data, const String& type, bool captureCallStack);
 
     void addRecordToTimeline(PassRefPtr<InspectorObject>, const String& type);
 

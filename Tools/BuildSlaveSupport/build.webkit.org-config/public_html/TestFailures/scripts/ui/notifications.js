@@ -89,9 +89,12 @@ ui.notifications.Info = base.extends(ui.notifications.Notification, {
 });
 
 ui.notifications.FailingTestGroup = base.extends('li', {
-    init: function(testGroup)
+    init: function(groupName, testNameList)
     {
-        this.textContent = testGroup;
+        var link = this.appendChild(document.createElement('a'));
+        link.target = '_blank';
+        link.href = ui.urlForFlakinessDashboard(testNameList);
+        link.textContent = groupName;
     }
 });
 
@@ -172,8 +175,8 @@ ui.notifications.FailingTests = base.extends(ui.notifications.Failure, {
             return false;
         this._testNameList.push(failureAnalysis.testName);
         $(this._effects).empty();
-        this._forEachTestGroup(function (testGroup) {
-            this._effects.appendChild(new ui.notifications.FailingTestGroup(testGroup))
+        this._forEachTestGroup(function(groupName, testNameList) {
+            this._effects.appendChild(new ui.notifications.FailingTestGroup(groupName, testNameList))
         }.bind(this));
         return true;
     },
@@ -193,9 +196,11 @@ ui.notifications.FailingTests = base.extends(ui.notifications.Failure, {
                 individualTests = individualTests.concat(testsInDirectory);
                 return;
             }
-            callback(directory + ' (' + count + ' tests)');
+            callback(directory + ' (' + count + ' tests)', testsInDirectory);
         });
-        individualTests.forEach(callback);
+        individualTests.forEach(function(testName) {
+            callback(testName, [testName]);
+        });
     }
 });
 
@@ -242,19 +247,16 @@ ui.notifications.FailingTestsSummary = base.extends(ui.notifications.FailingTest
 });
 
 ui.notifications.BuildersFailing = base.extends(ui.notifications.Failure, {
-    init: function()
+    init: function(message)
     {
-        this._problem.insertBefore(document.createTextNode('Build Failed:'), this._problem.firstChild);
+        this._problem.insertBefore(document.createTextNode(message + ':'), this._problem.firstChild);
     },
     setFailingBuilders: function(builderNameList)
     {
         $(this._effects).empty().append(builderNameList.map(function(builderName) {
             var effect = document.createElement('li');
-            effect.className = 'builder-name';
-            var link = effect.appendChild(document.createElement('a'));
-            link.target = '_blank';
-            link.href = ui.displayURLForBuilder(builderName);
-            link.textContent = ui.displayNameForBuilder(builderName);
+            effect.className = 'builder';
+            effect.appendChild(new ui.failures.Builder(builderName));
             return effect;
         }));
     }

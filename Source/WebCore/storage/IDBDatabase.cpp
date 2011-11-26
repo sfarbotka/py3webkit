@@ -26,7 +26,8 @@
 #include "config.h"
 #include "IDBDatabase.h"
 
-#include "Document.h"
+#include "EventQueue.h"
+#include "ExceptionCode.h"
 #include "EventQueue.h"
 #include "IDBAny.h"
 #include "IDBDatabaseCallbacksImpl.h"
@@ -55,8 +56,8 @@ PassRefPtr<IDBDatabase> IDBDatabase::create(ScriptExecutionContext* context, Pas
 IDBDatabase::IDBDatabase(ScriptExecutionContext* context, PassRefPtr<IDBDatabaseBackendInterface> backend)
     : ActiveDOMObject(context, this)
     , m_backend(backend)
-    , m_noNewTransactions(false)
-    , m_stopped(false)
+    , m_closePending(false)
+    , m_contextStopped(false)
 {
     // We pass a reference of this object before it can be adopted.
     relaxAdoptionRequirement();
@@ -65,48 +66,56 @@ IDBDatabase::IDBDatabase(ScriptExecutionContext* context, PassRefPtr<IDBDatabase
 
 IDBDatabase::~IDBDatabase()
 {
+    close();
     m_databaseCallbacks->unregisterDatabase(this);
 }
 
-void IDBDatabase::setSetVersionTransaction(IDBTransaction* transaction)
+void IDBDatabase::setVersionChangeTransaction(IDBTransaction* transaction)
 {
-    m_setVersionTransaction = transaction;
+    ASSERT(!m_versionChangeTransaction);
+    m_versionChangeTransaction = transaction;
+}
+
+void IDBDatabase::clearVersionChangeTransaction(IDBTransaction* transaction)
+{
+    ASSERT_UNUSED(transaction, m_versionChangeTransaction == transaction);
+    m_versionChangeTransaction = 0;
 }
 
 PassRefPtr<IDBObjectStore> IDBDatabase::createObjectStore(const String& name, const OptionsObject& options, ExceptionCode& ec)
 {
-    if (!m_setVersionTransaction) {
+    if (!m_versionChangeTransaction) {
         ec = IDBDatabaseException::NOT_ALLOWED_ERR;
         return 0;
     }
 
     String keyPath;
-    bool keyPathExists = options.getKeyStringWithUndefinedOrNullCheck("keyPath", keyPath);
+    bool keyPathExists = options.getWithUndefinedOrNullCheck("keyPath", keyPath);
     if (keyPathExists && !IDBIsValidKeyPath(keyPath)) {
         ec = IDBDatabaseException::NON_TRANSIENT_ERR;
         return 0;
     }
 
     bool autoIncrement = false;
-    options.getKeyBool("autoIncrement", autoIncrement);
+    options.get("autoIncrement", autoIncrement);
     // FIXME: Look up evictable and pass that on as well.
 
-    RefPtr<IDBObjectStoreBackendInterface> objectStore = m_backend->createObjectStore(name, keyPath, autoIncrement, m_setVersionTransaction->backend(), ec);
+    RefPtr<IDBObjectStoreBackendInterface> objectStore = m_backend->createObjectStore(name, keyPath, autoIncrement, m_versionChangeTransaction->backend(), ec);
     if (!objectStore) {
         ASSERT(ec);
         return 0;
     }
-    return IDBObjectStore::create(objectStore.release(), m_setVersionTransaction.get());
+    return IDBObjectStore::create(objectStore.release(), m_versionChangeTransaction.get());
 }
 
 void IDBDatabase::deleteObjectStore(const String& name, ExceptionCode& ec)
 {
-    if (!m_setVersionTransaction) {
+    if (!m_versionChangeTransaction) {
         ec = IDBDatabaseException::NOT_ALLOWED_ERR;
         return;
     }
 
-    m_backend->deleteObjectStore(name, m_setVersionTransaction->backend(), ec);
+    m_backend->deleteObjectStore(name, m_versionChangeTransaction->backend(), ec);
 }
 
 PassRefPtr<IDBVersionChangeRequest> IDBDatabase::setVersion(ScriptExecutionContext* context, const String& version, ExceptionCode& ec)
@@ -121,18 +130,27 @@ PassRefPtr<IDBVersionChangeRequest> IDBDatabase::setVersion(ScriptExecutionConte
     return request;
 }
 
+PassRefPtr<IDBTransaction> IDBDatabase::transaction(ScriptExecutionContext* context, const String& storeName, unsigned short mode, ExceptionCode& ec)
+{
+    RefPtr<DOMStringList> storeNames = DOMStringList::create();
+    storeNames->append(storeName);
+    return transaction(context, storeNames, mode, ec);
+}
+
 PassRefPtr<IDBTransaction> IDBDatabase::transaction(ScriptExecutionContext* context, PassRefPtr<DOMStringList> prpStoreNames, unsigned short mode, ExceptionCode& ec)
 {
     RefPtr<DOMStringList> storeNames = prpStoreNames;
-    if (!storeNames)
-        storeNames = DOMStringList::create();
+    if (!storeNames || storeNames->isEmpty()) {
+        ec = INVALID_ACCESS_ERR;
+        return 0;
+    }
 
     if (mode != IDBTransaction::READ_WRITE && mode != IDBTransaction::READ_ONLY) {
         // FIXME: May need to change when specced: http://www.w3.org/Bugs/Public/show_bug.cgi?id=11406
         ec = IDBDatabaseException::CONSTRAINT_ERR;
         return 0;
     }
-    if (m_noNewTransactions) {
+    if (m_closePending) {
         ec = IDBDatabaseException::NOT_ALLOWED_ERR;
         return 0;
     }
@@ -153,11 +171,16 @@ PassRefPtr<IDBTransaction> IDBDatabase::transaction(ScriptExecutionContext* cont
 
 void IDBDatabase::close()
 {
-    if (m_noNewTransactions)
+    if (m_closePending)
         return;
 
-    ASSERT(scriptExecutionContext()->isDocument());
-    EventQueue* eventQueue = static_cast<Document*>(scriptExecutionContext())->eventQueue();
+    m_closePending = true;
+    m_backend->close(m_databaseCallbacks);
+
+    if (m_contextStopped || !scriptExecutionContext())
+        return;
+
+    EventQueue* eventQueue = scriptExecutionContext()->eventQueue();
     // Remove any pending versionchange events scheduled to fire on this
     // connection. They would have been scheduled by the backend when another
     // connection called setVersion, but the frontend connection is being
@@ -166,13 +189,13 @@ void IDBDatabase::close()
         bool removed = eventQueue->cancelEvent(m_enqueuedEvents[i].get());
         ASSERT_UNUSED(removed, removed);
     }
-
-    m_noNewTransactions = true;
-    m_backend->close(m_databaseCallbacks);
 }
 
 void IDBDatabase::onVersionChange(const String& version)
 {
+    if (m_contextStopped || !scriptExecutionContext())
+        return;
+
     enqueueEvent(IDBVersionChangeEvent::create(version, eventNames().versionchangeEvent));
 }
 
@@ -183,7 +206,7 @@ bool IDBDatabase::hasPendingActivity() const
     //        get a handle to us or any derivative transaction/request object and any
     //        of those have event listeners. This is in order to handle user generated
     //        events properly.
-    return !m_stopped || ActiveDOMObject::hasPendingActivity();
+    return !m_contextStopped || ActiveDOMObject::hasPendingActivity();
 }
 
 void IDBDatabase::open()
@@ -193,8 +216,9 @@ void IDBDatabase::open()
 
 void IDBDatabase::enqueueEvent(PassRefPtr<Event> event)
 {
-    ASSERT(scriptExecutionContext()->isDocument());
-    EventQueue* eventQueue = static_cast<Document*>(scriptExecutionContext())->eventQueue();
+    ASSERT(!m_contextStopped);
+    ASSERT(scriptExecutionContext());
+    EventQueue* eventQueue = scriptExecutionContext()->eventQueue();
     event->setTarget(this);
     eventQueue->enqueueEvent(event.get());
     m_enqueuedEvents.append(event);
@@ -212,10 +236,16 @@ bool IDBDatabase::dispatchEvent(PassRefPtr<Event> event)
 
 void IDBDatabase::stop()
 {
+    ActiveDOMObject::stop();
     // Stop fires at a deterministic time, so we need to call close in it.
     close();
 
-    m_stopped = true;
+    m_contextStopped = true;
+}
+
+const AtomicString& IDBDatabase::interfaceName() const
+{
+    return eventNames().interfaceForIDBDatabase;
 }
 
 ScriptExecutionContext* IDBDatabase::scriptExecutionContext() const

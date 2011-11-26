@@ -1,3 +1,130 @@
+2011-11-26  Jonathan Dong  <jonathan.dong@torchmobile.com.cn>
+
+        [CMake] Clean up Web Inspector target in Source/WebKit/blackberry/CMakeListsBlackBerry.txt
+        https://bugs.webkit.org/show_bug.cgi?id=72784
+
+        Reviewed by Nikolas Zimmermann.
+
+        Abstracted the JavaScript file names from inspector/front-end/inspector.html
+        to keep them in-sync with the changes of inspector.html.
+
+        * blackberry/CMakeListsBlackBerry.txt:
+
+2011-11-23  Raphael Kubo da Costa  <kubo@profusion.mobi>
+
+        [CMake] Move the top-level logic to the top-level directory.
+        https://bugs.webkit.org/show_bug.cgi?id=72685
+
+        Reviewed by Brent Fulgham.
+
+        * blackberry/CMakeListsBlackBerry.txt: Adjust the Source/ directory.
+
+2011-11-20  Mark Rowe  <mrowe@apple.com>
+
+        <http://webkit.org/b/72661> Switch to a more modern approach to retrieving the startup volume name
+
+        Use the DiskArbitration framework to retrieve the name of the startup volume rather than using Carbon
+        File Manager APIs.
+
+        Reviewed by Dan Bernstein.
+
+        * WebKit.xcodeproj/project.pbxproj: Link against DiskArbitration.framework. It lives in the shared cache
+        so it should add only negligible launch time overhead.
+
+2011-11-18  Daniel Bates  <dbates@rim.com>
+
+        Add CMake build infrastructure for the BlackBerry port
+        https://bugs.webkit.org/show_bug.cgi?id=72768
+
+        Reviewed by Antonio Gomes.
+
+        * blackberry: Added.
+        * blackberry/CMakeListsBlackBerry.txt: Added.
+
+2011-11-18  Patrick Gansterer  <paroga@webkit.org>
+
+        [CMake] Add possibility to overwrite WEBKIT_PORT_DIR in platform specific files
+        https://bugs.webkit.org/show_bug.cgi?id=72710
+
+        Reviewed by Brent Fulgham.
+
+        * CMakeLists.txt:
+
+2011-11-17  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] Layer violation: qt_runtime.cpp accesses QWebElement and QTDRTNode
+        https://bugs.webkit.org/show_bug.cgi?id=72595
+
+        Reviewed by Noam Rosenthal.
+
+        * WebKit.pri: Add qwebelement_p.h to HEADERS.
+
+2011-11-11  Darin Adler  <darin@apple.com>
+
+        * WebKit.xcodeproj/project.pbxproj: Let a newer Xcode update this file.
+        If an older Xcode downgrades this file and we have a risk of some kind of
+        oscillating commit situation, please contact me so I know not to do this again.
+
+2011-11-08  Nikolas Zimmermann  <nzimmermann@rim.com>
+
+        Switch SVGImage cache to store ImageBuffers instead of whole SVGImages, including a DOM/Render tree
+        https://bugs.webkit.org/show_bug.cgi?id=71368
+
+        Reviewed by Antti Koivisto.
+
+        * CMakeLists.txt: Add svg/graphics include, for SVGImageCache.h.
+
+2011-11-04  Tor Arne Vestbø  <tor.arne.vestbo@nokia.com>
+
+        [Qt] Refactor and clean up the qmake build system
+
+        The qmake build system has accumulated a bit of cruft and redundancy
+        over time. There's also a fairly tight coupling between how to build
+        the various targets, and _what_ to build, making it harder to add new
+        rules or sources. This patch aims to elevate these issues somewhat.
+
+        This is a short-list of the changes:
+
+          * The rules for how to build targets are now mostly contained as
+            prf-files in Tools/qmake/mkspecs/features. Using mkspecs also
+            allows us to do pre- and post-processing of each project file,
+            which helps to clean up the actual project files.
+
+          * Derived sources are no longer generated as a separate make-step
+            but is part of each target's project file as a subdir. Makefile
+            rules are used to ensure that we run make on the derived sources
+            before running qmake on the actual target makefile. This makes
+            it easier to keep a proper dependency between derived sources
+            and the target.
+
+          * We use GNU make and the compiler to generate dependencies on
+            UNIX-based systems running Qt 5. This allows us to lessen the
+            need to run qmake, which should reduce compile time.
+
+          * WebKit2 is now build by default if building with Qt 5. It can
+            be disabled by passing --no-webkit2 to build-webkit.
+
+        The result of these changes are hopefully a cleaner and easier
+        build system to modify, and faster build times due to no longer
+        running qmake on every single build. It's also a first step
+        towards possibly generating the list of sources using another
+        build system.
+
+        https://bugs.webkit.org/show_bug.cgi?id=71222
+
+        Reviewed by Simon Hausmann.
+
+        * WebKit.pri: Added.
+
+2011-10-10  Joseph Pecoraro  <joepeck@webkit.org>
+
+        Extract WebOpenPanelResultListener out into its own file
+        https://bugs.webkit.org/show_bug.cgi?id=69575
+
+        Reviewed by David Kilzer.
+
+        * WebKit.xcodeproj/project.pbxproj:
+
 2011-10-06  Anders Carlsson  <andersca@apple.com>
 
         When building with clang, enable -Wglobal-constructors and -Wexit-time-destructors

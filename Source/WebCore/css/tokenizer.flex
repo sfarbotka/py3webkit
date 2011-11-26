@@ -12,8 +12,8 @@ unicode         \\{h}{1,6}[ \t\r\n\f]?
 escape          {unicode}|\\[ -~\200-\377]
 nmstart         [_a-zA-Z]|{nonascii}|{escape}
 nmchar          [_a-zA-Z0-9-]|{nonascii}|{escape}
-string1         \"([\t !#$%&(-~]|\\{nl}|\'|{nonascii}|{escape})*\"
-string2         \'([\t !#$%&(-~]|\\{nl}|\"|{nonascii}|{escape})*\'
+string1         \"([^\n\r\f\\"]|\\{nl}|{escape})*\"
+string2         \'([^\n\r\f\\']|\\{nl}|{escape})*\'
 
 ident           -?{nmstart}{nmchar}*
 num             [0-9]+|[0-9]*"."[0-9]+
@@ -80,6 +80,7 @@ nthfunc         "nth-"("child"|"of-type"|"last-child"|"last-of-type")
 "@-webkit-selector"     {yyTok = WEBKIT_SELECTOR_SYM; return yyTok; }
 "@-webkit-keyframes"    {yyTok = WEBKIT_KEYFRAMES_SYM; return yyTok; }
 "@-webkit-keyframe-rule" {yyTok = WEBKIT_KEYFRAME_RULE_SYM; return yyTok; }
+"@-webkit-region"       {yyTok = WEBKIT_REGION_STYLE_RULE_SYM; return yyTok;}
 
 "@"{ident}              {yyTok = ATKEYWORD; return yyTok; }
 

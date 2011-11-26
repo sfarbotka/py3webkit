@@ -257,7 +257,7 @@ int HTMLImageElement::width(bool ignorePendingStylesheets)
 
         // if the image is available, use its width
         if (m_imageLoader.image())
-            return m_imageLoader.image()->imageSize(1.0f).width();
+            return m_imageLoader.image()->imageSizeForRenderer(renderer(), 1.0f).width();
     }
 
     if (ignorePendingStylesheets)
@@ -280,7 +280,7 @@ int HTMLImageElement::height(bool ignorePendingStylesheets)
 
         // if the image is available, use its height
         if (m_imageLoader.image())
-            return m_imageLoader.image()->imageSize(1.0f).height();
+            return m_imageLoader.image()->imageSizeForRenderer(renderer(), 1.0f).height();
     }
 
     if (ignorePendingStylesheets)
@@ -297,7 +297,7 @@ int HTMLImageElement::naturalWidth() const
     if (!m_imageLoader.image())
         return 0;
 
-    return m_imageLoader.image()->imageSize(1.0f).width();
+    return m_imageLoader.image()->imageSizeForRenderer(renderer(), 1.0f).width();
 }
 
 int HTMLImageElement::naturalHeight() const
@@ -305,7 +305,7 @@ int HTMLImageElement::naturalHeight() const
     if (!m_imageLoader.image())
         return 0;
 
-    return m_imageLoader.image()->imageSize(1.0f).height();
+    return m_imageLoader.image()->imageSizeForRenderer(renderer(), 1.0f).height();
 }
 
 bool HTMLImageElement::isURLAttribute(Attribute* attr) const
@@ -313,7 +313,8 @@ bool HTMLImageElement::isURLAttribute(Attribute* attr) const
     return attr->name() == srcAttr
         || attr->name() == lowsrcAttr
         || attr->name() == longdescAttr
-        || (attr->name() == usemapAttr && attr->value().string()[0] != '#');
+        || (attr->name() == usemapAttr && attr->value().string()[0] != '#')
+        || HTMLElement::isURLAttribute(attr);
 }
 
 const AtomicString& HTMLImageElement::alt() const
@@ -402,5 +403,17 @@ bool HTMLImageElement::isServerMap() const
 
     return document()->completeURL(stripLeadingAndTrailingHTMLSpaces(usemap)).isEmpty();
 }
+
+#if ENABLE(MICRODATA)
+String HTMLImageElement::itemValueText() const
+{
+    return getURLAttribute(srcAttr);
+}
+
+void HTMLImageElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setAttribute(srcAttr, value, ec);
+}
+#endif
 
 }

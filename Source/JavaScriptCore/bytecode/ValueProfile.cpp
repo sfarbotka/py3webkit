@@ -32,94 +32,19 @@
 namespace JSC {
 
 #if ENABLE(VALUE_PROFILER)
-void ValueProfile::computeStatistics(const ClassInfo* classInfo, Statistics& statistics)
-{
-    statistics.cells++;
-    
-    if (classInfo == &JSFinalObject::s_info) {
-        statistics.finalObjects++;
-        statistics.objects++;
-        return;
-    }
-    
-    if (classInfo == &JSArray::s_info) {
-        statistics.arrays++;
-        statistics.objects++;
-        return;
-    }
-    
-    if (classInfo == &JSString::s_info) {
-        statistics.strings++;
-        return;
-    }
-    
-    if (classInfo->isSubClassOf(&JSObject::s_info))
-        statistics.objects++;
-}
-
-void ValueProfile::computeStatistics(Statistics& statistics) const
-{
-    for (unsigned i = 0; i < numberOfBuckets; ++i) {
-        if (!m_buckets[i]) {
-            WeakBucket weakBucket = m_weakBuckets[i];
-            if (!!weakBucket) {
-                statistics.samples++;
-                computeStatistics(weakBucket.getClassInfo(), statistics);
-            }
-            
-            continue;
-        }
-        
-        statistics.samples++;
-        
-        JSValue value = JSValue::decode(m_buckets[i]);
-        if (value.isInt32())
-            statistics.int32s++;
-        else if (value.isDouble())
-            statistics.doubles++;
-        else if (value.isCell())
-            computeStatistics(value.asCell()->structure()->classInfo(), statistics);
-        else if (value.isBoolean())
-            statistics.booleans++;
-    }
-}
-
 PredictedType ValueProfile::computeUpdatedPrediction()
 {
-    ValueProfile::Statistics statistics;
-    computeStatistics(statistics);
-    
-    PredictedType prediction;
-    
-    if (!statistics.samples)
-        prediction = PredictNone;
-    else if (statistics.int32s == statistics.samples)
-        prediction = PredictInt32;
-    else if (statistics.doubles == statistics.samples)
-        prediction = PredictDouble;
-    else if (statistics.int32s + statistics.doubles == statistics.samples)
-        prediction = PredictNumber;
-    else if (statistics.arrays == statistics.samples)
-        prediction = PredictArray;
-    else if (statistics.finalObjects == statistics.samples)
-        prediction = PredictFinalObject;
-    else if (statistics.strings == statistics.samples)
-        prediction = PredictString;
-    else if (statistics.objects == statistics.samples)
-        prediction = PredictObjectOther;
-    else if (statistics.cells == statistics.samples)
-        prediction = PredictCellOther;
-    else if (statistics.booleans == statistics.samples)
-        prediction = PredictBoolean;
-    else
-        prediction = PredictOther;
-
-    m_numberOfSamplesInPrediction += statistics.samples;
-    mergePrediction(m_prediction, prediction);
-    for (unsigned i = 0; i < numberOfBuckets; ++i) {
+    for (unsigned i = 0; i < totalNumberOfBuckets; ++i) {
+        JSValue value = JSValue::decode(m_buckets[i]);
+        if (!value)
+            continue;
+        
+        m_numberOfSamplesInPrediction++;
+        mergePrediction(m_prediction, predictionFromValue(value));
+        
         m_buckets[i] = JSValue::encode(JSValue());
-        m_weakBuckets[i] = WeakBucket();
     }
+    
     return m_prediction;
 }
 #endif // ENABLE(VALUE_PROFILER)

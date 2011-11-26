@@ -100,6 +100,12 @@ bool InspectorDebuggerAgent::enabled()
     return m_inspectorState->getBoolean(DebuggerAgentState::debuggerEnabled);
 }
 
+void InspectorDebuggerAgent::getCapabilities(ErrorString*, RefPtr<InspectorArray>* capabilities)
+{
+    if (scriptDebugServer().canSetScriptSource())
+        (*capabilities)->pushString(InspectorFrontend::Debugger::capabilitySetScriptSource);
+}
+
 void InspectorDebuggerAgent::enable(ErrorString*)
 {
     if (enabled())
@@ -109,7 +115,6 @@ void InspectorDebuggerAgent::enable(ErrorString*)
     m_inspectorState->setBoolean(DebuggerAgentState::debuggerEnabled, true);
 
     ASSERT(m_frontend);
-    m_frontend->debuggerWasEnabled();
 }
 
 void InspectorDebuggerAgent::disable(ErrorString*)
@@ -119,15 +124,14 @@ void InspectorDebuggerAgent::disable(ErrorString*)
 
     disable();
     m_inspectorState->setBoolean(DebuggerAgentState::debuggerEnabled, false);
-
-    if (m_frontend)
-        m_frontend->debuggerWasDisabled();
 }
 
 void InspectorDebuggerAgent::restore()
 {
-    if (enabled())
+    if (enabled()) {
+        m_frontend->globalObjectCleared();
         enable();
+    }
 }
 
 void InspectorDebuggerAgent::setFrontend(InspectorFrontend* frontend)
@@ -158,10 +162,12 @@ void InspectorDebuggerAgent::setBreakpointsActive(ErrorString*, bool active)
         scriptDebugServer().deactivateBreakpoints();
 }
 
-void InspectorDebuggerAgent::inspectedURLChanged(const String&)
+void InspectorDebuggerAgent::didClearMainFrameWindowObject()
 {
     m_scripts.clear();
     m_breakpointIdToDebugServerBreakpointIds.clear();
+    if (m_frontend)
+        m_frontend->globalObjectCleared();
 }
 
 static PassRefPtr<InspectorObject> buildObjectForBreakpointCookie(const String& url, int lineNumber, int columnNumber, const String& condition, bool isRegex)
@@ -321,11 +327,14 @@ static PassRefPtr<InspectorObject> scriptToInspectorObject(ScriptObject scriptOb
     return value->asObject();
 }
 
-void InspectorDebuggerAgent::searchInContent(ErrorString* error, const String& scriptId, const String& query, RefPtr<InspectorArray>* results)
+void InspectorDebuggerAgent::searchInContent(ErrorString* error, const String& scriptId, const String& query, const bool* const optionalCaseSensitive, const bool* const optionalIsRegex, RefPtr<InspectorArray>* results)
 {
+    bool isRegex = optionalIsRegex ? *optionalIsRegex : false;
+    bool caseSensitive = optionalCaseSensitive ? *optionalCaseSensitive : false;
+
     ScriptsMap::iterator it = m_scripts.find(scriptId);
     if (it != m_scripts.end())
-        *results = ContentSearchUtils::searchInTextByLines(query, it->second.source);
+        *results = ContentSearchUtils::searchInTextByLines(it->second.source, query, caseSensitive, isRegex);
     else
         *error = "No script for id: " + scriptId;
 }
@@ -349,6 +358,16 @@ void InspectorDebuggerAgent::getScriptSource(ErrorString* error, const String& s
         *scriptSource = it->second.source;
     else
         *error = "No script for id: " + scriptId;
+}
+
+void InspectorDebuggerAgent::getFunctionLocation(ErrorString* errorString, const String& functionId, RefPtr<InspectorObject>* location)
+{
+    InjectedScript injectedScript = m_injectedScriptManager->injectedScriptForObjectId(functionId);
+    if (injectedScript.hasNoValue()) {
+        *errorString = "Inspected frame has gone";
+        return;
+    }
+    injectedScript.getFunctionLocation(errorString, functionId, location);
 }
 
 void InspectorDebuggerAgent::schedulePauseOnNextStatement(const String& breakReason, PassRefPtr<InspectorObject> data)

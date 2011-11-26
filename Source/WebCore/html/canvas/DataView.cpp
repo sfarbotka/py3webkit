@@ -27,6 +27,7 @@
 #include "DataView.h"
 
 #include "CheckedInt.h"
+#include "ExceptionCode.h"
 
 namespace {
 
@@ -233,6 +234,12 @@ void DataView::setFloat32(unsigned byteOffset, float value, bool littleEndian, E
 void DataView::setFloat64(unsigned byteOffset, double value, bool littleEndian, ExceptionCode& ec)
 {
     setData<double>(byteOffset, value, littleEndian, ec);
+}
+
+void DataView::neuter()
+{
+    ArrayBufferView::neuter();
+    m_byteLength = 0;
 }
 
 }

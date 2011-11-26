@@ -31,6 +31,7 @@
 #include "SVGMPathElement.h"
 #include "SVGNames.h"
 #include "SVGParserUtilities.h"
+#include "SVGPathData.h"
 #include "SVGPathElement.h"
 #include "SVGPathParserFactory.h"
 #include "SVGTransformList.h"
@@ -116,7 +117,7 @@ SVGAnimateMotionElement::RotateMode SVGAnimateMotionElement::rotateMode() const
 {
     DEFINE_STATIC_LOCAL(const AtomicString, autoVal, ("auto"));
     DEFINE_STATIC_LOCAL(const AtomicString, autoReverse, ("auto-reverse"));
-    String rotate = fastGetAttribute(SVGNames::rotateAttr);
+    const AtomicString& rotate = getAttribute(SVGNames::rotateAttr);
     if (rotate == autoVal)
         return RotateAuto;
     if (rotate == autoReverse)
@@ -132,7 +133,7 @@ Path SVGAnimateMotionElement::animationPath() const
             SVGPathElement* pathElement = mPath->pathElement();
             Path path;
             if (pathElement)
-                pathElement->toPathData(path);
+                updatePathFromGraphicsElement(pathElement, path);
             return path;
         }
     }

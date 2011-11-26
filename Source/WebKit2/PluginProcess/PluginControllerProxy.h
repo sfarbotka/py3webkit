@@ -101,6 +101,7 @@ private:
     virtual mach_port_t compositingRenderServerPort();
 #endif
 
+    virtual float contentsScaleFactor();
     virtual String proxiesForURL(const String&);
     virtual String cookiesForURL(const String&);
     virtual void setCookiesForURL(const String& urlString, const String& cookieString);
@@ -112,7 +113,7 @@ private:
     // Message handlers.
     void frameDidFinishLoading(uint64_t requestID);
     void frameDidFail(uint64_t requestID, bool wasCancelled);
-    void geometryDidChange(const WebCore::IntRect& frameRect, const WebCore::IntRect& clipRect, const ShareableBitmap::Handle& backingStoreHandle);
+    void geometryDidChange(const WebCore::IntSize& pluginSize, const WebCore::IntRect& clipRect, const WebCore::AffineTransform& pluginToRootViewTransform, float contentsScaleFactor, const ShareableBitmap::Handle& backingStoreHandle);
     void didEvaluateJavaScript(uint64_t requestID, const String& result);
     void streamDidReceiveResponse(uint64_t streamID, const String& responseURLString, uint32_t streamLength, uint32_t lastModifiedTime, const String& mimeType, const String& headers);
     void streamDidReceiveData(uint64_t streamID, const CoreIPC::DataReference& data);
@@ -160,9 +161,7 @@ private:
 
     RefPtr<Plugin> m_plugin;
 
-    // The plug-in rect and clip rect in window coordinates.
-    WebCore::IntRect m_frameRect;
-    WebCore::IntRect m_clipRect;
+    WebCore::IntSize m_pluginSize;
 
     // The dirty rect in plug-in coordinates.
     WebCore::IntRect m_dirtyRect;
@@ -194,6 +193,9 @@ private:
     // For CA plug-ins, this holds the information needed to export the layer hierarchy to the UI process.
     RetainPtr<WKCARemoteLayerClientRef> m_remoteLayerClient;
 #endif
+
+    // The contents scale factor of this plug-in.
+    float m_contentsScaleFactor;
     
     // The backing store that this plug-in draws into.
     RefPtr<ShareableBitmap> m_backingStore;

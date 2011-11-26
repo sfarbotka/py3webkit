@@ -106,6 +106,11 @@ void ContextMenuController::handleContextMenuEvent(Event* event)
     showContextMenu(event);
 }
 
+static PassOwnPtr<ContextMenuItem> separatorItem()
+{
+    return adoptPtr(new ContextMenuItem(SeparatorType, ContextMenuItemTagNoAction, String()));
+}
+
 void ContextMenuController::showContextMenu(Event* event, PassRefPtr<ContextMenuProvider> menuProvider)
 {
     m_menuProvider = menuProvider;
@@ -117,6 +122,10 @@ void ContextMenuController::showContextMenu(Event* event, PassRefPtr<ContextMenu
     }
 
     m_menuProvider->populateContextMenu(m_contextMenu.get());
+    if (m_hitTestResult.isSelected()) {
+        appendItem(*separatorItem(), m_contextMenu.get());
+        populate();
+    }
     showContextMenu(event);
 }
 
@@ -159,8 +168,8 @@ static void openNewWindow(const KURL& urlToLoad, Frame* frame)
 {
     if (Page* oldPage = frame->page()) {
         FrameLoadRequest request(frame->document()->securityOrigin(), ResourceRequest(urlToLoad, frame->loader()->outgoingReferrer()));
-        if (Page* newPage = oldPage->chrome()->createWindow(frame, request, WindowFeatures(), NavigationAction())) {
-            newPage->mainFrame()->loader()->loadFrameRequest(request, false, false, 0, 0, SendReferrer);   
+        if (Page* newPage = oldPage->chrome()->createWindow(frame, request, WindowFeatures(), NavigationAction(request.resourceRequest()))) {
+            newPage->mainFrame()->loader()->loadFrameRequest(request, false, false, 0, 0, MaybeSendReferrer);
             newPage->chrome()->show();
         }
     }
@@ -299,7 +308,7 @@ void ContextMenuController::contextMenuItemSelected(ContextMenuItem* item)
         break;
     case ContextMenuItemTagOpenLink:
         if (Frame* targetFrame = m_hitTestResult.targetFrame())
-            targetFrame->loader()->loadFrameRequest(FrameLoadRequest(frame->document()->securityOrigin(), ResourceRequest(m_hitTestResult.absoluteLinkURL(), frame->loader()->outgoingReferrer())), false, false, 0, 0, SendReferrer);
+            targetFrame->loader()->loadFrameRequest(FrameLoadRequest(frame->document()->securityOrigin(), ResourceRequest(m_hitTestResult.absoluteLinkURL(), frame->loader()->outgoingReferrer())), false, false, 0, 0, MaybeSendReferrer);
         else
             openNewWindow(m_hitTestResult.absoluteLinkURL(), frame);
         break;
@@ -427,11 +436,6 @@ void ContextMenuController::appendItem(ContextMenuItem& menuItem, ContextMenu* p
     checkOrEnableIfNeeded(menuItem);
     if (parentMenu)
         parentMenu->appendItem(menuItem);
-}
-
-static PassOwnPtr<ContextMenuItem> separatorItem()
-{
-    return adoptPtr(new ContextMenuItem(SeparatorType, ContextMenuItemTagNoAction, String()));
 }
 
 void ContextMenuController::createAndAppendFontSubMenu(ContextMenuItem& fontMenuItem)

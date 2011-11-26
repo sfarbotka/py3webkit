@@ -23,6 +23,10 @@
 
 #include "InternalFunction.h"
 
+namespace WTF {
+class TextPosition;
+}
+
 namespace JSC {
 
     class FunctionPrototype;
@@ -48,15 +52,14 @@ namespace JSC {
     private:
         FunctionConstructor(JSGlobalObject*, Structure*);
         void finishCreation(ExecState*, FunctionPrototype*);
-        virtual ConstructType getConstructData(ConstructData&);
-        virtual CallType getCallDataVirtual(CallData&);
+        static ConstructType getConstructData(JSCell*, ConstructData&);
         static CallType getCallData(JSCell*, CallData&);
     };
 
-    JSObject* constructFunction(ExecState*, JSGlobalObject*, const ArgList&, const Identifier& functionName, const UString& sourceURL, int lineNumber);
+    JSObject* constructFunction(ExecState*, JSGlobalObject*, const ArgList&, const Identifier& functionName, const UString& sourceURL, const WTF::TextPosition&);
     JSObject* constructFunction(ExecState*, JSGlobalObject*, const ArgList&);
 
-    JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState*, JSGlobalObject*, const ArgList&, const Identifier&, const UString&, int lineNumber);
+    JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState*, JSGlobalObject*, const ArgList&, const Identifier&, const UString&, const WTF::TextPosition&);
 
 } // namespace JSC
 

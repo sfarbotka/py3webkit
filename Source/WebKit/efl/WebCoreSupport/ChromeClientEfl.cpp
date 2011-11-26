@@ -171,7 +171,7 @@ void ChromeClientEfl::setToolbarsVisible(bool visible)
 
 bool ChromeClientEfl::toolbarsVisible()
 {
-    Eina_Bool visible;
+    bool visible;
 
     ewk_view_toolbars_visible_get(m_view, &visible);
     return visible;
@@ -184,7 +184,7 @@ void ChromeClientEfl::setStatusbarVisible(bool visible)
 
 bool ChromeClientEfl::statusbarVisible()
 {
-    Eina_Bool visible;
+    bool visible;
 
     ewk_view_statusbar_visible_get(m_view, &visible);
     return visible;
@@ -197,7 +197,7 @@ void ChromeClientEfl::setScrollbarsVisible(bool visible)
 
 bool ChromeClientEfl::scrollbarsVisible()
 {
-    Eina_Bool visible;
+    bool visible;
 
     ewk_view_scrollbars_visible_get(m_view, &visible);
     return visible;
@@ -210,7 +210,7 @@ void ChromeClientEfl::setMenubarVisible(bool visible)
 
 bool ChromeClientEfl::menubarVisible()
 {
-    Eina_Bool visible;
+    bool visible;
 
     ewk_view_menubar_visible_get(m_view, &visible);
     return visible;
@@ -325,13 +325,13 @@ void ChromeClientEfl::contentsSizeChanged(Frame* frame, const IntSize& size) con
         ewk_view_contents_size_changed(m_view, size.width(), size.height());
 }
 
-IntRect ChromeClientEfl::windowToScreen(const IntRect& rect) const
+IntRect ChromeClientEfl::rootViewToScreen(const IntRect& rect) const
 {
     notImplemented();
     return rect;
 }
 
-IntPoint ChromeClientEfl::screenToWindow(const IntPoint& point) const
+IntPoint ChromeClientEfl::screenToRootView(const IntPoint& point) const
 {
     notImplemented();
     return point;
@@ -428,13 +428,12 @@ NotificationPresenter* ChromeClientEfl::notificationPresenter() const
 void ChromeClientEfl::runOpenPanel(Frame* frame, PassRefPtr<FileChooser> prpFileChooser)
 {
     RefPtr<FileChooser> chooser = prpFileChooser;
-    bool confirm;
     Eina_List* selectedFilenames = 0;
     void* filename;
     Vector<String> filenames;
 
-    CString accept = chooser->settings().acceptTypes.utf8();
-    confirm = ewk_view_run_open_panel(m_view, kit(frame), chooser->settings().allowsMultipleFiles, accept.data(), &selectedFilenames);
+    const FileChooserSettings& settings = chooser->settings();
+    bool confirm = ewk_view_run_open_panel(m_view, kit(frame), settings.allowsMultipleFiles, settings.acceptMIMETypes, &selectedFilenames);
 
     if (!confirm)
         return;
@@ -486,12 +485,12 @@ void ChromeClientEfl::invalidateContents(const IntRect& updateRect, bool immedia
     notImplemented();
 }
 
-void ChromeClientEfl::invalidateWindow(const IntRect& updateRect, bool immediate)
+void ChromeClientEfl::invalidateRootView(const IntRect& updateRect, bool immediate)
 {
     notImplemented();
 }
 
-void ChromeClientEfl::invalidateContentsAndWindow(const IntRect& updateRect, bool immediate)
+void ChromeClientEfl::invalidateContentsAndRootView(const IntRect& updateRect, bool immediate)
 {
     if (updateRect.isEmpty())
         return;
@@ -507,7 +506,7 @@ void ChromeClientEfl::invalidateContentsAndWindow(const IntRect& updateRect, boo
 
 void ChromeClientEfl::invalidateContentsForSlowScroll(const IntRect& updateRect, bool immediate)
 {
-    invalidateContentsAndWindow(updateRect, immediate);
+    invalidateContentsAndRootView(updateRect, immediate);
 }
 
 void ChromeClientEfl::scroll(const IntSize& scrollDelta, const IntRect& rectToScroll, const IntRect& clipRect)
@@ -530,7 +529,7 @@ void ChromeClientEfl::loadIconForFiles(const Vector<String>&, FileIconLoader*)
     notImplemented();
 }
 
-void ChromeClientEfl::dispatchViewportDataDidChange(const ViewportArguments& arguments) const
+void ChromeClientEfl::dispatchViewportPropertiesDidChange(const ViewportArguments& arguments) const
 {
     ewk_view_viewport_attributes_set(m_view, arguments);
 }

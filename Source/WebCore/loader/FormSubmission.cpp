@@ -90,9 +90,9 @@ void FormSubmission::Attributes::parseAction(const String& action)
 
 String FormSubmission::Attributes::parseEncodingType(const String& type)
 {
-    if (type.contains("multipart", false) || type.contains("form-data", false))
+    if (equalIgnoringCase(type, "multipart/form-data"))
         return "multipart/form-data";
-    if (type.contains("text", false) || type.contains("plain", false))
+    if (equalIgnoringCase(type, "text/plain"))
         return "text/plain";
     return "application/x-www-form-urlencoded";
 }
@@ -199,7 +199,7 @@ PassRefPtr<FormSubmission> FormSubmission::create(HTMLFormElement* form, const A
         formData = FormData::createMultiPart(*(static_cast<FormDataList*>(domFormData.get())), domFormData->encoding(), document);
         boundary = formData->boundary().data();
     } else {
-        formData = FormData::create(*(static_cast<FormDataList*>(domFormData.get())), domFormData->encoding());
+        formData = FormData::create(*(static_cast<FormDataList*>(domFormData.get())), domFormData->encoding(), attributes.method() == GetMethod ? FormData::FormURLEncoded : FormData::parseEncodingType(encodingType));
         if (copiedAttributes.method() == PostMethod && isMailtoForm) {
             // Convert the form data into a string that we put into the URL.
             appendMailtoPostFormDataToURL(actionURL, *formData, encodingType);

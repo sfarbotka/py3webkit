@@ -31,7 +31,7 @@
 #ifndef WebDevToolsAgent_h
 #define WebDevToolsAgent_h
 
-#include "WebCommon.h"
+#include "platform/WebCommon.h"
 
 namespace WebKit {
 class WebDevToolsAgentClient;
@@ -71,14 +71,6 @@ public:
     virtual void evaluateInWebInspector(long callId, const WebString& script) = 0;
     virtual void setJavaScriptProfilingEnabled(bool) = 0;
 
-    // Asynchronously executes debugger command in the render thread.
-    // |callerIdentifier| will be used for sending response.
-    WEBKIT_EXPORT static void executeDebuggerCommand(
-        const WebString& command, int callerIdentifier);
-
-    // Asynchronously request debugger to pause immediately.
-    WEBKIT_EXPORT static void debuggerPauseScript();
-
     class MessageDescriptor {
     public:
         virtual ~MessageDescriptor() { }
@@ -90,11 +82,9 @@ public:
     WEBKIT_EXPORT static bool shouldInterruptForMessage(const WebString&);
     WEBKIT_EXPORT static void processPendingMessages();
 
-    typedef void (*MessageLoopDispatchHandler)();
-
-    // Installs dispatch handle that is going to be called periodically
-    // while on a breakpoint.
-    WEBKIT_EXPORT static void setMessageLoopDispatchHandler(MessageLoopDispatchHandler);
+    // Returns a disconnect event that can be dispatched on the front-end
+    // in order to let it know that it has disconnected from the agent.
+    WEBKIT_EXPORT static WebString disconnectEventAsText();
 };
 
 } // namespace WebKit

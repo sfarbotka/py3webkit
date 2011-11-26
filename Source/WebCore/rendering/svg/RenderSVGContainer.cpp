@@ -33,6 +33,7 @@
 #include "RenderView.h"
 #include "SVGRenderSupport.h"
 #include "SVGResources.h"
+#include "SVGResourcesCache.h"
 #include "SVGStyledElement.h"
 
 namespace WebCore {
@@ -62,10 +63,10 @@ void RenderSVGContainer::layout()
     // Allow RenderSVGTransformableContainer to update its transform.
     bool updatedTransform = calculateLocalTransform();
 
-    SVGRenderSupport::layoutChildren(this, selfNeedsLayout());
+    SVGRenderSupport::layoutChildren(this, selfNeedsLayout() || SVGRenderSupport::filtersForceContainerLayout(this));
 
     // Invalidate all resources of this client if our layout changed.
-    if (m_everHadLayout && selfNeedsLayout())
+    if (m_everHadLayout && needsLayout())
         SVGResourcesCache::clientLayoutChanged(this);
 
     // At this point LayoutRepainter already grabbed the old bounds,
@@ -84,12 +85,8 @@ void RenderSVGContainer::layout()
 
 bool RenderSVGContainer::selfWillPaint()
 {
-#if ENABLE(FILTERS)
     SVGResources* resources = SVGResourcesCache::cachedResourcesForRenderObject(this);
     return resources && resources->filter();
-#else
-    return false;
-#endif
 }
 
 void RenderSVGContainer::paint(PaintInfo& paintInfo, const LayoutPoint&)

@@ -30,12 +30,10 @@
 // changes in its ouput.
 module test {
     interface [
+        ActiveDOMObject,
         Conditional=Condition1|Condition2,
-        CanBeConstructed,
         CallWith=ScriptExecutionContext,
         Constructor(in DOMString str1, in [Optional=CallWithDefaultValue] DOMString str2),
-        ConstructorWith=ScriptExecutionContext,
-        V8ConstructorSetsActiveDOMWrapper,
         ConstructorRaisesException
     ] TestInterface {
     };

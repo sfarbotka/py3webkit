@@ -28,6 +28,7 @@
 #import <WebKit2/WKPagePrivate.h>
 #import <WebKit2/WKStringCF.h>
 #import <WebKit2/WKURLCF.h>
+#import <WebKit2/WKViewPrivate.h>
 
 @interface BrowserWindowController ()
 - (void)didStartProgress;
@@ -43,10 +44,11 @@
 
 @implementation BrowserWindowController
 
-- (id)initWithContext:(WKContextRef)context
+- (id)initWithContext:(WKContextRef)context pageGroup:(WKPageGroupRef)pageGroup
 {
     if ((self = [super initWithWindowNibName:@"BrowserWindow"])) {
         _context = WKRetain(context);
+        _pageGroup = WKRetain(pageGroup);
         _zoomTextOnly = NO;
     }
     
@@ -159,6 +161,8 @@
 {
     WKRelease(_context);
     _context = 0;
+    WKRelease(_pageGroup);
+    _pageGroup = 0;
 }
 
 - (void)applicationTerminating
@@ -321,6 +325,11 @@ static void didRunInsecureContentForFrame(WKPageRef page, WKFrameRef frame, WKTy
     LOG(@"didRunInsecureContentForFrame");
 }
 
+static void didDetectXSSForFrame(WKPageRef page, WKFrameRef frame, WKTypeRef userData, const void *clientInfo) 
+{ 
+    LOG(@"didDetectXSSForFrame"); 
+}
+ 
 static void didStartProgress(WKPageRef page, const void *clientInfo)
 {
     [(BrowserWindowController *)clientInfo didStartProgress];
@@ -380,7 +389,7 @@ static void decidePolicyForResponse(WKPageRef page, WKFrameRef frame, WKURLRespo
 static WKPageRef createNewPage(WKPageRef page, WKURLRequestRef request, WKDictionaryRef features, WKEventModifiers modifiers, WKEventMouseButton button, const void* clientInfo)
 {
     LOG(@"createNewPage");
-    BrowserWindowController *controller = [[BrowserWindowController alloc] initWithContext:WKPageGetContext(page)];
+    BrowserWindowController *controller = [[BrowserWindowController alloc] initWithContext:WKPageGetContext(page) pageGroup:WKPageGetPageGroup(page)];
     [controller loadWindow];
 
     return controller->_webView.pageRef;
@@ -565,7 +574,7 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
 
 - (void)awakeFromNib
 {
-    _webView = [[WKView alloc] initWithFrame:[containerView frame] contextRef:_context];
+    _webView = [[WKView alloc] initWithFrame:[containerView frame] contextRef:_context pageGroupRef:_pageGroup];
 
     [containerView addSubview:_webView];
     [_webView setFrame:[containerView frame]];
@@ -599,7 +608,8 @@ static void runOpenPanel(WKPageRef page, WKFrameRef frame, WKOpenPanelParameters
         processDidExit,
         didChangeBackForwardList,
         0, // shouldGoToBackForwardItem
-        0  // didFailToInitializePlugin
+        0,  // didFailToInitializePlugin
+        didDetectXSSForFrame,
     };
     WKPageSetPageLoaderClient(_webView.pageRef, &loadClient);
     

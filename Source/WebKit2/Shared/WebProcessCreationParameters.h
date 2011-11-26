@@ -56,6 +56,8 @@ struct WebProcessCreationParameters {
     String applicationCacheDirectory;    
     String databaseDirectory;
     String localStorageDirectory;
+    String webInspectorLocalizedStringsPath;
+
     Vector<String> urlSchemesRegistererdAsEmptyDocument;
     Vector<String> urlSchemesRegisteredAsSecure;
     Vector<String> urlSchemesForWhichDomainRelaxationIsForbidden;
@@ -79,6 +81,8 @@ struct WebProcessCreationParameters {
 
     TextCheckerState textCheckerState;
 
+    bool fullKeyboardAccessEnabled;
+
     double defaultRequestTimeoutInterval;
 
 #if USE(CFURLSTORAGESESSIONS)
@@ -98,6 +102,8 @@ struct WebProcessCreationParameters {
     CoreIPC::MachPort acceleratedCompositingPort;
 
     String uiProcessBundleResourcePath;
+
+    String webInspectorBaseDirectory;
 
 #elif PLATFORM(WIN)
     String cfURLCachePath;

@@ -36,12 +36,6 @@
 #include <WebCore/SharedBuffer.h>
 #include <utility>
 
-#if PLATFORM(QT)
-#include <QX11Info>
-#elif PLATFORM(GTK)
-#include <gdk/gdkx.h>
-#endif
-
 using namespace WebCore;
 using namespace std;
 
@@ -460,6 +454,12 @@ static NPError NPN_GetValue(NPP npp, NPNVariable variable, void *value)
             *(NPBool*)value = plugin->isAcceleratedCompositingEnabled();
             break;
         }
+        case NPNVcontentsScaleFactor: {
+            RefPtr<NetscapePlugin> plugin = NetscapePlugin::fromNPP(npp);
+
+            *(double*)value = plugin->contentsScaleFactor();
+            break;
+        }
         case NPNVsupportsCocoaBool:
             // Always claim to support the Cocoa event model.
             *(NPBool*)value = true;
@@ -519,15 +519,8 @@ static NPError NPN_GetValue(NPP npp, NPNVariable variable, void *value)
        case NPNVxDisplay: {
            if (!npp)
                return NPERR_GENERIC_ERROR;
-#if PLATFORM(QT)
-           *reinterpret_cast<Display**>(value) = QX11Info::display();
+           *reinterpret_cast<Display**>(value) = NetscapePlugin::x11HostDisplay();
            break;
-#elif PLATFORM(GTK)
-           *reinterpret_cast<Display**>(value) = GDK_DISPLAY_XDISPLAY(gdk_display_get_default());
-           break;
-#else
-           goto default;
-#endif
        }
        case NPNVSupportsXEmbedBool:
            *static_cast<NPBool*>(value) = true;

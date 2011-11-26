@@ -42,8 +42,8 @@ public:
     }
 
     static JSC::JSObject* createPrototype(JSC::ExecState*, JSC::JSGlobalObject*);
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
     static const JSC::ClassInfo s_info;
 
     static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
@@ -52,15 +52,32 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::ExecState*, JSC::JSGlobalObject*);
-    TestSerializedScriptValueInterface* impl() const { return m_impl.get(); }
+    TestSerializedScriptValueInterface* impl() const { return m_impl; }
+    void releaseImpl() { m_impl->deref(); m_impl = 0; }
 
 private:
-    RefPtr<TestSerializedScriptValueInterface> m_impl;
+    TestSerializedScriptValueInterface* m_impl;
 protected:
     JSTestSerializedScriptValueInterface(JSC::Structure*, JSDOMGlobalObject*, PassRefPtr<TestSerializedScriptValueInterface>);
     void finishCreation(JSC::JSGlobalData&);
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | Base::StructureFlags;
 };
+
+class JSTestSerializedScriptValueInterfaceOwner : public JSC::WeakHandleOwner {
+    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&);
+    virtual void finalize(JSC::Handle<JSC::Unknown>, void* context);
+};
+
+inline JSC::WeakHandleOwner* wrapperOwner(DOMWrapperWorld*, TestSerializedScriptValueInterface*)
+{
+    DEFINE_STATIC_LOCAL(JSTestSerializedScriptValueInterfaceOwner, jsTestSerializedScriptValueInterfaceOwner, ());
+    return &jsTestSerializedScriptValueInterfaceOwner;
+}
+
+inline void* wrapperContext(DOMWrapperWorld* world, TestSerializedScriptValueInterface*)
+{
+    return world;
+}
 
 JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestSerializedScriptValueInterface*);
 TestSerializedScriptValueInterface* toTestSerializedScriptValueInterface(JSC::JSValue);
@@ -86,6 +103,31 @@ private:
     JSTestSerializedScriptValueInterfacePrototype(JSC::JSGlobalData& globalData, JSC::JSGlobalObject*, JSC::Structure* structure) : JSC::JSNonFinalObject(globalData, structure) { }
 protected:
     static const unsigned StructureFlags = Base::StructureFlags;
+};
+
+class JSTestSerializedScriptValueInterfaceConstructor : public DOMConstructorObject {
+private:
+    JSTestSerializedScriptValueInterfaceConstructor(JSC::Structure*, JSDOMGlobalObject*);
+    void finishCreation(JSC::ExecState*, JSDOMGlobalObject*);
+
+public:
+    typedef DOMConstructorObject Base;
+    static JSTestSerializedScriptValueInterfaceConstructor* create(JSC::ExecState* exec, JSC::Structure* structure, JSDOMGlobalObject* globalObject)
+    {
+        JSTestSerializedScriptValueInterfaceConstructor* ptr = new (JSC::allocateCell<JSTestSerializedScriptValueInterfaceConstructor>(*exec->heap())) JSTestSerializedScriptValueInterfaceConstructor(structure, globalObject);
+        ptr->finishCreation(exec, globalObject);
+        return ptr;
+    }
+
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static const JSC::ClassInfo s_info;
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
+    {
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
+    }
+protected:
+    static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::ImplementsHasInstance | DOMConstructorObject::StructureFlags;
 };
 
 // Attributes

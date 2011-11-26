@@ -26,8 +26,6 @@
 #ifndef StorageAreaImpl_h
 #define StorageAreaImpl_h
 
-#if ENABLE(DOM_STORAGE)
-
 #include "StorageArea.h"
 
 #include <wtf/PassRefPtr.h>
@@ -52,6 +50,8 @@ namespace WebCore {
         virtual String removeItem(const String& key, Frame* sourceFrame);
         virtual bool clear(Frame* sourceFrame);
         virtual bool contains(const String& key, Frame* sourceFrame) const;
+
+        virtual bool disabledByPrivateBrowsingInFrame(const Frame* sourceFrame) const;
 
         PassRefPtr<StorageAreaImpl> copy();
         void close();
@@ -83,7 +83,5 @@ namespace WebCore {
     };
 
 } // namespace WebCore
-
-#endif // ENABLE(DOM_STORAGE)
 
 #endif // StorageAreaImpl_h

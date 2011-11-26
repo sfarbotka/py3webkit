@@ -48,15 +48,14 @@ class InspectorFrontend;
 class InstrumentingAgents;
 class NameNodeMap;
 class Node;
-class StyleBase;
 
 #if ENABLE(INSPECTOR)
 
 class InspectorCSSAgent : public InspectorDOMAgent::DOMListener {
     WTF_MAKE_NONCOPYABLE(InspectorCSSAgent);
 public:
-    static CSSStyleSheet* parentStyleSheet(StyleBase*);
-    static CSSStyleRule* asCSSStyleRule(StyleBase*);
+    static CSSStyleSheet* parentStyleSheet(CSSRule*);
+    static CSSStyleRule* asCSSStyleRule(CSSRule*);
 
     InspectorCSSAgent(InstrumentingAgents*, InspectorDOMAgent*);
     ~InspectorCSSAgent();
@@ -65,9 +64,9 @@ public:
     void clearFrontend();
     void reset();
 
-    void getStylesForNode(ErrorString*, int nodeId, const RefPtr<InspectorArray>* forcedPseudoClasses, RefPtr<InspectorObject>* result);
-    void getInlineStyleForNode(ErrorString*, int nodeId, RefPtr<InspectorObject>* style);
-    void getComputedStyleForNode(ErrorString*, int nodeId, RefPtr<InspectorObject>* style);
+    void getComputedStyleForNode(ErrorString*, int nodeId, const RefPtr<InspectorArray>* forcedPseudoClasses, RefPtr<InspectorArray>* style);
+    void getInlineStylesForNode(ErrorString*, int nodeId, RefPtr<InspectorObject>* inlineStyle, RefPtr<InspectorArray>* attributes);
+    void getMatchedStylesForNode(ErrorString*, int nodeId, const RefPtr<InspectorArray>* forcedPseudoClasses, bool* includePseudo, bool* includeInherited, RefPtr<InspectorArray>* matchedCSSRules, RefPtr<InspectorArray>* pseudoIdRules, RefPtr<InspectorArray>* inheritedEntries);
     void getAllStyleSheets(ErrorString*, RefPtr<InspectorArray>* styleSheetInfos);
     void getStyleSheet(ErrorString*, const String& styleSheetId, RefPtr<InspectorObject>* result);
     void getStyleSheetText(ErrorString*, const String& styleSheetId, String* result);
@@ -86,6 +85,7 @@ private:
 
     static Element* inlineStyleElement(CSSStyleDeclaration*);
 
+    void recalcStyleForPseudoStateIfNeeded(Element*, InspectorArray* forcedPseudoClasses);
     InspectorStyleSheetForInlineStyle* asInspectorStyleSheet(Element* element);
     Element* elementForId(ErrorString*, int nodeId);
     void collectStyleSheets(CSSStyleSheet*, InspectorArray*);

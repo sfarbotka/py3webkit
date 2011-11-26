@@ -1,3 +1,239 @@
+2011-11-11  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add jsCast to replace static_cast
+        https://bugs.webkit.org/show_bug.cgi?id=72071
+
+        Reviewed by Geoffrey Garen.
+
+        Added new jsCast and changed all of the static_cast sites in functions that 
+        are in the MethodTable to use jsCast instead.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::getCallData):
+        (UserObjectImp::getOwnPropertyNames):
+        (UserObjectImp::getOwnPropertySlot):
+        (UserObjectImp::put):
+        (UserObjectImp::visitChildren):
+
+2011-11-10  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add jsCast to replace static_cast
+        https://bugs.webkit.org/show_bug.cgi?id=72071
+
+        Reviewed by Geoffrey Garen.
+
+        Added new jsCast and changed all of the static_cast sites in functions that 
+        are in the MethodTable to use jsCast instead.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::getCallData):
+        (UserObjectImp::getOwnPropertyNames):
+        (UserObjectImp::getOwnPropertySlot):
+        (UserObjectImp::put):
+        (UserObjectImp::visitChildren):
+
+2011-11-03  Filip Pizlo  <fpizlo@apple.com>
+
+        JSC should be able to sample itself in a more flexible way than just sampling flags
+        https://bugs.webkit.org/show_bug.cgi?id=71522
+
+        Reviewed by Gavin Barraclough.
+        
+        * ForwardingHeaders/wtf/Spectrum.h: Added.
+
+2011-11-03  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualize JSObject::getPropertyNames
+        https://bugs.webkit.org/show_bug.cgi?id=71306
+
+        Reviewed by Darin Adler.
+
+        Added getPropertyNames to the MethodTable, changed all the virtual 
+        implementations of getPropertyNames to static ones, and replaced 
+        all call sites with corresponding lookups in the MethodTable.
+
+        * JSUtils.cpp:
+        (KJSValueToCFTypeInternal):
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectCopyPropertyNames):
+
+2011-11-03  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualize JSObject::className
+        https://bugs.webkit.org/show_bug.cgi?id=71428
+
+        Reviewed by Sam Weinig.
+
+        Added className to the MethodTable, changed all the virtual 
+        implementations of className to static ones, and replaced 
+        all call sites with corresponding lookups in the MethodTable.
+
+        * JSUtils.cpp:
+        (KJSValueToCFTypeInternal):
+
+2011-11-02  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualize JSObject::getOwnPropertyNames
+        https://bugs.webkit.org/show_bug.cgi?id=71307
+
+        Reviewed by Darin Adler.
+
+        Added getOwnPropertyNames to the MethodTable, changed all the virtual 
+        implementations of getOwnPropertyNames to static ones, and replaced 
+        all call sites with corresponding lookups in the MethodTable.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::getOwnPropertyNames):
+        * UserObjectImp.h:
+
+2011-10-26  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Remove getOwnPropertySlotVirtual
+        https://bugs.webkit.org/show_bug.cgi?id=70741
+
+        Reviewed by Geoffrey Garen.
+
+        Removed all declarations and definitions of getOwnPropertySlotVirtual.
+        Also replaced all call sites to getOwnPropertyVirtualVirtual with a 
+        corresponding lookup in the MethodTable.
+
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-25  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Remove putVirtual
+        https://bugs.webkit.org/show_bug.cgi?id=70740
+
+        Reviewed by Geoffrey Garen.
+
+        Removed all declarations and definitions of putVirtual.
+        Also replaced all call sites to putVirtual with a 
+        corresponding lookup in the MethodTable.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectSetProperty):
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-19  Geoffrey Garen  <ggaren@apple.com>
+
+        Removed StringImplBase, fusing it into StringImpl
+        https://bugs.webkit.org/show_bug.cgi?id=70443
+
+        Reviewed by Gavin Barraclough.
+
+        * ForwardingHeaders/wtf/text/StringImplBase.h: Removed.
+
+2011-10-14  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Rename getOwnPropertySlot to getOwnPropertySlotVirtual
+        https://bugs.webkit.org/show_bug.cgi?id=69810
+
+        Reviewed by Geoffrey Garen.
+
+        Renamed the virtual version of getOwnPropertySlot to getOwnPropertySlotVirtual
+        in preparation for when we add the static getOwnPropertySlot to the MethodTable 
+        in ClassInfo.
+
+        Also added a few static getOwnPropertySlot functions where they had been overlooked 
+        before (especially in CodeGeneratorJS.pm).
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::getOwnPropertySlotVirtual):
+        * UserObjectImp.h:
+
+2011-10-14  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Rename virtual put to putVirtual
+        https://bugs.webkit.org/show_bug.cgi?id=69851
+
+        Reviewed by Darin Adler.
+
+        Renamed virtual versions of put to putVirtual in prepration for 
+        adding the static put to the MethodTable in ClassInfo since the 
+        compiler gets mad if the virtual and static versions have the same 
+        name.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectSetProperty):
+        * UserObjectImp.cpp:
+        (UserObjectImp::putVirtual):
+        * UserObjectImp.h:
+
+2011-10-14  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Rename virtual put to putVirtual
+        https://bugs.webkit.org/show_bug.cgi?id=69851
+
+        Reviewed by Darin Adler.
+
+        Renamed virtual versions of put to putVirtual in prepration for 
+        adding the static put to the MethodTable in ClassInfo since the 
+        compiler gets mad if the virtual and static versions have the same 
+        name.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectSetProperty):
+        * UserObjectImp.cpp:
+        (UserObjectImp::putVirtual):
+        * UserObjectImp.h:
+
+2011-10-13  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualized JSCell::toNumber
+        https://bugs.webkit.org/show_bug.cgi?id=69858
+
+        Reviewed by Sam Weinig.
+
+        Removed UserObjectImp::toNumber because it's no longer necessary since 
+        JSObject::toNumber can cover this case.
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-12  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        De-virtualize JSCell::toString
+        https://bugs.webkit.org/show_bug.cgi?id=69677
+
+        Reviewed by Sam Weinig.
+
+        Removed UserObjectImp::toString because it's no longer necessary since 
+        clients can provide their own toString callback which will in turn be 
+        called by JSObject::toString.
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-10  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Remove getCallDataVirtual methods
+        https://bugs.webkit.org/show_bug.cgi?id=69186
+
+        Reviewed by Geoffrey Garen.
+
+        Removed all getCallDataVirtual methods and replaced their call sites 
+        with an explicit lookup in the MethodTable.
+
+        * JSValueWrapper.cpp:
+        (JSValueWrapper::JSObjectCallFunction):
+        * UserObjectImp.cpp:
+        * UserObjectImp.h:
+
+2011-10-08  Mark Hahnenberg  <mhahnenberg@apple.com>
+
+        Add static version of JSCell::getOwnPropertySlot
+        https://bugs.webkit.org/show_bug.cgi?id=69593
+
+        Reviewed by Geoffrey Garen.
+
+        Added static version of getOwnPropertySlot to every class that overrides
+        JSCell::getOwnPropertySlot.  The virtual versions now call the static versions.
+        This is the first step in de-virtualizing JSCell::getOwnPropertySlot.
+
+        * UserObjectImp.cpp:
+        (UserObjectImp::getOwnPropertySlot):
+        * UserObjectImp.h:
+
 2011-10-08  Sheriff Bot  <webkit.review.bot@gmail.com>
 
         Unreviewed, rolling out r96996.
@@ -700,7 +936,7 @@
         Rename ThreadSafeShared to ThreadSafeRefCounted
         https://bugs.webkit.org/show_bug.cgi?id=56714
 
-        No new tests. Exposes no new functionality.§
+        No new tests. Exposes no new functionality.
 
         * ForwardingHeaders/wtf/ThreadSafeRefCounted.h: Copied from ForwardingHeaders/wtf/ThreadSafeShared.h.
         * ForwardingHeaders/wtf/ThreadSafeShared.h: Removed.
@@ -985,7 +1221,7 @@
 
         Reviewed by Darin Adler.
 
-        OwnArraryPtr.h uses deleteOwnedPtr but doesnâ€™t include OwnPtrCommon.h
+        OwnArraryPtr.h uses deleteOwnedPtr but doesn't include OwnPtrCommon.h
         https://bugs.webkit.org/show_bug.cgi?id=52867
 
         * ForwardingHeaders/wtf/OwnArrayPtrCommon.h: Removed.

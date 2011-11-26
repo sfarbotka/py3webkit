@@ -31,7 +31,6 @@
 // changes in its ouput.
 module test {
     interface [
-        LegacyDefaultOptionalArguments,
         Constructor
     ] TestObj {
         // Attributes
@@ -72,8 +71,7 @@ module test {
         TestObj objMethod();
         TestObj objMethodWithArgs(in long intArg, in DOMString strArg, in TestObj objArg);
 
-        [RequiresAllArguments] TestObj methodThatRequiresAllArgs(in DOMString strArg, in TestObj objArg);
-        [RequiresAllArguments=Raise] TestObj methodThatRequiresAllArgsAndThrows(in DOMString strArg, in TestObj objArg)
+        TestObj methodThatRequiresAllArgsAndThrows(in DOMString strArg, in TestObj objArg)
             raises(DOMException);
 
         void serializedValue(in SerializedScriptValue serializedArg);
@@ -119,7 +117,7 @@ module test {
         // 'Optional' extended attribute
         void    methodWithOptionalArg(in [Optional] long opt);
         void    methodWithNonOptionalArgAndOptionalArg(in long nonOpt, in [Optional] long opt);
-        void    methodWithNonOptionalArgAndTwoOptionalArgs(in long nonOpt, in [Optional] long opt1, in long opt2);
+        void    methodWithNonOptionalArgAndTwoOptionalArgs(in long nonOpt, in [Optional] long opt1, in [Optional] long opt2);
 
 #if defined(TESTING_V8) || defined(TESTING_JS)
         // 'Callback' extended attribute
@@ -145,6 +143,8 @@ module test {
         attribute [Conditional=Condition1&Condition2] TestObjectBConstructor conditionalAttr5;
         attribute [Conditional=Condition1|Condition2] TestObjectCConstructor conditionalAttr6;
 
+        const [Conditional=Condition1] unsigned short CONDITIONAL_CONST = 0;
+
 #if defined(TESTING_V8) || defined(TESTING_JS)
         readonly attribute [CachedAttribute] any cachedAttribute1;
         readonly attribute [CachedAttribute] any cachedAttribute2;
@@ -157,6 +157,8 @@ module test {
         void    overloadedMethod(in DOMString strArg);
         void    overloadedMethod(in long intArg);
         void    overloadedMethod(in [Callback] TestCallback callback);
+        void    overloadedMethod(in DOMStringList listArg);
+        void    overloadedMethod(in DOMString[] arrayArg);
 #endif
 
         // Class methods within JavaScript (like what's used for IDBKeyRange).
@@ -169,6 +171,12 @@ module test {
         [EnabledAtRuntime=FeatureName] void enabledAtRuntimeMethod2(in int intArg);
         attribute [EnabledAtRuntime] long enabledAtRuntimeAttr1;
         attribute [EnabledAtRuntime=FeatureName] long enabledAtRuntimeAttr2;
+#endif
+
+
+#if defined(TESTING_V8)
+        attribute float[]                   floatArray;
+        attribute double[]                  doubleArray;
 #endif
 
         // ObjectiveC reserved words.
@@ -188,5 +196,6 @@ module test {
         const unsigned short CONST_VALUE_12 = 0x01;
         const unsigned short CONST_VALUE_13 = 0X20;
         const unsigned short CONST_VALUE_14 = 0x1abc;
+        const [Reflect=CONST_IMPL] unsigned short CONST_JAVASCRIPT = 15;
     };
 }

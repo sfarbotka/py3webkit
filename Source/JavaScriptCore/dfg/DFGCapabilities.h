@@ -26,27 +26,43 @@
 #ifndef DFGCapabilities_h
 #define DFGCapabilities_h
 
+#include "DFGIntrinsic.h"
+#include "DFGNode.h"
+#include "Executable.h"
+#include "Heuristics.h"
 #include "Interpreter.h"
 #include <wtf/Platform.h>
 
 namespace JSC { namespace DFG {
 
-#define ENABLE_DFG_RESTRICTIONS 1
-
-#if USE(JSVALUE64)
-#define ENABLE_DFG_32BIT_RESTRICTIONS 0
-#else
-#define ENABLE_DFG_32BIT_RESTRICTIONS 1
-#endif
-
-
 #if ENABLE(DFG_JIT)
 // Fast check functions; if they return true it is still necessary to
 // check opcodes.
-inline bool mightCompileEval(CodeBlock*) { return true; }
-inline bool mightCompileProgram(CodeBlock*) { return true; }
-inline bool mightCompileFunctionForCall(CodeBlock*) { return true; }
-inline bool mightCompileFunctionForConstruct(CodeBlock*) { return true; }
+inline bool mightCompileEval(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumEvalOptimizationCandidateInstructionCount;
+}
+inline bool mightCompileProgram(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumProgramOptimizationCandidateInstructionCount;
+}
+inline bool mightCompileFunctionForCall(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumFunctionForCallOptimizationCandidateInstructionCount;
+}
+inline bool mightCompileFunctionForConstruct(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumFunctionForConstructOptimizationCandidateInstructionCount;
+}
+
+inline bool mightInlineFunctionForCall(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumFunctionForCallInlineCandidateInstructionCount;
+}
+inline bool mightInlineFunctionForConstruct(CodeBlock* codeBlock)
+{
+    return codeBlock->instructionCount() <= Heuristics::maximumFunctionForConstructInlineCandidateInstructionCount;
+}
 
 // Opcode checking.
 inline bool canCompileOpcode(OpcodeID opcodeID)
@@ -131,6 +147,8 @@ inline bool canCompileOpcode(OpcodeID opcodeID)
     case op_to_primitive:
     case op_throw:
     case op_throw_reference_error:
+    case op_call:
+    case op_construct:
         return true;
         
     // Opcodes we support conditionally. Enabling these opcodes currently results in
@@ -140,36 +158,56 @@ inline bool canCompileOpcode(OpcodeID opcodeID)
     // Regresses string-validate-input, probably because it uses comparisons (< and >)
     // on strings, which currently will cause speculation failures in some cases.
     case op_new_regexp: 
-#if ENABLE(DFG_RESTRICTIONS)
+#if DFG_ENABLE(RESTRICTIONS)
         return false;
 #else
         return true;
 #endif
       
-    // Opcodes we support conditionally on 32-bit builds. Enabling these opcodes
-    // currently results in crashes, which are still being investigated.
-        
-    case op_call:
-    case op_construct:
-#if ENABLE(DFG_32BIT_RESTRICTIONS)
-        return false;
-#else
-        return true;
-#endif
-
     default:
         return false;
     }
 }
 
+inline bool canInlineOpcode(OpcodeID opcodeID)
+{
+    switch (opcodeID) {
+        
+    // These opcodes would be easy to support with inlining, but we currently don't do it.
+    // The issue is that the scope chain will not be set correctly.
+    case op_get_scoped_var:
+    case op_put_scoped_var:
+    case op_resolve:
+    case op_resolve_base:
+    case op_resolve_global:
+        
+    // Constant buffers aren't copied correctly. This is easy to fix, but for
+    // now we just disable inlining for functions that use them.
+    case op_new_array_buffer:
+        
+    // Inlining doesn't correctly remap regular expression operands.
+    case op_new_regexp:
+        return false;
+        
+    default:
+        return canCompileOpcode(opcodeID);
+    }
+}
+
 bool canCompileOpcodes(CodeBlock*);
+bool canInlineOpcodes(CodeBlock*);
 #else // ENABLE(DFG_JIT)
 inline bool mightCompileEval(CodeBlock*) { return false; }
 inline bool mightCompileProgram(CodeBlock*) { return false; }
 inline bool mightCompileFunctionForCall(CodeBlock*) { return false; }
 inline bool mightCompileFunctionForConstruct(CodeBlock*) { return false; }
+inline bool mightInlineFunctionForCall(CodeBlock*) { return false; }
+inline bool mightInlineFunctionForConstruct(CodeBlock*) { return false; }
+
 inline bool canCompileOpcode(OpcodeID) { return false; }
+inline bool canInlineOpcode(OpcodeID) { return false; }
 inline bool canCompileOpcodes(CodeBlock*) { return false; }
+inline bool canInlineOpcodes(CodeBlock*) { return false; }
 #endif // ENABLE(DFG_JIT)
 
 inline bool canCompileEval(CodeBlock* codeBlock)
@@ -190,6 +228,32 @@ inline bool canCompileFunctionForCall(CodeBlock* codeBlock)
 inline bool canCompileFunctionForConstruct(CodeBlock* codeBlock)
 {
     return mightCompileFunctionForConstruct(codeBlock) && canCompileOpcodes(codeBlock);
+}
+
+inline bool canInlineFunctionForCall(CodeBlock* codeBlock)
+{
+    return mightInlineFunctionForCall(codeBlock) && canInlineOpcodes(codeBlock);
+}
+
+inline bool canInlineFunctionForConstruct(CodeBlock* codeBlock)
+{
+    return mightInlineFunctionForConstruct(codeBlock) && canInlineOpcodes(codeBlock);
+}
+
+inline bool mightInlineFunctionFor(CodeBlock* codeBlock, CodeSpecializationKind kind)
+{
+    if (kind == CodeForCall)
+        return mightInlineFunctionForCall(codeBlock);
+    ASSERT(kind == CodeForConstruct);
+    return mightInlineFunctionForConstruct(codeBlock);
+}
+
+inline bool canInlineFunctionFor(CodeBlock* codeBlock, CodeSpecializationKind kind)
+{
+    if (kind == CodeForCall)
+        return canInlineFunctionForCall(codeBlock);
+    ASSERT(kind == CodeForConstruct);
+    return canInlineFunctionForConstruct(codeBlock);
 }
 
 } } // namespace JSC::DFG

@@ -32,6 +32,12 @@ Source/ThirdParty/glu/*.ninja
 Source/ThirdParty/glu/*.sln
 Source/ThirdParty/glu/*.vcproj
 Source/ThirdParty/glu/glu.xcodeproj
+Source/WTF/WTF.gyp/*.Makefile
+Source/WTF/WTF.gyp/*.mk
+Source/WTF/WTF.gyp/*.ninja
+Source/WTF/WTF.gyp/*.sln
+Source/WTF/WTF.gyp/*.vcproj*
+Source/WTF/WTF.gyp/WTF.xcodeproj
 Source/WebCore/WebCore.gyp/*.Makefile
 Source/WebCore/WebCore.gyp/*.mk
 Source/WebCore/WebCore.gyp/*.ninja
@@ -59,6 +65,7 @@ Source/WebKit/chromium/base/
 Source/WebKit/chromium/chromium_deps/
 Source/WebKit/chromium/crypto/
 Source/WebKit/chromium/depot_tools/
+Source/WebKit/chromium/dbus/
 Source/WebKit/chromium/gfx/
 Source/WebKit/chromium/googleurl/
 Source/WebKit/chromium/gpu/
@@ -81,6 +88,7 @@ Source/WebKit/chromium/xcodebuild/
 # Ignore files that Chromium port generates
 /Makefile.chromium
 /out
+/gyp-mac-tool
 
 # Ignore compiled java tests:
 LayoutTests/java/*.class
@@ -114,6 +122,8 @@ LayoutTests/java/*.class
 # Ignore files installed by WebKitSupportLibrary/WebKitAuxiliaryLibrary
 /WebKitSupportLibrary.zip
 /WebKitLibraries/win/Software License Agreement for WebKit Support Libraries.rtf
+/WebKitLibraries/win/WebKitAuxiliaryLibrary.headers
+/WebKitLibraries/win/WebKitAuxiliaryLibraryVersion
 /WebKitLibraries/win/WebKitChangesToPthreads.diff
 /WebKitLibraries/win/include/ApplicationServices/
 /WebKitLibraries/win/include/AssertMacros.h
@@ -152,6 +162,8 @@ LayoutTests/java/*.class
 /WebKitLibraries/win/lib/icuin.lib
 /WebKitLibraries/win/lib/icuuc.lib
 /WebKitLibraries/win/lib/libdispatch.lib
+/WebKitLibraries/win/lib/libicuin.lib
+/WebKitLibraries/win/lib/libicuuc.lib
 /WebKitLibraries/win/lib/libxml2.lib
 /WebKitLibraries/win/lib/libxslt.lib
 /WebKitLibraries/win/lib/pthreadVC2.lib

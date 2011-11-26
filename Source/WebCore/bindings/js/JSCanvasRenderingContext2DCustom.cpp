@@ -53,9 +53,9 @@ static PassRefPtr<CanvasStyle> toHTMLCanvasStyle(ExecState*, JSValue value)
         return 0;
     JSObject* object = asObject(value);
     if (object->inherits(&JSCanvasGradient::s_info))
-        return CanvasStyle::createFromGradient(static_cast<JSCanvasGradient*>(object)->impl());
+        return CanvasStyle::createFromGradient(jsCast<JSCanvasGradient*>(object)->impl());
     if (object->inherits(&JSCanvasPattern::s_info))
-        return CanvasStyle::createFromPattern(static_cast<JSCanvasPattern*>(object)->impl());
+        return CanvasStyle::createFromPattern(jsCast<JSCanvasPattern*>(object)->impl());
     return 0;
 }
 
@@ -138,24 +138,6 @@ JSValue JSCanvasRenderingContext2D::createImageData(ExecState* exec)
 
     setDOMException(exec, ec);
     return toJS(exec, globalObject(), WTF::getPtr(imageData));
-}
-
-JSValue JSCanvasRenderingContext2D::putImageData(ExecState* exec)
-{
-    // putImageData has two variants
-    // putImageData(ImageData, x, y)
-    // putImageData(ImageData, x, y, dirtyX, dirtyY, dirtyWidth, dirtyHeight)
-    CanvasRenderingContext2D* context = static_cast<CanvasRenderingContext2D*>(impl());
-
-    ExceptionCode ec = 0;
-    if (exec->argumentCount() >= 7)
-        context->putImageData(toImageData(exec->argument(0)), exec->argument(1).toFloat(exec), exec->argument(2).toFloat(exec), 
-                              exec->argument(3).toFloat(exec), exec->argument(4).toFloat(exec), exec->argument(5).toFloat(exec), exec->argument(6).toFloat(exec), ec);
-    else
-        context->putImageData(toImageData(exec->argument(0)), exec->argument(1).toFloat(exec), exec->argument(2).toFloat(exec), ec);
-
-    setDOMException(exec, ec);
-    return jsUndefined();
 }
 
 JSValue JSCanvasRenderingContext2D::webkitLineDash(ExecState* exec) const

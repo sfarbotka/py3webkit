@@ -23,9 +23,9 @@
 #define Heap_h
 
 #include "AllocationSpace.h"
+#include "DFGCodeBlocks.h"
 #include "HandleHeap.h"
 #include "HandleStack.h"
-#include "JettisonedCodeBlocks.h"
 #include "MarkedBlock.h"
 #include "MarkedBlockSet.h"
 #include "MarkedSpace.h"
@@ -37,6 +37,7 @@
 
 namespace JSC {
 
+    class CodeBlock;
     class GCActivityCallback;
     class GlobalCodeBlock;
     class Heap;
@@ -103,7 +104,7 @@ namespace JSC {
         void protect(JSValue);
         bool unprotect(JSValue); // True when the protect count drops to 0.
         
-        void addJettisonedCodeBlock(PassOwnPtr<CodeBlock>);
+        void jettisonDFGCodeBlock(PassOwnPtr<CodeBlock>);
 
         size_t size();
         size_t capacity();
@@ -130,6 +131,8 @@ namespace JSC {
     private:
         friend class MarkedBlock;
         friend class AllocationSpace;
+        friend class SlotVisitor;
+        friend class CodeBlock;
 
         static const size_t minExtraCost = 256;
         static const size_t maxExtraCost = 1024 * 1024;
@@ -154,6 +157,7 @@ namespace JSC {
         void markProtectedObjects(HeapRootVisitor&);
         void markTempSortVectors(HeapRootVisitor&);
         void harvestWeakReferences();
+        void finalizeUnconditionalFinalizers();
         
         enum SweepToggle { DoNotSweep, DoSweep };
         void collect(SweepToggle);
@@ -167,7 +171,7 @@ namespace JSC {
         void waitForRelativeTime(double relative);
         void blockFreeingThreadMain();
         static void* blockFreeingThreadStartFunc(void* heap);
-
+        
         const HeapSize m_heapSize;
         const size_t m_minBytesPerCycle;
         size_t m_lastFullGCSize;
@@ -196,10 +200,13 @@ namespace JSC {
         OwnPtr<GCActivityCallback> m_activityCallback;
         
         MachineThreads m_machineThreads;
+        
+        MarkStackThreadSharedData m_sharedData;
         SlotVisitor m_slotVisitor;
+
         HandleHeap m_handleHeap;
         HandleStack m_handleStack;
-        JettisonedCodeBlocks m_jettisonedCodeBlocks;
+        DFGCodeBlocks m_dfgCodeBlocks;
         FinalizerOwner m_finalizerOwner;
         
         bool m_isSafeToCollect;

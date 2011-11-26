@@ -59,7 +59,7 @@ static EncodedJSValue JSC_HOST_CALL constructWithFunctionConstructor(ExecState* 
     return JSValue::encode(constructFunction(exec, asInternalFunction(exec->callee())->globalObject(), args));
 }
 
-ConstructType FunctionConstructor::getConstructData(ConstructData& constructData)
+ConstructType FunctionConstructor::getConstructData(JSCell*, ConstructData& constructData)
 {
     constructData.native.function = constructWithFunctionConstructor;
     return ConstructTypeHost;
@@ -71,11 +71,6 @@ static EncodedJSValue JSC_HOST_CALL callFunctionConstructor(ExecState* exec)
     return JSValue::encode(constructFunction(exec, asInternalFunction(exec->callee())->globalObject(), args));
 }
 
-CallType FunctionConstructor::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 // ECMA 15.3.1 The Function Constructor Called as a Function
 CallType FunctionConstructor::getCallData(JSCell*, CallData& callData)
 {
@@ -84,14 +79,14 @@ CallType FunctionConstructor::getCallData(JSCell*, CallData& callData)
 }
 
 // ECMA 15.3.2 The Function Constructor
-JSObject* constructFunction(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args, const Identifier& functionName, const UString& sourceURL, int lineNumber)
+JSObject* constructFunction(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args, const Identifier& functionName, const UString& sourceURL, const TextPosition& position)
 {
     if (!globalObject->evalEnabled())
         return throwError(exec, createEvalError(exec, "Function constructor is disabled"));
-    return constructFunctionSkippingEvalEnabledCheck(exec, globalObject, args, functionName, sourceURL, lineNumber);
+    return constructFunctionSkippingEvalEnabledCheck(exec, globalObject, args, functionName, sourceURL, position);
 }
 
-JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args, const Identifier& functionName, const UString& sourceURL, int lineNumber)
+JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args, const Identifier& functionName, const UString& sourceURL, const TextPosition& position)
 {
     // Functions need to have a space following the opening { due to for web compatibility
     // see https://bugs.webkit.org/show_bug.cgi?id=24350
@@ -116,7 +111,7 @@ JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState* exec, JSGlobalObj
     }
 
     JSGlobalData& globalData = globalObject->globalData();
-    SourceCode source = makeSource(program, sourceURL, lineNumber);
+    SourceCode source = makeSource(program, sourceURL, position);
     JSObject* exception = 0;
     FunctionExecutable* function = FunctionExecutable::fromGlobalCode(functionName, exec, exec->dynamicGlobalObject()->debugger(), source, &exception);
     if (!function) {
@@ -131,7 +126,7 @@ JSObject* constructFunctionSkippingEvalEnabledCheck(ExecState* exec, JSGlobalObj
 // ECMA 15.3.2 The Function Constructor
 JSObject* constructFunction(ExecState* exec, JSGlobalObject* globalObject, const ArgList& args)
 {
-    return constructFunction(exec, globalObject, args, Identifier(exec, "anonymous"), UString(), 1);
+    return constructFunction(exec, globalObject, args, Identifier(exec, "anonymous"), UString(), TextPosition::minimumPosition());
 }
 
 } // namespace JSC

@@ -35,62 +35,30 @@
 #include "CSSMutableStyleDeclaration.h"
 #include "DOMDataStore.h"
 #include "DocumentLoader.h"
+#include "EventTargetHeaders.h"
+#include "EventTargetInterfaces.h"
 #include "FrameLoaderClient.h"
-#include "Notification.h"
 #include "V8AbstractEventListener.h"
 #include "V8Binding.h"
 #include "V8Collection.h"
-#include "V8DOMApplicationCache.h"
 #include "V8DOMMap.h"
-#include "V8DOMWindow.h"
-#include "V8DedicatedWorkerContext.h"
 #include "V8EventListener.h"
 #include "V8EventListenerList.h"
-#include "V8EventSource.h"
-#include "V8FileReader.h"
-#include "V8FileWriter.h"
 #include "V8HTMLCollection.h"
 #include "V8HTMLDocument.h"
 #include "V8HiddenPropertyName.h"
-#include "V8IDBDatabase.h"
-#include "V8IDBRequest.h"
-#include "V8IDBTransaction.h"
 #include "V8IsolatedContext.h"
-#include "V8LocalMediaStream.h"
 #include "V8Location.h"
-#include "V8MediaStream.h"
-#include "V8MessageChannel.h"
 #include "V8NamedNodeMap.h"
-#include "V8Node.h"
 #include "V8NodeFilterCondition.h"
 #include "V8NodeList.h"
-#include "V8Notification.h"
-#include "V8PeerConnection.h"
 #include "V8Proxy.h"
-#include "V8SharedWorker.h"
-#include "V8SharedWorkerContext.h"
 #include "V8StyleSheet.h"
-#include "V8WebSocket.h"
-#include "V8Worker.h"
-#include "V8WorkerContext.h"
 #include "V8WorkerContextEventListener.h"
-#include "V8XMLHttpRequest.h"
 #include "WebGLContextAttributes.h"
 #include "WebGLUniformLocation.h"
 #include "WorkerContextExecutionProxy.h"
 #include "WrapperTypeInfo.h"
-
-#if ENABLE(SVG)
-#include "SVGElementInstance.h"
-#include "SVGPathSeg.h"
-#include "V8SVGElementInstance.h"
-#endif
-
-#if ENABLE(WEB_AUDIO)
-#include "V8AudioContext.h"
-#include "V8JavaScriptAudioNode.h"
-#endif
-
 #include <algorithm>
 #include <utility>
 #include <v8-debug.h>
@@ -124,7 +92,10 @@ void V8DOMWrapper::setJSWrapperForActiveDOMObject(void* object, v8::Persistent<v
 void V8DOMWrapper::setJSWrapperForDOMNode(Node* node, v8::Persistent<v8::Object> wrapper)
 {
     ASSERT(V8DOMWrapper::maybeDOMWrapper(wrapper));
-    getDOMNodeMap().set(node, wrapper);
+    if (node->isActiveNode())
+        getActiveDOMNodeMap().set(node, wrapper);
+    else
+        getDOMNodeMap().set(node, wrapper);
 }
 
 v8::Local<v8::Function> V8DOMWrapper::getConstructor(WrapperTypeInfo* type, v8::Handle<v8::Value> objectPrototype)
@@ -230,24 +201,6 @@ PassRefPtr<NodeFilter> V8DOMWrapper::wrapNativeNodeFilter(v8::Handle<v8::Value> 
     return NodeFilter::create(V8NodeFilterCondition::create(filter));
 }
 
-static bool globalObjectPrototypeIsDOMWindow(v8::Handle<v8::Object> objectPrototype)
-{
-    // We can identify what type of context the global object is wrapping by looking at the
-    // internal field count of its prototype. This assumes WorkerContexts and DOMWindows have different numbers
-    // of internal fields, so a COMPILE_ASSERT is included to warn if this ever changes.
-#if ENABLE(WORKERS)
-    COMPILE_ASSERT(V8DOMWindow::internalFieldCount != V8WorkerContext::internalFieldCount,
-        DOMWindowAndWorkerContextHaveUnequalFieldCounts);
-    COMPILE_ASSERT(V8DOMWindow::internalFieldCount != V8DedicatedWorkerContext::internalFieldCount,
-        DOMWindowAndDedicatedWorkerContextHaveUnequalFieldCounts);
-#endif
-#if ENABLE(SHARED_WORKERS)
-    COMPILE_ASSERT(V8DOMWindow::internalFieldCount != V8SharedWorkerContext::internalFieldCount,
-        DOMWindowAndSharedWorkerContextHaveUnequalFieldCounts);
-#endif
-    return objectPrototype->InternalFieldCount() == V8DOMWindow::internalFieldCount;
-}
-
 v8::Local<v8::Object> V8DOMWrapper::instantiateV8Object(V8Proxy* proxy, WrapperTypeInfo* type, void* impl)
 {
 #if ENABLE(WORKERS)
@@ -263,7 +216,7 @@ v8::Local<v8::Object> V8DOMWrapper::instantiateV8Object(V8Proxy* proxy, WrapperT
         v8::Handle<v8::Context> context = v8::Context::GetCurrent();
         if (!context.IsEmpty()) {
             v8::Handle<v8::Object> globalPrototype = v8::Handle<v8::Object>::Cast(context->Global()->GetPrototype());
-            if (globalObjectPrototypeIsDOMWindow(globalPrototype))
+            if (isWrapperOfType(globalPrototype, &V8DOMWindow::info))
                 proxy = V8Proxy::retrieve(V8DOMWindow::toNative(globalPrototype)->frame());
 #if ENABLE(WORKERS)
             else
@@ -330,7 +283,7 @@ bool V8DOMWrapper::isWrapperOfType(v8::Handle<v8::Value> value, WrapperTypeInfo*
     ASSERT(object->InternalFieldCount() >= v8DefaultWrapperInternalFieldCount);
 
     v8::Handle<v8::Value> wrapper = object->GetInternalField(v8DOMWrapperObjectIndex);
-    ASSERT(wrapper->IsNumber() || wrapper->IsExternal());
+    ASSERT_UNUSED(wrapper, wrapper->IsNumber() || wrapper->IsExternal());
 
     WrapperTypeInfo* typeInfo = static_cast<WrapperTypeInfo*>(object->GetPointerFromInternalField(v8DOMWrapperTypeIndex));
     return typeInfo == type;
@@ -345,118 +298,25 @@ v8::Handle<v8::Object> V8DOMWrapper::getWrapperSlow(Node* node)
             return v8::Handle<v8::Object>();
         return *wrapper;
     }
-    DOMNodeMapping& domNodeMap = context->world()->domDataStore()->domNodeMap();
+    DOMDataStore* store = context->world()->domDataStore();
+    DOMNodeMapping& domNodeMap = node->isActiveNode() ? store->activeDomNodeMap() : store->domNodeMap();
     return domNodeMap.get(node);
 }
 
+#define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
+    if (eventNames().interfaceFor##interfaceName == desiredInterface) \
+        return toV8(static_cast<interfaceName*>(target));
+
 // A JS object of type EventTarget is limited to a small number of possible classes.
-// Check EventTarget.h for new type conversion methods
 v8::Handle<v8::Value> V8DOMWrapper::convertEventTargetToV8Object(EventTarget* target)
 {
     if (!target)
         return v8::Null();
 
-#if ENABLE(SVG)
-    if (SVGElementInstance* instance = target->toSVGElementInstance())
-        return toV8(instance);
-#endif
+    AtomicString desiredInterface = target->interfaceName();
+    DOM_EVENT_TARGET_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
-#if ENABLE(WORKERS)
-    if (Worker* worker = target->toWorker())
-        return toV8(worker);
-
-    if (DedicatedWorkerContext* workerContext = target->toDedicatedWorkerContext())
-        return toV8(workerContext);
-#endif // WORKERS
-
-#if ENABLE(SHARED_WORKERS)
-    if (SharedWorker* sharedWorker = target->toSharedWorker())
-        return toV8(sharedWorker);
-
-    if (SharedWorkerContext* sharedWorkerContext = target->toSharedWorkerContext())
-        return toV8(sharedWorkerContext);
-#endif // SHARED_WORKERS
-
-#if ENABLE(NOTIFICATIONS)
-    if (Notification* notification = target->toNotification())
-        return toV8(notification);
-#endif
-
-#if ENABLE(INDEXED_DATABASE)
-    if (IDBDatabase* idbDatabase = target->toIDBDatabase())
-        return toV8(idbDatabase);
-    if (IDBRequest* idbRequest = target->toIDBRequest())
-        return toV8(idbRequest);
-    if (IDBTransaction* idbTransaction = target->toIDBTransaction())
-        return toV8(idbTransaction);
-#endif
-
-#if ENABLE(WEB_SOCKETS)
-    if (WebSocket* webSocket = target->toWebSocket())
-        return toV8(webSocket);
-#endif
-
-    if (Node* node = target->toNode())
-        return toV8(node);
-
-    if (DOMWindow* domWindow = target->toDOMWindow())
-        return toV8(domWindow);
-
-    // XMLHttpRequest is created within its JS counterpart.
-    if (XMLHttpRequest* xmlHttpRequest = target->toXMLHttpRequest()) {
-        v8::Handle<v8::Object> wrapper = getActiveDOMObjectMap().get(xmlHttpRequest);
-        ASSERT(!wrapper.IsEmpty());
-        return wrapper;
-    }
-
-    // MessagePort is created within its JS counterpart
-    if (MessagePort* port = target->toMessagePort()) {
-        v8::Handle<v8::Object> wrapper = getActiveDOMObjectMap().get(port);
-        ASSERT(!wrapper.IsEmpty());
-        return wrapper;
-    }
-
-    if (XMLHttpRequestUpload* upload = target->toXMLHttpRequestUpload()) {
-        v8::Handle<v8::Object> wrapper = getDOMObjectMap().get(upload);
-        ASSERT(!wrapper.IsEmpty());
-        return wrapper;
-    }
-
-    if (DOMApplicationCache* domAppCache = target->toDOMApplicationCache())
-        return toV8(domAppCache);
-
-    if (EventSource* eventSource = target->toEventSource())
-        return toV8(eventSource);
-
-#if ENABLE(BLOB)
-    if (FileReader* fileReader = target->toFileReader())
-        return toV8(fileReader);
-#endif
-
-#if ENABLE(FILE_SYSTEM)
-    if (FileWriter* fileWriter = target->toFileWriter())
-        return toV8(fileWriter);
-#endif
-
-#if ENABLE(WEB_AUDIO)
-    if (JavaScriptAudioNode* jsAudioNode = target->toJavaScriptAudioNode())
-        return toV8(jsAudioNode);
-    if (AudioContext* audioContext = target->toAudioContext())
-        return toV8(audioContext);
-#endif    
-
-#if ENABLE(MEDIA_STREAM)
-    if (LocalMediaStream* stream = target->toLocalMediaStream())
-        return toV8(stream);
-
-    if (MediaStream* stream = target->toMediaStream())
-        return toV8(stream);
-
-    if (PeerConnection* peerConnection = target->toPeerConnection())
-        return toV8(peerConnection);
-#endif
-
-    ASSERT(0);
+    ASSERT_NOT_REACHED();
     return notHandledByInterceptor();
 }
 
@@ -468,7 +328,7 @@ PassRefPtr<EventListener> V8DOMWrapper::getEventListener(v8::Local<v8::Value> va
     if (lookup == ListenerFindOnly)
         return V8EventListenerList::findWrapper(value, isAttribute);
     v8::Handle<v8::Object> globalPrototype = v8::Handle<v8::Object>::Cast(context->Global()->GetPrototype());
-    if (globalObjectPrototypeIsDOMWindow(globalPrototype))
+    if (isWrapperOfType(globalPrototype, &V8DOMWindow::info))
         return V8EventListenerList::findOrCreateWrapper<V8EventListener>(value, isAttribute);
 #if ENABLE(WORKERS)
     return V8EventListenerList::findOrCreateWrapper<V8WorkerContextEventListener>(value, isAttribute);
@@ -477,7 +337,6 @@ PassRefPtr<EventListener> V8DOMWrapper::getEventListener(v8::Local<v8::Value> va
 #endif
 }
 
-#if ENABLE(XPATH)
 // XPath-related utilities
 RefPtr<XPathNSResolver> V8DOMWrapper::getXPathNSResolver(v8::Handle<v8::Value> value, V8Proxy* proxy)
 {
@@ -488,6 +347,5 @@ RefPtr<XPathNSResolver> V8DOMWrapper::getXPathNSResolver(v8::Handle<v8::Value> v
         resolver = V8CustomXPathNSResolver::create(value->ToObject());
     return resolver;
 }
-#endif
 
 }  // namespace WebCore

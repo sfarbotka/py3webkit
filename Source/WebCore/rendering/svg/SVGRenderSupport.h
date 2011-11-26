@@ -25,6 +25,7 @@
 #define SVGRenderSupport_h
 
 #if ENABLE(SVG)
+#include "LayoutTypes.h"
 #include "PaintInfo.h"
 
 namespace WebCore {
@@ -53,6 +54,9 @@ public:
 
     // Calculates the repaintRect in combination with filter, clipper and masker in local coordinates.
     static void intersectRepaintRectWithResources(const RenderObject*, FloatRect&);
+
+    // Determines whether a container needs to be laid out because it's filtered and a child is being laid out.
+    static bool filtersForceContainerLayout(RenderObject*);
 
     // Determines whether the passed point lies in a clipping area
     static bool pointInClippingArea(RenderObject*, const FloatPoint&);

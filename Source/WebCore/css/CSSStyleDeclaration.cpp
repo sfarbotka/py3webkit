@@ -22,7 +22,6 @@
 #include "CSSStyleDeclaration.h"
 
 #include "CSSMutableStyleDeclaration.h"
-#include "CSSMutableValue.h"
 #include "CSSParser.h"
 #include "CSSProperty.h"
 #include "CSSPropertyNames.h"
@@ -40,7 +39,14 @@ using namespace WTF;
 namespace WebCore {
 
 CSSStyleDeclaration::CSSStyleDeclaration(CSSRule* parent)
-    : StyleBase(parent)
+    : m_strictParsing(!parent || parent->useStrictParsing())
+#ifndef NDEBUG
+    , m_iteratorCount(0)
+#endif
+    , m_isElementStyleDeclaration(false)
+    , m_isInlineStyleDeclaration(false)
+    , m_parentIsRule(true)
+    , m_parentRule(parent)
 {
 }
 
@@ -49,28 +55,7 @@ PassRefPtr<CSSValue> CSSStyleDeclaration::getPropertyCSSValue(const String& prop
     int propID = cssPropertyID(propertyName);
     if (!propID)
         return 0;
-
-    // Short-cut, not involving any change to the refcount.
-    if (!isMutableStyleDeclaration())
-        return getPropertyCSSValue(propID);
-
-    // Slow path.
-    RefPtr<CSSValue> value = getPropertyCSSValue(propID);
-    if (!value || !value->isMutableValue())
-        return value.release();
-
-    Node* node = static_cast<CSSMutableStyleDeclaration*>(this)->node();
-    if (!node || !node->isStyledElement())
-        return value.release();
-
-    Node* associatedNode = static_cast<CSSMutableValue*>(value.get())->node();
-    if (associatedNode) {
-        ASSERT(associatedNode == node);
-        return value.release();
-    }
-
-    static_cast<CSSMutableValue*>(value.get())->setNode(node);
-    return value.release();
+    return getPropertyCSSValue(propID);
 }
 
 String CSSStyleDeclaration::getPropertyValue(const String &propertyName)
@@ -123,10 +108,8 @@ void CSSStyleDeclaration::setProperty(const String& propertyName, const String& 
 void CSSStyleDeclaration::setProperty(const String& propertyName, const String& value, const String& priority, ExceptionCode& ec)
 {
     int propID = cssPropertyID(propertyName);
-    if (!propID) {
-        // FIXME: Should we raise an exception here?
+    if (!propID)
         return;
-    }
     bool important = priority.find("important", 0, false) != notFound;
     setProperty(propID, value, important, ec);
 }
@@ -142,11 +125,6 @@ String CSSStyleDeclaration::removeProperty(const String& propertyName, Exception
 bool CSSStyleDeclaration::isPropertyName(const String& propertyName)
 {
     return cssPropertyID(propertyName);
-}
-
-CSSRule* CSSStyleDeclaration::parentRule() const
-{
-    return (parent() && parent()->isRule()) ? static_cast<CSSRule*>(parent()) : 0;
 }
 
 bool CSSStyleDeclaration::cssPropertyMatches(const CSSProperty* property) const

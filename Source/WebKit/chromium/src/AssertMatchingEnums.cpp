@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,6 +33,7 @@
 
 #include "config.h"
 
+#include "AXObjectCache.h"
 #include "AccessibilityObject.h"
 #include "ApplicationCacheHost.h"
 #include "AsyncFileSystem.h"
@@ -50,10 +51,12 @@
 #include "IDBFactoryBackendInterface.h"
 #include "IDBKey.h"
 #include "MediaPlayer.h"
+#include "MediaStreamSource.h"
 #include "NotificationPresenter.h"
 #include "PageVisibilityState.h"
 #include "PasteboardPrivate.h"
 #include "PlatformCursor.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 #include "StorageInfo.h"
 #include "TextAffinity.h"
@@ -62,6 +65,7 @@
 #include "UserScriptTypes.h"
 #include "UserStyleSheetTypes.h"
 #include "VideoFrameChromium.h"
+#include "WebAccessibilityNotification.h"
 #include "WebAccessibilityObject.h"
 #include "WebApplicationCacheHost.h"
 #include "WebClipboard.h"
@@ -78,8 +82,10 @@
 #include "WebIconURL.h"
 #include "WebInputElement.h"
 #include "WebMediaPlayer.h"
+#include "WebMediaStreamSource.h"
 #include "WebNotificationPresenter.h"
 #include "WebPageVisibilityState.h"
+#include "WebReferrerPolicy.h"
 #include "WebScrollbar.h"
 #include "WebSettings.h"
 #include "WebStorageQuotaError.h"
@@ -105,6 +111,25 @@ namespace WebCore {
     using WTF::TextCaseSensitive;
     using WTF::TextCaseInsensitive;
 };
+
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationActiveDescendantChanged, AXObjectCache::AXActiveDescendantChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationAutocorrectionOccured, AXObjectCache::AXAutocorrectionOccured);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationCheckedStateChanged, AXObjectCache::AXCheckedStateChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationChildrenChanged, AXObjectCache::AXChildrenChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationFocusedUIElementChanged, AXObjectCache::AXFocusedUIElementChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationLayoutComplete, AXObjectCache::AXLayoutComplete);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationLoadComplete, AXObjectCache::AXLoadComplete);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationSelectedChildrenChanged, AXObjectCache::AXSelectedChildrenChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationSelectedTextChanged, AXObjectCache::AXSelectedTextChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationValueChanged, AXObjectCache::AXValueChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationScrolledToAnchor, AXObjectCache::AXScrolledToAnchor);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationLiveRegionChanged, AXObjectCache::AXLiveRegionChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationMenuListItemSelected, AXObjectCache::AXMenuListItemSelected);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationMenuListValueChanged, AXObjectCache::AXMenuListValueChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationRowCountChanged, AXObjectCache::AXRowCountChanged);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationRowCollapsed, AXObjectCache::AXRowCollapsed);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationRowExpanded, AXObjectCache::AXRowExpanded);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityNotificationInvalidStatusChanged, AXObjectCache::AXInvalidStatusChanged);
 
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleUnknown, UnknownRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleButton, ButtonRole);
@@ -171,6 +196,8 @@ COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleDefinitionListTerm, DefinitionL
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleDefinitionListDefinition, DefinitionListDefinitionRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleAnnotation, AnnotationRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleSliderThumb, SliderThumbRole);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleSpinButton, SpinButtonRole);
+COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleSpinButtonPart, SpinButtonPartRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleIgnored, IgnoredRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRolePresentational, PresentationalRole);
 COMPILE_ASSERT_MATCHING_ENUM(WebAccessibilityRoleTab, TabRole);
@@ -310,9 +337,11 @@ COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeFavicon, Favicon);
 COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeTouch, TouchIcon);
 COMPILE_ASSERT_MATCHING_ENUM(WebIconURL::TypeTouchPrecomposed, TouchPrecomposedIcon);
 
+#if ENABLE(INPUT_SPEECH)
 COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Idle, InputFieldSpeechButtonElement::Idle);
 COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Recording, InputFieldSpeechButtonElement::Recording);
 COMPILE_ASSERT_MATCHING_ENUM(WebInputElement::Recognizing, InputFieldSpeechButtonElement::Recognizing);
+#endif
 
 COMPILE_ASSERT_MATCHING_ENUM(WebNode::ElementNode, Node::ELEMENT_NODE);
 COMPILE_ASSERT_MATCHING_ENUM(WebNode::AttributeNode, Node::ATTRIBUTE_NODE);
@@ -392,14 +421,11 @@ COMPILE_ASSERT_MATCHING_ENUM(WebView::UserContentInjectInTopFrameOnly, InjectInT
 COMPILE_ASSERT_MATCHING_ENUM(WebView::UserStyleInjectInExistingDocuments, InjectInExistingDocuments);
 COMPILE_ASSERT_MATCHING_ENUM(WebView::UserStyleInjectInSubsequentDocuments, InjectInSubsequentDocuments);
 
-COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::NullType, IDBKey::NullType);
+COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::InvalidType, IDBKey::InvalidType);
+COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::ArrayType, IDBKey::ArrayType);
 COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::StringType, IDBKey::StringType);
 COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::DateType, IDBKey::DateType);
 COMPILE_ASSERT_MATCHING_ENUM(WebIDBKey::NumberType, IDBKey::NumberType);
-
-COMPILE_ASSERT_MATCHING_ENUM(WebIDBFactory::DefaultBackingStore, IDBFactoryBackendInterface::DefaultBackingStore);
-COMPILE_ASSERT_MATCHING_ENUM(WebIDBFactory::LevelDBBackingStore, IDBFactoryBackendInterface::LevelDBBackingStore);
-COMPILE_ASSERT_MATCHING_ENUM(WebIDBFactory::SQLiteBackingStore, IDBFactoryBackendInterface::SQLiteBackingStore);
 
 #if ENABLE(FILE_SYSTEM)
 COMPILE_ASSERT_MATCHING_ENUM(WebFileSystem::TypeTemporary, AsyncFileSystem::Temporary);
@@ -459,3 +485,13 @@ COMPILE_ASSERT_MATCHING_ENUM(WebThemeEngine::ScrollbarParentRenderLayer, Platfor
 COMPILE_ASSERT_MATCHING_ENUM(WebPageVisibilityStateVisible, PageVisibilityStateVisible);
 COMPILE_ASSERT_MATCHING_ENUM(WebPageVisibilityStateHidden, PageVisibilityStateHidden);
 COMPILE_ASSERT_MATCHING_ENUM(WebPageVisibilityStatePrerender, PageVisibilityStatePrerender);
+
+#if ENABLE(MEDIA_STREAM)
+COMPILE_ASSERT_MATCHING_ENUM(WebMediaStreamSource::TypeAudio, MediaStreamSource::TypeAudio);
+COMPILE_ASSERT_MATCHING_ENUM(WebMediaStreamSource::TypeVideo, MediaStreamSource::TypeVideo);
+#endif
+
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyAlways, SecurityPolicy::ReferrerPolicyAlways);
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyDefault, SecurityPolicy::ReferrerPolicyDefault);
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyNever, SecurityPolicy::ReferrerPolicyNever);
+COMPILE_ASSERT_MATCHING_ENUM(WebReferrerPolicyOrigin, SecurityPolicy::ReferrerPolicyOrigin);

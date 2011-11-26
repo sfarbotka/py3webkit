@@ -166,6 +166,11 @@ bool WebNode::isElementNode() const
     return m_private->isElementNode();
 }
 
+bool WebNode::hasEventListeners(const WebString& eventType) const
+{
+    return m_private->hasEventListeners(eventType);
+}
+
 void WebNode::addEventListener(const WebString& eventType, WebDOMEventListener* listener, bool useCapture)
 {
     EventListenerWrapper* listenerWrapper =
@@ -182,6 +187,13 @@ void WebNode::removeEventListener(const WebString& eventType, WebDOMEventListene
         listener->getEventListenerWrapper(eventType, useCapture, m_private.get());
     m_private->removeEventListener(eventType, listenerWrapper, useCapture);
     // listenerWrapper is now deleted.
+}
+
+bool WebNode::dispatchEvent(const WebDOMEvent& event)
+{
+    if (!event.isNull())
+        return m_private->dispatchEvent(event);
+    return false;
 }
 
 void WebNode::simulateClick()

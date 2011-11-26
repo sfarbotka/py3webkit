@@ -41,9 +41,12 @@ namespace WebCore {
 
 class InjectedScriptManager;
 class InspectorArray;
+class InspectorFrontend;
 class InspectorObject;
 class InspectorValue;
+class InstrumentingAgents;
 class ScriptDebugServer;
+class WorkerContext;
 
 typedef String ErrorString;
 
@@ -72,13 +75,17 @@ public:
     void releaseObject(ErrorString*, const String& objectId);
     void getProperties(ErrorString*, const String& objectId, const bool* const ownProperties, RefPtr<InspectorArray>* result);
     void releaseObjectGroup(ErrorString*, const String& objectGroup);
+    void run(ErrorString*);
 
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     void setScriptDebugServer(ScriptDebugServer*);
+#if ENABLE(WORKERS)
+    void pauseWorkerContext(WorkerContext*);
+#endif
 #endif
 
 protected:
-    explicit InspectorRuntimeAgent(InjectedScriptManager*);
+    InspectorRuntimeAgent(InstrumentingAgents*, InjectedScriptManager*);
     virtual ScriptState* scriptStateForFrameId(const String& frameId) = 0;
     virtual ScriptState* getDefaultInspectedState() = 0;
 
@@ -87,6 +94,8 @@ private:
 #if ENABLE(JAVASCRIPT_DEBUGGER)
     ScriptDebugServer* m_scriptDebugServer;
 #endif
+    InstrumentingAgents* m_instrumentingAgents;
+    bool m_paused;
 };
 
 } // namespace WebCore

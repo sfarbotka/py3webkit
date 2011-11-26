@@ -334,7 +334,7 @@ void PopupMenuWin::calculatePositionAndSize(const IntRect& r, FrameView* v)
 
     if (naturalHeight > maxPopupHeight)
         // We need room for a scrollbar
-        popupWidth += ScrollbarTheme::nativeTheme()->scrollbarThickness(SmallScrollbar);
+        popupWidth += ScrollbarTheme::theme()->scrollbarThickness(SmallScrollbar);
 
     // Add padding to align the popup text with the <select> text
     popupWidth += max(0, client()->clientPaddingRight() - client()->clientInsetRight()) + max(0, client()->clientPaddingLeft() - client()->clientInsetLeft());
@@ -996,7 +996,7 @@ LRESULT PopupMenuWin::wndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
                     // Put the point into coordinates relative to the scroll bar
                     mousePoint.move(-scrollBarRect.x(), -scrollBarRect.y());
                     PlatformMouseEvent event(hWnd, message, wParam, MAKELPARAM(mousePoint.x(), mousePoint.y()));
-                    scrollbar()->mouseUp();
+                    scrollbar()->mouseUp(event);
                     // FIXME: This is a hack to work around Scrollbar not invalidating correctly when it doesn't have a parent widget
                     RECT r = scrollBarRect;
                     ::InvalidateRect(popupHandle(), &r, TRUE);

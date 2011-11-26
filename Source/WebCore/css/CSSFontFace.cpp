@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "config.h"
@@ -116,19 +116,6 @@ SimpleFontData* CSSFontFace::getFontData(const FontDescription& fontDescription,
     }
 
     return 0;
-}
-
-void CSSFontFace::retireCustomFont(SimpleFontData* fontData)
-{
-    if (m_segmentedFontFaces.isEmpty()) {
-        GlyphPageTreeNode::pruneTreeCustomFontData(fontData);
-        delete fontData;
-        return;
-    }
-
-    // Use one of the CSSSegmentedFontFaces' font selector. They all have
-    // the same font selector.
-    (*m_segmentedFontFaces.begin())->fontSelector()->retireCustomFont(fontData);
 }
 
 #if ENABLE(SVG_FONTS)

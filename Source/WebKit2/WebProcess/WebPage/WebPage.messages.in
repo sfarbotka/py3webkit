@@ -43,6 +43,7 @@ messages -> WebPage {
 #endif
 #if ENABLE(TOUCH_EVENTS)
     TouchEvent(WebKit::WebTouchEvent event)
+    TouchEventSyncForTesting(WebKit::WebTouchEvent event) -> (bool handled)
 #endif
 
     ContextMenuHidden()
@@ -95,9 +96,9 @@ messages -> WebPage {
     SetUserAgent(WTF::String userAgent)
     SetCustomTextEncodingName(WTF::String encodingName)
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     SetFixedVisibleContentRect(WebCore::IntRect rect)
-    SetResizesToContentsUsingLayoutSize(WebCore::IntSize size)
+    SetViewportSize(WebCore::IntSize size)
 #endif
 
     Close()
@@ -113,11 +114,15 @@ messages -> WebPage {
     SetPageAndTextZoomFactors(double pageZoomFactor, double textZoomFactor)
     SetPageZoomFactor(double zoomFactor)
     SetTextZoomFactor(double zoomFactor)
+    WindowScreenDidChange(uint64_t displayID)
 
     ScalePage(double scale, WebCore::IntPoint origin)
 
     SetUseFixedLayout(bool fixed)
     SetFixedLayoutSize(WebCore::IntSize size)
+
+    SetPaginationMode(uint32_t mode);
+    SetGapBetweenPages(double gap);
 
     # Find.
     FindString(WTF::String string, uint32_t findOptions, unsigned maxMatchCount)
@@ -128,10 +133,10 @@ messages -> WebPage {
 #if PLATFORM(WIN)
     PerformDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, HashMap<UINT,Vector<String>> dataMap, uint32_t flags)
 #endif
-#if PLATFORM(QT)
+#if PLATFORM(QT) || PLATFORM(GTK)
     PerformDragControllerAction(uint64_t action, WebCore::DragData dragData)
 #endif
-#if !PLATFORM(WIN) && !PLATFORM(QT)
+#if !PLATFORM(WIN) && !PLATFORM(QT) && !PLATFORM(GTK)
     PerformDragControllerAction(uint64_t action, WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t draggingSourceOperationMask, WTF::String dragStorageName, uint32_t flags, WebKit::SandboxExtension::Handle sandboxExtensionHandle)
 #endif
     DragEnded(WebCore::IntPoint clientPosition, WebCore::IntPoint globalPosition, uint64_t operation)

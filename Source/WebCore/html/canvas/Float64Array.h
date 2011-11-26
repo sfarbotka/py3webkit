@@ -30,7 +30,7 @@
 #include "TypedArrayBase.h"
 #include <wtf/MathExtras.h>
 
-namespace WebCore {
+namespace WTF {
 
 class Float64Array : public TypedArrayBase<double> {
 public:
@@ -39,7 +39,7 @@ public:
     static PassRefPtr<Float64Array> create(PassRefPtr<ArrayBuffer>, unsigned byteOffset, unsigned length);
 
     // Can’t use "using" here due to a bug in the RVCT compiler.
-    void set(TypedArrayBase<double>* array, unsigned offset, ExceptionCode& ec) { return TypedArrayBase<double>::set(array, offset, ec); }
+    bool set(TypedArrayBase<double>* array, unsigned offset) { return TypedArrayBase<double>::set(array, offset); }
 
     void set(unsigned index, double value)
     {
@@ -71,6 +71,8 @@ private:
     virtual bool isDoubleArray() const { return true; }
 };
 
-} // namespace WebCore
+} // namespace WTF
+
+using WTF::Float64Array;
 
 #endif // Float64Array_h

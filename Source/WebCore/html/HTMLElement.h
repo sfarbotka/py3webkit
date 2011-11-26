@@ -30,7 +30,11 @@ namespace WebCore {
 class DocumentFragment;
 class HTMLCollection;
 class HTMLFormElement;
-                       
+
+#if ENABLE(MICRODATA)
+class MicroDataItemValue;
+#endif
+
 class HTMLElement : public StyledElement {
 public:
     static PassRefPtr<HTMLElement> create(const QualifiedName& tagName, Document*);
@@ -66,7 +70,7 @@ public:
 
     void click();
 
-    virtual void accessKeyAction(bool sendToAnyElement);
+    virtual void accessKeyAction(bool sendMouseEvents);
 
     bool ieForbidsInsertHTML() const;
 
@@ -81,6 +85,11 @@ public:
 
     TextDirection directionalityIfhasDirAutoAttribute(bool& isAuto) const;
 
+#if ENABLE(MICRODATA)
+    void setItemValue(const String&, ExceptionCode&);
+    PassRefPtr<MicroDataItemValue> itemValue() const;
+#endif
+
 protected:
     HTMLElement(const QualifiedName& tagName, Document*);
 
@@ -92,6 +101,8 @@ protected:
 
     virtual void childrenChanged(bool changedByParser = false, Node* beforeChange = 0, Node* afterChange = 0, int childCountDelta = 0);
     void calculateAndAdjustDirectionality();
+
+    virtual bool isURLAttribute(Attribute*) const;
 
 private:
     virtual String nodeName() const;
@@ -107,6 +118,11 @@ private:
     void adjustDirectionalityIfNeededAfterChildAttributeChanged(Element* child);
     void adjustDirectionalityIfNeededAfterChildrenChanged(Node* beforeChange, int childCountDelta);
     TextDirection directionality(Node** strongDirectionalityTextNode= 0) const;
+
+#if ENABLE(MICRODATA)
+    virtual String itemValueText() const;
+    virtual void setItemValueText(const String&, ExceptionCode&);
+#endif
 };
 
 inline HTMLElement* toHTMLElement(Node* node)
@@ -120,6 +136,9 @@ inline const HTMLElement* toHTMLElement(const Node* node)
     ASSERT(!node || node->isHTMLElement());
     return static_cast<const HTMLElement*>(node);
 }
+
+// This will catch anyone doing an unnecessary cast.
+void toHTMLElement(const HTMLElement*);
 
 inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document* document)
     : StyledElement(tagName, document, CreateHTMLElement)

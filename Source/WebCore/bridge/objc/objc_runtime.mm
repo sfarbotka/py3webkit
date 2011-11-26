@@ -205,22 +205,18 @@ void ObjcFallbackObjectImp::finishCreation(JSGlobalObject* globalObject)
     ASSERT(inherits(&s_info));
 }
 
-bool ObjcFallbackObjectImp::getOwnPropertySlot(ExecState*, const Identifier&, PropertySlot& slot)
+bool ObjcFallbackObjectImp::getOwnPropertySlot(JSCell*, ExecState*, const Identifier&, PropertySlot& slot)
 {
     // keep the prototype from getting called instead of just returning false
     slot.setUndefined();
     return true;
 }
 
-bool ObjcFallbackObjectImp::getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor& descriptor)
+bool ObjcFallbackObjectImp::getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor& descriptor)
 {
     // keep the prototype from getting called instead of just returning false
     descriptor.setUndefined();
     return true;
-}
-
-void ObjcFallbackObjectImp::put(ExecState*, const Identifier&, JSValue, PutPropertySlot&)
-{
 }
 
 void ObjcFallbackObjectImp::put(JSCell*, ExecState*, const Identifier&, JSValue, PutPropertySlot&)
@@ -259,14 +255,9 @@ static EncodedJSValue JSC_HOST_CALL callObjCFallbackObject(ExecState* exec)
     return JSValue::encode(result);
 }
 
-CallType ObjcFallbackObjectImp::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 CallType ObjcFallbackObjectImp::getCallData(JSCell* cell, CallData& callData)
 {
-    ObjcFallbackObjectImp* thisObject = static_cast<ObjcFallbackObjectImp*>(cell);
+    ObjcFallbackObjectImp* thisObject = jsCast<ObjcFallbackObjectImp*>(cell);
     id targetObject = thisObject->_instance->getObject();
     if (![targetObject respondsToSelector:@selector(invokeUndefinedMethodFromWebScript:withArguments:)])
         return CallTypeNone;
@@ -274,19 +265,15 @@ CallType ObjcFallbackObjectImp::getCallData(JSCell* cell, CallData& callData)
     return CallTypeHost;
 }
 
-bool ObjcFallbackObjectImp::deleteProperty(ExecState* exec, const Identifier& identifier)
-{
-    return deleteProperty(this, exec, identifier);
-}
-
 bool ObjcFallbackObjectImp::deleteProperty(JSCell*, ExecState*, const Identifier&)
 {
     return false;
 }
 
-JSValue ObjcFallbackObjectImp::defaultValue(ExecState* exec, PreferredPrimitiveType) const
+JSValue ObjcFallbackObjectImp::defaultValue(const JSObject* object, ExecState* exec, PreferredPrimitiveType)
 {
-    return _instance->getValueOfUndefinedField(exec, _item);
+    const ObjcFallbackObjectImp* thisObject = jsCast<const ObjcFallbackObjectImp*>(object);
+    return thisObject->_instance->getValueOfUndefinedField(exec, thisObject->_item);
 }
 
 bool ObjcFallbackObjectImp::toBoolean(ExecState *) const

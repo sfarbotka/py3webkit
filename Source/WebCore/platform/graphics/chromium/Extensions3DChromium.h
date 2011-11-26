@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,10 +40,12 @@ public:
     // Supported extensions:
     //   GL_CHROMIUM_resource_safe  : indicating that textures/renderbuffers are always initialized before read/write.
     //   GL_CHROMIUM_strict_attribs : indicating a GL error is generated for out-of-bounds buffer accesses.
+    //   GL_CHROMIUM_post_sub_buffer
     //   GL_CHROMIUM_map_sub
     //   GL_CHROMIUM_swapbuffers_complete_callback
     //   GL_CHROMIUM_rate_limit_offscreen_context
     //   GL_CHROMIUM_paint_framebuffer_canvas
+    //   GL_CHROMIUM_iosurface (Mac OS X specific)
 
     // Extensions3D methods.
     virtual bool supports(const String&);
@@ -56,6 +58,7 @@ public:
     virtual void deleteVertexArrayOES(Platform3DObject);
     virtual GC3Dboolean isVertexArrayOES(Platform3DObject);
     virtual void bindVertexArrayOES(Platform3DObject);
+    virtual String getTranslatedShaderSourceANGLE(Platform3DObject);
 
     enum {
         // GL_CHROMIUM_map_sub (enums inherited from GL_ARB_vertex_buffer_object)
@@ -63,11 +66,17 @@ public:
         WRITE_ONLY = 0x88B9
     };
 
+    // GL_CHROMIUM_post_sub_buffer
+    void postSubBufferCHROMIUM(int x, int y, int width, int height);
+
     // GL_CHROMIUM_map_sub
     void* mapBufferSubDataCHROMIUM(unsigned target, int offset, int size, unsigned access);
     void unmapBufferSubDataCHROMIUM(const void*);
     void* mapTexSubImage2DCHROMIUM(unsigned target, int level, int xoffset, int yoffset, int width, int height, unsigned format, unsigned type, unsigned access);
     void unmapTexSubImage2DCHROMIUM(const void*);
+
+    // GL_CHROMIUM_set_visibility
+    void setVisibilityCHROMIUM(bool);
 
     // GL_CHROMIUM_swapbuffers_complete_callback
     class SwapBuffersCompleteCallbackCHROMIUM {
@@ -82,6 +91,11 @@ public:
 
     // GL_CHROMIUM_paint_framebuffer_canvas
     void paintFramebufferToCanvas(int framebuffer, int width, int height, bool premultiplyAlpha, ImageBuffer*);
+
+    // GL_CHROMIUM_iosurface
+    // To avoid needing to expose extraneous enums, assumes internal format
+    // RGBA, format BGRA, and type UNSIGNED_INT_8_8_8_8_REV.
+    void texImageIOSurface2DCHROMIUM(unsigned target, int width, int height, uint32_t ioSurfaceId, unsigned plane);
 
 private:
     // Instances of this class are strictly owned by the GraphicsContext3D implementation and do not

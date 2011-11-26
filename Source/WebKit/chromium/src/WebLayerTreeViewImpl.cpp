@@ -49,9 +49,10 @@ PassRefPtr<WebLayerTreeViewImpl> WebLayerTreeViewImpl::create(WebLayerTreeViewCl
 }
 
 WebLayerTreeViewImpl::WebLayerTreeViewImpl(WebLayerTreeViewClient* client, const WebLayer& root, const WebLayerTreeView::Settings& settings) 
-    : CCLayerTreeHost(this, root, settings)
+    : CCLayerTreeHost(this, settings)
     , m_client(client)
 {
+    setRootLayer(root);
 }
 
 WebLayerTreeViewImpl::~WebLayerTreeViewImpl()
@@ -64,10 +65,10 @@ void WebLayerTreeViewImpl::animateAndLayout(double frameBeginTime)
         m_client->animateAndLayout(frameBeginTime);
 }
 
-void WebLayerTreeViewImpl::applyScrollDelta(const WebCore::IntSize& delta)
+void WebLayerTreeViewImpl::applyScrollAndScale(const WebCore::IntSize& scrollDelta, float pageScale)
 {
     if (m_client)
-        m_client->applyScrollDelta(WebSize(delta));
+        m_client->applyScrollAndScale(WebSize(scrollDelta), pageScale);
 }
 
 PassRefPtr<GraphicsContext3D> WebLayerTreeViewImpl::createLayerTreeHostContext3D()
@@ -95,18 +96,26 @@ PassRefPtr<GraphicsContext3D> WebLayerTreeViewImpl::createLayerTreeHostContext3D
     return GraphicsContext3DPrivate::createGraphicsContextFromWebContext(webContext.release(), attributes, 0, style, usage);
 }
 
+void WebLayerTreeViewImpl::didCommitAndDrawFrame()
+{
+    // FIXME: route this up to the WebLayerTreeView client
+}
+
+void WebLayerTreeViewImpl::didCompleteSwapBuffers()
+{
+    // FIXME: route this up to the WebLayerTreeView client
+}
+
 void WebLayerTreeViewImpl::didRecreateGraphicsContext(bool success)
 {
     if (m_client)
         m_client->didRebindGraphicsContext(success);
 }
 
-#if !USE(THREADED_COMPOSITING)
 void WebLayerTreeViewImpl::scheduleComposite()
 {
     if (m_client)
         m_client->scheduleComposite();
 }
-#endif
 
 } // namespace WebKit

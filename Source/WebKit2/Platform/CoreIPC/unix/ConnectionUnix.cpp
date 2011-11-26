@@ -39,8 +39,8 @@
 #include <wtf/OwnArrayPtr.h>
 
 #if PLATFORM(QT)
-#include <QApplication>
 #include <QSocketNotifier>
+#include <QWeakPointer>
 #elif PLATFORM(GTK)
 #include <glib.h>
 #endif
@@ -163,16 +163,17 @@ public:
     SocketNotifierResourceGuard(QSocketNotifier* socketNotifier)
         : m_socketNotifier(socketNotifier)
     {
-        m_socketNotifier->setEnabled(false);
+        m_socketNotifier.data()->setEnabled(false);
     }
 
     ~SocketNotifierResourceGuard()
     {
-        m_socketNotifier->setEnabled(true);
+        if (m_socketNotifier)
+            m_socketNotifier.data()->setEnabled(true);
     }
 
 private:
-    QSocketNotifier* const m_socketNotifier;
+    QWeakPointer<QSocketNotifier> const m_socketNotifier;
 };
 #endif
 

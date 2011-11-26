@@ -39,6 +39,12 @@ WebInspector.Drawer = function()
     this._mainStatusBar = document.getElementById("main-status-bar");
     this._mainStatusBar.addEventListener("mousedown", this._startStatusBarDragging.bind(this), true);
     this._counters = document.getElementById("counters");
+
+    this._drawerContentsElement = document.createElement("div");
+    this._drawerContentsElement.id = "drawer-contents";
+    this._drawerContentsElement.className = "drawer-contents";
+    this.element.appendChild(this._drawerContentsElement);
+    
     this._drawerStatusBar = document.createElement("div");
     this._drawerStatusBar.id = "drawer-status-bar";
     this._drawerStatusBar.className = "status-bar";
@@ -46,6 +52,12 @@ WebInspector.Drawer = function()
 
     this._viewStatusBar = document.createElement("div");
     this._drawerStatusBar.appendChild(this._viewStatusBar);
+}
+
+WebInspector.Drawer.AnimationType = {
+        Immediately: 0,
+        Normal: 1,
+        Slow: 2
 }
 
 WebInspector.Drawer.prototype = {
@@ -59,28 +71,36 @@ WebInspector.Drawer.prototype = {
         return Number.constrain(height, Preferences.minConsoleHeight, window.innerHeight - this._mainElement.totalOffsetTop() - Preferences.minConsoleHeight);
     },
 
-    show: function(view, immediately)
+    show: function(view, animationType)
     {
         this.immediatelyFinishAnimation();
+        if (this._view && this._view.counterElement)
+            this._view.counterElement.parentNode.removeChild(this._view.counterElement);
 
         var drawerWasVisible = this.visible;
-        
-        if (this._view)
-            this.element.removeChild(this._view.element);
+
+        if (this._view) {
+            this._view.detach();
+            this._drawerContentsElement.removeChildren();
+        }
 
         this._view = view;
 
         var statusBarItems = this._view.statusBarItems || [];
+        this._viewStatusBar.removeChildren();
         for (var i = 0; i < statusBarItems.length; ++i)
             this._viewStatusBar.appendChild(statusBarItems[i]);
 
-        if (drawerWasVisible)
-            return;
+        if (this._view.counterElement)
+            this._counters.insertBefore(this._view.counterElement, this._counters.firstChild);
 
         document.body.addStyleClass("drawer-visible");
+        this._view.markAsRoot();
+        this._view.show(this._drawerContentsElement);
 
-        this._view.show(this.element);
-
+        if (drawerWasVisible)
+            return;
+        
         var anchoredItems = document.getElementById("anchored-status-bar-items");
         var height = this._constrainHeight(this._savedHeight || this.element.offsetHeight);
         var animations = [
@@ -100,10 +120,10 @@ WebInspector.Drawer.prototype = {
             this._currentPanelCounters.parentNode.removeChild(this._currentPanelCounters);
             this._mainStatusBar.appendChild(this._currentPanelCounters);
         }
-
+        
         function animationFinished()
         {
-            WebInspector.currentPanel().statusBarResized();
+            WebInspector.inspectorView.currentPanel().statusBarResized();
             if (this._view && this._view.afterShow)
                 this._view.afterShow();
             delete this._currentAnimation;
@@ -111,12 +131,12 @@ WebInspector.Drawer.prototype = {
                 this._currentPanelCounters.removeAttribute("style");
         }
 
-        this._currentAnimation = WebInspector.animateStyle(animations, this._animationDuration(), animationFinished.bind(this));
-        if (immediately)
+        this._currentAnimation = WebInspector.animateStyle(animations, this._animationDuration(animationType), animationFinished.bind(this));
+        if (animationType === WebInspector.Drawer.AnimationType.Immediately)
             this._currentAnimation.forceComplete();
     },
 
-    hide: function(immediately)
+    hide: function(animationType)
     {
         this.immediatelyFinishAnimation();
         if (!this.visible)
@@ -124,8 +144,8 @@ WebInspector.Drawer.prototype = {
 
         this._savedHeight = this.element.offsetHeight;
 
-        if (this.element === WebInspector.currentFocusElement || this.element.isAncestor(WebInspector.currentFocusElement))
-            WebInspector.currentFocusElement = WebInspector.previousFocusElement;
+        if (this.element === WebInspector.currentFocusElement() || this.element.isAncestor(WebInspector.currentFocusElement()))
+            WebInspector.setCurrentFocusElement(WebInspector.previousFocusElement());
 
         var anchoredItems = document.getElementById("anchored-status-bar-items");
 
@@ -133,7 +153,7 @@ WebInspector.Drawer.prototype = {
         // like Elements in their updateStatusBarItems call will size things to fit the final location.
         this._mainStatusBar.style.setProperty("padding-left", (anchoredItems.offsetWidth - 1) + "px");
         document.body.removeStyleClass("drawer-visible");
-        WebInspector.currentPanel().statusBarResized();
+        WebInspector.inspectorView.currentPanel().statusBarResized();
         document.body.addStyleClass("drawer-visible");
 
         var animations = [
@@ -151,9 +171,12 @@ WebInspector.Drawer.prototype = {
 
         function animationFinished()
         {
-            WebInspector.currentPanel().doResize();
+            WebInspector.inspectorView.currentPanel().doResize();
             this._mainStatusBar.insertBefore(anchoredItems, this._mainStatusBar.firstChild);
             this._mainStatusBar.style.removeProperty("padding-left");
+
+            if (this._view.counterElement)
+                this._view.counterElement.parentNode.removeChild(this._view.counterElement);
 
             if (this._currentPanelCounters) {
                 this._currentPanelCounters.setAttribute("style", null);
@@ -161,15 +184,15 @@ WebInspector.Drawer.prototype = {
                 this._counters.insertBefore(this._currentPanelCounters, this._counters.firstChild);
             }
 
-            this._view.hide();
-            this.element.removeChild(this._view.element);
+            this._view.detach();
             delete this._view;
+            this._drawerContentsElement.removeChildren();
             document.body.removeStyleClass("drawer-visible");
             delete this._currentAnimation;
         }
 
-        this._currentAnimation = WebInspector.animateStyle(animations, this._animationDuration(), animationFinished.bind(this));
-        if (immediately)
+        this._currentAnimation = WebInspector.animateStyle(animations, this._animationDuration(animationType), animationFinished.bind(this));
+        if (animationType === WebInspector.Drawer.AnimationType.Immediately)
             this._currentAnimation.forceComplete();
     },
 
@@ -207,22 +230,16 @@ WebInspector.Drawer.prototype = {
             this._counters.insertBefore(x, this._counters.firstChild);
     },
 
-    _animationDuration: function()
+    _animationDuration: function(animationType)
     {
-        return (window.event && window.event.shiftKey ? 2000 : 250);
-    },
-
-    _safelyRemoveChildren: function()
-    {
-        var child = this.element.firstChild;
-        while (child) {
-            if (child.id !== "drawer-status-bar") {
-                var moveTo = child.nextSibling;
-                this.element.removeChild(child);
-                child = moveTo;
-            } else
-                child = child.nextSibling;
-        }
+        switch (animationType) {
+        case WebInspector.Drawer.AnimationType.Slow:
+            return 2000;
+        case WebInspector.Drawer.AnimationType.Normal:
+            return 250;
+        default:
+            return 0;
+        }        
     },
 
     _startStatusBarDragging: function(event)
@@ -245,8 +262,8 @@ WebInspector.Drawer.prototype = {
 
         this._mainElement.style.bottom = height + "px";
         this.element.style.height = height + "px";
-        if (WebInspector.currentPanel())
-            WebInspector.currentPanel().doResize();
+        if (WebInspector.inspectorView.currentPanel())
+            WebInspector.inspectorView.currentPanel().doResize();
         this._view.doResize();
 
         event.preventDefault();

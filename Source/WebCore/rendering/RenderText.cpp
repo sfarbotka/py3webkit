@@ -95,7 +95,7 @@ static void makeCapitalized(String* string, UChar previous)
     if (length >= numeric_limits<unsigned>::max())
         CRASH();
 
-    StringBuffer stringWithPrevious(length + 1);
+    StringBuffer<UChar> stringWithPrevious(length + 1);
     stringWithPrevious[0] = previous == noBreakSpace ? ' ' : previous;
     for (unsigned i = 1; i < length + 1; i++) {
         // Replace &nbsp with a real space since ICU no longer treats &nbsp as a word separator.
@@ -109,7 +109,7 @@ static void makeCapitalized(String* string, UChar previous)
     if (!boundary)
         return;
 
-    StringBuffer data(length);
+    StringBuffer<UChar> data(length);
 
     int32_t endOfWord;
     int32_t startOfWord = textBreakFirst(boundary);
@@ -328,7 +328,7 @@ static FloatRect localQuadForTextBox(InlineTextBox* box, unsigned start, unsigne
     return FloatRect();
 }
 
-void RenderText::absoluteRectsForRange(Vector<IntRect>& rects, unsigned start, unsigned end, bool useSelectionHeight, bool* wasFixed)
+void RenderText::absoluteRectsForRange(Vector<LayoutRect>& rects, unsigned start, unsigned end, bool useSelectionHeight, bool* wasFixed)
 {
     // Work around signed/unsigned issues. This function takes unsigneds, and is often passed UINT_MAX
     // to mean "all the way to the end". InlineTextBox coordinates are unsigneds, so changing this 
@@ -637,14 +637,14 @@ VisiblePosition RenderText::positionForPoint(const LayoutPoint& point)
     return createVisiblePosition(lastBoxAbove ? lastBoxAbove->start() + lastBoxAbove->len() : 0, DOWNSTREAM);
 }
 
-IntRect RenderText::localCaretRect(InlineBox* inlineBox, int caretOffset, int* extraWidthToEndOfLine)
+LayoutRect RenderText::localCaretRect(InlineBox* inlineBox, int caretOffset, LayoutUnit* extraWidthToEndOfLine)
 {
     if (!inlineBox)
-        return IntRect();
+        return LayoutRect();
 
     ASSERT(inlineBox->isInlineTextBox());
     if (!inlineBox->isInlineTextBox())
-        return IntRect();
+        return LayoutRect();
 
     InlineTextBox* box = toInlineTextBox(inlineBox);
 
@@ -1469,9 +1469,9 @@ float RenderText::width(unsigned from, unsigned len, const Font& f, float xPos, 
     return w;
 }
 
-IntRect RenderText::linesBoundingBox() const
+LayoutRect RenderText::linesBoundingBox() const
 {
-    IntRect result;
+    LayoutRect result;
     
     ASSERT(!firstTextBox() == !lastTextBox());  // Either both are null or both exist.
     if (firstTextBox() && lastTextBox()) {
@@ -1497,30 +1497,30 @@ IntRect RenderText::linesBoundingBox() const
     return result;
 }
 
-IntRect RenderText::linesVisualOverflowBoundingBox() const
+LayoutRect RenderText::linesVisualOverflowBoundingBox() const
 {
     if (!firstTextBox())
-        return IntRect();
+        return LayoutRect();
 
     // Return the width of the minimal left side and the maximal right side.
-    int logicalLeftSide = numeric_limits<int>::max();
-    int logicalRightSide = numeric_limits<int>::min();
+    LayoutUnit logicalLeftSide = numeric_limits<LayoutUnit>::max();
+    LayoutUnit logicalRightSide = numeric_limits<LayoutUnit>::min();
     for (InlineTextBox* curr = firstTextBox(); curr; curr = curr->nextTextBox()) {
         logicalLeftSide = min(logicalLeftSide, curr->logicalLeftVisualOverflow());
         logicalRightSide = max(logicalRightSide, curr->logicalRightVisualOverflow());
     }
     
-    int logicalTop = firstTextBox()->logicalTopVisualOverflow();
-    int logicalWidth = logicalRightSide - logicalLeftSide;
-    int logicalHeight = lastTextBox()->logicalBottomVisualOverflow() - logicalTop;
+    LayoutUnit logicalTop = firstTextBox()->logicalTopVisualOverflow();
+    LayoutUnit logicalWidth = logicalRightSide - logicalLeftSide;
+    LayoutUnit logicalHeight = lastTextBox()->logicalBottomVisualOverflow() - logicalTop;
     
-    IntRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
+    LayoutRect rect(logicalLeftSide, logicalTop, logicalWidth, logicalHeight);
     if (!style()->isHorizontalWritingMode())
         rect = rect.transposedRect();
     return rect;
 }
 
-IntRect RenderText::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
+LayoutRect RenderText::clippedOverflowRectForRepaint(RenderBoxModelObject* repaintContainer) const
 {
     RenderObject* rendererToRepaint = containingBlock();
 

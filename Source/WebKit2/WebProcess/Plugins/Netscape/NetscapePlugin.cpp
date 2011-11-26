@@ -118,10 +118,9 @@ void NetscapePlugin::invalidate(const NPRect* invalidRect)
     IntRect rect;
     
     if (!invalidRect)
-        rect = IntRect(0, 0, m_frameRect.width(), m_frameRect.height());
+        rect = IntRect(0, 0, m_pluginSize.width(), m_pluginSize.height());
     else
-        rect = IntRect(invalidRect->left, invalidRect->top,
-                       invalidRect->right - invalidRect->left, invalidRect->bottom - invalidRect->top);
+        rect = IntRect(invalidRect->left, invalidRect->top, invalidRect->right - invalidRect->left, invalidRect->bottom - invalidRect->top);
     
     if (platformInvalidate(rect))
         return;
@@ -391,6 +390,11 @@ void NetscapePlugin::unscheduleTimer(unsigned timerID)
     timer->stop();
 }
 
+double NetscapePlugin::contentsScaleFactor()
+{
+    return controller()->contentsScaleFactor();
+}
+
 String NetscapePlugin::proxiesForURL(const String& urlString)
 {
     return controller()->proxiesForURL(urlString);
@@ -409,7 +413,7 @@ void NetscapePlugin::setCookiesForURL(const String& urlString, const String& coo
 bool NetscapePlugin::getAuthenticationInfo(const ProtectionSpace& protectionSpace, String& username, String& password)
 {
     return controller()->getAuthenticationInfo(protectionSpace, username, password);
-}
+}    
 
 NPError NetscapePlugin::NPP_New(NPMIMEType pluginType, uint16_t mode, int16_t argc, char* argn[], char* argv[], NPSavedData* savedData)
 {
@@ -479,20 +483,25 @@ NPError NetscapePlugin::NPP_SetValue(NPNVariable variable, void *value)
 
 void NetscapePlugin::callSetWindow()
 {
-#if PLUGIN_ARCHITECTURE(X11)
-    // We use a backing store as the painting area for the plugin.
-    m_npWindow.x = 0;
-    m_npWindow.y = 0;
-#else
-    m_npWindow.x = m_frameRect.x();
-    m_npWindow.y = m_frameRect.y();
-#endif
-    m_npWindow.width = m_frameRect.width();
-    m_npWindow.height = m_frameRect.height();
-    m_npWindow.clipRect.top = m_clipRect.y();
-    m_npWindow.clipRect.left = m_clipRect.x();
-    m_npWindow.clipRect.bottom = m_clipRect.maxY();
-    m_npWindow.clipRect.right = m_clipRect.maxX();
+    if (wantsPluginRelativeNPWindowCoordinates()) {
+        m_npWindow.x = 0;
+        m_npWindow.y = 0;
+        m_npWindow.clipRect.top = m_clipRect.y();
+        m_npWindow.clipRect.left = m_clipRect.x();
+    } else {
+        IntPoint pluginLocationInRootViewCoordinates = convertToRootView(IntPoint());
+        IntPoint clipRectInRootViewCoordinates = convertToRootView(m_clipRect.location());
+
+        m_npWindow.x = pluginLocationInRootViewCoordinates.x();
+        m_npWindow.y = pluginLocationInRootViewCoordinates.y();
+        m_npWindow.clipRect.top = clipRectInRootViewCoordinates.y();
+        m_npWindow.clipRect.left = clipRectInRootViewCoordinates.x();
+    }
+
+    m_npWindow.width = m_pluginSize.width();
+    m_npWindow.height = m_pluginSize.height();
+    m_npWindow.clipRect.right = m_npWindow.clipRect.left + m_clipRect.width();
+    m_npWindow.clipRect.bottom = m_npWindow.clipRect.top + m_clipRect.height();
 
     NPP_SetWindow(&m_npWindow);
 }
@@ -640,18 +649,23 @@ void NetscapePlugin::paint(GraphicsContext* context, const IntRect& dirtyRect)
 
 PassRefPtr<ShareableBitmap> NetscapePlugin::snapshot()
 {
-    if (!supportsSnapshotting() || m_frameRect.isEmpty())
+    if (!supportsSnapshotting() || m_pluginSize.isEmpty())
         return 0;
 
     ASSERT(m_isStarted);
-    
-    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::createShareable(m_frameRect.size(), ShareableBitmap::SupportsAlpha);
+
+    IntSize backingStoreSize = m_pluginSize;
+    backingStoreSize.scale(contentsScaleFactor());
+
+    RefPtr<ShareableBitmap> bitmap = ShareableBitmap::createShareable(backingStoreSize, ShareableBitmap::SupportsAlpha);
     OwnPtr<GraphicsContext> context = bitmap->createGraphicsContext();
 
-    context->translate(-m_frameRect.x(), -m_frameRect.y());
+    // FIXME: We should really call applyDeviceScaleFactor instead of scale, but that ends up calling into WKSI
+    // which we currently don't have initiated in the plug-in process.
+    context->scale(FloatSize(contentsScaleFactor(), contentsScaleFactor()));
 
-    platformPaint(context.get(), m_frameRect, true);
-    
+    platformPaint(context.get(), IntRect(IntPoint(), m_pluginSize), true);
+
     return bitmap.release();
 }
 
@@ -660,19 +674,33 @@ bool NetscapePlugin::isTransparent()
     return m_isTransparent;
 }
 
-void NetscapePlugin::geometryDidChange(const IntRect& frameRect, const IntRect& clipRect)
+void NetscapePlugin::geometryDidChange(const IntSize& pluginSize, const IntRect& clipRect, const AffineTransform& pluginToRootViewTransform)
 {
     ASSERT(m_isStarted);
 
-    if (m_frameRect == frameRect && m_clipRect == clipRect) {
+    if (pluginSize == m_pluginSize && m_clipRect == clipRect && m_pluginToRootViewTransform == pluginToRootViewTransform) {
         // Nothing to do.
         return;
     }
 
-    m_frameRect = frameRect;
+    bool shouldCallWindow = true;
+
+    // If the plug-in doesn't want window relative coordinates, we don't need to call setWindow unless its size or clip rect changes.
+    if (wantsPluginRelativeNPWindowCoordinates() && m_pluginSize == pluginSize && m_clipRect == clipRect)
+        shouldCallWindow = false;
+
+    m_pluginSize = pluginSize;
     m_clipRect = clipRect;
+    m_pluginToRootViewTransform = pluginToRootViewTransform;
+
+    IntPoint frameRectLocationInWindowCoordinates = m_pluginToRootViewTransform.mapPoint(IntPoint());
+    m_frameRectInWindowCoordinates = IntRect(frameRectLocationInWindowCoordinates, m_pluginSize);
 
     platformGeometryDidChange();
+
+    if (!shouldCallWindow)
+        return;
+
     callSetWindow();
 }
 
@@ -724,7 +752,7 @@ void NetscapePlugin::didEvaluateJavaScript(uint64_t requestID, const String& res
 }
 
 void NetscapePlugin::streamDidReceiveResponse(uint64_t streamID, const KURL& responseURL, uint32_t streamLength, 
-                                              uint32_t lastModifiedTime, const String& mimeType, const String& headers)
+                                              uint32_t lastModifiedTime, const String& mimeType, const String& headers, const String& /* suggestedFileName */)
 {
     ASSERT(m_isStarted);
     
@@ -757,7 +785,7 @@ void NetscapePlugin::streamDidFail(uint64_t streamID, bool wasCancelled)
 }
 
 void NetscapePlugin::manualStreamDidReceiveResponse(const KURL& responseURL, uint32_t streamLength, uint32_t lastModifiedTime, 
-                                                    const String& mimeType, const String& headers)
+                                                    const String& mimeType, const String& headers, const String& /* suggestedFileName */)
 {
     ASSERT(m_isStarted);
     ASSERT(m_loadManually);
@@ -822,6 +850,12 @@ bool NetscapePlugin::handleMouseLeaveEvent(const WebMouseEvent& mouseEvent)
     return platformHandleMouseLeaveEvent(mouseEvent);
 }
 
+bool NetscapePlugin::handleContextMenuEvent(const WebMouseEvent&)
+{
+    // We don't know if the plug-in has handled mousedown event by displaying a context menu, so we never want WebKit to show a default one.
+    return true;
+}
+
 bool NetscapePlugin::handleKeyboardEvent(const WebKeyboardEvent& keyboardEvent)
 {
     ASSERT(m_isStarted);
@@ -850,6 +884,16 @@ NPObject* NetscapePlugin::pluginScriptableNPObject()
 #endif    
 
     return scriptableNPObject;
+}
+
+void NetscapePlugin::contentsScaleFactorChanged(float scaleFactor)
+{
+    ASSERT(m_isStarted);
+
+#if PLUGIN_ARCHITECTURE(MAC)
+    double contentsScaleFactor = scaleFactor;
+    NPP_SetValue(NPNVcontentsScaleFactor, &contentsScaleFactor);
+#endif
 }
 
 void NetscapePlugin::privateBrowsingStateChanged(bool privateBrowsingEnabled)
@@ -901,6 +945,20 @@ bool NetscapePlugin::supportsSnapshotting() const
     return m_pluginModule && m_pluginModule->pluginQuirks().contains(PluginQuirks::SupportsSnapshotting);
 #endif
     return false;
+}
+
+IntPoint NetscapePlugin::convertToRootView(const IntPoint& pointInPluginCoordinates) const
+{
+    return m_pluginToRootViewTransform.mapPoint(pointInPluginCoordinates);
+}
+
+bool NetscapePlugin::convertFromRootView(const IntPoint& pointInRootViewCoordinates, IntPoint& pointInPluginCoordinates)
+{
+    if (!m_pluginToRootViewTransform.isInvertible())
+        return false;
+
+    pointInPluginCoordinates = m_pluginToRootViewTransform.inverse().mapPoint(pointInRootViewCoordinates);
+    return true;
 }
 
 } // namespace WebKit

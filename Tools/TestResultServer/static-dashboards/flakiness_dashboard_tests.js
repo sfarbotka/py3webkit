@@ -49,6 +49,10 @@ function setupExpectationsTest()
     g_builders = {};
     g_allExpectations = null;
     g_allTests = null;
+    g_currentState = {};
+    for (var key in g_defaultCrossDashboardStateValues) {
+        g_currentState[key] = g_defaultCrossDashboardStateValues[key];
+    }
 }
 
 // Processes the expectations for a test and asserts that the final expectations
@@ -91,7 +95,22 @@ function assertEquals(actual, expected, message)
     }
 }
 
-function throwError(resultsForTests, actual, expected) {}
+function testFlattenTrie()
+{
+    var tests = {
+        'bar.html': {'results': [[100, 'F']], 'times': [[100, 0]]},
+        'foo': {
+            'bar': {
+                'baz.html': {'results': [[100, 'F']], 'times': [[100, 0]]},
+            }
+        }
+    };
+    var expectedFlattenedTests = {
+        'bar.html': {'results': [[100, 'F']], 'times': [[100, 0]]},
+        'foo/bar/baz.html': {'results': [[100, 'F']], 'times': [[100, 0]]},
+    };
+    assertEquals(JSON.stringify(flattenTrie(tests)), JSON.stringify(expectedFlattenedTests))
+}
 
 function testReleaseFail()
 {

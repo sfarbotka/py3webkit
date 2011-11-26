@@ -34,6 +34,7 @@
 
 #include "WebGLLayerChromium.h"
 
+#include "DrawingBuffer.h"
 #include "Extensions3DChromium.h"
 #include "GraphicsContext3D.h"
 #include "LayerRendererChromium.h"
@@ -48,24 +49,24 @@ PassRefPtr<WebGLLayerChromium> WebGLLayerChromium::create(CCLayerDelegate* deleg
 
 WebGLLayerChromium::WebGLLayerChromium(CCLayerDelegate* delegate)
     : CanvasLayerChromium(delegate)
-    , m_context(0)
     , m_textureChanged(true)
-    , m_contextSupportsRateLimitingExtension(false)
-    , m_rateLimitingTimer(this, &WebGLLayerChromium::rateLimitContext)
     , m_textureUpdated(false)
+    , m_drawingBuffer(0)
 {
 }
 
 WebGLLayerChromium::~WebGLLayerChromium()
 {
+    if (context() && layerTreeHost())
+        layerTreeHost()->stopRateLimiter(context());
 }
 
 bool WebGLLayerChromium::drawsContent() const
 {
-    return (m_context && m_context->getExtensions()->getGraphicsResetStatusARB() == GraphicsContext3D::NO_ERROR);
+    return (context() && context()->getExtensions()->getGraphicsResetStatusARB() == GraphicsContext3D::NO_ERROR);
 }
 
-void WebGLLayerChromium::updateCompositorResources(GraphicsContext3D* rendererContext, TextureAllocator*)
+void WebGLLayerChromium::updateCompositorResources(GraphicsContext3D* rendererContext, CCTextureUpdater&)
 {
     if (!drawsContent())
         return;
@@ -85,11 +86,10 @@ void WebGLLayerChromium::updateCompositorResources(GraphicsContext3D* rendererCo
     }
     // Update the contents of the texture used by the compositor.
     if (!m_dirtyRect.isEmpty() && m_textureUpdated) {
-        // prepareTexture copies the contents of the off-screen render target into the texture
-        // used by the compositor.
-        //
-        m_context->prepareTexture();
-        m_context->markLayerComposited();
+        // publishToPlatformLayer prepares the contents of the off-screen render target for use by the compositor.
+        drawingBuffer()->publishToPlatformLayer();
+        context()->markLayerComposited();
+        m_updateRect = FloatRect(FloatPoint(), bounds());
         resetNeedsDisplay();
         m_textureUpdated = false;
     }
@@ -100,7 +100,7 @@ bool WebGLLayerChromium::paintRenderedResultsToCanvas(ImageBuffer* imageBuffer)
     if (m_textureUpdated || !layerRendererContext() || !drawsContent())
         return false;
 
-    IntSize framebufferSize = m_context->getInternalFramebufferSize();
+    IntSize framebufferSize = context()->getInternalFramebufferSize();
     ASSERT(layerRendererContext());
 
     // This would ideally be done in the webgl context, but that isn't possible yet.
@@ -109,39 +109,53 @@ bool WebGLLayerChromium::paintRenderedResultsToCanvas(ImageBuffer* imageBuffer)
     layerRendererContext()->framebufferTexture2D(GraphicsContext3D::FRAMEBUFFER, GraphicsContext3D::COLOR_ATTACHMENT0, GraphicsContext3D::TEXTURE_2D, m_textureId, 0);
 
     Extensions3DChromium* extensions = static_cast<Extensions3DChromium*>(layerRendererContext()->getExtensions());
-    extensions->paintFramebufferToCanvas(framebuffer, framebufferSize.width(), framebufferSize.height(), !m_context->getContextAttributes().premultipliedAlpha, imageBuffer);
+    extensions->paintFramebufferToCanvas(framebuffer, framebufferSize.width(), framebufferSize.height(), !context()->getContextAttributes().premultipliedAlpha, imageBuffer);
     layerRendererContext()->deleteFramebuffer(framebuffer);
     return true;
 }
 
-void WebGLLayerChromium::setTextureUpdated()
+void WebGLLayerChromium::contentChanged()
 {
     m_textureUpdated = true;
     // If WebGL commands are issued outside of a the animation callbacks, then use
     // call rateLimitOffscreenContextCHROMIUM() to keep the context from getting too far ahead.
-    if (layerTreeHost() && !layerTreeHost()->animating() && m_contextSupportsRateLimitingExtension && !m_rateLimitingTimer.isActive())
-        m_rateLimitingTimer.startOneShot(0);
+    if (layerTreeHost())
+        layerTreeHost()->startRateLimiter(context());
 }
 
-void WebGLLayerChromium::setContext(const GraphicsContext3D* context)
+void WebGLLayerChromium::setDrawingBuffer(DrawingBuffer* drawingBuffer)
 {
-    bool contextChanged = (m_context != context);
+    bool drawingBufferChanged = (m_drawingBuffer != drawingBuffer);
 
-    m_context = const_cast<GraphicsContext3D*>(context);
+    // The GraphicsContext3D used by the layer is the context associated with
+    // the drawing buffer. If the drawing buffer is changing, make sure
+    // to stop the rate limiter on the old context, not the new context from the
+    // new drawing buffer.
+    GraphicsContext3D* context3D = context();
+    if (layerTreeHost() && drawingBufferChanged && context3D)
+        layerTreeHost()->stopRateLimiter(context3D);
 
-    if (!m_context)
+    m_drawingBuffer = drawingBuffer;
+    if (!m_drawingBuffer)
         return;
 
-    unsigned int textureId = m_context->platformTexture();
-    if (textureId != m_textureId || contextChanged) {
+    unsigned int textureId = m_drawingBuffer->platformColorBuffer();
+    if (textureId != m_textureId || drawingBufferChanged) {
         m_textureChanged = true;
         m_textureUpdated = true;
     }
     m_textureId = textureId;
-    GraphicsContext3D::Attributes attributes = m_context->getContextAttributes();
+    GraphicsContext3D::Attributes attributes = context()->getContextAttributes();
     m_hasAlpha = attributes.alpha;
     m_premultipliedAlpha = attributes.premultipliedAlpha;
-    m_contextSupportsRateLimitingExtension = m_context->getExtensions()->supports("GL_CHROMIUM_rate_limit_offscreen_context");
+}
+
+GraphicsContext3D* WebGLLayerChromium::context() const
+{
+    if (drawingBuffer())
+        return drawingBuffer()->graphicsContext3D().get();
+
+    return 0;
 }
 
 GraphicsContext3D* WebGLLayerChromium::layerRendererContext()
@@ -153,16 +167,6 @@ GraphicsContext3D* WebGLLayerChromium::layerRendererContext()
     return layerTreeHost()->context();
 }
 
-void WebGLLayerChromium::rateLimitContext(Timer<WebGLLayerChromium>*)
-{
-    TRACE_EVENT("WebGLLayerChromium::rateLimitContext", this, 0);
-
-    if (!m_context)
-        return;
-
-    Extensions3DChromium* extensions = static_cast<Extensions3DChromium*>(m_context->getExtensions());
-    extensions->rateLimitOffscreenContextCHROMIUM();
 }
 
-}
 #endif // USE(ACCELERATED_COMPOSITING)

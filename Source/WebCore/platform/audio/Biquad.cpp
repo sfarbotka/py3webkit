@@ -32,6 +32,7 @@
 
 #include "Biquad.h"
 
+#include "DenormalDisabler.h"
 #include <algorithm>
 #include <stdio.h>
 #include <wtf/MathExtras.h>
@@ -96,11 +97,12 @@ void Biquad::process(const float* sourceP, float* destP, size_t framesToProcess)
         y1 = y;
     }
 
-    // Local variables back to member
-    m_x1 = x1;
-    m_x2 = x2;
-    m_y1 = y1;
-    m_y2 = y2;
+    // Local variables back to member. Flush denormals here so we
+    // don't slow down the inner loop above.
+    m_x1 = DenormalDisabler::flushDenormalFloatToZero(x1);
+    m_x2 = DenormalDisabler::flushDenormalFloatToZero(x2);
+    m_y1 = DenormalDisabler::flushDenormalFloatToZero(y1);
+    m_y2 = DenormalDisabler::flushDenormalFloatToZero(y2);
 
     m_b0 = b0;
     m_b1 = b1;
@@ -371,6 +373,45 @@ void Biquad::setAllpassPole(const Complex &pole)
 {
     Complex zero = Complex(1, 0) / pole;
     setZeroPolePairs(zero, pole);
+}
+
+void Biquad::getFrequencyResponse(int nFrequencies,
+                                  const float* frequency,
+                                  float* magResponse,
+                                  float* phaseResponse)
+{
+    // Evaluate the Z-transform of the filter at given normalized
+    // frequency from 0 to 1.  (1 corresponds to the Nyquist
+    // frequency.)
+    //
+    // The z-transform of the filter is
+    //
+    // H(z) = (b0 + b1*z^(-1) + b2*z^(-2))/(1 + a1*z^(-1) + a2*z^(-2))
+    //
+    // Evaluate as
+    //
+    // b0 + (b1 + b2*z1)*z1
+    // --------------------
+    // 1 + (a1 + a2*z1)*z1
+    //
+    // with z1 = 1/z and z = exp(j*pi*frequency). Hence z1 = exp(-j*pi*frequency)
+
+    // Make local copies of the coefficients as a micro-optimization.
+    double b0 = m_b0;
+    double b1 = m_b1;
+    double b2 = m_b2;
+    double a1 = m_a1;
+    double a2 = m_a2;
+    
+    for (int k = 0; k < nFrequencies; ++k) {
+        double omega = -piDouble * frequency[k];
+        Complex z = Complex(cos(omega), sin(omega));
+        Complex numerator = b0 + (b1 + b2 * z) * z;
+        Complex denominator = Complex(1, 0) + (a1 + a2 * z) * z;
+        Complex response = numerator / denominator;
+        magResponse[k] = static_cast<float>(abs(response));
+        phaseResponse[k] = static_cast<float>(atan2(imag(response), real(response)));
+    }
 }
 
 } // namespace WebCore

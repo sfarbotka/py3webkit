@@ -82,30 +82,29 @@ public:
         CSS_PAIR = 100, // We envision this being exposed as a means of getting computed style values for pairs (border-spacing/radius, background-position, etc.)
         CSS_DASHBOARD_REGION = 101, // FIXME: Dashboard region should not be a primitive value.
         CSS_UNICODE_RANGE = 102,
-        
+
         // These next types are just used internally to allow us to translate back and forth from CSSPrimitiveValues to CSSParserValues.
         CSS_PARSER_OPERATOR = 103,
         CSS_PARSER_INTEGER = 104,
         CSS_PARSER_HEXCOLOR = 105,
-        
-        // This is used internally for unknown identifiers 
+
+        // This is used internally for unknown identifiers
         CSS_PARSER_IDENTIFIER = 106,
-        
+
         // These are from CSS3 Values and Units, but that isn't a finished standard yet
         CSS_TURN = 107,
         CSS_REMS = 108,
 
         // This is used internally for counter names (as opposed to counter values)
         CSS_COUNTER_NAME = 109,
-        CSS_FROM_FLOW = 110,
 
         // This is used by the CSS Exclusions draft
-        CSS_SHAPE = 111,
-        
+        CSS_SHAPE = 110,
+
         // Used by border images.
-        CSS_QUAD = 112
+        CSS_QUAD = 111
     };
-    
+
     // This enum follows the CSSParser::Units enum augmented with UNIT_FREQUENCY for frequencies.
     enum UnitCategory {
         UNumber,
@@ -120,23 +119,34 @@ public:
     static bool isUnitTypeLength(int type) { return (type > CSSPrimitiveValue::CSS_PERCENTAGE && type < CSSPrimitiveValue::CSS_DEG) ||
                                                     type == CSSPrimitiveValue::CSS_REMS; }
 
-    bool isLength() const { return isUnitTypeLength(m_type); }
+    bool isLength() const { return isUnitTypeLength(m_primitiveUnitType); }
 
     static PassRefPtr<CSSPrimitiveValue> createIdentifier(int identifier) { return adoptRef(new CSSPrimitiveValue(identifier)); }
     static PassRefPtr<CSSPrimitiveValue> createColor(unsigned rgbValue) { return adoptRef(new CSSPrimitiveValue(rgbValue)); }
     static PassRefPtr<CSSPrimitiveValue> create(double value, UnitTypes type) { return adoptRef(new CSSPrimitiveValue(value, type)); }
     static PassRefPtr<CSSPrimitiveValue> create(const String& value, UnitTypes type) { return adoptRef(new CSSPrimitiveValue(value, type)); }
-    
+
     template<typename T> static PassRefPtr<CSSPrimitiveValue> create(T value)
     {
         return adoptRef(new CSSPrimitiveValue(value));
     }
 
-    virtual ~CSSPrimitiveValue();
+    // This value is used to handle quirky margins in reflow roots (body, td, and th) like WinIE.
+    // The basic idea is that a stylesheet can use the value __qem (for quirky em) instead of em.
+    // When the quirky value is used, if you're in quirks mode, the margin will collapse away
+    // inside a table cell.
+    static PassRefPtr<CSSPrimitiveValue> createAllowingMarginQuirk(double value, UnitTypes type)
+    {
+        CSSPrimitiveValue* quirkValue = new CSSPrimitiveValue(value, type);
+        quirkValue->m_isQuirkValue = true;
+        return adoptRef(quirkValue);
+    }
+
+    ~CSSPrimitiveValue();
 
     void cleanup();
 
-    unsigned short primitiveType() const { return m_type; }
+    unsigned short primitiveType() const { return m_primitiveUnitType; }
 
     /*
      * computes a length in pixels out of the given CSSValue. Need the RenderStyle to get
@@ -151,8 +161,8 @@ public:
     template<typename T> T computeLength(RenderStyle* currStyle, RenderStyle* rootStyle, double multiplier = 1.0, bool computingFontSize = false);
 
     // use with care!!!
-    void setPrimitiveType(unsigned short type) { m_type = type; }
-    
+    void setPrimitiveType(unsigned short type) { m_primitiveUnitType = type; }
+
     double getDoubleValue(unsigned short unitType, ExceptionCode&) const;
     double getDoubleValue(unsigned short unitType) const;
     double getDoubleValue() const { return m_value.num; }
@@ -175,48 +185,58 @@ public:
     String getStringValue() const;
 
     Counter* getCounterValue(ExceptionCode&) const;
-    Counter* getCounterValue() const { return m_type != CSS_COUNTER ? 0 : m_value.counter; }
+    Counter* getCounterValue() const { return m_primitiveUnitType != CSS_COUNTER ? 0 : m_value.counter; }
 
     Rect* getRectValue(ExceptionCode&) const;
-    Rect* getRectValue() const { return m_type != CSS_RECT ? 0 : m_value.rect; }
+    Rect* getRectValue() const { return m_primitiveUnitType != CSS_RECT ? 0 : m_value.rect; }
 
     Quad* getQuadValue(ExceptionCode&) const;
-    Quad* getQuadValue() const { return m_type != CSS_QUAD ? 0 : m_value.quad; }
-    
+    Quad* getQuadValue() const { return m_primitiveUnitType != CSS_QUAD ? 0 : m_value.quad; }
+
     PassRefPtr<RGBColor> getRGBColorValue(ExceptionCode&) const;
-    RGBA32 getRGBA32Value() const { return m_type != CSS_RGBCOLOR ? 0 : m_value.rgbcolor; }
+    RGBA32 getRGBA32Value() const { return m_primitiveUnitType != CSS_RGBCOLOR ? 0 : m_value.rgbcolor; }
 
     Pair* getPairValue(ExceptionCode&) const;
-    Pair* getPairValue() const { return m_type != CSS_PAIR ? 0 : m_value.pair; }
+    Pair* getPairValue() const { return m_primitiveUnitType != CSS_PAIR ? 0 : m_value.pair; }
 
-    DashboardRegion* getDashboardRegionValue() const { return m_type != CSS_DASHBOARD_REGION ? 0 : m_value.region; }
+    DashboardRegion* getDashboardRegionValue() const { return m_primitiveUnitType != CSS_DASHBOARD_REGION ? 0 : m_value.region; }
 
-    CSSWrapShape* getShapeValue() const { return m_type != CSS_SHAPE ? 0 : m_value.shape; }
+    CSSWrapShape* getShapeValue() const { return m_primitiveUnitType != CSS_SHAPE ? 0 : m_value.shape; }
 
     int getIdent() const;
     template<typename T> inline operator T() const; // Defined in CSSPrimitiveValueMappings.h
 
-    virtual bool parseString(const String&, bool = false);
-    virtual String cssText() const;
+    String customCssText() const;
 
-    virtual bool isQuirkValue() { return false; }
+    bool isQuirkValue() { return m_isQuirkValue; }
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
+    void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
 
 protected:
-    // FIXME: int vs. unsigned overloading is too subtle to distinguish the color and identifier cases.
-    CSSPrimitiveValue(int ident);
-    CSSPrimitiveValue(double, UnitTypes);
-    CSSPrimitiveValue(const String&, UnitTypes);
+    CSSPrimitiveValue(ClassType, int ident);
+    CSSPrimitiveValue(ClassType, const String&, UnitTypes);
 
 private:
     CSSPrimitiveValue();
+    // FIXME: int vs. unsigned overloading is too subtle to distinguish the color and identifier cases.
+    CSSPrimitiveValue(int ident);
     CSSPrimitiveValue(unsigned color); // RGB value
     CSSPrimitiveValue(const Length&);
+    CSSPrimitiveValue(const String&, UnitTypes);
+    CSSPrimitiveValue(double, UnitTypes);
 
     template<typename T> CSSPrimitiveValue(T); // Defined in CSSPrimitiveValueMappings.h
-    template<typename T> CSSPrimitiveValue(T* val) { init(PassRefPtr<T>(val)); }
-    template<typename T> CSSPrimitiveValue(PassRefPtr<T> val) { init(val); }
+    template<typename T> CSSPrimitiveValue(T* val)
+        : CSSValue(PrimitiveClass)
+    {
+        init(PassRefPtr<T>(val));
+    }
+
+    template<typename T> CSSPrimitiveValue(PassRefPtr<T> val)
+        : CSSValue(PrimitiveClass)
+    {
+        init(val);
+    }
 
     static void create(int); // compile-time guard
     static void create(unsigned); // compile-time guard
@@ -239,12 +259,6 @@ private:
 
     double computeLengthDouble(RenderStyle* currentStyle, RenderStyle* rootStyle, double multiplier, bool computingFontSize);
 
-    virtual bool isPrimitiveValue() const { return true; }
-
-    virtual unsigned short cssValueType() const;
-
-    signed m_type : 31;
-    mutable unsigned m_hasCachedCSSText : 1;
     union {
         int ident;
         double num;

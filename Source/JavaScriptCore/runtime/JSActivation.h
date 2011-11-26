@@ -53,31 +53,27 @@ namespace JSC {
             return activation;
         }
 
-        virtual ~JSActivation();
+        static void finalize(JSCell*);
 
         static void visitChildren(JSCell*, SlotVisitor&);
 
-        virtual bool isDynamicScope(bool& requiresDynamicChecks) const;
+        bool isDynamicScope(bool& requiresDynamicChecks) const;
 
-        virtual bool isActivationObject() const { return true; }
+        static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier&, PropertySlot&);
+        static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
 
-        virtual bool getOwnPropertySlot(ExecState*, const Identifier&, PropertySlot&);
-        virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode);
-
-        virtual void put(ExecState*, const Identifier&, JSValue, PutPropertySlot&);
         static void put(JSCell*, ExecState*, const Identifier&, JSValue, PutPropertySlot&);
 
-        virtual void putWithAttributes(ExecState*, const Identifier&, JSValue, unsigned attributes);
-        virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
+        static void putWithAttributes(JSObject*, ExecState*, const Identifier&, JSValue, unsigned attributes);
         static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
 
-        virtual JSObject* toThisObject(ExecState*) const;
+        static JSObject* toThisObject(JSCell*, ExecState*);
 
-        void copyRegisters(JSGlobalData&);
+        void tearOff(JSGlobalData&);
         
         static const ClassInfo s_info;
 
-        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue proto) { return Structure::create(globalData, globalObject, proto, TypeInfo(ObjectType, StructureFlags), &s_info); }
+        static Structure* createStructure(JSGlobalData& globalData, JSGlobalObject* globalObject, JSValue proto) { return Structure::create(globalData, globalObject, proto, TypeInfo(ActivationObjectType, StructureFlags), &s_info); }
 
     protected:
         void finishCreation(CallFrame*);
@@ -110,6 +106,29 @@ namespace JSC {
     ALWAYS_INLINE JSActivation* Register::activation() const
     {
         return asActivation(jsValue());
+    }
+
+    inline bool JSActivation::isDynamicScope(bool& requiresDynamicChecks) const
+    {
+        requiresDynamicChecks = m_requiresDynamicChecks;
+        return false;
+    }
+
+    inline void JSActivation::tearOff(JSGlobalData& globalData)
+    {
+        ASSERT(!m_registerArray);
+
+        size_t numLocals = m_numCapturedVars + m_numParametersMinusThis;
+
+        if (!numLocals)
+            return;
+
+        int registerOffset = m_numParametersMinusThis + RegisterFile::CallFrameHeaderSize;
+        size_t registerArraySize = numLocals + RegisterFile::CallFrameHeaderSize;
+
+        OwnArrayPtr<WriteBarrier<Unknown> > registerArray = copyRegisterArray(globalData, m_registers - registerOffset, registerArraySize, m_numParametersMinusThis + 1);
+        WriteBarrier<Unknown>* registers = registerArray.get() + registerOffset;
+        setRegisters(registers, registerArray.release());
     }
 
 } // namespace JSC

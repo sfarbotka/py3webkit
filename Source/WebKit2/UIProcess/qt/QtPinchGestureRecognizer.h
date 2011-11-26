@@ -38,7 +38,7 @@ QT_END_NAMESPACE
 
 namespace WebKit {
 
-class QtPinchGestureRecognizer : private QtGestureRecognizer {
+class QtPinchGestureRecognizer : public QtGestureRecognizer {
 public:
     struct TouchPointInformation {
         inline TouchPointInformation();
@@ -50,7 +50,7 @@ public:
         QPointF initialPosition;
     };
 
-    QtPinchGestureRecognizer(ViewportInteractionEngine*);
+    QtPinchGestureRecognizer(QtWebPageEventHandler*);
     bool recognize(const QTouchEvent*);
     void reset();
 

@@ -50,11 +50,6 @@
 #include <inttypes.h>
 #endif
 
-#if OS(SYMBIAN)
-#include <e32def.h>
-#include <e32debug.h>
-#endif
-
 #ifdef NDEBUG
 /* Disable ASSERT* macros in release mode. */
 #define ASSERTIONS_DISABLED_DEFAULT 1
@@ -62,7 +57,7 @@
 #define ASSERTIONS_DISABLED_DEFAULT 0
 #endif
 
-#if COMPILER(MSVC7_OR_LOWER) || COMPILER(WINSCW)
+#if COMPILER(MSVC7_OR_LOWER)
 #define HAVE_VARIADIC_MACRO 0
 #else
 #define HAVE_VARIADIC_MACRO 1
@@ -165,12 +160,7 @@ WTF_EXPORT_PRIVATE void WTFReportBacktrace();
    Signals are ignored by the crash reporter on OS X so we must do better.
 */
 #ifndef CRASH
-#if OS(SYMBIAN)
-#define CRASH() do { \
-    __DEBUGGER(); \
-    User::Panic(_L("Webkit CRASH"),0); \
-} while (false)
-#elif COMPILER(CLANG)
+#if COMPILER(CLANG)
 #define CRASH() do { \
     WTFReportBacktrace(); \
     *(int *)(uintptr_t)0xbbadbeef = 0; \
@@ -223,7 +213,7 @@ WTF_EXPORT_PRIVATE void WTFReportBacktrace();
 #undef ERROR
 #endif
 
-#if OS(WINDOWS) || OS(SYMBIAN)
+#if OS(WINDOWS)
 /* FIXME: Change to use something other than ASSERT to avoid this conflict with the underlying platform */
 #undef ASSERT
 #endif
@@ -274,8 +264,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define ASSERT_WITH_MESSAGE(assertion) ((void)0)
-#elif COMPILER(WINSCW)
-#define ASSERT_WITH_MESSAGE(assertion, arg...) ((void)0)
 #elif ASSERT_MSG_DISABLED
 #define ASSERT_WITH_MESSAGE(assertion, ...) ((void)0)
 #else
@@ -291,8 +279,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define ASSERT_WITH_MESSAGE_UNUSED(variable, assertion) ((void)0)
-#elif COMPILER(WINSCW)
-#define ASSERT_WITH_MESSAGE_UNUSED(variable, assertion, arg...) ((void)0)
 #elif ASSERT_MSG_DISABLED
 #if COMPILER(INTEL) && !OS(WINDOWS) || COMPILER(RVCT)
 template<typename T>
@@ -337,8 +323,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define FATAL() ((void)0)
-#elif COMPILER(WINSCW)
-#define FATAL(arg...) ((void)0)
 #elif FATAL_DISABLED
 #define FATAL(...) ((void)0)
 #else
@@ -352,8 +336,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define LOG_ERROR() ((void)0)
-#elif COMPILER(WINSCW)
-#define LOG_ERROR(arg...)  ((void)0)
 #elif ERROR_DISABLED
 #define LOG_ERROR(...) ((void)0)
 #else
@@ -364,8 +346,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define LOG() ((void)0)
-#elif COMPILER(WINSCW)
-#define LOG(arg...) ((void)0)
 #elif LOG_DISABLED
 #define LOG(channel, ...) ((void)0)
 #else
@@ -378,8 +358,6 @@ while (0)
 
 #if COMPILER(MSVC7_OR_LOWER)
 #define LOG_VERBOSE(channel) ((void)0)
-#elif COMPILER(WINSCW)
-#define LOG_VERBOSE(channel, arg...) ((void)0)
 #elif LOG_DISABLED
 #define LOG_VERBOSE(channel, ...) ((void)0)
 #else

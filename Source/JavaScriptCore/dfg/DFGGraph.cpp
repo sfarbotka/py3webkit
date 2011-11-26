@@ -79,6 +79,46 @@ const char* Graph::nameOfVariableAccessData(VariableAccessData* variableAccessDa
     return buf;
 }
 
+static void printWhiteSpace(unsigned amount)
+{
+    while (amount-- > 0)
+        printf(" ");
+}
+
+void Graph::dumpCodeOrigin(NodeIndex nodeIndex)
+{
+    if (!nodeIndex)
+        return;
+    
+    Node& currentNode = at(nodeIndex);
+    Node& previousNode = at(nodeIndex - 1);
+    if (previousNode.codeOrigin.inlineCallFrame == currentNode.codeOrigin.inlineCallFrame)
+        return;
+    
+    Vector<CodeOrigin> previousInlineStack = previousNode.codeOrigin.inlineStack();
+    Vector<CodeOrigin> currentInlineStack = currentNode.codeOrigin.inlineStack();
+    unsigned commonSize = std::min(previousInlineStack.size(), currentInlineStack.size());
+    unsigned indexOfDivergence = commonSize;
+    for (unsigned i = 0; i < commonSize; ++i) {
+        if (previousInlineStack[i].inlineCallFrame != currentInlineStack[i].inlineCallFrame) {
+            indexOfDivergence = i;
+            break;
+        }
+    }
+    
+    // Print the pops.
+    for (unsigned i = previousInlineStack.size(); i-- > indexOfDivergence;) {
+        printWhiteSpace(i * 2);
+        printf("<-- %p\n", previousInlineStack[i].inlineCallFrame->executable.get());
+    }
+    
+    // Print the pushes.
+    for (unsigned i = indexOfDivergence; i < currentInlineStack.size(); ++i) {
+        printWhiteSpace(i * 2);
+        printf("--> %p\n", currentInlineStack[i].inlineCallFrame->executable.get());
+    }
+}
+
 void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
 {
     Node& node = at(nodeIndex);
@@ -91,6 +131,9 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
         ASSERT(refCount);
         --refCount;
     }
+    
+    dumpCodeOrigin(nodeIndex);
+    printWhiteSpace((node.codeOrigin.inlineDepth() - 1) * 2);
 
     // Example/explanation of dataflow dump output
     //
@@ -166,7 +209,7 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
         else
             printf("%sid%u", hasPrinted ? ", " : "", storageAccessData.identifierNumber);
         
-        printf(", %lu", storageAccessData.offset);
+        printf(", %lu", static_cast<unsigned long>(storageAccessData.offset));
         hasPrinted = true;
     }
     ASSERT(node.hasVariableAccessData() == node.hasLocal());
@@ -179,6 +222,18 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
             printf("%sr%u(%s)", hasPrinted ? ", " : "", operand, nameOfVariableAccessData(variableAccessData));
         hasPrinted = true;
     }
+    if (node.hasConstantBuffer() && codeBlock) {
+        if (hasPrinted)
+            printf(", ");
+        printf("%u:[", node.startConstant());
+        for (unsigned i = 0; i < node.numConstants(); ++i) {
+            if (i)
+                printf(", ");
+            printf("%s", codeBlock->constantBuffer(node.startConstant())[i].description());
+        }
+        printf("]");
+        hasPrinted = true;
+    }
     if (op == JSConstant) {
         printf("%s$%u", hasPrinted ? ", " : "", node.constantNumber());
         if (codeBlock) {
@@ -187,12 +242,16 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
         }
         hasPrinted = true;
     }
+    if (op == WeakJSConstant) {
+        printf("%s%p", hasPrinted ? ", " : "", node.weakConstant());
+        hasPrinted = true;
+    }
     if  (node.isBranch() || node.isJump()) {
-        printf("%sT:#%u", hasPrinted ? ", " : "", blockIndexForBytecodeOffset(node.takenBytecodeOffset()));
+        printf("%sT:#%u", hasPrinted ? ", " : "", node.takenBlockIndex());
         hasPrinted = true;
     }
     if  (node.isBranch()) {
-        printf("%sF:#%u", hasPrinted ? ", " : "", blockIndexForBytecodeOffset(node.notTakenBytecodeOffset()));
+        printf("%sF:#%u", hasPrinted ? ", " : "", node.notTakenBlockIndex());
         hasPrinted = true;
     }
     (void)hasPrinted;
@@ -206,31 +265,6 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
             printf("  predicting %s", predictionToString(getGlobalVarPrediction(node.varNumber())));
         else if (node.hasHeapPrediction())
             printf("  predicting %s", predictionToString(node.getHeapPrediction()));
-        else if (node.hasMethodCheckData()) {
-            MethodCheckData& methodCheckData = m_methodCheckData[node.methodCheckDataIndex()];
-            JSCell* functionCell = getJSFunction(methodCheckData.function);
-            ExecutableBase* executable = 0;
-            CodeBlock* primaryForCall = 0;
-            CodeBlock* secondaryForCall = 0;
-            CodeBlock* primaryForConstruct = 0;
-            CodeBlock* secondaryForConstruct = 0;
-            if (functionCell) {
-                JSFunction* function = asFunction(functionCell);
-                executable = function->executable();
-                if (!executable->isHostFunction()) {
-                    FunctionExecutable* functionExecutable = static_cast<FunctionExecutable*>(executable);
-                    if (functionExecutable->isGeneratedForCall()) {
-                        primaryForCall = &functionExecutable->generatedBytecodeForCall();
-                        secondaryForCall = primaryForCall->alternative();
-                    }
-                    if (functionExecutable->isGeneratedForConstruct()) {
-                        primaryForConstruct = &functionExecutable->generatedBytecodeForConstruct();
-                        secondaryForConstruct = primaryForConstruct->alternative();
-                    }
-                }
-            }
-            printf("  predicting function %p(%p(%p(%p) %p(%p)))", methodCheckData.function, executable, primaryForCall, secondaryForCall, primaryForConstruct, secondaryForConstruct);
-        }
     }
     
     printf("\n");
@@ -239,9 +273,25 @@ void Graph::dump(NodeIndex nodeIndex, CodeBlock* codeBlock)
 void Graph::dump(CodeBlock* codeBlock)
 {
     for (size_t b = 0; b < m_blocks.size(); ++b) {
-        printf("Block #%u (bc#%u):  %s\n", (int)b, m_blocks[b]->bytecodeBegin, m_blocks[b]->isOSRTarget ? " (OSR target)" : "");
-        for (size_t i = m_blocks[b]->begin; i < m_blocks[b]->end; ++i)
+        BasicBlock* block = m_blocks[b].get();
+        printf("Block #%u (bc#%u): %s%s\n", (int)b, block->bytecodeBegin, block->isReachable ? "" : " (skipped)", block->isOSRTarget ? " (OSR target)" : "");
+        printf("  vars before: ");
+        if (block->cfaHasVisited)
+            dumpOperands(block->valuesAtHead, stdout);
+        else
+            printf("<empty>");
+        printf("\n");
+        printf("  var links: ");
+        dumpOperands(block->variablesAtHead, stdout);
+        printf("\n");
+        for (size_t i = block->begin; i < block->end; ++i)
             dump(i, codeBlock);
+        printf("  vars after: ");
+        if (block->cfaHasVisited)
+            dumpOperands(block->valuesAtTail, stdout);
+        else
+            printf("<empty>");
+        printf("\n");
     }
     printf("Phi Nodes:\n");
     for (size_t i = m_blocks.last()->end; i < size(); ++i)
@@ -277,15 +327,8 @@ void Graph::refChildren(NodeIndex op)
     }
 }
 
-void Graph::predictArgumentTypes(ExecState* exec, CodeBlock* codeBlock)
+void Graph::predictArgumentTypes(CodeBlock* codeBlock)
 {
-    if (exec) {
-        size_t numberOfArguments = std::min(exec->argumentCountIncludingThis(), m_arguments.size());
-        
-        for (size_t arg = 1; arg < numberOfArguments; ++arg)
-            at(m_arguments[arg]).variableAccessData()->predict(predictionFromValue(exec->argument(arg - 1)));
-    }
-    
     ASSERT(codeBlock);
     ASSERT(codeBlock->alternative());
 
@@ -298,7 +341,7 @@ void Graph::predictArgumentTypes(ExecState* exec, CodeBlock* codeBlock)
         
         at(m_arguments[arg]).variableAccessData()->predict(profile->computeUpdatedPrediction());
         
-#if ENABLE(DFG_DEBUG_VERBOSE)
+#if DFG_ENABLE(DEBUG_VERBOSE)
         printf("Argument [%lu] prediction: %s\n", arg, predictionToString(at(m_arguments[arg]).variableAccessData()->prediction()));
 #endif
     }

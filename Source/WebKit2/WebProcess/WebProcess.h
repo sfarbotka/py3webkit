@@ -96,7 +96,7 @@ public:
     void addVisitedLink(WebCore::LinkHash);
     bool isLinkVisited(WebCore::LinkHash) const;
 
-    bool fullKeyboardAccessEnabled();
+    bool fullKeyboardAccessEnabled() const { return m_fullKeyboardAccessEnabled; }
 
     WebFrame* webFrame(uint64_t) const;
     void addWebFrame(uint64_t, WebFrame*);
@@ -143,6 +143,7 @@ private:
     void setAlwaysUsesComplexTextCodePath(bool);
     void setShouldUseFontSmoothing(bool);
     void languageChanged(const String&) const;
+    void fullKeyboardAccessModeChanged(bool fullKeyboardAccessEnabled);
 #if PLATFORM(WIN)
     void setShouldPaintNativeControls(bool);
 #endif
@@ -175,6 +176,9 @@ private:
 
     void downloadRequest(uint64_t downloadID, uint64_t initiatingPageID, const WebCore::ResourceRequest&);
     void cancelDownload(uint64_t downloadID);
+#if PLATFORM(QT)
+    void startTransfer(uint64_t downloadID, const String& destination);
+#endif
 
     void setTextCheckerState(const TextCheckerState&);
     
@@ -224,6 +228,8 @@ private:
 #if PLATFORM(MAC)
     pid_t m_presenterApplicationPid;
 #endif
+
+    bool m_fullKeyboardAccessEnabled;
 
 #if PLATFORM(QT)
     QNetworkAccessManager* m_networkAccessManager;

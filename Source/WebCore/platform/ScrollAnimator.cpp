@@ -52,6 +52,9 @@ ScrollAnimator::ScrollAnimator(ScrollableArea* scrollableArea)
     : m_scrollableArea(scrollableArea)
     , m_currentPosX(0)
     , m_currentPosY(0)
+    , m_currentZoomScale(1)
+    , m_currentZoomTransX(0)
+    , m_currentZoomTransY(0)
 {
 }
 
@@ -74,11 +77,9 @@ bool ScrollAnimator::scroll(ScrollbarOrientation orientation, ScrollGranularity,
 
 void ScrollAnimator::scrollToOffsetWithoutAnimation(const FloatPoint& offset)
 {
-    if (m_currentPosX != offset.x() || m_currentPosY != offset.y()) {
-        m_currentPosX = offset.x();
-        m_currentPosY = offset.y();
-        notifyPositionChanged();
-    }
+    m_currentPosX = offset.x();
+    m_currentPosY = offset.y();
+    notifyPositionChanged();
 }
 
 bool ScrollAnimator::handleWheelEvent(const PlatformWheelEvent& e)
@@ -100,18 +101,25 @@ bool ScrollAnimator::handleWheelEvent(const PlatformWheelEvent& e)
         || (deltaY < 0 && maxForwardScrollDelta.height() > 0)
         || (deltaY > 0 && maxBackwardScrollDelta.height() > 0)) {
         handled = true;
-        if (e.granularity() == ScrollByPageWheelEvent) {
-            ASSERT(!e.deltaX());
-            bool negative = deltaY < 0;
-            deltaY = max(max(static_cast<float>(m_scrollableArea->visibleHeight()) * Scrollbar::minFractionToStepWhenPaging(), static_cast<float>(m_scrollableArea->visibleHeight() - Scrollbar::maxOverlapBetweenPages())), 1.0f);
-            if (negative)
-                deltaY = -deltaY;
+        if (deltaY) {
+            if (e.granularity() == ScrollByPageWheelEvent) {
+                bool negative = deltaY < 0;
+                deltaY = max(max(static_cast<float>(m_scrollableArea->visibleHeight()) * Scrollbar::minFractionToStepWhenPaging(), static_cast<float>(m_scrollableArea->visibleHeight() - Scrollbar::maxOverlapBetweenPages())), 1.0f);
+                if (negative)
+                    deltaY = -deltaY;
+            }
+            scroll(VerticalScrollbar, ScrollByPixel, verticalScrollbar->pixelStep(), -deltaY);
         }
 
-        if (deltaY)
-            scroll(VerticalScrollbar, ScrollByPixel, verticalScrollbar->pixelStep(), -deltaY);
-        if (deltaX)
+        if (deltaX) {
+            if (e.granularity() == ScrollByPageWheelEvent) {
+                bool negative = deltaX < 0;
+                deltaX = max(max(static_cast<float>(m_scrollableArea->visibleWidth()) * Scrollbar::minFractionToStepWhenPaging(), static_cast<float>(m_scrollableArea->visibleWidth() - Scrollbar::maxOverlapBetweenPages())), 1.0f);
+                if (negative)
+                    deltaX = -deltaX;
+            }
             scroll(HorizontalScrollbar, ScrollByPixel, horizontalScrollbar->pixelStep(), -deltaX);
+        }
     }
 
     return handled;
@@ -131,6 +139,33 @@ FloatPoint ScrollAnimator::currentPosition() const
 void ScrollAnimator::notifyPositionChanged()
 {
     m_scrollableArea->setScrollOffsetFromAnimation(IntPoint(m_currentPosX, m_currentPosY));
+}
+
+void ScrollAnimator::notifyZoomChanged(ZoomAnimationState state)
+{
+    m_scrollableArea->zoomAnimatorTransformChanged(m_currentZoomScale, m_currentZoomTransX, m_currentZoomTransY,
+                                                   state == ZoomAnimationContinuing ? ScrollableArea::ZoomAnimationContinuing
+                                                                                    : ScrollableArea::ZoomAnimationFinishing);
+}
+
+FloatPoint ScrollAnimator::zoomTranslation() const
+{
+    return FloatPoint(m_currentZoomTransX, m_currentZoomTransY);
+}
+
+void ScrollAnimator::resetZoom()
+{
+    m_currentZoomScale = 1;
+    m_currentZoomTransX = 0;
+    m_currentZoomTransY = 0;
+}
+
+void ScrollAnimator::setZoomParametersForTest(float scale, float x, float y)
+{
+    m_currentZoomScale = scale;
+    m_currentZoomTransX = (1 - scale) * x;
+    m_currentZoomTransY = (1 - scale) * y;
+    notifyZoomChanged(ZoomAnimationContinuing); // Don't let page re-scale.
 }
 
 } // namespace WebCore

@@ -30,18 +30,16 @@ from webkitpy.layout_tests.port.mac import MacPort
 from webkitpy.layout_tests.port import port_testcase
 from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.system.outputcapture import OutputCapture
-from webkitpy.tool.mocktool import MockOptions, MockUser, MockExecutive
+from webkitpy.tool.mocktool import MockOptions
+from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.host_mock import MockHost
 
 
 class MacTest(port_testcase.PortTestCase):
-    def port_maker(self, platform):
-        # FIXME: This platform check should no longer be necessary and should be removed as soon as possible.
-        if platform != 'darwin':
-            return None
-        return MacPort
+    port_maker = MacPort
 
     def assert_skipped_file_search_paths(self, port_name, expected_paths):
-        port = MacPort(port_name=port_name, filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = self.make_port(port_name=port_name)
         self.assertEqual(port._skipped_file_search_paths(), expected_paths)
 
     def test_skipped_file_search_paths(self):
@@ -60,24 +58,28 @@ fast/events/attempt-scroll-with-no-scrollbars.html
 
 # see bug <rdar://problem/5646437> REGRESSION (r28015): svg/batik/text/smallFonts fails
 svg/batik/text/smallFonts.svg
+
+# Java tests don't work on WK2
+java/
 """
     example_skipped_tests = [
         "fast/events/mouseout-on-window.html",
         "fast/events/attempt-scroll-with-no-scrollbars.html",
         "svg/batik/text/smallFonts.svg",
+        "java",
     ]
 
     def test_tests_from_skipped_file_contents(self):
-        port = MacPort(filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = self.make_port()
         self.assertEqual(port._tests_from_skipped_file_contents(self.example_skipped_file), self.example_skipped_tests)
 
     def assert_name(self, port_name, os_version_string, expected):
-        port = MacPort(port_name=port_name, os_version_string=os_version_string, filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = self.make_port(port_name=port_name, os_version_string=os_version_string)
         self.assertEquals(expected, port.name())
 
     def test_tests_for_other_platforms(self):
         platforms = ['mac', 'chromium-linux', 'mac-snowleopard']
-        port = MacPort(port_name='mac-snowleopard', filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = MacPort(MockHost(), port_name='mac-snowleopard')
         platform_dir_paths = map(port._webkit_baseline_path, platforms)
         # Replace our empty mock file system with one which has our expected platform directories.
         port._filesystem = MockFileSystem(dirs=platform_dir_paths)
@@ -88,7 +90,7 @@ svg/batik/text/smallFonts.svg
         self.assertFalse('platform/mac-snowleopard' in dirs_to_skip)
 
     def test_version(self):
-        port = MacPort(filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = MacPort(MockHost())
         self.assertTrue(port.version())
 
     def test_versions(self):
@@ -111,8 +113,24 @@ svg/batik/text/smallFonts.svg
 
         self.assertRaises(AssertionError, self.assert_name, None, '10.3.1', 'should-raise-assertion-so-this-value-does-not-matter')
 
+    def test_is_version_methods(self):
+        leopard_port = self.make_port(port_name='mac-leopard', os_version_string='10.5.3')
+        self.assertTrue(leopard_port.is_leopard())
+        self.assertFalse(leopard_port.is_snowleopard())
+        self.assertFalse(leopard_port.is_lion())
+
+        snowleopard_port = self.make_port(port_name='mac-snowleopard', os_version_string='10.6.3')
+        self.assertFalse(snowleopard_port.is_leopard())
+        self.assertTrue(snowleopard_port.is_snowleopard())
+        self.assertFalse(snowleopard_port.is_lion())
+
+        lion_port = self.make_port(port_name='mac-lion', os_version_string='10.7.2')
+        self.assertFalse(lion_port.is_leopard())
+        self.assertFalse(lion_port.is_snowleopard())
+        self.assertTrue(lion_port.is_lion())
+
     def test_setup_environ_for_server(self):
-        port = MacPort(options=MockOptions(leaks=True, guard_malloc=True))
+        port = MacPort(MockHost(), options=MockOptions(leaks=True, guard_malloc=True))
         env = port.setup_environ_for_server(port.driver_name())
         self.assertEquals(env['MallocStackLogging'], '1')
         self.assertEquals(env['DYLD_INSERT_LIBRARIES'], '/usr/lib/libgmalloc.dylib')
@@ -121,7 +139,7 @@ svg/batik/text/smallFonts.svg
         # FIXME: Port constructors should not "parse" the port name, but
         # rather be passed components (directly or via setters).  Once
         # we fix that, this method will need a re-write.
-        port = MacPort(port_name='mac-%s' % version, options=MockOptions(webkit_test_runner=use_webkit2), filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = MacPort(MockHost(), port_name='mac-%s' % version, options=MockOptions(webkit_test_runner=use_webkit2))
         absolute_search_paths = map(port._webkit_baseline_path, search_paths)
         self.assertEquals(port.baseline_search_path(), absolute_search_paths)
 
@@ -136,7 +154,7 @@ svg/batik/text/smallFonts.svg
         self._assert_search_path(['mac-wk2', 'mac-lion', 'mac'], 'lion', use_webkit2=True)
 
     def test_show_results_html_file(self):
-        port = MacPort(filesystem=MockFileSystem(), user=MockUser(), executive=MockExecutive())
+        port = MacPort(MockHost())
         # Delay setting a should_log executive to avoid logging from MacPort.__init__.
         port._executive = MockExecutive(should_log=True)
         expected_stderr = "MOCK run_command: ['Tools/Scripts/run-safari', '--release', '-NSOpen', 'test.html'], cwd=/mock-checkout\n"

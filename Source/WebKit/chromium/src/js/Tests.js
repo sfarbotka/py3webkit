@@ -177,7 +177,7 @@ TestSuite.prototype.showPanel = function(panelName)
     var toolbar = document.getElementById("toolbar");
     var button = toolbar.getElementsByClassName(panelName)[0];
     button.click();
-    this.assertEquals(WebInspector.panels[panelName], WebInspector.currentPanel());
+    this.assertEquals(WebInspector.panels[panelName], WebInspector.inspectorView.currentPanel());
 };
 
 
@@ -252,16 +252,16 @@ TestSuite.prototype.testShowScriptsTab = function()
 TestSuite.prototype.testScriptsTabIsPopulatedOnInspectedPageRefresh = function()
 {
     var test = this;
-    this.assertEquals(WebInspector.panels.elements, WebInspector.currentPanel(), "Elements panel should be current one.");
+    this.assertEquals(WebInspector.panels.elements, WebInspector.inspectorView.currentPanel(), "Elements panel should be current one.");
 
-    this.addSniffer(WebInspector.panels.scripts, "reset", waitUntilScriptIsParsed);
+    WebInspector.debuggerPresentationModel.addEventListener(WebInspector.DebuggerPresentationModel.Events.DebuggerReset, waitUntilScriptIsParsed);
 
     // Reload inspected page. It will reset the debugger agent.
-    test.evaluateInConsole_(
-        "window.location.reload(true);",
-        function(resultText) {});
+    test.evaluateInConsole_("window.location.reload(true);", function(resultText) {});
 
-    function waitUntilScriptIsParsed() {
+    function waitUntilScriptIsParsed()
+    {
+        WebInspector.debuggerPresentationModel.removeEventListener(WebInspector.DebuggerPresentationModel.Events.DebuggerReset, waitUntilScriptIsParsed);
         test.showPanel("scripts");
         test._waitUntilScriptsAreParsed(["debugger_test_page.html"],
             function() {
@@ -354,40 +354,12 @@ TestSuite.prototype.testNoScriptDuplicatesOnPanelSwitch = function()
 TestSuite.prototype.testPauseWhenLoadingDevTools = function()
 {
     this.showPanel("scripts");
-    var test = this;
-
-    var expectations = {
-            functionsOnStack: ["callDebugger"],
-            lineNumber: 8,
-            lineText: "  debugger;"
-        };
-
 
     // Script execution can already be paused.
-    if (WebInspector.currentPanel().paused) {
-        var callFrame = WebInspector.currentPanel()._presentationModel.selectedCallFrame;
-        this.assertEquals(expectations.functionsOnStack[0], callFrame.functionName);
-        var callbackInvoked = false;
-        this._checkSourceFrameWhenLoaded(expectations, function() {
-                callbackInvoked = true;
-                if (test.controlTaken_)
-                    test.releaseControl();
-            });
-        if (!callbackInvoked) {
-            test.takeControl();
-        }
+    if (WebInspector.debuggerModel.debuggerPausedDetails)
         return;
-    }
 
-    this._waitForScriptPause(
-        {
-            functionsOnStack: ["callDebugger"],
-            lineNumber: 8,
-            lineText: "  debugger;"
-        },
-        function() {
-            test.releaseControl();
-        });
+    this._waitForScriptPause(this.releaseControl.bind(this));
     this.takeControl();
 };
 
@@ -397,19 +369,16 @@ TestSuite.prototype.testPauseWhenLoadingDevTools = function()
 TestSuite.prototype.testPauseWhenScriptIsRunning = function()
 {
     this.showPanel("scripts");
-    var test = this;
 
-    test.evaluateInConsole_(
+    this.evaluateInConsole_(
         'setTimeout("handleClick()" , 0)',
-        function(resultText) {
-          test.assertTrue(!isNaN(resultText), "Failed to get timer id: " + resultText);
-          testScriptPauseAfterDelay();
-        });
+        didEvaluateInConsole.bind(this));
 
-    // Wait for some time to make sure that inspected page is running the
-    // infinite loop.
-    function testScriptPauseAfterDelay() {
-        setTimeout(testScriptPause, 300);
+    function didEvaluateInConsole(resultText) {
+        this.assertTrue(!isNaN(resultText), "Failed to get timer id: " + resultText);
+        // Wait for some time to make sure that inspected page is running the
+        // infinite loop.
+        setTimeout(testScriptPause.bind(this), 300);
     }
 
     function testScriptPause() {
@@ -417,15 +386,7 @@ TestSuite.prototype.testPauseWhenScriptIsRunning = function()
         // pause it and wait for the result.
         WebInspector.panels.scripts.pauseButton.click();
 
-        test._waitForScriptPause(
-            {
-                functionsOnStack: ["handleClick", ""],
-                lineNumber: 5,
-                lineText: "  while(true) {"
-            },
-            function() {
-                test.releaseControl();
-            });
+        this._waitForScriptPause(this.releaseControl.bind(this));
     }
 
     this.takeControl();
@@ -570,6 +531,13 @@ TestSuite.prototype.testConsoleOnNavigateBack = function()
 };
 
 
+TestSuite.prototype.testReattachAfterCrash = function()
+{
+    this.evaluateInConsole_("1+1;", this.releaseControl.bind(this));
+    this.takeControl();
+};
+
+
 TestSuite.prototype.testSharedWorker = function()
 {
     function didEvaluateInConsole(resultText) {
@@ -577,6 +545,15 @@ TestSuite.prototype.testSharedWorker = function()
         this.releaseControl();
     }
     this.evaluateInConsole_("globalVar", didEvaluateInConsole.bind(this));
+    this.takeControl();
+};
+
+
+TestSuite.prototype.testPauseInSharedWorkerInitialization = function()
+{
+    if (WebInspector.debuggerModel.debuggerPausedDetails)
+        return;
+    this._waitForScriptPause(this.releaseControl.bind(this));
     this.takeControl();
 };
 
@@ -626,7 +603,7 @@ TestSuite.prototype.showMainPageScriptSource_ = function(scriptName, callback)
         scriptResource = options[pageScriptIndex].representedObject;
 
         // Current panel is "Scripts".
-        WebInspector.currentPanel()._showScriptOrResource(scriptResource);
+        WebInspector.inspectorView.currentPanel()._showScriptOrResource(scriptResource);
         test.assertEquals(pageScriptIndex, scriptSelect.selectedIndex, "Unexpected selected option index.");
     }
 
@@ -669,19 +646,6 @@ TestSuite.prototype.evaluateInConsole_ = function(code, callback)
 
 
 /**
- * Checks current execution line against expectations.
- * @param {WebInspector.SourceFrame} sourceFrame
- * @param {number} lineNumber Expected line number
- * @param {string} lineContent Expected line text
- */
-TestSuite.prototype._checkExecutionLine = function(sourceFrame, lineNumber, lineContent)
-{
-    this.assertEquals(lineNumber, sourceFrame._executionLineNumber + 1, "Unexpected execution line number.");
-    this.assertEquals(lineContent, sourceFrame._textModel.line(lineNumber - 1), "Unexpected execution line text.");
-}
-
-
-/**
  * Checks that all expected scripts are present in the scripts list
  * in the Scripts panel.
  * @param {Array.<string>} expected Regular expressions describing
@@ -710,54 +674,15 @@ TestSuite.prototype._scriptsAreParsed = function(expected)
 
 /**
  * Waits for script pause, checks expectations, and invokes the callback.
- * @param {Object} expectations  Dictionary of expectations
  * @param {function():void} callback
  */
-TestSuite.prototype._waitForScriptPause = function(expectations, callback)
+TestSuite.prototype._waitForScriptPause = function(callback)
 {
-    var test = this;
-    // Wait until script is paused.
-    test.addSniffer(
-        WebInspector.debuggerModel,
-        "_pausedScript",
-        function(details) {
-            var callFrames = details.callFrames;
-            var functionsOnStack = [];
-            for (var i = 0; i < callFrames.length; i++)
-                functionsOnStack.push(callFrames[i].functionName);
-
-            test.assertEquals(expectations.functionsOnStack.join(","), functionsOnStack.join(","), "Unexpected stack.");
-
-            // Check that execution line where the script is paused is
-            // expected one.
-            test._checkSourceFrameWhenLoaded(expectations, callback);
-        });
-};
-
-
-/**
- * Waits for current source frame to load, checks expectations, and invokes
- * the callback.
- * @param {Object} expectations  Dictionary of expectations
- * @param {function():void} callback
- */
-TestSuite.prototype._checkSourceFrameWhenLoaded = function(expectations, callback)
-{
-    var test = this;
-
-    var frame = WebInspector.currentPanel().visibleView;
-
-    if (frame._textViewer)
-        checkExecLine();
-    else {
-        setTimeout(function() {
-            test._checkSourceFrameWhenLoaded(expectations, callback);
-        }, 100);
-    }
-    function checkExecLine() {
-        test._checkExecutionLine(frame, expectations.lineNumber, expectations.lineText);
+    function pauseListener(event) {
+        WebInspector.debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.DebuggerPaused, pauseListener, this);
         callback();
     }
+    WebInspector.debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.DebuggerPaused, pauseListener, this);
 };
 
 

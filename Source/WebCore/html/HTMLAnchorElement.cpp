@@ -39,6 +39,7 @@
 #include "RenderImage.h"
 #include "ResourceHandle.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 
 namespace WebCore {
@@ -229,15 +230,15 @@ void HTMLAnchorElement::parseMappedAttribute(Attribute* attr)
         HTMLElement::parseMappedAttribute(attr);
 }
 
-void HTMLAnchorElement::accessKeyAction(bool sendToAnyElement)
+void HTMLAnchorElement::accessKeyAction(bool sendMouseEvents)
 {
-    // send the mouse button events if the caller specified sendToAnyElement
-    dispatchSimulatedClick(0, sendToAnyElement);
+    // send the mouse button events if the caller specified sendMouseEvents
+    dispatchSimulatedClick(0, sendMouseEvents);
 }
 
 bool HTMLAnchorElement::isURLAttribute(Attribute *attr) const
 {
-    return attr->name() == hrefAttr;
+    return attr->name() == hrefAttr || HTMLElement::isURLAttribute(attr);
 }
 
 bool HTMLAnchorElement::canStartSelection() const
@@ -451,13 +452,6 @@ String HTMLAnchorElement::origin() const
     return origin->toString();
 }
 
-String HTMLAnchorElement::getParameter(const String& name) const
-{
-    ParsedURLParameters parameters;
-    href().copyParsedQueryTo(parameters);
-    return parameters.get(name);
-}
-
 void HTMLAnchorElement::setSearch(const String& value)
 {
     KURL url = href();
@@ -510,8 +504,8 @@ void HTMLAnchorElement::handleClick(Event* event)
         ResourceRequest request(kurl);
 
         if (!hasRel(RelationNoReferrer)) {
-            String referrer = frame->loader()->outgoingReferrer();
-            if (!referrer.isEmpty() && !SecurityOrigin::shouldHideReferrer(kurl, referrer))
+            String referrer = SecurityPolicy::generateReferrerHeader(document()->referrerPolicy(), kurl, frame->loader()->outgoingReferrer());
+            if (!referrer.isEmpty())
                 request.setHTTPReferrer(referrer);
             frame->loader()->addExtraFieldsToMainResourceRequest(request);
         }
@@ -519,7 +513,7 @@ void HTMLAnchorElement::handleClick(Event* event)
         frame->loader()->client()->startDownload(request, fastGetAttribute(downloadAttr));
     } else
 #endif
-        frame->loader()->urlSelected(kurl, target(), event, false, false, hasRel(RelationNoReferrer) ? NoReferrer : SendReferrer);
+        frame->loader()->urlSelected(kurl, target(), event, false, false, hasRel(RelationNoReferrer) ? NeverSendReferrer : MaybeSendReferrer);
 
     sendPings(kurl);
 }
@@ -583,7 +577,19 @@ void handleLinkClick(Event* event, Document* document, const String& url, const 
     Frame* frame = document->frame();
     if (!frame)
         return;
-    frame->loader()->urlSelected(document->completeURL(url), target, event, false, false, hideReferrer ? NoReferrer : SendReferrer);
+    frame->loader()->urlSelected(document->completeURL(url), target, event, false, false, hideReferrer ? NeverSendReferrer : MaybeSendReferrer);
 }
+
+#if ENABLE(MICRODATA)
+String HTMLAnchorElement::itemValueText() const
+{
+    return getURLAttribute(hrefAttr);
+}
+
+void HTMLAnchorElement::setItemValueText(const String& value, ExceptionCode& ec)
+{
+    setAttribute(hrefAttr, value, ec);
+}
+#endif
 
 }

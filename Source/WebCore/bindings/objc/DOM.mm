@@ -343,11 +343,6 @@ id <DOMEventTarget> kit(WebCore::EventTarget* eventTarget)
     if (WebCore::Node* node = eventTarget->toNode())
         return kit(node);
 
-#if ENABLE(SVG_DOM_OBJC_BINDINGS)
-    if (WebCore::SVGElementInstance* svgElementInstance = eventTarget->toSVGElementInstance())
-        return kit(svgElementInstance);
-#endif
-
     // We don't have an ObjC binding for XMLHttpRequest.
 
     return nil;
@@ -408,6 +403,16 @@ id <DOMEventTarget> kit(WebCore::EventTarget* eventTarget)
     return core(self)->boundingBox();
 }
 
+- (NSImage *)renderedImageForcingBlackText:(BOOL)forceBlackText
+{
+    WebCore::Range* range = core(self);
+    WebCore::Frame* frame = range->ownerDocument()->frame();
+    if (!frame)
+        return nil;
+
+    return frame->rangeImage(range, forceBlackText);
+}
+
 - (NSArray *)textRects
 {
     // FIXME: The call to updateLayoutIgnorePendingStylesheets should be moved into WebCore::Range.
@@ -439,7 +444,7 @@ id <DOMEventTarget> kit(WebCore::EventTarget* eventTarget)
     WebCore::CachedImage* cachedImage = static_cast<WebCore::RenderImage*>(renderer)->cachedImage();
     if (!cachedImage || cachedImage->errorOccurred())
         return nil;
-    return cachedImage->image()->getNSImage();
+    return cachedImage->imageForRenderer(renderer)->getNSImage();
 }
 
 @end
@@ -464,7 +469,7 @@ id <DOMEventTarget> kit(WebCore::EventTarget* eventTarget)
     WebCore::CachedImage* cachedImage = static_cast<WebCore::RenderImage*>(renderer)->cachedImage();
     if (!cachedImage || cachedImage->errorOccurred())
         return nil;
-    return (NSData *)cachedImage->image()->getTIFFRepresentation();
+    return (NSData *)cachedImage->imageForRenderer(renderer)->getTIFFRepresentation();
 }
 
 - (NSURL *)_getURLAttribute:(NSString *)name

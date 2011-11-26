@@ -28,15 +28,11 @@
 namespace WebCore {
 
 CSSPageRule::CSSPageRule(CSSStyleSheet* parent, int sourceLine)
-    : CSSStyleRule(parent, sourceLine)
+    : CSSStyleRule(parent, sourceLine, CSSRule::PAGE_RULE)
 {
 }
 
-CSSPageRule::~CSSPageRule()
-{
-}
-
-String CSSPageRule::selectorText() const
+String CSSPageRule::pageSelectorText() const
 {
     String text = "@page";
     CSSSelector* selector = selectorList().first();

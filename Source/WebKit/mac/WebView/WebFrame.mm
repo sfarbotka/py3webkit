@@ -666,7 +666,7 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
 
     size_t location;
     size_t length;
-    if (!TextIterator::locationAndLengthFromRange(range, location, length))
+    if (!TextIterator::getLocationAndLengthFromRange(_private->coreFrame->selection()->rootEditableElementOrDocumentElement(), range, location, length))
         return NSMakeRange(NSNotFound, 0);
 
     return NSMakeRange(location, length);
@@ -685,26 +685,12 @@ static inline WebDataSource *dataSource(DocumentLoader* loader)
     // directly in the document DOM, so serialization is problematic. Our solution is
     // to use the root editable element of the selection start as the positional base.
     // That fits with AppKit's idea of an input context.
-    Element* selectionRoot = _private->coreFrame->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : _private->coreFrame->document()->documentElement();
-    return TextIterator::rangeFromLocationAndLength(scope, nsrange.location, nsrange.length);
-}
-
-- (DOMRange *)convertNSRangeToDOMRange:(NSRange)nsrange
-{
-    // This method exists to maintain compatibility with Leopard's Dictionary.app. <rdar://problem/6002160>
-    return [self _convertNSRangeToDOMRange:nsrange];
+    return TextIterator::rangeFromLocationAndLength(_private->coreFrame->selection()->rootEditableElementOrDocumentElement(), nsrange.location, nsrange.length);
 }
 
 - (DOMRange *)_convertNSRangeToDOMRange:(NSRange)nsrange
 {
     return kit([self _convertToDOMRange:nsrange].get());
-}
-
-- (NSRange)convertDOMRangeToNSRange:(DOMRange *)range
-{
-    // This method exists to maintain compatibility with Leopard's Dictionary.app. <rdar://problem/6002160>
-    return [self _convertDOMRangeToNSRange:range];
 }
 
 - (NSRange)_convertDOMRangeToNSRange:(DOMRange *)range

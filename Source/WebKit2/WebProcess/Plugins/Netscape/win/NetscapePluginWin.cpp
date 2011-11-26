@@ -158,18 +158,15 @@ void NetscapePlugin::platformVisibilityDidChange()
 
 void NetscapePlugin::scheduleWindowedGeometryUpdate()
 {
-    IntRect clipRectInPluginWindowCoordinates = m_clipRect;
-    clipRectInPluginWindowCoordinates.move(-m_frameRect.x(), -m_frameRect.y());
-
     // We only update the size here and let the UI process update our position and clip rect so
     // that we can keep our position in sync when scrolling, etc. See <http://webkit.org/b/60210>.
-    ::SetWindowPos(m_window, 0, 0, 0, m_frameRect.width(), m_frameRect.height(), SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOZORDER);
+    ::SetWindowPos(m_window, 0, 0, 0, m_pluginSize.width(), m_pluginSize.height(), SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOZORDER);
 
     WindowGeometry geometry;
     geometry.window = m_window;
     geometry.visible = controller()->isPluginVisible();
-    geometry.frame = m_frameRect;
-    geometry.clipRect = clipRectInPluginWindowCoordinates;
+    geometry.frame = IntRect(convertToRootView(IntPoint()), m_pluginSize);
+    geometry.clipRect = m_clipRect;
 
     controller()->scheduleWindowedPluginGeometryUpdate(geometry);
 }
@@ -194,10 +191,12 @@ void NetscapePlugin::platformPaint(GraphicsContext* context, const IntRect& dirt
 
     WINDOWPOS windowpos = { 0, 0, 0, 0, 0, 0, 0 };
 
-    windowpos.x = m_frameRect.x();
-    windowpos.y = m_frameRect.y();
-    windowpos.cx = m_frameRect.width();
-    windowpos.cy = m_frameRect.height();
+    IntPoint pluginLocationInRootViewCoordinates = convertToRootView(IntPoint());
+
+    windowpos.x = pluginLocationInRootViewCoordinates.x();
+    windowpos.y = pluginLocationInRootViewCoordinates.y();
+    windowpos.cx = m_pluginSize.width();
+    windowpos.cy = m_pluginSize.height();
 
     NPEvent npEvent;
     npEvent.event = WM_WINDOWPOSCHANGED;
@@ -323,6 +322,11 @@ void NetscapePlugin::platformSetFocus(bool hasFocus)
     npEvent.lParam = 0;
 
     NPP_HandleEvent(&npEvent);
+}
+
+bool NetscapePlugin::wantsPluginRelativeNPWindowCoordinates()
+{
+    return false;
 }
 
 bool NetscapePlugin::platformHandleMouseEnterEvent(const WebMouseEvent& event)

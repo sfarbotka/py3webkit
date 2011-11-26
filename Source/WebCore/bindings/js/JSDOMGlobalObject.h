@@ -47,7 +47,7 @@ namespace WebCore {
     protected:
         struct JSDOMGlobalObjectData;
 
-        JSDOMGlobalObject(JSC::JSGlobalData&, JSC::Structure*, PassRefPtr<DOMWrapperWorld>);
+        JSDOMGlobalObject(JSC::JSGlobalData&, JSC::Structure*, PassRefPtr<DOMWrapperWorld>, const JSC::GlobalObjectMethodTable* = 0);
         virtual ~JSDOMGlobalObject();
         void finishCreation(JSC::JSGlobalData&);
         void finishCreation(JSC::JSGlobalData&, JSC::JSGlobalThis*);
@@ -75,7 +75,7 @@ namespace WebCore {
 
         static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSValue prototype)
         {
-            return JSC::Structure::create(globalData, 0, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
+            return JSC::Structure::create(globalData, 0, prototype, JSC::TypeInfo(JSC::GlobalObjectType, StructureFlags), &s_info);
         }
 
     protected:

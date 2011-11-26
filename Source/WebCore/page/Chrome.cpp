@@ -43,15 +43,12 @@
 #include "ResourceHandle.h"
 #include "SecurityOrigin.h"
 #include "Settings.h"
+#include "StorageNamespace.h"
 #include "WindowFeatures.h"
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefPtr.h>
 #include <wtf/Vector.h>
 #include <wtf/text/StringBuilder.h>
-
-#if ENABLE(DOM_STORAGE)
-#include "StorageNamespace.h"
-#endif
 
 #if ENABLE(INPUT_COLOR)
 #include "ColorChooser.h"
@@ -74,14 +71,14 @@ Chrome::~Chrome()
     m_client->chromeDestroyed();
 }
 
-void Chrome::invalidateWindow(const IntRect& updateRect, bool immediate)
+void Chrome::invalidateRootView(const IntRect& updateRect, bool immediate)
 {
-    m_client->invalidateWindow(updateRect, immediate);
+    m_client->invalidateRootView(updateRect, immediate);
 }
 
-void Chrome::invalidateContentsAndWindow(const IntRect& updateRect, bool immediate)
+void Chrome::invalidateContentsAndRootView(const IntRect& updateRect, bool immediate)
 {
-    m_client->invalidateContentsAndWindow(updateRect, immediate);
+    m_client->invalidateContentsAndRootView(updateRect, immediate);
 }
 
 void Chrome::invalidateContentsForSlowScroll(const IntRect& updateRect, bool immediate)
@@ -94,21 +91,21 @@ void Chrome::scroll(const IntSize& scrollDelta, const IntRect& rectToScroll, con
     m_client->scroll(scrollDelta, rectToScroll, clipRect);
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void Chrome::delegatedScrollRequested(const IntPoint& scrollPoint)
 {
     m_client->delegatedScrollRequested(scrollPoint);
 }
 #endif
 
-IntPoint Chrome::screenToWindow(const IntPoint& point) const
+IntPoint Chrome::screenToRootView(const IntPoint& point) const
 {
-    return m_client->screenToWindow(point);
+    return m_client->screenToRootView(point);
 }
 
-IntRect Chrome::windowToScreen(const IntRect& rect) const
+IntRect Chrome::rootViewToScreen(const IntRect& rect) const
 {
-    return m_client->windowToScreen(rect);
+    return m_client->rootViewToScreen(rect);
 }
 
 PlatformPageClient Chrome::platformPageClient() const
@@ -185,12 +182,10 @@ Page* Chrome::createWindow(Frame* frame, const FrameLoadRequest& request, const 
 {
     Page* newPage = m_client->createWindow(frame, request, features, action);
 
-#if ENABLE(DOM_STORAGE)
     if (newPage) {
         if (StorageNamespace* oldSessionStorage = m_page->sessionStorage(false))
             newPage->setSessionStorage(oldSessionStorage->copy());
     }
-#endif
 
     return newPage;
 }
@@ -424,21 +419,14 @@ void Chrome::setToolTip(const HitTestResult& result)
         if (Node* node = result.innerNonSharedNode()) {
             if (node->hasTagName(inputTag)) {
                 HTMLInputElement* input = static_cast<HTMLInputElement*>(node);
-                if (input->isFileUpload()) {
-                    FileList* files = input->files();
-                    unsigned listSize = files->length();
-                    if (listSize > 1) {
-                        StringBuilder names;
-                        for (size_t i = 0; i < listSize; ++i) {
-                            names.append(files->item(i)->fileName());
-                            if (i != listSize - 1)
-                                names.append('\n');
-                        }
-                        toolTip = names.toString();
-                        // filename always display as LTR.
-                        toolTipDirection = LTR;
-                    }
-                }
+                toolTip = input->defaultToolTip();
+
+                // FIXME: We should obtain text direction of tooltip from
+                // ChromeClient or platform. As of October 2011, all client
+                // implementations don't use text direction information for
+                // ChromeClient::setToolTip. We'll work on tooltip text
+                // direction during bidi cleanup in form inputs.
+                toolTipDirection = LTR;
             }
         }
     }
@@ -475,14 +463,14 @@ void Chrome::openColorChooser(ColorChooser* colorChooser, const Color& initialCo
     m_client->openColorChooser(colorChooser, initialColor);
 }
 
-void Chrome::cleanupColorChooser()
+void Chrome::cleanupColorChooser(ColorChooser* colorChooser)
 {
-    m_client->cleanupColorChooser();
+    m_client->cleanupColorChooser(colorChooser);
 }
 
-void Chrome::setSelectedColorInColorChooser(const Color& color)
+void Chrome::setSelectedColorInColorChooser(ColorChooser* colorChooser, const Color& color)
 {
-    m_client->setSelectedColorInColorChooser(color);
+    m_client->setSelectedColorInColorChooser(colorChooser, color);
 }
 #endif
 
@@ -496,9 +484,9 @@ void Chrome::loadIconForFiles(const Vector<String>& filenames, FileIconLoader* l
     m_client->loadIconForFiles(filenames, loader);
 }
 
-void Chrome::dispatchViewportDataDidChange(const ViewportArguments& arguments) const
+void Chrome::dispatchViewportPropertiesDidChange(const ViewportArguments& arguments) const
 {
-    m_client->dispatchViewportDataDidChange(arguments);
+    m_client->dispatchViewportPropertiesDidChange(arguments);
 }
 
 void Chrome::setCursor(const Cursor& cursor)

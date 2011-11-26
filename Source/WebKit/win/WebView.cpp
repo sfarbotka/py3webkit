@@ -78,6 +78,7 @@
 #include <WebCore/DocumentMarkerController.h>
 #include <WebCore/DragController.h>
 #include <WebCore/DragData.h>
+#include <WebCore/DragSession.h>
 #include <WebCore/Editor.h>
 #include <WebCore/EventHandler.h>
 #include <WebCore/EventNames.h>
@@ -128,6 +129,7 @@
 #include <WebCore/Scrollbar.h>
 #include <WebCore/ScrollbarTheme.h>
 #include <WebCore/SecurityOrigin.h>
+#include <WebCore/SecurityPolicy.h>
 #include <WebCore/Settings.h>
 #include <WebCore/SimpleFontData.h>
 #include <WebCore/SystemInfo.h>
@@ -336,6 +338,7 @@ WebView::WebView()
     , m_viewWindow(0)
     , m_mainFrame(0)
     , m_page(0)
+    , m_inspectorClient(0)
     , m_hasCustomDropTarget(false)
     , m_useBackForwardList(true)
     , m_userAgentOverridden(false)
@@ -708,6 +711,7 @@ HRESULT STDMETHODCALLTYPE WebView::close()
     setUIDelegate(0);
     setFormDelegate(0);
 
+    m_inspectorClient = 0;
     if (m_webInspector)
         m_webInspector->webViewClosed();
 
@@ -2299,7 +2303,7 @@ LRESULT CALLBACK WebView::WebViewWndProc(HWND hWnd, UINT message, WPARAM wParam,
             if (Frame* coreFrame = core(mainFrameImpl)) {
                 webView->deleteBackingStore();
                 coreFrame->page()->theme()->themeChanged();
-                ScrollbarTheme::nativeTheme()->themeChanged();
+                ScrollbarTheme::theme()->themeChanged();
                 RECT windowRect;
                 ::GetClientRect(hWnd, &windowRect);
                 ::InvalidateRect(hWnd, &windowRect, false);
@@ -2639,12 +2643,14 @@ HRESULT STDMETHODCALLTYPE WebView::initWithFrame(
     if (SUCCEEDED(m_preferences->shouldUseHighResolutionTimers(&useHighResolutionTimer)))
         Settings::setShouldUseHighResolutionTimers(useHighResolutionTimer);
 
+    m_inspectorClient = new WebInspectorClient(this);
+
     Page::PageClients pageClients;
     pageClients.chromeClient = new WebChromeClient(this);
     pageClients.contextMenuClient = new WebContextMenuClient(this);
     pageClients.editorClient = new WebEditorClient(this);
     pageClients.dragClient = new WebDragClient(this);
-    pageClients.inspectorClient = new WebInspectorClient(this);
+    pageClients.inspectorClient = m_inspectorClient;
 #if ENABLE(CLIENT_BASED_GEOLOCATION)
     pageClients.geolocationClient = new WebGeolocationClient(this);
 #endif
@@ -4592,7 +4598,7 @@ HRESULT WebView::notifyPreferencesChanged(IWebNotification* notification)
     hr = preferences->isJavaScriptEnabled(&enabled);
     if (FAILED(hr))
         return hr;
-    settings->setJavaScriptEnabled(!!enabled);
+    settings->setScriptEnabled(!!enabled);
 
     hr = preferences->javaScriptCanOpenWindowsAutomatically(&enabled);
     if (FAILED(hr))
@@ -5084,7 +5090,7 @@ HRESULT STDMETHODCALLTYPE WebView::DragEnter(
     ::ScreenToClient(m_viewWindow, (LPPOINT)&localpt);
     DragData data(pDataObject, IntPoint(localpt.x, localpt.y), 
         IntPoint(pt.x, pt.y), keyStateToDragOperation(grfKeyState));
-    *pdwEffect = dragOperationToDragCursor(m_page->dragController()->dragEntered(&data));
+    *pdwEffect = dragOperationToDragCursor(m_page->dragController()->dragEntered(&data).operation);
 
     m_lastDropEffect = *pdwEffect;
     m_dragData = pDataObject;
@@ -5103,7 +5109,7 @@ HRESULT STDMETHODCALLTYPE WebView::DragOver(
         ::ScreenToClient(m_viewWindow, (LPPOINT)&localpt);
         DragData data(m_dragData.get(), IntPoint(localpt.x, localpt.y), 
             IntPoint(pt.x, pt.y), keyStateToDragOperation(grfKeyState));
-        *pdwEffect = dragOperationToDragCursor(m_page->dragController()->dragUpdated(&data));
+        *pdwEffect = dragOperationToDragCursor(m_page->dragController()->dragUpdated(&data).operation);
     } else
         *pdwEffect = DROPEFFECT_NONE;
 
@@ -5723,7 +5729,7 @@ bool WebView::onIMESetContext(WPARAM wparam, LPARAM)
 HRESULT STDMETHODCALLTYPE WebView::inspector(IWebInspector** inspector)
 {
     if (!m_webInspector)
-        m_webInspector.adoptRef(WebInspector::createInstance(this));
+        m_webInspector.adoptRef(WebInspector::createInstance(this, m_inspectorClient));
 
     return m_webInspector.copyRefTo(inspector);
 }
@@ -6354,19 +6360,19 @@ HRESULT WebView::invalidateBackingStore(const RECT* rect)
 
 HRESULT WebView::addOriginAccessWhitelistEntry(BSTR sourceOrigin, BSTR destinationProtocol, BSTR destinationHost, BOOL allowDestinationSubdomains)
 {
-    SecurityOrigin::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(String(sourceOrigin, SysStringLen(sourceOrigin))), String(destinationProtocol, SysStringLen(destinationProtocol)), String(destinationHost, SysStringLen(destinationHost)), allowDestinationSubdomains);
+    SecurityPolicy::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(String(sourceOrigin, SysStringLen(sourceOrigin))), String(destinationProtocol, SysStringLen(destinationProtocol)), String(destinationHost, SysStringLen(destinationHost)), allowDestinationSubdomains);
     return S_OK;
 }
 
 HRESULT WebView::removeOriginAccessWhitelistEntry(BSTR sourceOrigin, BSTR destinationProtocol, BSTR destinationHost, BOOL allowDestinationSubdomains)
 {
-    SecurityOrigin::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(String(sourceOrigin, SysStringLen(sourceOrigin))), String(destinationProtocol, SysStringLen(destinationProtocol)), String(destinationHost, SysStringLen(destinationHost)), allowDestinationSubdomains);
+    SecurityPolicy::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(String(sourceOrigin, SysStringLen(sourceOrigin))), String(destinationProtocol, SysStringLen(destinationProtocol)), String(destinationHost, SysStringLen(destinationHost)), allowDestinationSubdomains);
     return S_OK;
 }
 
 HRESULT WebView::resetOriginAccessWhitelists()
 {
-    SecurityOrigin::resetOriginAccessWhitelists();
+    SecurityPolicy::resetOriginAccessWhitelists();
     return S_OK;
 }
  
@@ -6547,7 +6553,7 @@ HRESULT WebView::geolocationDidFailWithError(IWebError* error)
 
 HRESULT WebView::setDomainRelaxationForbiddenForURLScheme(BOOL forbidden, BSTR scheme)
 {
-    SecurityOrigin::setDomainRelaxationForbiddenForURLScheme(forbidden, String(scheme, SysStringLen(scheme)));
+    SchemeRegistry::setDomainRelaxationForbiddenForURLScheme(forbidden, String(scheme, SysStringLen(scheme)));
     return S_OK;
 }
 

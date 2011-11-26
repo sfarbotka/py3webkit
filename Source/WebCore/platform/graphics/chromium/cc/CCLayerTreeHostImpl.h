@@ -25,6 +25,7 @@
 #ifndef CCLayerTreeHostImpl_h
 #define CCLayerTreeHostImpl_h
 
+#include "cc/CCInputHandler.h"
 #include "cc/CCLayerTreeHost.h"
 #include "cc/CCLayerTreeHostCommon.h"
 #include <wtf/RefPtr.h>
@@ -42,16 +43,34 @@ class TextureAllocator;
 struct LayerRendererCapabilities;
 class TransformationMatrix;
 
+// CCLayerTreeHost->CCProxy callback interface.
+class CCLayerTreeHostImplClient {
+public:
+    virtual void onSwapBuffersCompleteOnImplThread() = 0;
+    virtual void setNeedsRedrawOnImplThread() = 0;
+    virtual void setNeedsCommitOnImplThread() = 0;
+};
+
 // CCLayerTreeHostImpl owns the CCLayerImpl tree as well as associated rendering state
-class CCLayerTreeHostImpl {
+class CCLayerTreeHostImpl : public CCInputHandlerClient {
     WTF_MAKE_NONCOPYABLE(CCLayerTreeHostImpl);
 public:
-    static PassOwnPtr<CCLayerTreeHostImpl> create(const CCSettings&);
+    static PassOwnPtr<CCLayerTreeHostImpl> create(const CCSettings&, CCLayerTreeHostImplClient*);
     virtual ~CCLayerTreeHostImpl();
+
+    // CCInputHandlerTarget implementation
+    virtual double currentTimeMs() const;
+    virtual void setNeedsRedraw();
+    virtual void scrollRootLayer(const IntSize&);
+    virtual bool haveWheelEventHandlers();
+    virtual void pinchGestureBegin();
+    virtual void pinchGestureUpdate(float, const IntPoint&);
+    virtual void pinchGestureEnd();
 
     // Virtual for testing
     virtual void beginCommit();
     virtual void commitComplete();
+    virtual void animate(double frameDisplayTimeMs);
     virtual void drawLayers();
 
     GraphicsContext3D* context();
@@ -65,14 +84,19 @@ public:
     const LayerRendererCapabilities& layerRendererCapabilities() const;
     TextureAllocator* contentsTextureAllocator() const;
 
-    void present();
+    void swapBuffers();
+    void onSwapBuffersComplete();
 
     void readback(void* pixels, const IntRect&);
 
     CCLayerImpl* rootLayer() const { return m_rootLayerImpl.get(); }
     void setRootLayer(PassRefPtr<CCLayerImpl>);
 
+    CCLayerImpl* scrollLayer() const { return m_scrollLayerImpl.get(); }
+
+    bool visible() const { return m_visible; }
     void setVisible(bool);
+    void setHaveWheelEventHandlers(bool haveWheelEventHandlers) { m_haveWheelEventHandlers = haveWheelEventHandlers; }
 
     int sourceFrameNumber() const { return m_sourceFrameNumber; }
     void setSourceFrameNumber(int frameNumber) { m_sourceFrameNumber = frameNumber; }
@@ -81,22 +105,39 @@ public:
     const IntSize& viewportSize() const { return m_viewportSize; }
     void setZoomAnimatorTransform(const TransformationMatrix&);
 
+    void setPageScaleFactorAndLimits(float pageScale, float minPageScale, float maxPageScale);
+    float pageScale() const { return m_pageScale; }
+
     const CCSettings& settings() const { return m_settings; }
 
-    void scrollRootLayer(const IntSize&);
-
-    PassOwnPtr<CCScrollUpdateSet> processScrollDeltas();
+    PassOwnPtr<CCScrollAndScaleSet> processScrollDeltas();
 
 protected:
-    explicit CCLayerTreeHostImpl(const CCSettings&);
+    CCLayerTreeHostImpl(const CCSettings&, CCLayerTreeHostImplClient*);
+    CCLayerTreeHostImplClient* m_client;
     int m_sourceFrameNumber;
     int m_frameNumber;
 
 private:
+    void setPageScaleDelta(float);
+    void applyPageScaleDeltaToScrollLayer();
+    void adjustScrollsForPageScaleChange(float);
+    void updateMaxScrollPosition();
+
     OwnPtr<LayerRendererChromium> m_layerRenderer;
     RefPtr<CCLayerImpl> m_rootLayerImpl;
+    RefPtr<CCLayerImpl> m_scrollLayerImpl;
     CCSettings m_settings;
     IntSize m_viewportSize;
+    bool m_visible;
+    bool m_haveWheelEventHandlers;
+
+    float m_pageScale;
+    float m_pageScaleDelta;
+    float m_sentPageScaleDelta;
+    float m_minPageScale, m_maxPageScale;
+
+    bool m_pinchGestureActive;
 };
 
 };

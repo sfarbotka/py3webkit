@@ -35,7 +35,7 @@
 
 namespace WebCore {
 
-WrapperTypeInfo V8TestInterface::info = { V8TestInterface::GetTemplate, V8TestInterface::derefObject, 0, 0 };
+WrapperTypeInfo V8TestInterface::info = { V8TestInterface::GetTemplate, V8TestInterface::derefObject, V8TestInterface::toActiveDOMObject, 0 };
 
 namespace TestInterfaceInternal {
 
@@ -50,6 +50,8 @@ v8::Handle<v8::Value> V8TestInterface::constructorCallback(const v8::Arguments& 
     if (!args.IsConstructCall())
         return throwError("DOM object constructor cannot be called as a function.", V8Proxy::TypeError);
 
+    if (ConstructorMode::current() == ConstructorMode::WrapExistingObject)
+        return args.Holder();
     if (args.Length() < 1)
         return throwError("Not enough arguments", V8Proxy::TypeError);
 
@@ -61,7 +63,7 @@ v8::Handle<v8::Value> V8TestInterface::constructorCallback(const v8::Arguments& 
     if (!context)
         return throwError("TestInterface constructor's associated context is not available", V8Proxy::ReferenceError);
 
-    RefPtr<TestInterface> obj = TestInterface::create(str1, str2, context, ec);
+    RefPtr<TestInterface> obj = TestInterface::create(context, str1, str2, ec);
     if (ec)
         goto fail;
 
@@ -122,6 +124,10 @@ bool V8TestInterface::HasInstance(v8::Handle<v8::Value> value)
     return GetRawTemplate()->HasInstance(value);
 }
 
+ActiveDOMObject* V8TestInterface::toActiveDOMObject(v8::Handle<v8::Object> object)
+{
+    return toNative(object);
+}      
 
 v8::Handle<v8::Object> V8TestInterface::wrapSlow(TestInterface* impl)
 {
@@ -136,7 +142,7 @@ v8::Handle<v8::Object> V8TestInterface::wrapSlow(TestInterface* impl)
 
     if (!hasDependentLifetime)
         wrapperHandle.MarkIndependent();
-    getDOMObjectMap().set(impl, wrapperHandle);
+    getActiveDOMObjectMap().set(impl, wrapperHandle);
     return wrapper;
 }
 

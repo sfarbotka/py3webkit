@@ -31,10 +31,10 @@
 #ifndef WebWidgetClient_h
 #define WebWidgetClient_h
 
-#include "WebCommon.h"
 #include "WebNavigationPolicy.h"
 #include "WebRect.h"
 #include "WebScreenInfo.h"
+#include "platform/WebCommon.h"
 
 namespace WebKit {
 
@@ -60,6 +60,14 @@ public:
     virtual void didActivateCompositor(int compositorIdentifier) { }
     virtual void didDeactivateCompositor() { }
 
+    // Called for compositing mode when the draw commands for a WebKit-side
+    // frame have been issued.
+    virtual void didCommitAndDrawCompositorFrame() { }
+
+    // Called for compositing mode when swapbuffers has been posted in the GPU
+    // process.
+    virtual void didCompleteSwapBuffers() { }
+
     // Called when a call to WebWidget::composite is required
     virtual void scheduleComposite() { }
 
@@ -83,6 +91,14 @@ public:
     // Called to block execution of the current thread until the widget is
     // closed.
     virtual void runModal() { }
+
+    // Called to enter/exit fullscreen mode. If enterFullScreen returns true,
+    // then WebWidget::{will,Did}EnterFullScreen should bound resizing the
+    // WebWidget into fullscreen mode. Similarly, when exitFullScreen is
+    // called, WebWidget::{will,Did}ExitFullScreen should bound resizing the
+    // WebWidget out of fullscreen mode.
+    virtual bool enterFullScreen() { return false; }
+    virtual void exitFullScreen() { }
 
     // Called to get/set the position of the widget in screen coordinates.
     virtual WebRect windowRect() { return WebRect(); }

@@ -1394,20 +1394,13 @@ bool RenderThemeMac::paintSliderThumb(RenderObject* o, const PaintInfo& paintInf
         paintInfo.context->scale(FloatSize(zoomLevel, zoomLevel));
         paintInfo.context->translate(-unzoomedRect.x(), -unzoomedRect.y());
     }
-    
-#if PLATFORM(MAC)
-    // Workaround for <rdar://problem/9421781>.
-    if (!o->view()->frameView()->documentView()) {
-        paintInfo.context->translate(0, unzoomedRect.y());
-        paintInfo.context->scale(FloatSize(1, -1));
-        paintInfo.context->translate(0, -(unzoomedRect.y() + unzoomedRect.height()));
-    }
-#elif PLATFORM(CHROMIUM)
+
+#if PLATFORM(CHROMIUM)
     paintInfo.context->translate(0, unzoomedRect.y());
     paintInfo.context->scale(FloatSize(1, -1));
     paintInfo.context->translate(0, -(unzoomedRect.y() + unzoomedRect.height()));
 #endif
-    
+
     [sliderThumbCell drawInteriorWithFrame:unzoomedRect inView:documentViewFor(o)];
     [sliderThumbCell setControlView:nil];
 
@@ -1781,10 +1774,9 @@ bool RenderThemeMac::paintMediaMuteButton(RenderObject* o, const PaintInfo& pain
     if (!mediaNode || (!mediaNode->hasTagName(videoTag) && !mediaNode->hasTagName(audioTag)))
         return false;
 
-    if (MediaControlMuteButtonElement* btn = static_cast<MediaControlMuteButtonElement*>(node)) {
+    if (node->isMediaControlElement()) {
         LocalCurrentGraphicsContext localContext(paintInfo.context);
-        wkDrawMediaUIPart(btn->displayType(), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
-
+        wkDrawMediaUIPart(mediaControlElementType(node), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
     }
     return false;
 }
@@ -1796,9 +1788,9 @@ bool RenderThemeMac::paintMediaPlayButton(RenderObject* o, const PaintInfo& pain
     if (!mediaNode || (!mediaNode->hasTagName(videoTag) && !mediaNode->hasTagName(audioTag)))
         return false;
 
-    if (MediaControlPlayButtonElement* btn = static_cast<MediaControlPlayButtonElement*>(node)) {
+    if (node->isMediaControlElement()) {
         LocalCurrentGraphicsContext localContext(paintInfo.context);
-        wkDrawMediaUIPart(btn->displayType(), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
+        wkDrawMediaUIPart(mediaControlElementType(node), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
     }
     return false;
 }
@@ -1888,17 +1880,14 @@ bool RenderThemeMac::paintMediaReturnToRealtimeButton(RenderObject* o, const Pai
 
 bool RenderThemeMac::paintMediaToggleClosedCaptionsButton(RenderObject* o, const PaintInfo& paintInfo, const IntRect& r)
 {
-    HTMLInputElement* node = static_cast<HTMLInputElement*>(o->node());
+    Node* node = o->node();
     if (!node)
         return false;
-    
-    MediaControlToggleClosedCaptionsButtonElement* btn = static_cast<MediaControlToggleClosedCaptionsButtonElement*>(node);
-    if (!btn)
+    if (!node->isMediaControlElement())
         return false;
 
     LocalCurrentGraphicsContext localContext(paintInfo.context);
-    wkDrawMediaUIPart(btn->displayType(), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
-
+    wkDrawMediaUIPart(mediaControlElementType(node), mediaControllerTheme(), localContext.cgContext(), r, getMediaUIPartStateFlags(node));
     return false;
 }
  
@@ -2092,14 +2081,18 @@ NSSliderCell* RenderThemeMac::sliderThumbVertical() const
     return m_sliderThumbVertical.get();
 }
 
-String RenderThemeMac::fileListNameForWidth(const Vector<String>& filenames, const Font& font, int width)
+String RenderThemeMac::fileListNameForWidth(const Vector<String>& filenames, const Font& font, int width, bool multipleFilesAllowed)
 {
     if (width <= 0)
         return String();
 
     String strToTruncate;
-    if (filenames.isEmpty())
-        strToTruncate = fileButtonNoFileSelectedLabel();
+    if (filenames.isEmpty()) {
+        if (multipleFilesAllowed)
+            strToTruncate = fileButtonNoFilesSelectedLabel();
+        else
+            strToTruncate = fileButtonNoFileSelectedLabel();
+    }
     else if (filenames.size() == 1)
         strToTruncate = [[NSFileManager defaultManager] displayNameAtPath:(filenames[0])];
     else

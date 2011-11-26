@@ -75,6 +75,7 @@ class WebViewHost : public WebKit::WebSpellCheckClient, public WebKit::WebViewCl
     void reset();
     void setSelectTrailingWhitespaceEnabled(bool);
     void setSmartInsertDeleteEnabled(bool);
+    void setLogConsoleOutput(bool);
     void waitForPolicyDelegate();
     void setCustomPolicyDelegate(bool, bool);
     WebKit::WebFrame* topLoadingFrame() { return m_topLoadingFrame; }
@@ -87,6 +88,7 @@ class WebViewHost : public WebKit::WebSpellCheckClient, public WebKit::WebViewCl
     void paintRect(const WebKit::WebRect&);
     void updatePaintRect(const WebKit::WebRect&);
     void paintInvalidatedRegion();
+    void paintPagesWithBoundaries();
     SkCanvas* canvas();
     void displayRepaintMask();
 
@@ -161,6 +163,8 @@ class WebViewHost : public WebKit::WebSpellCheckClient, public WebKit::WebViewCl
     virtual void closeWidgetSoon();
     virtual void show(WebKit::WebNavigationPolicy);
     virtual void runModal();
+    virtual bool enterFullScreen();
+    virtual void exitFullScreen();
     virtual WebKit::WebRect windowRect();
     virtual void setWindowRect(const WebKit::WebRect&);
     virtual WebKit::WebRect rootWindowRect();
@@ -208,6 +212,7 @@ class WebViewHost : public WebKit::WebSpellCheckClient, public WebKit::WebViewCl
     virtual void didFailResourceLoad(WebKit::WebFrame*, unsigned identifier, const WebKit::WebURLError&);
     virtual void didDisplayInsecureContent(WebKit::WebFrame*);
     virtual void didRunInsecureContent(WebKit::WebFrame*, const WebKit::WebSecurityOrigin&, const WebKit::WebURL&);
+    virtual void didDetectXSS(WebKit::WebFrame*, const WebKit::WebURL&, bool didBlockEntirePage);
     virtual void openFileSystem(WebKit::WebFrame*, WebKit::WebFileSystem::Type, long long size, bool create, WebKit::WebFileSystemCallbacks*);
 
     WebKit::WebDeviceOrientationClientMock* deviceOrientationClientMock();
@@ -251,6 +256,9 @@ private:
     // Called when the URL of the page changes.
     // Should be used to update the text of the URL bar.
     void setAddressBarURL(const WebKit::WebURL&);
+
+    void enterFullScreenNow();
+    void exitFullScreenNow();
 
     // In the Mac code, this is called to trigger the end of a test after the
     // page has finished loading. From here, we can generate the dump for the
@@ -314,6 +322,9 @@ private:
 
     // true if we want to enable selection of trailing whitespaces
     bool m_selectTrailingWhitespaceEnabled;
+
+    // true if whatever is sent to the console should be logged to stdout.
+    bool m_logConsoleOutput;
 
     // Set of headers to clear in willSendRequest.
     HashSet<WTF::String> m_clearHeaders;

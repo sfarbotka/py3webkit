@@ -60,6 +60,7 @@ class ScriptCallStack;
 class ScriptExecutionContext;
 class ScriptProfile;
 class StorageArea;
+class WorkerContext;
 class WorkerContextProxy;
 class XMLHttpRequest;
 
@@ -150,6 +151,10 @@ public:
 
     static void addMessageToConsole(Page*, MessageSource, MessageType, MessageLevel, const String& message, PassRefPtr<ScriptArguments>, PassRefPtr<ScriptCallStack>);
     static void addMessageToConsole(Page*, MessageSource, MessageType, MessageLevel, const String& message, unsigned lineNumber, const String&);
+#if ENABLE(WORKERS)
+    static void addMessageToConsole(WorkerContext*, MessageSource, MessageType, MessageLevel, const String& message, PassRefPtr<ScriptArguments>, PassRefPtr<ScriptCallStack>);
+    static void addMessageToConsole(WorkerContext*, MessageSource, MessageType, MessageLevel, const String& message, unsigned lineNumber, const String&);
+#endif
     static void consoleCount(Page*, PassRefPtr<ScriptArguments>, PassRefPtr<ScriptCallStack>);
     static void startConsoleTiming(Page*, const String& title);
     static void stopConsoleTiming(Page*, const String& title, PassRefPtr<ScriptCallStack>);
@@ -171,15 +176,15 @@ public:
     static void didOpenDatabase(ScriptExecutionContext*, PassRefPtr<Database>, const String& domain, const String& name, const String& version);
 #endif
 
-#if ENABLE(DOM_STORAGE)
     static void didUseDOMStorage(Page*, StorageArea*, bool isLocalStorage, Frame*);
-#endif
 
 #if ENABLE(WORKERS)
+    static bool shouldPauseDedicatedWorkerOnStart(ScriptExecutionContext*);
     static void didStartWorkerContext(ScriptExecutionContext*, WorkerContextProxy*, const KURL&);
     static void didCreateWorker(ScriptExecutionContext*, intptr_t id, const String& url, bool isSharedWorker);
     static void didDestroyWorker(ScriptExecutionContext*, intptr_t id);
     static void workerContextTerminated(ScriptExecutionContext*, WorkerContextProxy*);
+    static void willEvaluateWorkerScript(WorkerContext*, int workerThreadStartMode);
 #endif
 
 #if ENABLE(WEB_SOCKETS)
@@ -303,11 +308,10 @@ private:
     static void didOpenDatabaseImpl(InstrumentingAgents*, PassRefPtr<Database>, const String& domain, const String& name, const String& version);
 #endif
 
-#if ENABLE(DOM_STORAGE)
     static void didUseDOMStorageImpl(InstrumentingAgents*, StorageArea*, bool isLocalStorage, Frame*);
-#endif
 
 #if ENABLE(WORKERS)
+    static bool shouldPauseDedicatedWorkerOnStartImpl(InstrumentingAgents*);
     static void didStartWorkerContextImpl(InstrumentingAgents*, WorkerContextProxy*, const KURL&);
     static void didCreateWorkerImpl(InstrumentingAgents*, intptr_t id, const String& url, bool isSharedWorker);
     static void didDestroyWorkerImpl(InstrumentingAgents*, intptr_t id);
@@ -328,6 +332,9 @@ private:
     static InstrumentingAgents* instrumentingAgentsForFrame(Frame*);
     static InstrumentingAgents* instrumentingAgentsForContext(ScriptExecutionContext*);
     static InstrumentingAgents* instrumentingAgentsForDocument(Document*);
+#if ENABLE(WORKERS)
+    static InstrumentingAgents* instrumentingAgentsForWorkerContext(WorkerContext*);
+#endif
 
     static bool collectingHTMLParseErrors(InstrumentingAgents*);
     static void pauseOnNativeEventIfNeeded(InstrumentingAgents*, const String& categoryType, const String& eventName, bool synchronous);
@@ -937,7 +944,6 @@ inline void InspectorInstrumentation::didWriteHTML(const InspectorInstrumentatio
 #endif
 }
 
-#if ENABLE(DOM_STORAGE)
 inline void InspectorInstrumentation::didUseDOMStorage(Page* page, StorageArea* storageArea, bool isLocalStorage, Frame* frame)
 {
 #if ENABLE(INSPECTOR)
@@ -945,13 +951,21 @@ inline void InspectorInstrumentation::didUseDOMStorage(Page* page, StorageArea* 
         didUseDOMStorageImpl(instrumentingAgents, storageArea, isLocalStorage, frame);
 #endif
 }
-#endif
 
 #if ENABLE(WORKERS)
+inline bool InspectorInstrumentation::shouldPauseDedicatedWorkerOnStart(ScriptExecutionContext* context)
+{
+#if ENABLE(INSPECTOR)
+    FAST_RETURN_IF_NO_FRONTENDS(false);
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForContext(context))
+        return shouldPauseDedicatedWorkerOnStartImpl(instrumentingAgents);
+#endif
+    return false;
+}
+
 inline void InspectorInstrumentation::didStartWorkerContext(ScriptExecutionContext* context, WorkerContextProxy* proxy, const KURL& url)
 {
 #if ENABLE(INSPECTOR)
-    FAST_RETURN_IF_NO_FRONTENDS(void());
     if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForContext(context))
         didStartWorkerContextImpl(instrumentingAgents, proxy, url);
 #endif

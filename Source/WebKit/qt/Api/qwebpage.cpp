@@ -22,6 +22,7 @@
 #include "config.h"
 #include "qwebpage.h"
 
+#include "qwebelement_p.h"
 #include "qwebview.h"
 #include "qwebframe.h"
 #include "qwebpage_p.h"
@@ -51,6 +52,7 @@
 #include "DragClientQt.h"
 #include "DragController.h"
 #include "DragData.h"
+#include "DragSession.h"
 #include "Editor.h"
 #include "EditorClientQt.h"
 #include "FocusController.h"
@@ -91,6 +93,7 @@
 #include "PageGroup.h"
 #include "Pasteboard.h"
 #include "PlatformKeyboardEvent.h"
+#include "PlatformStrategiesQt.h"
 #include "PlatformTouchEvent.h"
 #include "PlatformWheelEvent.h"
 #include "PluginDatabase.h"
@@ -100,16 +103,17 @@
 #include "QtPlatformPlugin.h"
 #include "RefPtr.h"
 #include "RenderTextControl.h"
+#include "RenderThemeQt.h"
 #include "SchemeRegistry.h"
 #include "Scrollbar.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 #if defined Q_OS_WIN32
 #include "SystemInfo.h"
 #endif // Q_OS_WIN32
 #include "TextIterator.h"
 #include "UtilsQt.h"
-#include "WebPlatformStrategies.h"
 #if USE(QTKIT)
 #include "WebSystemInterface.h"
 #endif
@@ -317,9 +321,10 @@ QWebPagePrivate::QWebPagePrivate(QWebPage *qq)
     WebCore::InitializeLoggingChannelsIfNecessary();
     ScriptController::initializeThreading();
     WTF::initializeMainThread();
-    WebCore::SecurityOrigin::setLocalLoadPolicy(WebCore::SecurityOrigin::AllowLocalLoadsForLocalAndSubstituteData);
+    WebCore::SecurityPolicy::setLocalLoadPolicy(WebCore::SecurityPolicy::AllowLocalLoadsForLocalAndSubstituteData);
 
-    WebPlatformStrategies::initialize();
+    PlatformStrategiesQt::initialize();
+    QtWebElementRuntime::initialize();
 
 #if USE(QTKIT)
     InitWebCoreSystemInterface();
@@ -991,7 +996,7 @@ void QWebPagePrivate::dragEnterEvent(T* ev)
 #ifndef QT_NO_DRAGANDDROP
     DragData dragData(ev->mimeData(), QPointF(ev->pos()).toPoint(),
             QCursor::pos(), dropActionToDragOp(ev->possibleActions()));
-    Qt::DropAction action = dragOpToDropAction(page->dragController()->dragEntered(&dragData));
+    Qt::DropAction action = dragOpToDropAction(page->dragController()->dragEntered(&dragData).operation);
     ev->setDropAction(action);
     ev->acceptProposedAction();
 #endif
@@ -1013,7 +1018,7 @@ void QWebPagePrivate::dragMoveEvent(T *ev)
 #ifndef QT_NO_DRAGANDDROP
     DragData dragData(ev->mimeData(), QPointF(ev->pos()).toPoint(),
             QCursor::pos(), dropActionToDragOp(ev->possibleActions()));
-    m_lastDropAction = dragOpToDropAction(page->dragController()->dragUpdated(&dragData));
+    m_lastDropAction = dragOpToDropAction(page->dragController()->dragUpdated(&dragData).operation);
     ev->setDropAction(m_lastDropAction);
     if (m_lastDropAction != Qt::IgnoreAction)
         ev->accept();
@@ -1201,7 +1206,7 @@ void QWebPagePrivate::dynamicPropertyChangeEvent(QDynamicPropertyChangeEvent* ev
             }
         }
     }
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
     else if (event->propertyName() == "_q_TiledBackingStoreTileSize") {
         WebCore::Frame* frame = QWebFramePrivate::core(q->mainFrame());
         if (!frame->tiledBackingStore())
@@ -2309,7 +2314,7 @@ static void openNewWindow(const QUrl& url, WebCore::Frame* frame)
         NavigationAction action;
         FrameLoadRequest request = frameLoadRequest(url, frame);
         if (Page* newPage = oldPage->chrome()->createWindow(frame, request, features, action)) {
-            newPage->mainFrame()->loader()->loadFrameRequest(request, false, false, 0, 0, SendReferrer);
+            newPage->mainFrame()->loader()->loadFrameRequest(request, false, false, 0, 0, MaybeSendReferrer);
             newPage->chrome()->show();
         }
     }
@@ -2348,7 +2353,7 @@ void QWebPage::triggerAction(WebAction action, bool)
                 WTF::RefPtr<WebCore::Frame> wcFrame = targetFrame->d->frame;
                 targetFrame->d->frame->loader()->loadFrameRequest(frameLoadRequest(d->hitTestResult.linkUrl(), wcFrame.get()),
                                                                   /*lockHistory*/ false, /*lockBackForwardList*/ false, /*event*/ 0,
-                                                                  /*FormState*/ 0, SendReferrer);
+                                                                  /*FormState*/ 0, MaybeSendReferrer);
                 break;
             }
             // fall through
@@ -2557,6 +2562,8 @@ QWebPage::ViewportAttributes QWebPage::viewportAttributesForSize(const QSize& av
     }
 
     WebCore::ViewportAttributes conf = WebCore::computeViewportAttributes(d->viewportArguments(), desktopWidth, deviceWidth, deviceHeight, qt_defaultDpi(), availableSize);
+    WebCore::restrictMinimumScaleFactorToViewportSize(conf, availableSize);
+    WebCore::restrictScaleFactorToInitialScaleIfNotUserScalable(conf);
 
     result.m_isValid = true;
     result.m_size = conf.layoutSize;
@@ -3268,11 +3275,15 @@ bool QWebPage::swallowContextMenuEvent(QContextMenuEvent *event)
 {
     d->page->contextMenuController()->clearContextMenu();
 
-    if (QWebFrame* webFrame = frameAt(event->pos())) {
-        Frame* frame = QWebFramePrivate::core(webFrame);
-        if (Scrollbar* scrollbar = frame->view()->scrollbarAtPoint(PlatformMouseEvent(event, 1).pos()))
-            return scrollbar->contextMenu(PlatformMouseEvent(event, 1));
+#if HAVE(QSTYLE)
+    if (!RenderThemeQt::useMobileTheme()) {
+        if (QWebFrame* webFrame = frameAt(event->pos())) {
+            Frame* frame = QWebFramePrivate::core(webFrame);
+            if (Scrollbar* scrollbar = frame->view()->scrollbarAtPoint(PlatformMouseEvent(event, 1).pos()))
+                return scrollbar->contextMenu(PlatformMouseEvent(event, 1));
+        }
     }
+#endif
 
     WebCore::Frame* focusedFrame = d->page->focusController()->focusedOrMainFrame();
     focusedFrame->eventHandler()->sendContextMenuEvent(PlatformMouseEvent(event, 1));
@@ -3716,8 +3727,6 @@ QWebPluginFactory *QWebPage::pluginFactory() const
 
     "Mozilla/5.0 (%Platform%%Security%%Subplatform%) AppleWebKit/%WebKitVersion% (KHTML, like Gecko) %AppVersion Safari/%WebKitVersion%"
 
-    On mobile platforms such as Symbian S60 and Maemo, "Mobile Safari" is used instead of "Safari".
-
     In this string the following values are replaced at run-time:
     \list
     \o %Platform% expands to the windowing system followed by "; " if it is not Windows (e.g. "X11; ").
@@ -3744,47 +3753,14 @@ QString QWebPage::userAgentForUrl(const QUrl&) const
         "Macintosh; "
 #elif defined Q_WS_QWS
         "QtEmbedded; "
-#elif defined Q_WS_MAEMO_5
-        "Maemo"
-#elif defined Q_WS_MAEMO_6
-        "MeeGo"
 #elif defined Q_WS_WIN
         // Nothing
 #elif defined Q_WS_X11
         "X11; "
-#elif defined Q_OS_SYMBIAN
-        "Symbian"
 #else
         "Unknown; "
 #endif
     );
-
-#if defined Q_OS_SYMBIAN
-        QSysInfo::SymbianVersion symbianVersion = QSysInfo::symbianVersion();
-        switch (symbianVersion) {
-        case QSysInfo::SV_9_2:
-            firstPartTemp += QString::fromLatin1("OS/9.2; ");
-            break;
-        case QSysInfo::SV_9_3:
-            firstPartTemp += QString::fromLatin1("OS/9.3; ");
-            break;                
-        case QSysInfo::SV_9_4:
-            firstPartTemp += QString::fromLatin1("OS/9.4; ");
-            break;
-        case QSysInfo::SV_SF_2:
-            firstPartTemp += QString::fromLatin1("/2; ");
-            break;
-        case QSysInfo::SV_SF_3:
-            firstPartTemp += QString::fromLatin1("/3; ");
-            break;
-        case QSysInfo::SV_SF_4:
-            firstPartTemp += QString::fromLatin1("/4; ");
-            break;
-        default:
-            firstPartTemp += QString::fromLatin1("; ");
-            break;
-        }
-#endif
 
 #if defined(QT_NO_OPENSSL)
         // No SSL support
@@ -3822,7 +3798,6 @@ QString QWebPage::userAgentForUrl(const QUrl&) const
 #elif defined Q_OS_IRIX
         firstPartTemp += QString::fromLatin1("SGI Irix");
 #elif defined Q_OS_LINUX
-#if !defined(Q_WS_MAEMO_5) && !defined(Q_WS_MAEMO_6)
 
 #if defined(__x86_64__)
         firstPartTemp += QString::fromLatin1("Linux x86_64");
@@ -3830,7 +3805,6 @@ QString QWebPage::userAgentForUrl(const QUrl&) const
         firstPartTemp += QString::fromLatin1("Linux i686");
 #else
         firstPartTemp += QString::fromLatin1("Linux");
-#endif
 #endif
 
 #elif defined Q_OS_LYNX
@@ -3857,22 +3831,6 @@ QString QWebPage::userAgentForUrl(const QUrl&) const
         firstPartTemp += QString::fromLatin1("Sun Solaris");
 #elif defined Q_OS_ULTRIX
         firstPartTemp += QString::fromLatin1("DEC Ultrix");
-#elif defined Q_OS_SYMBIAN
-        firstPartTemp += QLatin1Char(' ');
-        QSysInfo::S60Version s60Version = QSysInfo::s60Version();
-        switch (s60Version) {
-        case QSysInfo::SV_S60_3_1:
-            firstPartTemp += QString::fromLatin1("Series60/3.1");
-            break;
-        case QSysInfo::SV_S60_3_2:
-            firstPartTemp += QString::fromLatin1("Series60/3.2");
-            break;
-        case QSysInfo::SV_S60_5_0:
-            firstPartTemp += QString::fromLatin1("Series60/5.0");
-            break;
-        default:
-            break;
-        }
 #elif defined Q_OS_UNIX
         firstPartTemp += QString::fromLatin1("UNIX BSD/SYSV system");
 #elif defined Q_OS_UNIXWARE
@@ -3911,11 +3869,7 @@ QString QWebPage::userAgentForUrl(const QUrl&) const
 
         QString thirdPartTemp;
         thirdPartTemp.reserve(150);
-#if defined(Q_OS_SYMBIAN) || defined(Q_WS_MAEMO_5) || defined(Q_WS_MAEMO_6)
-        thirdPartTemp += QLatin1String(" Mobile Safari/");
-#else
         thirdPartTemp += QLatin1String(" Safari/");
-#endif
         thirdPartTemp += qWebKitVersion();
         thirdPartTemp.squeeze();
         thirdPart = thirdPartTemp;
@@ -3969,7 +3923,7 @@ quint64 QWebPage::bytesReceived() const
 }
 
 /*!
-    \since 4.7
+    \since 4.8
     \fn void QWebPage::viewportChangeRequested()
 
     Page authors can provide the supplied values by using the viewport meta tag. More information

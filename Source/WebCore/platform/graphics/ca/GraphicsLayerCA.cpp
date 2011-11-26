@@ -49,8 +49,6 @@
 
 using namespace std;
 
-#define HAVE_MODERN_QUARTZCORE (!defined(BUILDING_ON_LEOPARD))
-
 namespace WebCore {
 
 // The threshold width or height above which a tiled layer will be used. This should be
@@ -171,7 +169,6 @@ static void getTransformFunctionValue(const TransformOperation* transformOp, Tra
     }
 }
 
-#if HAVE_MODERN_QUARTZCORE
 static PlatformCAAnimation::ValueFunctionType getValueFunctionNameForTransformOperation(TransformOperation::OperationType transformType)
 {
     // Use literal strings to avoid link-time dependency on those symbols.
@@ -204,7 +201,6 @@ static PlatformCAAnimation::ValueFunctionType getValueFunctionNameForTransformOp
         return PlatformCAAnimation::NoValueFunction;
     }
 }
-#endif
 
 static String propertyIdToString(AnimatedPropertyID property)
 {
@@ -254,10 +250,6 @@ GraphicsLayerCA::GraphicsLayerCA(GraphicsLayerClient* client)
     , m_uncommittedChanges(0)
 {
     m_layer = PlatformCALayer::create(PlatformCALayer::LayerTypeWebLayer, this);
-
-#if !HAVE_MODERN_QUARTZCORE
-    setContentsOrientation(defaultContentsOrientation());
-#endif
 
     updateDebugIndicators();
     noteLayerPropertyChanged(ContentsScaleChanged);
@@ -490,6 +482,18 @@ void GraphicsLayerCA::setDrawsContent(bool drawsContent)
     noteLayerPropertyChanged(DrawsContentChanged);
 }
 
+void GraphicsLayerCA::setContentsVisible(bool contentsVisible)
+{
+    if (contentsVisible == m_contentsVisible)
+        return;
+
+    GraphicsLayer::setContentsVisible(contentsVisible);
+    noteLayerPropertyChanged(ContentsVisibilityChanged);
+    // Visibility affects whether the contentsLayer is parented.
+    if (m_contentsLayer)
+        noteSublayersChanged();
+}
+
 void GraphicsLayerCA::setAcceleratesDrawing(bool acceleratesDrawing)
 {
     if (acceleratesDrawing == m_acceleratesDrawing)
@@ -614,13 +618,6 @@ bool GraphicsLayerCA::addAnimation(const KeyframeValueList& valueList, const Int
 
     if (!anim || anim->isEmptyOrZeroDuration() || valueList.size() < 2)
         return false;
-
-#if !HAVE_MODERN_QUARTZCORE
-    // Older versions of QuartzCore do not handle opacity in transform layers properly, so we will
-    // always do software animation in that case.
-    if (valueList.property() == AnimatedPropertyOpacity)
-        return false;
-#endif
 
     // CoreAnimation does not handle the steps() timing function. Fall back
     // to software animation in that case.
@@ -952,6 +949,9 @@ void GraphicsLayerCA::commitLayerChangesBeforeSublayers(float pageScaleFactor, c
     if (m_uncommittedChanges & DrawsContentChanged)
         updateLayerDrawsContent(pageScaleFactor, positionRelativeToBase);
 
+    if (m_uncommittedChanges & ContentsVisibilityChanged)
+        updateContentsVisibility();
+
     if (m_uncommittedChanges & ContentsOpaqueChanged)
         updateContentsOpaque();
 
@@ -1021,7 +1021,7 @@ void GraphicsLayerCA::updateSublayerList()
                 newSublayers.append(static_cast<GraphicsLayerCA*>(m_replicaLayer)->primaryLayer());
             // Add the primary layer. Even if we have negative z-order children, the primary layer always comes behind.
             newSublayers.append(m_layer);
-        } else if (m_contentsLayer) {
+        } else if (m_contentsLayer && m_contentsVisible) {
             // FIXME: add the contents layer in the correct order with negative z-order children.
             // This does not cause visible rendering issues because currently contents layers are only used
             // for replaced elements that don't have children.
@@ -1051,7 +1051,8 @@ void GraphicsLayerCA::updateSublayerList()
             // If we have a transform layer, then the contents layer is parented in the 
             // primary layer (which is itself a child of the transform layer).
             m_layer->removeAllSublayers();
-            m_layer->appendSublayer(m_contentsLayer.get());
+            if (m_contentsVisible)
+                m_layer->appendSublayer(m_contentsLayer.get());
         }
     } else
         m_layer->setSublayers(newSublayers);
@@ -1128,9 +1129,6 @@ void GraphicsLayerCA::updateGeometry(float pageScaleFactor, const FloatPoint& po
             clone->setAnchorPoint(scaledAnchorPoint);
         }
     }
-
-    // Contents transform may depend on height.
-    updateContentsTransform();
 }
 
 void GraphicsLayerCA::updateTransform()
@@ -1173,6 +1171,23 @@ void GraphicsLayerCA::updateMasksToBounds()
     }
 
     updateDebugIndicators();
+}
+
+void GraphicsLayerCA::updateContentsVisibility()
+{
+    // Note that m_contentsVisible also affects whether m_contentsLayer is parented.
+    if (m_contentsVisible) {
+        if (m_drawsContent)
+            m_layer->setNeedsDisplay();
+    } else {
+        m_layer.get()->setContents(0);
+
+        if (LayerMap* layerCloneMap = m_layerClones.get()) {
+            LayerMap::const_iterator end = layerCloneMap->end();
+            for (LayerMap::const_iterator it = layerCloneMap->begin(); it != end; ++it)
+                it->second->setContents(0);
+        }
+    }
 }
 
 void GraphicsLayerCA::updateContentsOpaque()
@@ -1323,9 +1338,14 @@ void GraphicsLayerCA::updateLayerDrawsContent(float pageScaleFactor, const Float
 
     if (m_drawsContent)
         m_layer->setNeedsDisplay();
-    else
+    else {
         m_layer->setContents(0);
-
+        if (m_layerClones) {
+            LayerMap::const_iterator end = m_layerClones->end();
+            for (LayerMap::const_iterator it = m_layerClones->begin(); it != end; ++it)
+                it->second->setContents(0);
+        }
+    }
     updateDebugIndicators();
 }
 
@@ -1682,6 +1702,29 @@ bool GraphicsLayerCA::createAnimationFromKeyframes(const KeyframeValueList& valu
     return true;
 }
 
+bool GraphicsLayerCA::appendToUncommittedAnimations(const KeyframeValueList& valueList, const TransformOperationList& functionList, const Animation* animation, const String& animationName, const IntSize& boxSize, int animationIndex, double timeOffset, bool isMatrixAnimation)
+{
+    TransformOperation::OperationType transformOp = isMatrixAnimation ? TransformOperation::MATRIX_3D : functionList[animationIndex];
+    bool additive = animationIndex > 0;
+    bool isKeyframe = valueList.size() > 2;
+
+    RefPtr<PlatformCAAnimation> caAnimation;
+    bool validMatrices = true;
+    if (isKeyframe) {
+        caAnimation = createKeyframeAnimation(animation, valueList.property(), additive);
+        validMatrices = setTransformAnimationKeyframes(valueList, animation, caAnimation.get(), animationIndex, transformOp, isMatrixAnimation, boxSize);
+    } else {
+        caAnimation = createBasicAnimation(animation, valueList.property(), additive);
+        validMatrices = setTransformAnimationEndpoints(valueList, animation, caAnimation.get(), animationIndex, transformOp, isMatrixAnimation, boxSize);
+    }
+    
+    if (!validMatrices)
+        return false;
+
+    m_uncomittedAnimations.append(LayerPropertyAnimation(caAnimation, animationName, valueList.property(), animationIndex, timeOffset));
+    return true;
+}
+
 bool GraphicsLayerCA::createTransformAnimationsFromKeyframes(const KeyframeValueList& valueList, const Animation* animation, const String& animationName, double timeOffset, const IntSize& boxSize)
 {
     ASSERT(valueList.property() == AnimatedPropertyWebkitTransform);
@@ -1702,41 +1745,33 @@ bool GraphicsLayerCA::createTransformAnimationsFromKeyframes(const KeyframeValue
     // Also, we can't do component animation unless we have valueFunction, so we need to do matrix animation
     // if that's not true as well.
     bool isMatrixAnimation = !listsMatch || !PlatformCAAnimation::supportsValueFunction();
-    
-    size_t numAnimations = isMatrixAnimation ? 1 : functionList.size();
-    bool isKeyframe = valueList.size() > 2;
-    
-    // Iterate through the transform functions, sending an animation for each one.
-    for (size_t animationIndex = 0; animationIndex < numAnimations; ++animationIndex) {
-        TransformOperation::OperationType transformOp = isMatrixAnimation ? TransformOperation::MATRIX_3D : functionList[animationIndex];
-        RefPtr<PlatformCAAnimation> caAnimation;
+    int numAnimations = isMatrixAnimation ? 1 : functionList.size();
 
-        bool additive;
-#if !defined(BUILDING_ON_LEOPARD) && !defined(BUILDING_ON_SNOW_LEOPARD) && !PLATFORM(WIN)
-        // Old versions of Core Animation apply animations in reverse order (<rdar://problem/7095638>) so we need the last one we add (per property)
+    bool reverseAnimationList = true;
+#if !defined(BUILDING_ON_SNOW_LEOPARD) && !PLATFORM(WIN)
+        // Old versions of Core Animation apply animations in reverse order (<rdar://problem/7095638>) so we need to flip the list.
         // to be non-additive. For binary compatibility, the current version of Core Animation preserves this behavior for applications linked
         // on or before Snow Leopard.
         // FIXME: This fix has not been added to QuartzCore on Windows yet (<rdar://problem/9112233>) so we expect the
         // reversed animation behavior
         static bool executableWasLinkedOnOrBeforeSnowLeopard = wkExecutableWasLinkedOnOrBeforeSnowLeopard();
         if (!executableWasLinkedOnOrBeforeSnowLeopard)
-            additive = animationIndex > 0;
-        else
+            reverseAnimationList = false;
 #endif
-            additive = animationIndex < (numAnimations - 1);
-
-        if (isKeyframe) {
-            caAnimation = createKeyframeAnimation(animation, valueList.property(), additive);
-            validMatrices = setTransformAnimationKeyframes(valueList, animation, caAnimation.get(), animationIndex, transformOp, isMatrixAnimation, boxSize);
-        } else {
-            caAnimation = createBasicAnimation(animation, valueList.property(), additive);
-            validMatrices = setTransformAnimationEndpoints(valueList, animation, caAnimation.get(), animationIndex, transformOp, isMatrixAnimation, boxSize);
+    if (reverseAnimationList) {
+        for (int animationIndex = numAnimations - 1; animationIndex >= 0; --animationIndex) {
+            if (!appendToUncommittedAnimations(valueList, functionList, animation, animationName, boxSize, animationIndex, timeOffset, isMatrixAnimation)) {
+                validMatrices = false;
+                break;
+            }
         }
-        
-        if (!validMatrices)
-            break;
-    
-        m_uncomittedAnimations.append(LayerPropertyAnimation(caAnimation, animationName, valueList.property(), animationIndex, timeOffset));
+    } else {
+        for (int animationIndex = 0; animationIndex < numAnimations; ++animationIndex) {
+            if (!appendToUncommittedAnimations(valueList, functionList, animation, animationName, boxSize, animationIndex, timeOffset, isMatrixAnimation)) {
+                validMatrices = false;
+                break;
+            }
+        }
     }
 
     return validMatrices;
@@ -1908,11 +1943,9 @@ bool GraphicsLayerCA::setTransformAnimationEndpoints(const KeyframeValueList& va
     const TimingFunction* timingFunction = timingFunctionForAnimationValue(valueList.at(0), anim);
     basicAnim->setTimingFunction(timingFunction);
 
-#if HAVE_MODERN_QUARTZCORE
     PlatformCAAnimation::ValueFunctionType valueFunction = getValueFunctionNameForTransformOperation(transformOpType);
     if (valueFunction != PlatformCAAnimation::NoValueFunction)
         basicAnim->setValueFunction(valueFunction);
-#endif
 
     return true;
 }
@@ -1973,11 +2006,10 @@ bool GraphicsLayerCA::setTransformAnimationKeyframes(const KeyframeValueList& va
         
     keyframeAnim->setTimingFunctions(timingFunctions);
 
-#if HAVE_MODERN_QUARTZCORE
     PlatformCAAnimation::ValueFunctionType valueFunction = getValueFunctionNameForTransformOperation(transformOpType);
     if (valueFunction != PlatformCAAnimation::NoValueFunction)
         keyframeAnim->setValueFunction(valueFunction);
-#endif
+
     return true;
 }
 
@@ -2136,17 +2168,6 @@ void GraphicsLayerCA::swapFromOrToTiledLayer(bool useTiledLayer, float pageScale
         m_visibleTileWashLayer = 0;
     }
 #endif
-    
-    if (useTiledLayer) {
-#if !HAVE_MODERN_QUARTZCORE
-        // Tiled layer has issues with flipped coordinates.
-        setContentsOrientation(CompositingCoordinatesTopDown);
-#endif
-    } else {
-#if !HAVE_MODERN_QUARTZCORE
-        setContentsOrientation(GraphicsLayerCA::defaultContentsOrientation());
-#endif
-    }
 
     m_layer->adoptSublayers(oldLayer.get());
 
@@ -2160,8 +2181,6 @@ void GraphicsLayerCA::swapFromOrToTiledLayer(bool useTiledLayer, float pageScale
     ASSERT(oldLayer->superlayer());
     if (oldLayer->superlayer())
         oldLayer->superlayer()->replaceSublayer(oldLayer.get(), m_layer.get());
-
-    updateContentsTransform();
 
     updateGeometry(pageScaleFactor, positionRelativeToBase);
     updateTransform();
@@ -2192,25 +2211,7 @@ void GraphicsLayerCA::swapFromOrToTiledLayer(bool useTiledLayer, float pageScale
 
 GraphicsLayer::CompositingCoordinatesOrientation GraphicsLayerCA::defaultContentsOrientation() const
 {
-#if !HAVE_MODERN_QUARTZCORE
-    // Older QuartzCore does not support -geometryFlipped, so we manually flip the root
-    // layer geometry, and then flip the contents of each layer back so that the CTM for CG
-    // is unflipped, allowing it to do the correct font auto-hinting.
-    return CompositingCoordinatesBottomUp;
-#else
     return CompositingCoordinatesTopDown;
-#endif
-}
-
-void GraphicsLayerCA::updateContentsTransform()
-{
-#if !HAVE_MODERN_QUARTZCORE
-    if (contentsOrientation() == CompositingCoordinatesBottomUp) {
-        CGAffineTransform contentsTransform = CGAffineTransformMakeScale(1, -1);
-        contentsTransform = CGAffineTransformTranslate(contentsTransform, 0, -m_layer->bounds().size().height());
-        m_layer->setContentsTransform(TransformationMatrix(contentsTransform));
-    }
-#endif
 }
 
 void GraphicsLayerCA::setupContentsLayer(PlatformCALayer* contentsLayer)
@@ -2456,11 +2457,6 @@ void GraphicsLayerCA::setOpacityInternal(float accumulatedOpacity)
 
 void GraphicsLayerCA::updateOpacityOnLayer()
 {
-#if !HAVE_MODERN_QUARTZCORE
-    // Distribute opacity either to our own layer or to our children. We pass in the 
-    // contribution from our parent(s).
-    distributeOpacity(parent() ? parent()->accumulatedOpacity() : 1);
-#else
     primaryLayer()->setOpacity(m_opacity);
 
     if (LayerMap* layerCloneMap = primaryLayerClones()) {
@@ -2473,7 +2469,6 @@ void GraphicsLayerCA::updateOpacityOnLayer()
         }
         
     }
-#endif
 }
 
 void GraphicsLayerCA::setMaintainsPixelAlignment(bool maintainsAlignment)

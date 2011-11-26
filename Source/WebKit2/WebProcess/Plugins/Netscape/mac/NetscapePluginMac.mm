@@ -88,75 +88,66 @@ NPError NetscapePlugin::setEventModel(NPEventModel eventModel)
     return NPERR_NO_ERROR;
 }
 
-static double flipScreenYCoordinate(double y)
+bool NetscapePlugin::getScreenTransform(NPCoordinateSpace sourceSpace, AffineTransform& transform)
 {
-    return [(NSScreen *)[[NSScreen screens] objectAtIndex:0] frame].size.height - y;
+    ASSERT(transform.isIdentity());
+
+    switch (sourceSpace) {
+        case NPCoordinateSpacePlugin: {
+            transform.translate(m_windowFrameInScreenCoordinates.x(), m_windowFrameInScreenCoordinates.y());
+            transform.translate(m_viewFrameInWindowCoordinates.x(), m_viewFrameInWindowCoordinates.height() + m_viewFrameInWindowCoordinates.y());
+            transform.flipY();
+            transform *= m_pluginToRootViewTransform;
+            return true;
+        }
+
+        case NPCoordinateSpaceWindow: {
+            transform.translate(m_windowFrameInScreenCoordinates.x(), m_windowFrameInScreenCoordinates.y());
+            return true;
+        }
+
+        case NPCoordinateSpaceFlippedWindow: {
+            transform.translate(m_windowFrameInScreenCoordinates.x(), m_windowFrameInScreenCoordinates.height() + m_windowFrameInScreenCoordinates.y());
+            transform.flipY();
+            return true;
+        }
+
+        case NPCoordinateSpaceScreen: {
+            // Nothing to do.
+            return true;
+        }
+
+        case NPCoordinateSpaceFlippedScreen: {
+            double screenHeight = [(NSScreen *)[[NSScreen screens] objectAtIndex:0] frame].size.height;
+            transform.translate(0, screenHeight);
+            transform.flipY();
+            return true;
+        }
+
+        default:
+            return false;
+    }
 }
 
 NPBool NetscapePlugin::convertPoint(double sourceX, double sourceY, NPCoordinateSpace sourceSpace, double& destX, double& destY, NPCoordinateSpace destSpace)
 {
-    if (sourceSpace == destSpace) {
-        destX = sourceX;
-        destY = sourceY;
-        return true;
-    }
-
-    double sourceXInScreenSpace;
-    double sourceYInScreenSpace;
-
-    FloatPoint sourceInScreenSpace;
-    switch (sourceSpace) {
-    case NPCoordinateSpacePlugin:
-        sourceXInScreenSpace = sourceX + m_windowFrameInScreenCoordinates.x() + m_viewFrameInWindowCoordinates.x() + m_npWindow.x;
-        sourceYInScreenSpace = m_windowFrameInScreenCoordinates.y() + m_viewFrameInWindowCoordinates.y() + m_viewFrameInWindowCoordinates.height() - (sourceY + m_npWindow.y);
-        break;
-    case NPCoordinateSpaceWindow:
-        sourceXInScreenSpace = sourceX + m_windowFrameInScreenCoordinates.x();
-        sourceYInScreenSpace = sourceY + m_windowFrameInScreenCoordinates.y();
-        break;
-    case NPCoordinateSpaceFlippedWindow:
-        sourceXInScreenSpace = sourceX + m_windowFrameInScreenCoordinates.x();
-        sourceYInScreenSpace = m_windowFrameInScreenCoordinates.y() + m_windowFrameInScreenCoordinates.height() - sourceY;
-        break;
-    case NPCoordinateSpaceScreen:
-        sourceXInScreenSpace = sourceX;
-        sourceYInScreenSpace = sourceY;
-        break;
-    case NPCoordinateSpaceFlippedScreen:
-        sourceXInScreenSpace = sourceX;
-        sourceYInScreenSpace = flipScreenYCoordinate(sourceY);
-        break;
-    default:
+    AffineTransform sourceTransform;
+    if (!getScreenTransform(sourceSpace, sourceTransform))
         return false;
-    }
 
-    // Now convert back.
-    switch (destSpace) {
-    case NPCoordinateSpacePlugin:
-        destX = sourceXInScreenSpace - (m_windowFrameInScreenCoordinates.x() + m_viewFrameInWindowCoordinates.x() + m_npWindow.x);
-        destY = m_windowFrameInScreenCoordinates.y() + m_viewFrameInWindowCoordinates.y() + m_viewFrameInWindowCoordinates.height() - (sourceYInScreenSpace + m_npWindow.y);
-        break;
-    case NPCoordinateSpaceWindow:
-        destX = sourceXInScreenSpace - m_windowFrameInScreenCoordinates.x();
-        destY = sourceYInScreenSpace - m_windowFrameInScreenCoordinates.y();
-        break;
-    case NPCoordinateSpaceFlippedWindow:
-        destX = sourceXInScreenSpace - m_windowFrameInScreenCoordinates.x();
-        destY = sourceYInScreenSpace - m_windowFrameInScreenCoordinates.y();
-        destY = m_windowFrameInScreenCoordinates.height() - destY;
-        break;
-    case NPCoordinateSpaceScreen:
-        destX = sourceXInScreenSpace;
-        destY = sourceYInScreenSpace;
-        break;
-    case NPCoordinateSpaceFlippedScreen:
-        destX = sourceXInScreenSpace;
-        destY = flipScreenYCoordinate(sourceYInScreenSpace);
-        break;
-    default:
+    AffineTransform destTransform;
+    if (!getScreenTransform(destSpace, destTransform))
         return false;
-    }
 
+    if (!destTransform.isInvertible())
+        return false;
+
+    AffineTransform transform = destTransform.inverse() * sourceTransform;
+
+    FloatPoint destinationPoint = transform.mapPoint(FloatPoint(sourceX, sourceY));
+
+    destX = destinationPoint.x();
+    destY = destinationPoint.y();
     return true;
 }
 
@@ -302,6 +293,18 @@ bool NetscapePlugin::platformInvalidate(const IntRect&)
 
 void NetscapePlugin::platformGeometryDidChange()
 {
+    switch (m_eventModel) {
+    case NPEventModelCocoa:
+        // Nothing to do
+        break;
+#ifndef NP_NO_CARBON
+    case NPEventModelCarbon:
+        updateFakeWindowBounds();
+        break;
+#endif
+    default:
+        ASSERT_NOT_REACHED();
+    }
 }
 
 void NetscapePlugin::platformVisibilityDidChange()
@@ -331,6 +334,21 @@ WindowRef NetscapePlugin::windowRef() const
     ASSERT(m_eventModel == NPEventModelCarbon);
 
     return reinterpret_cast<WindowRef>(m_npCGContext.window);
+}
+
+void NetscapePlugin::updateFakeWindowBounds()
+{
+    double screenX, screenY;
+    bool didConvert = convertPoint(0, 0, NPCoordinateSpacePlugin, screenX, screenY, NPCoordinateSpaceFlippedScreen);
+    ASSERT_UNUSED(didConvert, didConvert);
+    
+    Rect bounds;
+    bounds.top = screenY;
+    bounds.left = screenX;
+    bounds.bottom = screenY + m_pluginSize.height();
+    bounds.right = screenX + m_pluginSize.width();
+    
+    ::SetWindowBounds(windowRef(), kWindowStructureRgn, &bounds);
 }
 
 unsigned NetscapePlugin::buttonState()
@@ -403,9 +421,6 @@ void NetscapePlugin::platformPaint(GraphicsContext* context, const IntRect& dirt
 {
     CGContextRef platformContext = context->platformContext();
 
-    // Translate the context so that the origin is at the top left corner of the plug-in view.
-    context->translate(m_frameRect.x(), m_frameRect.y());
-
     switch (m_eventModel) {
         case NPEventModelCocoa: {
             // Don't send draw events when we're using the Core Animation drawing model.
@@ -415,8 +430,8 @@ void NetscapePlugin::platformPaint(GraphicsContext* context, const IntRect& dirt
             NPCocoaEvent event = initializeEvent(NPCocoaEventDrawRect);
 
             event.data.draw.context = platformContext;
-            event.data.draw.x = dirtyRect.x() - m_frameRect.x();
-            event.data.draw.y = dirtyRect.y() - m_frameRect.y();
+            event.data.draw.x = dirtyRect.x();
+            event.data.draw.y = dirtyRect.y();
             event.data.draw.width = dirtyRect.width();
             event.data.draw.height = dirtyRect.height();
             
@@ -476,11 +491,11 @@ static int32_t buttonNumber(WebMouseEvent::Button button)
     return -1;
 }
 
-static void fillInCocoaEventFromMouseEvent(NPCocoaEvent& event, const WebMouseEvent& mouseEvent, const WebCore::IntPoint& pluginLocation)
+static void fillInCocoaEventFromMouseEvent(NPCocoaEvent& event, const WebMouseEvent& mouseEvent, const WebCore::IntPoint& eventPositionInPluginCoordinates)
 {
     event.data.mouse.modifierFlags = modifierFlags(mouseEvent);
-    event.data.mouse.pluginX = mouseEvent.position().x() - pluginLocation.x();
-    event.data.mouse.pluginY = mouseEvent.position().y() - pluginLocation.y();
+    event.data.mouse.pluginX = eventPositionInPluginCoordinates.x();
+    event.data.mouse.pluginY = eventPositionInPluginCoordinates.y();
     event.data.mouse.buttonNumber = buttonNumber(mouseEvent.button());
     event.data.mouse.clickCount = mouseEvent.clickCount();
     event.data.mouse.deltaX = mouseEvent.deltaX();
@@ -488,7 +503,7 @@ static void fillInCocoaEventFromMouseEvent(NPCocoaEvent& event, const WebMouseEv
     event.data.mouse.deltaZ = mouseEvent.deltaZ();
 }
     
-static NPCocoaEvent initializeMouseEvent(const WebMouseEvent& mouseEvent, const WebCore::IntPoint& pluginLocation)
+static NPCocoaEvent initializeMouseEvent(const WebMouseEvent& mouseEvent, const WebCore::IntPoint& eventPositionInPluginCoordinates)
 {
     NPCocoaEventType eventType;
 
@@ -511,7 +526,7 @@ static NPCocoaEvent initializeMouseEvent(const WebMouseEvent& mouseEvent, const 
     }
 
     NPCocoaEvent event = initializeEvent(eventType);
-    fillInCocoaEventFromMouseEvent(event, mouseEvent, pluginLocation);
+    fillInCocoaEventFromMouseEvent(event, mouseEvent, eventPositionInPluginCoordinates);
     return event;
 }
 
@@ -519,7 +534,11 @@ bool NetscapePlugin::platformHandleMouseEvent(const WebMouseEvent& mouseEvent)
 {
     switch (m_eventModel) {
         case NPEventModelCocoa: {
-            NPCocoaEvent event = initializeMouseEvent(mouseEvent, m_frameRect.location());
+            IntPoint eventPositionInPluginCoordinates;
+            if (!convertFromRootView(mouseEvent.position(), eventPositionInPluginCoordinates))
+                return true;
+
+            NPCocoaEvent event = initializeMouseEvent(mouseEvent, eventPositionInPluginCoordinates);
 
             NPCocoaEvent* previousMouseEvent = m_currentMouseEvent;
             m_currentMouseEvent = &event;
@@ -583,11 +602,15 @@ bool NetscapePlugin::platformHandleWheelEvent(const WebWheelEvent& wheelEvent)
 {
     switch (m_eventModel) {
         case NPEventModelCocoa: {
+            IntPoint eventPositionInPluginCoordinates;
+            if (!convertFromRootView(wheelEvent.position(), eventPositionInPluginCoordinates))
+                return true;
+
             NPCocoaEvent event = initializeEvent(NPCocoaEventScrollWheel);
             
             event.data.mouse.modifierFlags = modifierFlags(wheelEvent);
-            event.data.mouse.pluginX = wheelEvent.position().x() - m_frameRect.x();
-            event.data.mouse.pluginY = wheelEvent.position().y() - m_frameRect.y();
+            event.data.mouse.pluginX = eventPositionInPluginCoordinates.x();
+            event.data.mouse.pluginY = eventPositionInPluginCoordinates.y();
             event.data.mouse.buttonNumber = 0;
             event.data.mouse.clickCount = 0;
             event.data.mouse.deltaX = wheelEvent.delta().width();
@@ -615,7 +638,7 @@ bool NetscapePlugin::platformHandleMouseEnterEvent(const WebMouseEvent& mouseEve
         case NPEventModelCocoa: {
             NPCocoaEvent event = initializeEvent(NPCocoaEventMouseEntered);
             
-            fillInCocoaEventFromMouseEvent(event, mouseEvent, m_frameRect.location());
+            fillInCocoaEventFromMouseEvent(event, mouseEvent, IntPoint());
             return NPP_HandleEvent(&event);
         }
 
@@ -641,7 +664,7 @@ bool NetscapePlugin::platformHandleMouseLeaveEvent(const WebMouseEvent& mouseEve
         case NPEventModelCocoa: {
             NPCocoaEvent event = initializeEvent(NPCocoaEventMouseExited);
             
-            fillInCocoaEventFromMouseEvent(event, mouseEvent, m_frameRect.location());
+            fillInCocoaEventFromMouseEvent(event, mouseEvent, IntPoint());
             return NPP_HandleEvent(&event);
         }
 
@@ -836,6 +859,11 @@ void NetscapePlugin::platformSetFocus(bool hasFocus)
     }
 }
 
+bool NetscapePlugin::wantsPluginRelativeNPWindowCoordinates()
+{
+    return true;
+}
+
 void NetscapePlugin::windowFocusChanged(bool hasFocus)
 {
     m_windowHasFocus = hasFocus;
@@ -871,26 +899,6 @@ void NetscapePlugin::windowFocusChanged(bool hasFocus)
     }
 }
 
-#ifndef NP_NO_CARBON
-static Rect computeFakeWindowBoundsRect(const WebCore::IntRect& windowFrameInScreenCoordinates, const WebCore::IntRect& viewFrameInWindowCoordinates)
-{
-    // Carbon global coordinates has the origin set at the top left corner of the main viewing screen, so we want to flip the y coordinate.
-    CGFloat maxY = NSMaxY([(NSScreen *)[[NSScreen screens] objectAtIndex:0] frame]);
-
-    int flippedWindowFrameYCoordinate = maxY - windowFrameInScreenCoordinates.maxY();
-    int flippedViewFrameYCoordinate = windowFrameInScreenCoordinates.height() - viewFrameInWindowCoordinates.maxY();
-
-    Rect bounds;
-    
-    bounds.top = flippedWindowFrameYCoordinate + flippedViewFrameYCoordinate;
-    bounds.left = windowFrameInScreenCoordinates.x();
-    bounds.right = bounds.left + viewFrameInWindowCoordinates.width();
-    bounds.bottom = bounds.top + viewFrameInWindowCoordinates.height();
-    
-    return bounds;
-}
-#endif
-
 void NetscapePlugin::windowAndViewFramesChanged(const IntRect& windowFrameInScreenCoordinates, const IntRect& viewFrameInWindowCoordinates)
 {
     m_windowFrameInScreenCoordinates = windowFrameInScreenCoordinates;
@@ -902,12 +910,9 @@ void NetscapePlugin::windowAndViewFramesChanged(const IntRect& windowFrameInScre
             break;
 
 #ifndef NP_NO_CARBON
-        case NPEventModelCarbon: {
-            Rect bounds = computeFakeWindowBoundsRect(windowFrameInScreenCoordinates, viewFrameInWindowCoordinates);
-
-            ::SetWindowBounds(windowRef(), kWindowStructureRgn, &bounds);
+        case NPEventModelCarbon:
+            updateFakeWindowBounds();
             break;
-        }
 #endif
 
         default:

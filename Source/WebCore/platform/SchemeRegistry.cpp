@@ -68,10 +68,13 @@ static URLSchemesMap& schemesWithUniqueOrigins()
 {
     DEFINE_STATIC_LOCAL(URLSchemesMap, schemesWithUniqueOrigins, ());
 
-    // This is a willful violation of HTML5.
-    // See https://bugs.webkit.org/show_bug.cgi?id=11885
-    if (schemesWithUniqueOrigins.isEmpty())
+    if (schemesWithUniqueOrigins.isEmpty()) {
+        schemesWithUniqueOrigins.add("about");
+        schemesWithUniqueOrigins.add("javascript");
+        // This is a willful violation of HTML5.
+        // See https://bugs.webkit.org/show_bug.cgi?id=11885
         schemesWithUniqueOrigins.add("data");
+    }
 
     return schemesWithUniqueOrigins;
 }
@@ -84,6 +87,12 @@ static URLSchemesMap& emptyDocumentSchemes()
         emptyDocumentSchemes.add("about");
 
     return emptyDocumentSchemes;
+}
+
+static HashSet<String>& schemesForbiddenFromDomainRelaxation()
+{
+    DEFINE_STATIC_LOCAL(HashSet<String>, schemes, ());
+    return schemes;
 }
 
 static URLSchemesMap& canDisplayOnlyIfCanRequestSchemes()
@@ -129,6 +138,18 @@ void SchemeRegistry::removeURLSchemeRegisteredAsLocal(const String& scheme)
 const URLSchemesMap& SchemeRegistry::localSchemes()
 {
     return localURLSchemes();
+}
+
+static URLSchemesMap& schemesAllowingLocalStorageAccessInPrivateBrowsing()
+{
+    DEFINE_STATIC_LOCAL(URLSchemesMap, schemesAllowingLocalStorageAccessInPrivateBrowsing, ());
+    return schemesAllowingLocalStorageAccessInPrivateBrowsing;
+}
+
+static URLSchemesMap& schemesAllowingDatabaseAccessInPrivateBrowsing()
+{
+    DEFINE_STATIC_LOCAL(URLSchemesMap, schemesAllowingDatabaseAccessInPrivateBrowsing, ());
+    return schemesAllowingDatabaseAccessInPrivateBrowsing;
 }
 
 bool SchemeRegistry::shouldTreatURLSchemeAsLocal(const String& scheme)
@@ -186,6 +207,24 @@ bool SchemeRegistry::shouldLoadURLSchemeAsEmptyDocument(const String& scheme)
     return emptyDocumentSchemes().contains(scheme);
 }
 
+void SchemeRegistry::setDomainRelaxationForbiddenForURLScheme(bool forbidden, const String& scheme)
+{
+    if (scheme.isEmpty())
+        return;
+
+    if (forbidden)
+        schemesForbiddenFromDomainRelaxation().add(scheme);
+    else
+        schemesForbiddenFromDomainRelaxation().remove(scheme);
+}
+
+bool SchemeRegistry::isDomainRelaxationForbiddenForURLScheme(const String& scheme)
+{
+    if (scheme.isEmpty())
+        return false;
+    return schemesForbiddenFromDomainRelaxation().contains(scheme);
+}
+
 bool SchemeRegistry::canDisplayOnlyIfCanRequest(const String& scheme)
 {
     if (scheme.isEmpty())
@@ -208,6 +247,30 @@ bool SchemeRegistry::shouldTreatURLSchemeAsNotAllowingJavascriptURLs(const Strin
     if (scheme.isEmpty())
         return false;
     return notAllowingJavascriptURLsSchemes().contains(scheme);
+}
+
+void SchemeRegistry::registerURLSchemeAsAllowingLocalStorageAccessInPrivateBrowsing(const String& scheme)
+{
+    schemesAllowingLocalStorageAccessInPrivateBrowsing().add(scheme);
+}
+
+bool SchemeRegistry::allowsLocalStorageAccessInPrivateBrowsing(const String& scheme)
+{
+    if (scheme.isEmpty())
+        return false;
+    return schemesAllowingLocalStorageAccessInPrivateBrowsing().contains(scheme);
+}
+
+void SchemeRegistry::registerURLSchemeAsAllowingDatabaseAccessInPrivateBrowsing(const String& scheme)
+{
+    schemesAllowingDatabaseAccessInPrivateBrowsing().add(scheme);
+}
+
+bool SchemeRegistry::allowsDatabaseAccessInPrivateBrowsing(const String& scheme)
+{
+    if (scheme.isEmpty())
+        return false;
+    return schemesAllowingDatabaseAccessInPrivateBrowsing().contains(scheme);
 }
 
 } // namespace WebCore

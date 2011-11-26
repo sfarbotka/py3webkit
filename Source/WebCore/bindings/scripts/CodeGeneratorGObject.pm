@@ -242,7 +242,7 @@ sub GetGValueTypeName {
                  "unsigned int", "uint",
                  "unsigned long long", "uint64", 
                  "unsigned long", "ulong",
-                 "unsigned short", "ushort");
+                 "unsigned short", "uint");
 
     return $types{$type} ? $types{$type} : "object";
 }
@@ -920,8 +920,7 @@ EOF
         if(@{$function->raisesExceptions}) {
             my $exceptionHandling = << "EOF";
 
-    WebCore::ExceptionCodeDescription ecdesc;
-    WebCore::getExceptionCodeDescription(ec, ecdesc);
+    WebCore::ExceptionCodeDescription ecdesc(ec);
     g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
 EOF
             push(@cBody, $exceptionHandling);
@@ -954,8 +953,7 @@ EOF
         if(@{$function->raisesExceptions}) {
             my $exceptionHandling = << "EOF";
     if (ec) {
-        WebCore::ExceptionCodeDescription ecdesc;
-        WebCore::getExceptionCodeDescription(ec, ecdesc);
+        WebCore::ExceptionCodeDescription ecdesc(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), ecdesc.code, ecdesc.name);
     }
 EOF
@@ -1062,7 +1060,7 @@ sub GenerateFunctions {
         $param->name("value");
         $param->type($attribute->signature->type);
         my %attributes = ();
-        $param->extendedAttributes(attributes);
+        $param->extendedAttributes("attributes");
         my $arrayRef = $function->parameters;
         push(@$arrayRef, $param);
         
@@ -1225,8 +1223,7 @@ static void webkit_dom_${decamelize}_dispatch_event(WebKitDOMEventTarget* target
     WebCore::ExceptionCode ec = 0;
     coreTarget->dispatchEvent(coreEvent, ec);
     if (ec) {
-        WebCore::ExceptionCodeDescription description;
-        WebCore::getExceptionCodeDescription(ec, description);
+        WebCore::ExceptionCodeDescription description(ec);
         g_set_error_literal(error, g_quark_from_string("WEBKIT_DOM"), description.code, description.name);
     }
 }
@@ -1383,3 +1380,5 @@ sub GenerateInterface {
     $fname =~ s/_//g;
     $object->WriteData($fname);
 }
+
+1;

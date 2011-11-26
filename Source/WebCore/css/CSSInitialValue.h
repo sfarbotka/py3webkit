@@ -39,23 +39,19 @@ public:
         return explicitValue;
     }
 
-    virtual String cssText() const;
-        
+    String customCssText() const;
+
 private:
     CSSInitialValue(bool implicit)
-        : m_implicit(implicit)
+        : CSSValue(InitialClass)
     {
+        m_isImplicit = implicit;
     }
 
     static PassRefPtr<CSSInitialValue> create(bool implicit)
     {
         return adoptRef(new CSSInitialValue(implicit));
     }
-
-    virtual unsigned short cssValueType() const;
-    virtual bool isImplicitInitialValue() const { return m_implicit; }
-
-    bool m_implicit;
 };
 
 } // namespace WebCore

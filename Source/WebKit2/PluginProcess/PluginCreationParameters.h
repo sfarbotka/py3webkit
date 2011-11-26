@@ -55,6 +55,9 @@ struct PluginCreationParameters {
     // The browser user agent.
     String userAgent;
 
+    // The current contents scale factor that this plug-in should have.
+    float contentsScaleFactor;
+
     // Whether private browsing is enabled at the time of instantiation.
     bool isPrivateBrowsingEnabled;
 

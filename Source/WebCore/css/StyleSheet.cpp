@@ -20,74 +20,72 @@
 #include "config.h"
 #include "StyleSheet.h"
 
+#include "CSSRule.h"
+#include "CSSStyleSheet.h"
+#include "Document.h"
 #include "MediaList.h"
 #include "Node.h"
 
 namespace WebCore {
 
-StyleSheet::StyleSheet(StyleSheet* parentSheet, const String& originalURL, const KURL& finalURL)
-    : StyleList(parentSheet)
-    , m_parentNode(0)
-    , m_originalURL(originalURL)
-    , m_finalURL(finalURL)
-    , m_disabled(false)
-{
-}
-
 StyleSheet::StyleSheet(Node* parentNode, const String& originalURL, const KURL& finalURL)
-    : StyleList(0)
+    : m_disabled(false)
+    , m_parentRule(0)
     , m_parentNode(parentNode)
     , m_originalURL(originalURL)
     , m_finalURL(finalURL)
-    , m_disabled(false)
 {
 }
 
-StyleSheet::StyleSheet(StyleBase* owner, const String& originalURL, const KURL& finalURL)
-    : StyleList(owner)
+StyleSheet::StyleSheet(CSSRule* parentRule, const String& originalURL, const KURL& finalURL)
+    : m_disabled(false)
+    , m_parentRule(parentRule)
     , m_parentNode(0)
     , m_originalURL(originalURL)
     , m_finalURL(finalURL)
-    , m_disabled(false)
 {
 }
 
 StyleSheet::~StyleSheet()
 {
     if (m_media)
-        m_media->setParent(0);
-
-    // For style rules outside the document, .parentStyleSheet can become null even if the style rule
-    // is still observable from JavaScript. This matches the behavior of .parentNode for nodes, but
-    // it's not ideal because it makes the CSSOM's behavior depend on the timing of garbage collection.
-    for (unsigned i = 0; i < length(); ++i) {
-        ASSERT(item(i)->parent() == this);
-        item(i)->setParent(0);
-    }
+        m_media->setParentStyleSheet(0);
 }
 
 StyleSheet* StyleSheet::parentStyleSheet() const
 {
-    return (parent() && parent()->isStyleSheet()) ? static_cast<StyleSheet*>(parent()) : 0;
+    ASSERT(isCSSStyleSheet());
+    return m_parentRule ? m_parentRule->parentStyleSheet() : 0;
 }
 
 void StyleSheet::setMedia(PassRefPtr<MediaList> media)
 {
+    ASSERT(isCSSStyleSheet());
+    ASSERT(!media->parentStyleSheet() || media->parentStyleSheet() == this);
+
     if (m_media)
-        m_media->setParent(0);
+        m_media->setParentStyleSheet(0);
 
     m_media = media;
-    m_media->setParent(this);
+    m_media->setParentStyleSheet(static_cast<CSSStyleSheet*>(this));
 }
 
-KURL StyleSheet::completeURL(const String& url) const
+KURL StyleSheet::baseURL() const
 {
-    // Always return a null URL when passed a null string.
-    // FIXME: Should we change the KURL constructor to have this behavior?
-    // See also Document::completeURL(const String&)
-    if (url.isNull())
+    if (!m_finalURL.isNull())
+        return m_finalURL;
+    if (StyleSheet* parentSheet = parentStyleSheet())
+        return parentSheet->baseURL();
+    if (!m_parentNode)
         return KURL();
-    return KURL(baseURL(), url);
+    return m_parentNode->document()->baseURL();
+}
+
+void StyleSheet::setDisabled(bool disabled)
+{
+     m_disabled = disabled;
+     if (isCSSStyleSheet())
+         static_cast<CSSStyleSheet*>(this)->styleSheetChanged();
 }
 
 }

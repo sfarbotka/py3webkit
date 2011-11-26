@@ -37,13 +37,14 @@
 #include "EventListener.h"
 #include "EventNames.h"
 #include "EventTarget.h"
-#include "ExceptionCode.h"
 #include "IDBAny.h"
 #include "IDBCallbacks.h"
 
 namespace WebCore {
 
 class IDBTransaction;
+
+typedef int ExceptionCode;
 
 class IDBRequest : public IDBCallbacks, public EventTarget, public ActiveDOMObject {
 public:
@@ -70,6 +71,7 @@ public:
     void markEarlyDeath();
     bool resetReadyState(IDBTransaction*);
     void setCursorType(IDBCursorBackendInterface::CursorType);
+    void setCursor(PassRefPtr<IDBCursor>);
     IDBAny* source();
     void abort();
 
@@ -81,13 +83,15 @@ public:
     virtual void onSuccess(PassRefPtr<IDBKey>);
     virtual void onSuccess(PassRefPtr<IDBTransactionBackendInterface>);
     virtual void onSuccess(PassRefPtr<SerializedScriptValue>);
+    virtual void onSuccessWithContinuation();
     virtual void onBlocked();
 
     // ActiveDOMObject
-    virtual bool hasPendingActivity() const;
+    virtual bool hasPendingActivity() const OVERRIDE;
+    virtual void stop() OVERRIDE;
 
     // EventTarget
-    virtual IDBRequest* toIDBRequest() { return this; }
+    virtual const AtomicString& interfaceName() const;
     virtual ScriptExecutionContext* scriptExecutionContext() const;
     virtual bool dispatchEvent(PassRefPtr<Event>);
     bool dispatchEvent(PassRefPtr<Event> event, ExceptionCode& ec) { return EventTarget::dispatchEvent(event, ec); }
@@ -110,15 +114,19 @@ private:
     virtual EventTargetData* eventTargetData();
     virtual EventTargetData* ensureEventTargetData();
 
+    void setResultCursor(PassRefPtr<IDBCursor>, IDBCursorBackendInterface::CursorType);
+
     RefPtr<IDBAny> m_source;
     RefPtr<IDBTransaction> m_transaction;
 
     ReadyState m_readyState;
-    bool m_finished; // Is it possible that we'll fire any more events? If not, we're finished.
+    bool m_requestFinished; // Is it possible that we'll fire any more events? If not, we're finished.
+    bool m_contextStopped;
     Vector<RefPtr<Event> > m_enqueuedEvents;
 
     // Only used if the result type will be a cursor.
     IDBCursorBackendInterface::CursorType m_cursorType;
+    RefPtr<IDBCursor> m_cursor;
 
     EventTargetData m_eventTargetData;
 };

@@ -53,12 +53,11 @@ public:
         return adoptRef(new ProgressEvent(type, initializer));
     }
 
-    void initProgressEvent(const AtomicString& typeArg, bool canBubbleArg, bool cancelableArg,
-        bool lengthComputableArg, unsigned long long loadedArg, unsigned long long totalArg);
-
     bool lengthComputable() const { return m_lengthComputable; }
     unsigned long long loaded() const { return m_loaded; }
     unsigned long long total() const { return m_total; }
+
+    virtual const AtomicString& interfaceName() const;
 
 protected:
     ProgressEvent();
@@ -66,8 +65,6 @@ protected:
     ProgressEvent(const AtomicString&, const ProgressEventInit&);
 
 private:
-    virtual bool isProgressEvent() const { return true; }
-    
     bool m_lengthComputable;
     unsigned long long m_loaded;
     unsigned long long m_total;

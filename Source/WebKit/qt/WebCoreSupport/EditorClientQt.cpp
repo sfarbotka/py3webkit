@@ -201,7 +201,7 @@ void EditorClientQt::respondToChangedContents()
     emit m_page->contentsChanged();
 }
 
-void EditorClientQt::respondToChangedSelection()
+void EditorClientQt::respondToChangedSelection(Frame* frame)
 {
     if (dumpEditingCallbacks)
         printf("EDITING DELEGATE: webViewDidChangeSelection:WebViewDidChangeSelectionNotification\n");
@@ -212,7 +212,6 @@ void EditorClientQt::respondToChangedSelection()
 
     m_page->d->updateEditorActions();
     emit m_page->selectionChanged();
-    Frame* frame = m_page->d->page->focusController()->focusedOrMainFrame();
     if (!frame->editor()->ignoreCompositionSelectionChange())
         emit m_page->microFocusChanged();
 }
@@ -627,11 +626,6 @@ void EditorClientQt::setInputMethodState(bool active)
             }
         }
 
-#if defined(Q_WS_MAEMO_5) || defined(Q_WS_MAEMO_6) || defined(Q_OS_SYMBIAN)
-        // disables auto-uppercase and predictive text for mobile devices
-        hints |= Qt::ImhNoAutoUppercase;
-        hints |= Qt::ImhNoPredictiveText;
-#endif // Q_WS_MAEMO_5 || Q_WS_MAEMO_6 || Q_OS_SYMBIAN
         webPageClient->setInputMethodHints(hints);
         webPageClient->setInputMethodEnabled(active);
     }

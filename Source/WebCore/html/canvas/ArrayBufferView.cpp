@@ -27,8 +27,9 @@
 #include "ArrayBufferView.h"
 
 #include "ArrayBuffer.h"
+#include "ExceptionCode.h"
 
-namespace WebCore {
+namespace WTF {
 
 ArrayBufferView::ArrayBufferView(PassRefPtr<ArrayBuffer> buffer,
                        unsigned byteOffset)
@@ -36,52 +37,56 @@ ArrayBufferView::ArrayBufferView(PassRefPtr<ArrayBuffer> buffer,
         , m_buffer(buffer)
 {
     m_baseAddress = m_buffer ? (static_cast<char*>(m_buffer->data()) + m_byteOffset) : 0;
+    if (m_buffer) 
+        m_buffer->addView(this);
 }
 
 ArrayBufferView::~ArrayBufferView()
 {
+    if (m_buffer)
+        m_buffer->removeView(this);
 }
 
-void ArrayBufferView::setImpl(ArrayBufferView* array, unsigned byteOffset, ExceptionCode& ec)
+bool ArrayBufferView::setImpl(ArrayBufferView* array, unsigned byteOffset)
 {
     if (byteOffset > byteLength()
         || byteOffset + array->byteLength() > byteLength()
         || byteOffset + array->byteLength() < byteOffset) {
         // Out of range offset or overflow
-        ec = INDEX_SIZE_ERR;
-        return;
+        return false;
     }
 
     char* base = static_cast<char*>(baseAddress());
     memmove(base + byteOffset, array->baseAddress(), array->byteLength());
+    return true;
 }
 
-void ArrayBufferView::setRangeImpl(const char* data, size_t dataByteLength, unsigned byteOffset, ExceptionCode& ec)
+bool ArrayBufferView::setRangeImpl(const char* data, size_t dataByteLength, unsigned byteOffset)
 {
     if (byteOffset > byteLength()
         || byteOffset + dataByteLength > byteLength()
         || byteOffset + dataByteLength < byteOffset) {
         // Out of range offset or overflow
-        ec = INDEX_SIZE_ERR;
-        return;
+        return false;
     }
 
     char* base = static_cast<char*>(baseAddress());
     memmove(base + byteOffset, data, dataByteLength);
+    return true;
 }
 
-void ArrayBufferView::zeroRangeImpl(unsigned byteOffset, size_t rangeByteLength, ExceptionCode& ec)
+bool ArrayBufferView::zeroRangeImpl(unsigned byteOffset, size_t rangeByteLength)
 {
     if (byteOffset > byteLength()
         || byteOffset + rangeByteLength > byteLength()
         || byteOffset + rangeByteLength < byteOffset) {
         // Out of range offset or overflow
-        ec = INDEX_SIZE_ERR;
-        return;
+        return false;
     }
 
     char* base = static_cast<char*>(baseAddress());
     memset(base + byteOffset, 0, rangeByteLength);
+    return true;
 }
 
 void ArrayBufferView::calculateOffsetAndLength(int start, int end, unsigned arraySize,
@@ -99,6 +104,12 @@ void ArrayBufferView::calculateOffsetAndLength(int start, int end, unsigned arra
         end = start;
     *offset = static_cast<unsigned>(start);
     *length = static_cast<unsigned>(end - start);
+}
+
+void ArrayBufferView::neuter()
+{
+    m_buffer = 0;
+    m_byteOffset = 0;
 }
 
 }

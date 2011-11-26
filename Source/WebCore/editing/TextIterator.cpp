@@ -257,6 +257,7 @@ TextIterator::TextIterator()
     , m_emitsCharactersBetweenAllVisiblePositions(false)
     , m_entersTextControls(false)
     , m_emitsTextWithoutTranscoding(false)
+    , m_emitsOriginalText(false)
     , m_handledFirstLetter(false)
     , m_ignoresStyleVisibility(false)
     , m_emitsObjectReplacementCharacters(false)
@@ -277,6 +278,7 @@ TextIterator::TextIterator(const Range* r, TextIteratorBehavior behavior)
     , m_emitsCharactersBetweenAllVisiblePositions(behavior & TextIteratorEmitsCharactersBetweenAllVisiblePositions)
     , m_entersTextControls(behavior & TextIteratorEntersTextControls)
     , m_emitsTextWithoutTranscoding(behavior & TextIteratorEmitsTextsWithoutTranscoding)
+    , m_emitsOriginalText(behavior & TextIteratorEmitsOriginalText)
     , m_handledFirstLetter(false)
     , m_ignoresStyleVisibility(behavior & TextIteratorIgnoresStyleVisibility)
     , m_emitsObjectReplacementCharacters(behavior & TextIteratorEmitsObjectReplacementCharacters)
@@ -991,7 +993,7 @@ void TextIterator::emitCharacter(UChar c, Node* textNode, Node* offsetBaseNode, 
 void TextIterator::emitText(Node* textNode, RenderObject* renderObject, int textStartOffset, int textEndOffset)
 {
     RenderText* renderer = toRenderText(renderObject);
-    m_text = m_emitsTextWithoutTranscoding ? renderer->textWithoutTranscoding() : renderer->text();
+    m_text = m_emitsOriginalText ? renderer->originalText() : (m_emitsTextWithoutTranscoding ? renderer->textWithoutTranscoding() : renderer->text());
     ASSERT(m_text.characters());
     ASSERT(0 <= textStartOffset && textStartOffset < static_cast<int>(m_text.length()));
     ASSERT(0 <= textEndOffset && textEndOffset <= static_cast<int>(m_text.length()));
@@ -2476,16 +2478,13 @@ PassRefPtr<Range> TextIterator::rangeFromLocationAndLength(Element* scope, int r
     return resultRange.release();
 }
 
-bool TextIterator::locationAndLengthFromRange(const Range* range, size_t& location, size_t& length)
+bool TextIterator::getLocationAndLengthFromRange(Element* scope, const Range* range, size_t& location, size_t& length)
 {
     location = notFound;
     length = 0;
 
     if (!range->startContainer())
         return false;
-
-    Element* selectionRoot = range->ownerDocument()->frame()->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : range->ownerDocument()->documentElement();
 
     // The critical assumption is that this only gets called with ranges that
     // concentrate on a given area containing the selection root. This is done

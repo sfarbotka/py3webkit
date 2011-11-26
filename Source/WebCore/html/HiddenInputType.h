@@ -44,12 +44,13 @@ private:
     virtual const AtomicString& formControlType() const;
     virtual bool supportsValidation() const;
     virtual RenderObject* createRenderer(RenderArena*, RenderStyle*) const;
-    virtual void accessKeyAction(bool sendToAnyElement);
+    virtual void accessKeyAction(bool sendMouseEvents);
     virtual bool rendererIsNeeded();
     virtual bool storesValueSeparateFromAttribute();
     virtual bool isHiddenType() const;
     virtual bool shouldRespectHeightAndWidthAttributes();
     virtual void setValue(const String&, bool, bool);
+    virtual bool appendFormData(FormDataList&, bool) const;
 };
 
 } // namespace WebCore

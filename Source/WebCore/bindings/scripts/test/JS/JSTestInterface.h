@@ -42,8 +42,8 @@ public:
     }
 
     static JSC::JSObject* createPrototype(JSC::ExecState*, JSC::JSGlobalObject*);
-    virtual bool getOwnPropertySlot(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier& propertyName, JSC::PropertyDescriptor&);
     static const JSC::ClassInfo s_info;
 
     static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
@@ -52,15 +52,32 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::ExecState*, JSC::JSGlobalObject*);
-    TestInterface* impl() const { return m_impl.get(); }
+    TestInterface* impl() const { return m_impl; }
+    void releaseImpl() { m_impl->deref(); m_impl = 0; }
 
 private:
-    RefPtr<TestInterface> m_impl;
+    TestInterface* m_impl;
 protected:
     JSTestInterface(JSC::Structure*, JSDOMGlobalObject*, PassRefPtr<TestInterface>);
     void finishCreation(JSC::JSGlobalData&);
     static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | Base::StructureFlags;
 };
+
+class JSTestInterfaceOwner : public JSC::WeakHandleOwner {
+    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&);
+    virtual void finalize(JSC::Handle<JSC::Unknown>, void* context);
+};
+
+inline JSC::WeakHandleOwner* wrapperOwner(DOMWrapperWorld*, TestInterface*)
+{
+    DEFINE_STATIC_LOCAL(JSTestInterfaceOwner, jsTestInterfaceOwner, ());
+    return &jsTestInterfaceOwner;
+}
+
+inline void* wrapperContext(DOMWrapperWorld* world, TestInterface*)
+{
+    return world;
+}
 
 JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestInterface*);
 TestInterface* toTestInterface(JSC::JSValue);
@@ -86,6 +103,33 @@ private:
     JSTestInterfacePrototype(JSC::JSGlobalData& globalData, JSC::JSGlobalObject*, JSC::Structure* structure) : JSC::JSNonFinalObject(globalData, structure) { }
 protected:
     static const unsigned StructureFlags = Base::StructureFlags;
+};
+
+class JSTestInterfaceConstructor : public DOMConstructorObject {
+private:
+    JSTestInterfaceConstructor(JSC::Structure*, JSDOMGlobalObject*);
+    void finishCreation(JSC::ExecState*, JSDOMGlobalObject*);
+
+public:
+    typedef DOMConstructorObject Base;
+    static JSTestInterfaceConstructor* create(JSC::ExecState* exec, JSC::Structure* structure, JSDOMGlobalObject* globalObject)
+    {
+        JSTestInterfaceConstructor* ptr = new (JSC::allocateCell<JSTestInterfaceConstructor>(*exec->heap())) JSTestInterfaceConstructor(structure, globalObject);
+        ptr->finishCreation(exec, globalObject);
+        return ptr;
+    }
+
+    static bool getOwnPropertySlot(JSC::JSCell*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSC::JSObject*, JSC::ExecState*, const JSC::Identifier&, JSC::PropertyDescriptor&);
+    static const JSC::ClassInfo s_info;
+    static JSC::Structure* createStructure(JSC::JSGlobalData& globalData, JSC::JSGlobalObject* globalObject, JSC::JSValue prototype)
+    {
+        return JSC::Structure::create(globalData, globalObject, prototype, JSC::TypeInfo(JSC::ObjectType, StructureFlags), &s_info);
+    }
+protected:
+    static const unsigned StructureFlags = JSC::OverridesGetOwnPropertySlot | JSC::ImplementsHasInstance | DOMConstructorObject::StructureFlags;
+    static JSC::EncodedJSValue JSC_HOST_CALL constructJSTestInterface(JSC::ExecState*);
+    static JSC::ConstructType getConstructData(JSC::JSCell*, JSC::ConstructData&);
 };
 
 // Attributes

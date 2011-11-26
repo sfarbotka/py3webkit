@@ -48,6 +48,7 @@ ScrollableArea::ScrollableArea()
     , m_verticalScrollElasticity(ScrollElasticityNone)
     , m_horizontalScrollElasticity(ScrollElasticityNone)
     , m_scrollbarOverlayStyle(ScrollbarOverlayStyleDefault)
+    , m_scrollOriginChanged(false)
 {
 }
 
@@ -62,7 +63,31 @@ ScrollAnimator* ScrollableArea::scrollAnimator() const
 
     return m_scrollAnimator.get();
 }
+
+void ScrollableArea::setScrollOrigin(const IntPoint& origin)
+{
+    if (m_scrollOrigin != origin) {
+        m_scrollOrigin = origin;
+        m_scrollOriginChanged = true;
+    }
+}
  
+void ScrollableArea::setScrollOriginX(int x)
+{
+    if (m_scrollOrigin.x() != x) {
+        m_scrollOrigin.setX(x);
+        m_scrollOriginChanged = true;
+    }
+}
+
+void ScrollableArea::setScrollOriginY(int y)
+{
+    if (m_scrollOrigin.y() != y) {
+        m_scrollOrigin.setY(y);
+        m_scrollOriginChanged = true;
+    }
+}
+
 bool ScrollableArea::scroll(ScrollDirection direction, ScrollGranularity granularity, float multiplier)
 {
     ScrollbarOrientation orientation;
@@ -121,6 +146,11 @@ void ScrollableArea::scrollToXOffsetWithoutAnimation(float x)
 void ScrollableArea::scrollToYOffsetWithoutAnimation(float y)
 {
     scrollToOffsetWithoutAnimation(FloatPoint(scrollAnimator()->currentPosition().x(), y));
+}
+
+void ScrollableArea::zoomAnimatorTransformChanged(float, float, float, ZoomAnimationState)
+{
+    // Requires FrameView to override this.
 }
 
 bool ScrollableArea::handleWheelEvent(const PlatformWheelEvent& wheelEvent)
@@ -223,12 +253,12 @@ void ScrollableArea::setScrollbarOverlayStyle(ScrollbarOverlayStyle overlayStyle
     m_scrollbarOverlayStyle = overlayStyle;
 
     if (horizontalScrollbar()) {
-        ScrollbarTheme::nativeTheme()->updateScrollbarOverlayStyle(horizontalScrollbar());
+        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(horizontalScrollbar());
         horizontalScrollbar()->invalidate();
     }
     
     if (verticalScrollbar()) {
-        ScrollbarTheme::nativeTheme()->updateScrollbarOverlayStyle(verticalScrollbar());
+        ScrollbarTheme::theme()->updateScrollbarOverlayStyle(verticalScrollbar());
         verticalScrollbar()->invalidate();
     }
 }

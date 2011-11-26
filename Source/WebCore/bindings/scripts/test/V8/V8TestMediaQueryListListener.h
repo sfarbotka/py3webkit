@@ -24,16 +24,16 @@
 #include "TestMediaQueryListListener.h"
 #include "V8DOMWrapper.h"
 #include "WrapperTypeInfo.h"
-#include <wtf/text/StringHash.h>
 #include <v8.h>
 #include <wtf/HashMap.h>
+#include <wtf/text/StringHash.h>
 
 namespace WebCore {
 
 class V8TestMediaQueryListListener {
 public:
     static const bool hasDependentLifetime = false;
-    static bool HasInstance(v8::Handle<v8::Value> value);
+    static bool HasInstance(v8::Handle<v8::Value>);
     static v8::Persistent<v8::FunctionTemplate> GetRawTemplate();
     static v8::Persistent<v8::FunctionTemplate> GetTemplate();
     static TestMediaQueryListListener* toNative(v8::Handle<v8::Object> object)
@@ -44,14 +44,20 @@ public:
     static void derefObject(void*);
     static WrapperTypeInfo info;
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
+    static v8::Handle<v8::Object> existingWrapper(TestMediaQueryListListener*);
+
 private:
     static v8::Handle<v8::Object> wrapSlow(TestMediaQueryListListener*);
 };
 
+ALWAYS_INLINE v8::Handle<v8::Object> V8TestMediaQueryListListener::existingWrapper(TestMediaQueryListListener* impl)
+{
+    return getDOMObjectMap().get(impl);
+}
 
 v8::Handle<v8::Object> V8TestMediaQueryListListener::wrap(TestMediaQueryListListener* impl)
 {
-        v8::Handle<v8::Object> wrapper = getDOMObjectMap().get(impl);
+        v8::Handle<v8::Object> wrapper = existingWrapper(impl);
         if (!wrapper.IsEmpty())
             return wrapper;
     return V8TestMediaQueryListListener::wrapSlow(impl);
@@ -67,6 +73,7 @@ inline v8::Handle<v8::Value> toV8(PassRefPtr< TestMediaQueryListListener > impl)
 {
     return toV8(impl.get());
 }
+
 }
 
 #endif // V8TestMediaQueryListListener_h

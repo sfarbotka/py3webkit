@@ -32,18 +32,11 @@ module events {
 
     interface [
         NoStaticTables,
-        CanBeConstructed,
-        CustomConstructor
+        ConstructorTemplate=Event
     ] CloseEvent : Event {
-        readonly attribute boolean wasClean;
-        readonly attribute unsigned short code;
-        readonly attribute [ConvertingNullStringTo=Undefined] DOMString reason;
-        void initCloseEvent(in [Optional=CallWithDefaultValue] DOMString typeArg,
-                            in [Optional=CallWithDefaultValue] boolean canBubbleArg,
-                            in [Optional=CallWithDefaultValue] boolean cancelableArg,
-                            in [Optional=CallWithDefaultValue] boolean wasCleanArg,
-                            in [Optional=CallWithDefaultValue] unsigned short codeArg,
-                            in [Optional=CallWithDefaultValue] DOMString reasonArg);
+        readonly attribute [InitializedByConstructor] boolean wasClean;
+        readonly attribute [InitializedByConstructor] unsigned short code;
+        readonly attribute [InitializedByConstructor, ConvertingNullStringTo=Undefined] DOMString reason;
     };
 
 }

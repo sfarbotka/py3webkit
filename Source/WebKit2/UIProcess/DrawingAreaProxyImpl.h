@@ -39,6 +39,8 @@ class Region;
 
 namespace WebKit {
 
+class LayerTreeHostProxy;
+
 class DrawingAreaProxyImpl : public DrawingAreaProxy {
 public:
     static PassOwnPtr<DrawingAreaProxyImpl> create(WebPageProxy*);
@@ -53,7 +55,6 @@ private:
     virtual void sizeDidChange();
     virtual void deviceScaleFactorDidChange();
     virtual void visibilityDidChange();
-    virtual void setPageIsVisible(bool);
     virtual void setBackingStoreIsDiscardable(bool);
     virtual void waitForBackingStoreUpdateOnNextPaint();
 
@@ -75,6 +76,13 @@ private:
     void exitAcceleratedCompositingMode();
 
     bool isInAcceleratedCompositingMode() const { return !m_layerTreeContext.isEmpty(); }
+
+#if USE(TILED_BACKING_STORE)
+    virtual void setVisibleContentsRectAndScale(const WebCore::IntRect& visibleContentsRect, float scale);
+    virtual void setVisibleContentRectTrajectoryVector(const WebCore::FloatPoint&);
+    virtual void paintToCurrentGLContext(const WebCore::TransformationMatrix&, float opacity);
+    void didReceiveLayerTreeHostProxyMessage(CoreIPC::Connection*, CoreIPC::MessageID, CoreIPC::ArgumentDecoder*);
+#endif
 #else
     bool isInAcceleratedCompositingMode() const { return false; }
 #endif

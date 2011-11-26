@@ -31,8 +31,8 @@
 #ifndef WebInputEvent_h
 #define WebInputEvent_h
 
-#include "WebCommon.h"
 #include "WebTouchPoint.h"
+#include "platform/WebCommon.h"
 
 #include <string.h>
 
@@ -103,6 +103,9 @@ public:
         // WebGestureEvent
         GestureScrollBegin,
         GestureScrollEnd,
+        GestureScrollUpdate,
+        GestureFlingStart,
+        GestureFlingCancel,
         GestureTap,
 
         // WebTouchEvent
@@ -179,6 +182,17 @@ public:
             || type == MouseUp
             || type == TouchStart
             || type == TouchEnd;
+    }
+
+    // Returns true if the WebInputEvent |type| should be handled as scroll gesture.
+    static bool isScrollGestureEventType(int type)
+    {
+        return type == GestureScrollBegin
+            || type == GestureScrollEnd
+            || type == GestureScrollUpdate
+            || type == GestureFlingStart
+            || type == GestureFlingCancel
+            || type == GestureTap; // FIXME: Why is GestureTap on this list?
     }
 };
 
@@ -334,12 +348,17 @@ public:
     int y;
     int globalX;
     int globalY;
+    float deltaX;
+    float deltaY;
 
     WebGestureEvent(unsigned sizeParam = sizeof(WebGestureEvent))
-        : x(0)
+        : WebInputEvent(sizeParam)
+        , x(0)
         , y(0)
         , globalX(0)
         , globalY(0)
+        , deltaX(0.0f)
+        , deltaY(0.0f)
     {
     }
 };

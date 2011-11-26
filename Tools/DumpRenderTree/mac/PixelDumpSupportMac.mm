@@ -62,7 +62,7 @@ void restoreMainDisplayColorProfile(int ignored)
         const CMDeviceScope scope = { kCFPreferencesCurrentUser, kCFPreferencesCurrentHost };
         int error = CMSetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)kCGDirectMainDisplay, &scope, cmDefaultProfileID, &sInitialProfileLocation);
         if (error)
-            fprintf(stderr, "Failed to restore initial color profile for main display! Open System Preferences > Displays > Color and manually re-select the profile.  (Error: %i)", error);
+            fprintf(stderr, "Failed to restore initial color profile for main display! Open System Preferences > Displays > Color and manually re-select the profile.  (Error: %i)\n", error);
         sInitialProfileLocation.locType = cmNoProfileBase;
     }
 }
@@ -80,7 +80,7 @@ void setupMainDisplayColorProfile()
         CMCloseProfile(profile);
     }
     if (error) {
-        fprintf(stderr, "Failed to retrieve current color profile for main display, thus it won't be changed.  Many pixel tests may fail as a result.  (Error: %i)", error);
+        fprintf(stderr, "Failed to retrieve current color profile for main display, thus it won't be changed.  Many pixel tests may fail as a result.  (Error: %i)\n", error);
         sInitialProfileLocation.locType = cmNoProfileBase;
         return;
     }
@@ -90,7 +90,7 @@ void setupMainDisplayColorProfile()
     strcpy(location.u.pathLoc.path, PROFILE_PATH);
     error = CMSetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)kCGDirectMainDisplay, &scope, cmDefaultProfileID, &location);
     if (error) {
-        fprintf(stderr, "Failed to set color profile for main display!  Many pixel tests may fail as a result.  (Error: %i)", error);
+        fprintf(stderr, "Failed to set color profile for main display!  Many pixel tests may fail as a result.  (Error: %i)\n", error);
         sInitialProfileLocation.locType = cmNoProfileBase;
         return;
     }
@@ -168,15 +168,17 @@ PassRefPtr<BitmapContext> createBitmapContextFromWebView(bool onscreen, bool inc
     if ([view _isUsingAcceleratedCompositing])
         onscreen = YES;
 
+    float deviceScaleFactor = [view _backingScaleFactor];
     NSSize webViewSize = [view frame].size;
-    size_t pixelsWide = static_cast<size_t>(webViewSize.width);
-    size_t pixelsHigh = static_cast<size_t>(webViewSize.height);
+    size_t pixelsWide = static_cast<size_t>(webViewSize.width * deviceScaleFactor);
+    size_t pixelsHigh = static_cast<size_t>(webViewSize.height * deviceScaleFactor);
     size_t rowBytes = 0;
     void* buffer = 0;
     RefPtr<BitmapContext> bitmapContext = createBitmapContext(pixelsWide, pixelsHigh, rowBytes, buffer);
     if (!bitmapContext)
         return 0;
     CGContextRef context = bitmapContext->cgContext();
+    CGContextScaleCTM(context, deviceScaleFactor, deviceScaleFactor);
 
     NSGraphicsContext *nsContext = [NSGraphicsContext graphicsContextWithGraphicsPort:context flipped:NO];
     ASSERT(nsContext);
@@ -190,8 +192,13 @@ PassRefPtr<BitmapContext> createBitmapContextFromWebView(bool onscreen, bool inc
                 [view displayRectIgnoringOpacity:line inContext:nsContext];
         }
     } else {
-
-        if (onscreen) {
+        if (deviceScaleFactor != 1) {
+            // Call displayRectIgnoringOpacity for HiDPI tests since it ensures we paint directly into the context 
+            // that we have appropriately sized and scaled.
+            [view displayRectIgnoringOpacity:[view bounds] inContext:nsContext];
+            if ([view isTrackingRepaints])
+                paintRepaintRectOverlay(view, context);
+        } else if (onscreen) {
             // displayIfNeeded does not update the CA layers if the layer-hosting view was not marked as needing display, so
             // we're at the mercy of CA's display-link callback to update layers in time. So we need to force a display of the view
             // to get AppKit to update the CA layers synchronously.

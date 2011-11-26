@@ -661,6 +661,9 @@ bool FrameLoaderClientQt::canShowMIMEType(const String& MIMEType) const
     if (MIMETypeRegistry::isSupportedNonImageMIMEType(type))
         return true;
 
+    if (MIMETypeRegistry::isSupportedMediaMIMEType(type))
+        return true;
+
     if (m_frame && m_frame->settings()  && m_frame->settings()->arePluginsEnabled()
         && PluginDatabase::installedPlugins()->isMIMETypeRegistered(type))
         return true;
@@ -870,6 +873,14 @@ void FrameLoaderClientQt::didRunInsecureContent(WebCore::SecurityOrigin*, const 
     notImplemented();
 }
 
+void FrameLoaderClientQt::didDetectXSS(const KURL&, bool)
+{
+    if (dumpFrameLoaderCallbacks)
+        printf("didDetectXSS\n");
+
+    notImplemented();
+}
+
 void FrameLoaderClientQt::saveViewStateToItem(WebCore::HistoryItem* item)
 {
     QWebHistoryItem historyItem(new QWebHistoryItemPrivate(item));
@@ -896,7 +907,11 @@ void FrameLoaderClientQt::committedLoad(WebCore::DocumentLoader* loader, const c
 {
     if (!m_pluginView)
         loader->commitData(data, length);
-    
+
+    // If we are sending data to MediaDocument, we should stop here and cancel the request.
+    if (m_frame->document()->isMediaDocument())
+        loader->cancelMainResourceLoad(pluginWillHandleLoadError(loader->response()));
+
     // We re-check here as the plugin can have been created.
     if (m_pluginView && m_pluginView->isPluginView()) {
         if (!m_hasSentResponseToPlugin) {
@@ -971,7 +986,20 @@ WebCore::ResourceError FrameLoaderClientQt::pluginWillHandleLoadError(const WebC
 
 bool FrameLoaderClientQt::shouldFallBack(const WebCore::ResourceError& error)
 {
-    return !(error.isCancellation() || (error.errorCode() == WebKitErrorFrameLoadInterruptedByPolicyChange));
+    DEFINE_STATIC_LOCAL(const ResourceError, cancelledError, (this->cancelledError(ResourceRequest())));
+    DEFINE_STATIC_LOCAL(const ResourceError, pluginWillHandleLoadError, (this->pluginWillHandleLoadError(ResourceResponse())));
+    DEFINE_STATIC_LOCAL(const ResourceError, errorInterruptedForPolicyChange, (this->interruptedForPolicyChangeError(ResourceRequest())));
+
+    if (error.errorCode() == cancelledError.errorCode() && error.domain() == cancelledError.domain())
+        return false;
+
+    if (error.errorCode() == errorInterruptedForPolicyChange.errorCode() && error.domain() == errorInterruptedForPolicyChange.domain())
+        return false;
+
+    if (error.errorCode() == pluginWillHandleLoadError.errorCode() && error.domain() == pluginWillHandleLoadError.domain())
+        return false;
+
+    return true;
 }
 
 WTF::PassRefPtr<WebCore::DocumentLoader> FrameLoaderClientQt::createDocumentLoader(const WebCore::ResourceRequest& request, const SubstituteData& substituteData)
@@ -1214,7 +1242,7 @@ void FrameLoaderClientQt::dispatchDecidePolicyForResponse(FramePolicyFunction fu
 void FrameLoaderClientQt::dispatchDecidePolicyForNewWindowAction(FramePolicyFunction function, const WebCore::NavigationAction& action, const WebCore::ResourceRequest& request, PassRefPtr<WebCore::FormState>, const WTF::String&)
 {
     Q_ASSERT(m_webFrame);
-    QNetworkRequest r(request.toNetworkRequest(m_webFrame));
+    QNetworkRequest r(request.toNetworkRequest(m_frame->loader()->networkingContext()));
     QWebPage* page = m_webFrame->page();
 
     if (!page->d->acceptNavigationRequest(0, r, QWebPage::NavigationType(action.type()))) {
@@ -1235,7 +1263,7 @@ void FrameLoaderClientQt::dispatchDecidePolicyForNewWindowAction(FramePolicyFunc
 void FrameLoaderClientQt::dispatchDecidePolicyForNavigationAction(FramePolicyFunction function, const WebCore::NavigationAction& action, const WebCore::ResourceRequest& request, PassRefPtr<WebCore::FormState>)
 {
     Q_ASSERT(m_webFrame);
-    QNetworkRequest r(request.toNetworkRequest(m_webFrame));
+    QNetworkRequest r(request.toNetworkRequest(m_frame->loader()->networkingContext()));
     QWebPage*page = m_webFrame->page();
     PolicyAction result;
 
@@ -1290,7 +1318,7 @@ void FrameLoaderClientQt::startDownload(const WebCore::ResourceRequest& request,
     if (!m_webFrame)
         return;
 
-    emit m_webFrame->page()->downloadRequested(request.toNetworkRequest(m_webFrame));
+    emit m_webFrame->page()->downloadRequested(request.toNetworkRequest(m_frame->loader()->networkingContext()));
 }
 
 PassRefPtr<Frame> FrameLoaderClientQt::createFrame(const KURL& url, const String& name, HTMLFrameOwnerElement* ownerElement,
@@ -1614,17 +1642,6 @@ PassRefPtr<Widget> FrameLoaderClientQt::createPlugin(const IntSize& pluginSize, 
         if (mimeType == "application/x-shockwave-flash") {
             QWebPageClient* client = m_webFrame->page()->d->client.get();
             const bool isQWebView = client && qobject_cast<QWidget*>(client->pluginParent());
-#if defined(MOZ_PLATFORM_MAEMO) && (MOZ_PLATFORM_MAEMO >= 5)
-            size_t wmodeIndex = params.find("wmode");
-            if (wmodeIndex == WTF::notFound) {
-                // Disable XEmbed mode and force it to opaque mode.
-                params.append("wmode");
-                values.append("opaque");
-            } else if (!isQWebView) {
-                // Disable transparency if client is not a QWebView.
-                values[wmodeIndex] = "opaque";
-            }
-#else
             if (!isQWebView) {
                 // Inject wmode=opaque when there is no client or the client is not a QWebView.
                 size_t wmodeIndex = params.find("wmode");
@@ -1634,7 +1651,6 @@ PassRefPtr<Widget> FrameLoaderClientQt::createPlugin(const IntSize& pluginSize, 
                 } else if (equalIgnoringCase(values[wmodeIndex], "window"))
                     values[wmodeIndex] = "opaque";
             }
-#endif
         }
 
         RefPtr<PluginView> pluginView = PluginView::create(m_frame, pluginSize, element, url,

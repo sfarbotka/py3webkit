@@ -65,7 +65,7 @@ private:
 
     virtual void setCursor(const WebCore::Cursor&);
     virtual void setCursorHiddenUntilMouseMoves(bool);
-    virtual void setViewportArguments(const WebCore::ViewportArguments&);
+    virtual void didChangeViewportProperties(const WebCore::ViewportArguments&);
 
     virtual void registerEditCommand(PassRefPtr<WebEditCommandProxy>, WebPageProxy::UndoOrRedo);
     virtual void clearAllEditCommands();
@@ -81,7 +81,7 @@ private:
     virtual PassRefPtr<WebPopupMenuProxy> createPopupMenuProxy(WebPageProxy*);
     virtual PassRefPtr<WebContextMenuProxy> createContextMenuProxy(WebPageProxy*);
 
-    virtual void setFindIndicator(PassRefPtr<FindIndicator>, bool);
+    virtual void setFindIndicator(PassRefPtr<FindIndicator>, bool, bool);
 #if USE(ACCELERATED_COMPOSITING)
     virtual void enterAcceleratedCompositingMode(const LayerTreeContext&);
     virtual void exitAcceleratedCompositingMode();

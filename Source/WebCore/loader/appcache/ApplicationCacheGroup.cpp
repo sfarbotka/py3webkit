@@ -406,7 +406,6 @@ void ApplicationCacheGroup::setNewestCache(PassRefPtr<ApplicationCache> newestCa
 
     m_caches.add(m_newestCache.get());
     m_newestCache->setGroup(this);
-    InspectorInstrumentation::updateApplicationCacheStatus(m_frame);
 }
 
 void ApplicationCacheGroup::makeObsolete()
@@ -417,7 +416,6 @@ void ApplicationCacheGroup::makeObsolete()
     m_isObsolete = true;
     cacheStorage().cacheGroupMadeObsolete(this);
     ASSERT(!m_storageID);
-    InspectorInstrumentation::updateApplicationCacheStatus(m_frame);
 }
 
 void ApplicationCacheGroup::update(Frame* frame, ApplicationCacheUpdateOption updateOption)
@@ -680,12 +678,6 @@ void ApplicationCacheGroup::didReceiveManifestResponse(const ResourceResponse& r
 
     if (response.url() != m_manifestHandle->firstRequest().url()) {
         m_frame->domWindow()->console()->addMessage(OtherMessageSource, LogMessageType, ErrorMessageLevel, "Application Cache manifest could not be fetched, because a redirection was attempted.", 0, String());
-        cacheUpdateFailed();
-        return;
-    }
-
-    if (!equalIgnoringCase(response.mimeType(), "text/cache-manifest")) {
-        m_frame->domWindow()->console()->addMessage(OtherMessageSource, LogMessageType, ErrorMessageLevel, "Application Cache manifest had an incorrect MIME type: " + response.mimeType() + ".", 0, String());
         cacheUpdateFailed();
         return;
     }
@@ -1144,7 +1136,6 @@ void ApplicationCacheGroup::postListenerTask(ApplicationCacheHost::EventID event
 void ApplicationCacheGroup::setUpdateStatus(UpdateStatus status)
 {
     m_updateStatus = status;
-    InspectorInstrumentation::updateApplicationCacheStatus(m_frame);
 }
 
 void ApplicationCacheGroup::clearStorageID()

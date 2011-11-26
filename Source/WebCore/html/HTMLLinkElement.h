@@ -25,7 +25,7 @@
 #define HTMLLinkElement_h
 
 #include "CSSStyleSheet.h"
-#include "CachedResourceClient.h"
+#include "CachedStyleSheetClient.h"
 #include "CachedResourceHandle.h"
 #include "DOMSettableTokenList.h"
 #include "HTMLElement.h"
@@ -37,11 +37,9 @@
 
 namespace WebCore {
 
-class CachedCSSStyleSheet;
-class CachedResource;
 class KURL;
 
-class HTMLLinkElement : public HTMLElement, public CachedResourceClient, public LinkLoaderClient {
+class HTMLLinkElement : public HTMLElement, public CachedStyleSheetClient, public LinkLoaderClient {
 public:
     static PassRefPtr<HTMLLinkElement> create(const QualifiedName&, Document*, bool createdByParser);
     virtual ~HTMLLinkElement();
@@ -53,7 +51,7 @@ public:
 
     String type() const;
 
-    StyleSheet* sheet() const;
+    CSSStyleSheet* sheet() const { return m_sheet.get(); }
 
     // FIXME: This should be renamed isStyleSheetLoading as this is only used for stylesheets.
     bool isLoading() const;
@@ -95,6 +93,11 @@ private:
     enum PendingSheetType { None, NonBlocking, Blocking };
     void addPendingSheet(PendingSheetType);
     void removePendingSheet();
+
+#if ENABLE(MICRODATA)
+    virtual String itemValueText() const OVERRIDE;
+    virtual void setItemValueText(const String&, ExceptionCode&) OVERRIDE;
+#endif
 
 private:
     HTMLLinkElement(const QualifiedName&, Document*, bool createdByParser);

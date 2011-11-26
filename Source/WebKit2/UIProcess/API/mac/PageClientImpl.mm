@@ -219,7 +219,7 @@ void PageClientImpl::setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves)
     [NSCursor setHiddenUntilMouseMoves:hiddenUntilMouseMoves];
 }
 
-void PageClientImpl::setViewportArguments(const WebCore::ViewportArguments&)
+void PageClientImpl::didChangeViewportProperties(const WebCore::ViewportArguments&)
 {
 }
 
@@ -313,9 +313,9 @@ PassRefPtr<WebContextMenuProxy> PageClientImpl::createContextMenuProxy(WebPagePr
     return WebContextMenuProxyMac::create(m_wkView, page);
 }
 
-void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator> findIndicator, bool fadeOut)
+void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator> findIndicator, bool fadeOut, bool animate)
 {
-    [m_wkView _setFindIndicator:findIndicator fadeOut:fadeOut];
+    [m_wkView _setFindIndicator:findIndicator fadeOut:fadeOut animate:animate];
 }
 
 void PageClientImpl::accessibilityWebProcessTokenReceived(const CoreIPC::DataReference& data)
@@ -406,8 +406,7 @@ void PageClientImpl::didPerformDictionaryLookup(const String& text, double scale
     [attributedString.get() addAttribute:NSFontAttributeName value:font range:NSMakeRange(0, [attributedString.get() length])];
 
     NSPoint textBaselineOrigin = dictionaryPopupInfo.origin;
-    textBaselineOrigin.y += [font ascender];
-    
+
 #if !defined(BUILDING_ON_SNOW_LEOPARD)
     // Convert to screen coordinates.
     textBaselineOrigin = [m_wkView convertPoint:textBaselineOrigin toView:nil];

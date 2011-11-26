@@ -110,5 +110,14 @@ module html {
     const [EnabledAtRuntime=webkitMediaSource] unsigned short SOURCE_ENDED = 2;
     readonly attribute [EnabledAtRuntime=webkitMediaSource] unsigned short webkitSourceState;
 #endif
+
+#if defined(ENABLE_VIDEO_TRACK) && ENABLE_VIDEO_TRACK
+    [EnabledAtRuntime=webkitVideoTrack] TextTrack addTrack(in DOMString kind, in [Optional] DOMString label, in [Optional] DOMString language)
+        raises (DOMException);
+    readonly attribute [EnabledAtRuntime=webkitVideoTrack] TextTrackList textTracks;
+#endif
+
+    attribute [Reflect, ConvertNullToNullString, ConvertNullStringToNull] DOMString mediaGroup;
+    attribute [CustomSetter] MediaController controller;
 };
 }

@@ -45,6 +45,9 @@ protected:
     
     virtual void paintTrackBackground(GraphicsContext*, Scrollbar*, const IntRect&);
     virtual void paintThumb(GraphicsContext*, Scrollbar*, const IntRect&);
+    
+private:
+    virtual bool isMockTheme() const { return true; }
 };
 
 }

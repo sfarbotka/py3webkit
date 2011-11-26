@@ -33,6 +33,7 @@
 WebInspector.ConsolePanel = function()
 {
     WebInspector.Panel.call(this, "console");
+
     WebInspector.consoleView.addEventListener(WebInspector.ConsoleView.Events.EntryAdded, this._consoleMessageAdded, this);
     WebInspector.consoleView.addEventListener(WebInspector.ConsoleView.Events.ConsoleCleared, this._consoleCleared, this);
     this._view = WebInspector.consoleView;
@@ -49,26 +50,23 @@ WebInspector.ConsolePanel.prototype = {
         return this._view.statusBarItems;
     },
 
-    show: function()
+    wasShown: function()
     {
+        WebInspector.Panel.prototype.wasShown.call(this);
         if (WebInspector.drawer.visible) {
-            WebInspector.drawer.hide(true);
+            WebInspector.drawer.hide(WebInspector.Drawer.AnimationType.Immediately);
             this._drawerWasVisible = true;
         }
-        WebInspector.Panel.prototype.show.call(this);
-
-        this.addChildView(this._view);
-        this._view.show();
+        this._view.show(this.element);
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.Panel.prototype.hide.call(this);
-        this.removeChildView(this._view);
         if (this._drawerWasVisible) {
-            WebInspector.drawer.show(this._view, true);
+            WebInspector.drawer.show(this._view, WebInspector.Drawer.AnimationType.Immediately);
             delete this._drawerWasVisible;
         }
+        WebInspector.Panel.prototype.willHide.call(this);
     },
 
     searchCanceled: function()
@@ -82,7 +80,7 @@ WebInspector.ConsolePanel.prototype = {
     {
         WebInspector.searchController.updateSearchMatchesCount(0, this);
         this.searchCanceled();
-        this._searchRegex = createSearchRegex(query, "g");
+        this._searchRegex = createPlainTextSearchRegex(query, "gi");
 
         this._searchResults = [];
         var messages = WebInspector.consoleView.messages;
@@ -134,7 +132,7 @@ WebInspector.ConsolePanel.prototype = {
 
     _consoleMessageAdded: function(event)
     {
-        if (!this._searchRegex || !this.visible)
+        if (!this._searchRegex || !this.isShowing())
             return;
         var message = event.data;
         this._searchRegex.lastIndex = 0;
@@ -150,7 +148,7 @@ WebInspector.ConsolePanel.prototype = {
             return;
         this._clearCurrentSearchResultHighlight();
         this._searchResults.length = 0;
-        if (this.visible)
+        if (this.isShowing())
             WebInspector.searchController.updateSearchMatchesCount(0, this);
     }
 }

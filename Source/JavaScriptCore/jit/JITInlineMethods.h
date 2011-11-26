@@ -85,11 +85,20 @@ ALWAYS_INLINE void JIT::emitGetFromCallFrameHeaderPtr(RegisterFile::CallFrameHea
 ALWAYS_INLINE void JIT::emitLoadCharacterString(RegisterID src, RegisterID dst, JumpList& failures)
 {
     failures.append(branchPtr(NotEqual, Address(src), TrustedImmPtr(m_globalData->jsStringVPtr)));
-    failures.append(branchTest32(NonZero, Address(src, OBJECT_OFFSETOF(JSString, m_fiberCount))));
     failures.append(branch32(NotEqual, MacroAssembler::Address(src, ThunkHelpers::jsStringLengthOffset()), TrustedImm32(1)));
     loadPtr(MacroAssembler::Address(src, ThunkHelpers::jsStringValueOffset()), dst);
+    failures.append(branchTest32(Zero, dst));
+    loadPtr(MacroAssembler::Address(dst, ThunkHelpers::stringImplFlagsOffset()), regT1);
     loadPtr(MacroAssembler::Address(dst, ThunkHelpers::stringImplDataOffset()), dst);
+
+    JumpList is16Bit;
+    JumpList cont8Bit;
+    is16Bit.append(branchTest32(Zero, regT1, TrustedImm32(ThunkHelpers::stringImpl8BitFlag())));
+    load8(MacroAssembler::Address(dst, 0), dst);
+    cont8Bit.append(jump());
+    is16Bit.link(this);
     load16(MacroAssembler::Address(dst, 0), dst);
+    cont8Bit.link(this);
 }
 
 ALWAYS_INLINE void JIT::emitGetFromCallFrameHeader32(RegisterFile::CallFrameHeaderEntry entry, RegisterID to, RegisterID from)
@@ -349,17 +358,9 @@ ALWAYS_INLINE void JIT::clearSamplingFlag(int32_t flag)
 #endif
 
 #if ENABLE(SAMPLING_COUNTERS)
-ALWAYS_INLINE void JIT::emitCount(AbstractSamplingCounter& counter, uint32_t count)
+ALWAYS_INLINE void JIT::emitCount(AbstractSamplingCounter& counter, int32_t count)
 {
-#if CPU(X86_64) // Or any other 64-bit plattform.
-    addPtr(TrustedImm32(count), AbsoluteAddress(counter.addressOfCounter()));
-#elif CPU(X86) // Or any other little-endian 32-bit plattform.
-    intptr_t hiWord = reinterpret_cast<intptr_t>(counter.addressOfCounter()) + sizeof(int32_t);
-    add32(TrustedImm32(count), AbsoluteAddress(counter.addressOfCounter()));
-    addWithCarry32(TrustedImm32(0), AbsoluteAddress(reinterpret_cast<void*>(hiWord)));
-#else
-#error "SAMPLING_FLAGS not implemented on this platform."
-#endif
+    add64(TrustedImm32(count), AbsoluteAddress(counter.addressOfCounter()));
 }
 #endif
 
@@ -453,6 +454,9 @@ inline void JIT::emitValueProfilingSite(ValueProfilingSiteKind siteKind)
         return;
     
     const RegisterID value = regT0;
+#if USE(JSVALUE32_64)
+    const RegisterID valueTag = regT1;
+#endif
     const RegisterID scratch = regT3;
     
     ValueProfile* valueProfile;
@@ -465,19 +469,37 @@ inline void JIT::emitValueProfilingSite(ValueProfilingSiteKind siteKind)
     
     ASSERT(valueProfile);
     
+    if (ValueProfile::numberOfBuckets == 1) {
+        // We're in a simple configuration: only one bucket, so we can just do a direct
+        // store.
+#if USE(JSVALUE64)
+        storePtr(value, valueProfile->m_buckets);
+#else
+        EncodedValueDescriptor* descriptor = bitwise_cast<EncodedValueDescriptor*>(valueProfile->m_buckets);
+        store32(value, &descriptor->asBits.payload);
+        store32(valueTag, &descriptor->asBits.tag);
+#endif
+        return;
+    }
+    
     if (m_randomGenerator.getUint32() & 1)
         add32(Imm32(1), bucketCounterRegister);
     else
         add32(Imm32(3), bucketCounterRegister);
     and32(Imm32(ValueProfile::bucketIndexMask), bucketCounterRegister);
     move(ImmPtr(valueProfile->m_buckets), scratch);
+#if USE(JSVALUE64)
     storePtr(value, BaseIndex(scratch, bucketCounterRegister, TimesEight));
+#elif USE(JSVALUE32_64)
+    store32(value, BaseIndex(scratch, bucketCounterRegister, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.payload)));
+    store32(valueTag, BaseIndex(scratch, bucketCounterRegister, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.tag)));
+#endif
 }
 #endif
 
 #if USE(JSVALUE32_64)
 
-inline void JIT::emitLoadTag(unsigned index, RegisterID tag)
+inline void JIT::emitLoadTag(int index, RegisterID tag)
 {
     RegisterID mappedTag;
     if (getMappedTag(index, mappedTag)) {
@@ -496,7 +518,7 @@ inline void JIT::emitLoadTag(unsigned index, RegisterID tag)
     unmap(tag);
 }
 
-inline void JIT::emitLoadPayload(unsigned index, RegisterID payload)
+inline void JIT::emitLoadPayload(int index, RegisterID payload)
 {
     RegisterID mappedPayload;
     if (getMappedPayload(index, mappedPayload)) {
@@ -521,7 +543,7 @@ inline void JIT::emitLoad(const JSValue& v, RegisterID tag, RegisterID payload)
     move(Imm32(v.tag()), tag);
 }
 
-inline void JIT::emitLoad(unsigned index, RegisterID tag, RegisterID payload, RegisterID base)
+inline void JIT::emitLoad(int index, RegisterID tag, RegisterID payload, RegisterID base)
 {
     ASSERT(tag != payload);
 
@@ -542,7 +564,7 @@ inline void JIT::emitLoad(unsigned index, RegisterID tag, RegisterID payload, Re
     load32(tagFor(index, base), tag);
 }
 
-inline void JIT::emitLoad2(unsigned index1, RegisterID tag1, RegisterID payload1, unsigned index2, RegisterID tag2, RegisterID payload2)
+inline void JIT::emitLoad2(int index1, RegisterID tag1, RegisterID payload1, int index2, RegisterID tag2, RegisterID payload2)
 {
     if (isMapped(index1)) {
         emitLoad(index1, tag1, payload1);
@@ -553,7 +575,7 @@ inline void JIT::emitLoad2(unsigned index1, RegisterID tag1, RegisterID payload1
     emitLoad(index1, tag1, payload1);
 }
 
-inline void JIT::emitLoadDouble(unsigned index, FPRegisterID value)
+inline void JIT::emitLoadDouble(int index, FPRegisterID value)
 {
     if (m_codeBlock->isConstantRegisterIndex(index)) {
         WriteBarrier<Unknown>& inConstantPool = m_codeBlock->constantRegister(index);
@@ -562,7 +584,7 @@ inline void JIT::emitLoadDouble(unsigned index, FPRegisterID value)
         loadDouble(addressFor(index), value);
 }
 
-inline void JIT::emitLoadInt32ToDouble(unsigned index, FPRegisterID value)
+inline void JIT::emitLoadInt32ToDouble(int index, FPRegisterID value)
 {
     if (m_codeBlock->isConstantRegisterIndex(index)) {
         WriteBarrier<Unknown>& inConstantPool = m_codeBlock->constantRegister(index);
@@ -572,52 +594,52 @@ inline void JIT::emitLoadInt32ToDouble(unsigned index, FPRegisterID value)
         convertInt32ToDouble(payloadFor(index), value);
 }
 
-inline void JIT::emitStore(unsigned index, RegisterID tag, RegisterID payload, RegisterID base)
+inline void JIT::emitStore(int index, RegisterID tag, RegisterID payload, RegisterID base)
 {
     store32(payload, payloadFor(index, base));
     store32(tag, tagFor(index, base));
 }
 
-inline void JIT::emitStoreInt32(unsigned index, RegisterID payload, bool indexIsInt32)
+inline void JIT::emitStoreInt32(int index, RegisterID payload, bool indexIsInt32)
 {
     store32(payload, payloadFor(index, callFrameRegister));
     if (!indexIsInt32)
         store32(TrustedImm32(JSValue::Int32Tag), tagFor(index, callFrameRegister));
 }
 
-inline void JIT::emitStoreAndMapInt32(unsigned index, RegisterID tag, RegisterID payload, bool indexIsInt32, size_t opcodeLength)
+inline void JIT::emitStoreAndMapInt32(int index, RegisterID tag, RegisterID payload, bool indexIsInt32, size_t opcodeLength)
 {
     emitStoreInt32(index, payload, indexIsInt32);
     map(m_bytecodeOffset + opcodeLength, index, tag, payload);
 }
 
-inline void JIT::emitStoreInt32(unsigned index, TrustedImm32 payload, bool indexIsInt32)
+inline void JIT::emitStoreInt32(int index, TrustedImm32 payload, bool indexIsInt32)
 {
     store32(payload, payloadFor(index, callFrameRegister));
     if (!indexIsInt32)
         store32(TrustedImm32(JSValue::Int32Tag), tagFor(index, callFrameRegister));
 }
 
-inline void JIT::emitStoreCell(unsigned index, RegisterID payload, bool indexIsCell)
+inline void JIT::emitStoreCell(int index, RegisterID payload, bool indexIsCell)
 {
     store32(payload, payloadFor(index, callFrameRegister));
     if (!indexIsCell)
         store32(TrustedImm32(JSValue::CellTag), tagFor(index, callFrameRegister));
 }
 
-inline void JIT::emitStoreBool(unsigned index, RegisterID payload, bool indexIsBool)
+inline void JIT::emitStoreBool(int index, RegisterID payload, bool indexIsBool)
 {
     store32(payload, payloadFor(index, callFrameRegister));
     if (!indexIsBool)
         store32(TrustedImm32(JSValue::BooleanTag), tagFor(index, callFrameRegister));
 }
 
-inline void JIT::emitStoreDouble(unsigned index, FPRegisterID value)
+inline void JIT::emitStoreDouble(int index, FPRegisterID value)
 {
     storeDouble(value, addressFor(index));
 }
 
-inline void JIT::emitStore(unsigned index, const JSValue constant, RegisterID base)
+inline void JIT::emitStore(int index, const JSValue constant, RegisterID base)
 {
     store32(Imm32(constant.payload()), payloadFor(index, base));
     store32(Imm32(constant.tag()), tagFor(index, base));
@@ -640,7 +662,7 @@ inline bool JIT::isLabeled(unsigned bytecodeOffset)
     return false;
 }
 
-inline void JIT::map(unsigned bytecodeOffset, unsigned virtualRegisterIndex, RegisterID tag, RegisterID payload)
+inline void JIT::map(unsigned bytecodeOffset, int virtualRegisterIndex, RegisterID tag, RegisterID payload)
 {
     if (isLabeled(bytecodeOffset))
         return;
@@ -662,12 +684,12 @@ inline void JIT::unmap(RegisterID registerID)
 inline void JIT::unmap()
 {
     m_mappedBytecodeOffset = (unsigned)-1;
-    m_mappedVirtualRegisterIndex = (unsigned)-1;
+    m_mappedVirtualRegisterIndex = RegisterFile::ReturnPC;
     m_mappedTag = (RegisterID)-1;
     m_mappedPayload = (RegisterID)-1;
 }
 
-inline bool JIT::isMapped(unsigned virtualRegisterIndex)
+inline bool JIT::isMapped(int virtualRegisterIndex)
 {
     if (m_mappedBytecodeOffset != m_bytecodeOffset)
         return false;
@@ -676,7 +698,7 @@ inline bool JIT::isMapped(unsigned virtualRegisterIndex)
     return true;
 }
 
-inline bool JIT::getMappedPayload(unsigned virtualRegisterIndex, RegisterID& payload)
+inline bool JIT::getMappedPayload(int virtualRegisterIndex, RegisterID& payload)
 {
     if (m_mappedBytecodeOffset != m_bytecodeOffset)
         return false;
@@ -688,7 +710,7 @@ inline bool JIT::getMappedPayload(unsigned virtualRegisterIndex, RegisterID& pay
     return true;
 }
 
-inline bool JIT::getMappedTag(unsigned virtualRegisterIndex, RegisterID& tag)
+inline bool JIT::getMappedTag(int virtualRegisterIndex, RegisterID& tag)
 {
     if (m_mappedBytecodeOffset != m_bytecodeOffset)
         return false;
@@ -700,7 +722,7 @@ inline bool JIT::getMappedTag(unsigned virtualRegisterIndex, RegisterID& tag)
     return true;
 }
 
-inline void JIT::emitJumpSlowCaseIfNotJSCell(unsigned virtualRegisterIndex)
+inline void JIT::emitJumpSlowCaseIfNotJSCell(int virtualRegisterIndex)
 {
     if (!m_codeBlock->isKnownNotImmediate(virtualRegisterIndex)) {
         if (m_codeBlock->isConstantRegisterIndex(virtualRegisterIndex))
@@ -710,7 +732,7 @@ inline void JIT::emitJumpSlowCaseIfNotJSCell(unsigned virtualRegisterIndex)
     }
 }
 
-inline void JIT::emitJumpSlowCaseIfNotJSCell(unsigned virtualRegisterIndex, RegisterID tag)
+inline void JIT::emitJumpSlowCaseIfNotJSCell(int virtualRegisterIndex, RegisterID tag)
 {
     if (!m_codeBlock->isKnownNotImmediate(virtualRegisterIndex)) {
         if (m_codeBlock->isConstantRegisterIndex(virtualRegisterIndex))
@@ -718,12 +740,6 @@ inline void JIT::emitJumpSlowCaseIfNotJSCell(unsigned virtualRegisterIndex, Regi
         else
             addSlowCase(branch32(NotEqual, tag, TrustedImm32(JSValue::CellTag)));
     }
-}
-
-inline void JIT::linkSlowCaseIfNotJSCell(Vector<SlowCaseEntry>::iterator& iter, unsigned virtualRegisterIndex)
-{
-    if (!m_codeBlock->isKnownNotImmediate(virtualRegisterIndex))
-        linkSlowCase(iter);
 }
 
 ALWAYS_INLINE bool JIT::isOperandConstantImmediateInt(unsigned src)
@@ -855,7 +871,7 @@ ALWAYS_INLINE void JIT::emitJumpSlowCaseIfNotJSCell(RegisterID reg, int vReg)
 
 #if USE(JSVALUE64)
 
-inline void JIT::emitLoadDouble(unsigned index, FPRegisterID value)
+inline void JIT::emitLoadDouble(int index, FPRegisterID value)
 {
     if (m_codeBlock->isConstantRegisterIndex(index)) {
         WriteBarrier<Unknown>& inConstantPool = m_codeBlock->constantRegister(index);
@@ -864,7 +880,7 @@ inline void JIT::emitLoadDouble(unsigned index, FPRegisterID value)
         loadDouble(addressFor(index), value);
 }
 
-inline void JIT::emitLoadInt32ToDouble(unsigned index, FPRegisterID value)
+inline void JIT::emitLoadInt32ToDouble(int index, FPRegisterID value)
 {
     if (m_codeBlock->isConstantRegisterIndex(index)) {
         ASSERT(isOperandConstantImmediateInt(index));

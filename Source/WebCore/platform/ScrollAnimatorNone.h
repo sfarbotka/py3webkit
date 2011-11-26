@@ -33,7 +33,6 @@
 
 #if ENABLE(SMOOTH_SCROLLING)
 
-#include "LayoutTypes.h"
 #include "ScrollAnimator.h"
 #include "Timer.h"
 
@@ -50,6 +49,11 @@ public:
 
     virtual bool scroll(ScrollbarOrientation, ScrollGranularity, float step, float multiplier);
     virtual void scrollToOffsetWithoutAnimation(const FloatPoint&);
+
+#if ENABLE(GESTURE_EVENTS)
+    virtual void zoom(const PlatformGestureEvent&);
+    virtual void handleGestureEvent(const PlatformGestureEvent&);
+#endif
 
     virtual void willEndLiveResize();
     virtual void didAddVerticalScrollbar(Scrollbar*);
@@ -88,11 +92,11 @@ protected:
     friend class ::ScrollAnimatorNoneTest;
 
     struct PerAxisData {
-        PerAxisData(ScrollAnimatorNone* parent, float* currentPos, LayoutUnit visibleLength);
+        PerAxisData(ScrollAnimatorNone* parent, float* currentPos, int visibleLength);
         void reset();
         bool updateDataFromParameters(float step, float multiplier, float scrollableSize, double currentTime, Parameters*);
         bool animateScroll(double currentTime);
-        void updateVisibleLength(LayoutUnit visibleLength);
+        void updateVisibleLength(int visibleLength);
 
         static double curveAt(Curve, double t);
         static double attackCurve(Curve, double deltaT, double curveT, double startPos, double attackPos);
@@ -124,8 +128,30 @@ protected:
         double m_releaseTime;
         Curve m_releaseCurve;
 
-        LayoutUnit m_visibleLength;
+        int m_visibleLength;
     };
+
+    // While zooming, scale, posX and posY need to stay tightly coupled, so use a separate
+    // data structure.
+    struct ZoomData {
+        ZoomData(ScrollAnimatorNone* parent);
+        bool animateZoom(double currentTime);
+
+        ScrollAnimatorNone* m_parent;
+        bool m_isAnimating;
+
+        double m_startTime;
+
+        double m_animationTime;
+        double m_lastAnimationTime;
+
+        double m_startScale;
+        double m_desiredScale;
+        double m_desiredTransX;
+        double m_desiredTransY;
+    };
+
+    friend struct ZoomData;
 
     void animationTimerFired(Timer<ScrollAnimatorNone>*);
     void stopAnimationTimerIfNeeded();
@@ -133,6 +159,7 @@ protected:
 
     PerAxisData m_horizontalData;
     PerAxisData m_verticalData;
+    ZoomData m_zoomData;
 
     double m_startTime;
     Timer<ScrollAnimatorNone> m_animationTimer;

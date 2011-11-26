@@ -26,6 +26,8 @@
 #ifndef StylePendingImage_h
 #define StylePendingImage_h
 
+#include "CSSImageGeneratorValue.h"
+#include "CSSImageValue.h"
 #include "Image.h"
 #include "StyleImage.h"
 
@@ -37,18 +39,20 @@ namespace WebCore {
 
 class StylePendingImage : public StyleImage {
 public:
-    static PassRefPtr<StylePendingImage> create(CSSImageValue* value) { return adoptRef(new StylePendingImage(value)); }
+    static PassRefPtr<StylePendingImage> create(CSSValue* value) { return adoptRef(new StylePendingImage(value)); }
 
-    virtual WrappedImagePtr data() const { return m_value; }
+    virtual WrappedImagePtr data() const { return static_cast<CSSImageValue*>(m_value); }
 
     virtual PassRefPtr<CSSValue> cssValue() const { return m_value; }
-    CSSImageValue* cssImageValue() const { return m_value; }
+    CSSImageValue* cssImageValue() const { return m_value->isImageValue() ? static_cast<CSSImageValue*>(m_value) : 0; }
+    CSSImageGeneratorValue* cssImageGeneratorValue() const { return m_value->isImageGeneratorValue() ? static_cast<CSSImageGeneratorValue*>(m_value) : 0; }
     
     virtual IntSize imageSize(const RenderObject*, float /*multiplier*/) const { return IntSize(); }
     virtual bool imageHasRelativeWidth() const { return false; }
     virtual bool imageHasRelativeHeight() const { return false; }
+    virtual void computeIntrinsicDimensions(const RenderObject*, Length& /* intrinsicWidth */ , Length& /* intrinsicHeight */, FloatSize& /* intrinsicRatio */) { }
     virtual bool usesImageContainerSize() const { return false; }
-    virtual void setImageContainerSize(const IntSize&) { }
+    virtual void setContainerSizeForRenderer(const RenderObject*, const IntSize&, float) { }
     virtual void addClient(RenderObject*) { }
     virtual void removeClient(RenderObject*) { }
     virtual PassRefPtr<Image> image(RenderObject*, const IntSize&) const
@@ -58,13 +62,13 @@ public:
     }
     
 private:
-    StylePendingImage(CSSImageValue* value)
+    StylePendingImage(CSSValue* value)
         : m_value(value)
     {
         m_isPendingImage = true;
     }
 
-    CSSImageValue* m_value; // Not retained; it owns us.
+    CSSValue* m_value; // Not retained; it owns us.
 };
 
 }

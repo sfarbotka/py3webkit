@@ -85,8 +85,10 @@ namespace WebCore {
         static PassRefPtr<DOMWindow> create(Frame* frame) { return adoptRef(new DOMWindow(frame)); }
         virtual ~DOMWindow();
 
-        virtual DOMWindow* toDOMWindow() { return this; }
+        virtual const AtomicString& interfaceName() const;
         virtual ScriptExecutionContext* scriptExecutionContext() const;
+
+        virtual DOMWindow* toDOMWindow();
 
         Frame* frame() const { return m_frame; }
         void disconnectFrame();
@@ -358,11 +360,9 @@ namespace WebCore {
         DEFINE_ATTRIBUTE_EVENT_LISTENER(deviceorientation);
 #endif
 
-#if ENABLE(DOM_STORAGE)
         // HTML 5 key/value storage
         Storage* sessionStorage(ExceptionCode&) const;
         Storage* localStorage(ExceptionCode&) const;
-#endif
 
 #if ENABLE(FILE_SYSTEM)
         // They are placed here and in all capital letters so they can be checked against the constants in the
@@ -382,6 +382,9 @@ namespace WebCore {
 
 #if ENABLE(NOTIFICATIONS)
         NotificationCenter* webkitNotifications() const;
+        // Renders webkitNotifications object safely inoperable, disconnects
+        // if from embedder-provided NotificationPresenter.
+        void resetNotifications();
 #endif
 
 #if ENABLE(QUOTA)
@@ -413,6 +416,12 @@ namespace WebCore {
 
     private:
         DOMWindow(Frame*);
+
+        // FIXME: When this DOMWindow is no longer the active DOMWindow (i.e.,
+        // when its document is no longer the document that is displayed in its
+        // frame), we would like to zero out m_frame to avoid being confused
+        // by the document that is currently active in m_frame.
+        bool isCurrentlyDisplayedInFrame() const;
 
         virtual void refEventTarget() { ref(); }
         virtual void derefEventTarget() { deref(); }
@@ -449,10 +458,8 @@ namespace WebCore {
         String m_status;
         String m_defaultStatus;
 
-#if ENABLE(DOM_STORAGE)
         mutable RefPtr<Storage> m_sessionStorage;
         mutable RefPtr<Storage> m_localStorage;
-#endif
 
 #if ENABLE(INDEXED_DATABASE)
         mutable RefPtr<IDBFactory> m_idbFactory;

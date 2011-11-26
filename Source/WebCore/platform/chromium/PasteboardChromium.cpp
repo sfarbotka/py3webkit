@@ -130,7 +130,7 @@ void Pasteboard::writeImage(Node* node, const KURL&, const String& title)
     CachedImage* cachedImage = renderer->cachedImage();
     if (!cachedImage || cachedImage->errorOccurred())
         return;
-    Image* image = cachedImage->image();
+    Image* image = cachedImage->imageForRenderer(renderer);
     ASSERT(image);
 
     NativeImagePtr bitmap = image->nativeImageForCurrentFrame();
@@ -155,6 +155,11 @@ void Pasteboard::writeImage(Node* node, const KURL&, const String& title)
     PlatformSupport::clipboardWriteImage(bitmap, url, title);
 }
 
+void Pasteboard::writeClipboard(Clipboard* clipboard)
+{
+    PlatformSupport::clipboardWriteDataObject(clipboard);
+}
+
 bool Pasteboard::canSmartReplace()
 {
     return PlatformSupport::clipboardIsFormatAvailable(PasteboardPrivate::WebSmartPasteFormat, m_selectionMode ? PasteboardPrivate::SelectionBuffer : PasteboardPrivate::StandardBuffer);
@@ -173,10 +178,12 @@ PassRefPtr<DocumentFragment> Pasteboard::documentFragment(Frame* frame, PassRefP
     if (PlatformSupport::clipboardIsFormatAvailable(PasteboardPrivate::HTMLFormat, buffer)) {
         String markup;
         KURL srcURL;
-        PlatformSupport::clipboardReadHTML(buffer, &markup, &srcURL);
+        unsigned fragmentStart = 0;
+        unsigned fragmentEnd = 0;
+        PlatformSupport::clipboardReadHTML(buffer, &markup, &srcURL, &fragmentStart, &fragmentEnd);
 
         RefPtr<DocumentFragment> fragment =
-            createFragmentFromMarkup(frame->document(), markup, srcURL, FragmentScriptingNotAllowed);
+            createFragmentFromMarkupWithContext(frame->document(), markup, fragmentStart, fragmentEnd, srcURL, FragmentScriptingNotAllowed);
         if (fragment)
             return fragment.release();
     }

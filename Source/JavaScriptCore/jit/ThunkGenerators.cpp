@@ -38,12 +38,11 @@ static void stringCharLoad(SpecializedThunkJIT& jit)
 {
     // load string
     jit.loadJSStringArgument(SpecializedThunkJIT::ThisArgument, SpecializedThunkJIT::regT0);
-    // regT0 now contains this, and is a non-rope JSString*
 
     // Load string length to regT2, and start the process of loading the data pointer into regT0
     jit.load32(MacroAssembler::Address(SpecializedThunkJIT::regT0, ThunkHelpers::jsStringLengthOffset()), SpecializedThunkJIT::regT2);
     jit.loadPtr(MacroAssembler::Address(SpecializedThunkJIT::regT0, ThunkHelpers::jsStringValueOffset()), SpecializedThunkJIT::regT0);
-    jit.loadPtr(MacroAssembler::Address(SpecializedThunkJIT::regT0, ThunkHelpers::stringImplDataOffset()), SpecializedThunkJIT::regT0);
+    jit.appendFailure(jit.branchTest32(MacroAssembler::Zero, SpecializedThunkJIT::regT0));
 
     // load index
     jit.loadInt32Argument(0, SpecializedThunkJIT::regT1); // regT1 contains the index
@@ -52,7 +51,17 @@ static void stringCharLoad(SpecializedThunkJIT& jit)
     jit.appendFailure(jit.branch32(MacroAssembler::AboveOrEqual, SpecializedThunkJIT::regT1, SpecializedThunkJIT::regT2));
 
     // Load the character
+    SpecializedThunkJIT::JumpList is16Bit;
+    SpecializedThunkJIT::JumpList cont8Bit;
+    // Load the string flags
+    jit.loadPtr(MacroAssembler::Address(SpecializedThunkJIT::regT0, ThunkHelpers::stringImplFlagsOffset()), SpecializedThunkJIT::regT2);
+    jit.loadPtr(MacroAssembler::Address(SpecializedThunkJIT::regT0, ThunkHelpers::stringImplDataOffset()), SpecializedThunkJIT::regT0);
+    is16Bit.append(jit.branchTest32(MacroAssembler::Zero, SpecializedThunkJIT::regT2, MacroAssembler::TrustedImm32(ThunkHelpers::stringImpl8BitFlag())));
+    jit.load8(MacroAssembler::BaseIndex(SpecializedThunkJIT::regT0, SpecializedThunkJIT::regT1, MacroAssembler::TimesOne, 0), SpecializedThunkJIT::regT0);
+    cont8Bit.append(jit.jump());
+    is16Bit.link(&jit);
     jit.load16(MacroAssembler::BaseIndex(SpecializedThunkJIT::regT0, SpecializedThunkJIT::regT1, MacroAssembler::TimesTwo, 0), SpecializedThunkJIT::regT0);
+    cont8Bit.link(&jit);
 }
 
 static void charToString(SpecializedThunkJIT& jit, JSGlobalData* globalData, MacroAssembler::RegisterID src, MacroAssembler::RegisterID dst, MacroAssembler::RegisterID scratch)
@@ -216,7 +225,6 @@ MacroAssemblerCodeRef ceilThunkGenerator(JSGlobalData* globalData)
     return jit.finalize(*globalData, globalData->jitStubs->ctiNativeCall());
 }
 
-static const double negativeZeroConstant = -0.0;
 static const double oneConstant = 1.0;
 static const double negativeHalfConstant = -0.5;
     
@@ -268,7 +276,7 @@ MacroAssemblerCodeRef logThunkGenerator(JSGlobalData* globalData)
 MacroAssemblerCodeRef absThunkGenerator(JSGlobalData* globalData)
 {
     SpecializedThunkJIT jit(1, globalData);
-    if (!jit.supportsDoubleBitops())
+    if (!jit.supportsFloatingPointAbs())
         return MacroAssemblerCodeRef::createSelfManagedCodeRef(globalData->jitStubs->ctiNativeCall());
     MacroAssembler::Jump nonIntJump;
     jit.loadInt32Argument(0, SpecializedThunkJIT::regT0, nonIntJump);
@@ -279,9 +287,8 @@ MacroAssemblerCodeRef absThunkGenerator(JSGlobalData* globalData)
     jit.returnInt32(SpecializedThunkJIT::regT0);
     nonIntJump.link(&jit);
     // Shame about the double int conversion here.
-    jit.loadDouble(&negativeZeroConstant, SpecializedThunkJIT::fpRegT1);
     jit.loadDoubleArgument(0, SpecializedThunkJIT::fpRegT0, SpecializedThunkJIT::regT0);
-    jit.andnotDouble(SpecializedThunkJIT::fpRegT0, SpecializedThunkJIT::fpRegT1);
+    jit.absDouble(SpecializedThunkJIT::fpRegT0, SpecializedThunkJIT::fpRegT1);
     jit.returnDouble(SpecializedThunkJIT::fpRegT1);
     return jit.finalize(*globalData, globalData->jitStubs->ctiNativeCall());
 }

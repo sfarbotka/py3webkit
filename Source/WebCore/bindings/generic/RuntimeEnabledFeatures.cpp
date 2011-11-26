@@ -60,6 +60,10 @@ bool RuntimeEnabledFeatures::isSpeechInputEnabled = true;
 bool RuntimeEnabledFeatures::isMediaStreamEnabled = true;
 #endif
 
+#if ENABLE(GAMEPAD)
+bool RuntimeEnabledFeatures::isGamepadEnabled = false;
+#endif
+
 #if ENABLE(XHR_RESPONSE_BLOB)
 bool RuntimeEnabledFeatures::isXHRResponseBlobEnabled = false;
 #endif
@@ -109,6 +113,11 @@ bool RuntimeEnabledFeatures::htmlSourceElementEnabled()
     return MediaPlayer::isAvailable();
 }
 
+bool RuntimeEnabledFeatures::mediaControllerEnabled()
+{
+    return MediaPlayer::isAvailable();
+}
+
 bool RuntimeEnabledFeatures::mediaErrorEnabled()
 {
     return MediaPlayer::isAvailable();
@@ -153,6 +162,10 @@ bool RuntimeEnabledFeatures::isQuotaEnabled = false;
 
 #if ENABLE(FULLSCREEN_API)
 bool RuntimeEnabledFeatures::isFullScreenAPIEnabled = true;
+#endif
+
+#if ENABLE(POINTER_LOCK)
+bool RuntimeEnabledFeatures::isPointerLockEnabled = false;
 #endif
 
 #if ENABLE(MEDIA_SOURCE)

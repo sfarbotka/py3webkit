@@ -78,11 +78,6 @@ EncodedJSValue JSCallbackFunction::call(ExecState* exec)
     return JSValue::encode(toJS(exec, result));
 }
 
-CallType JSCallbackFunction::getCallDataVirtual(CallData& callData)
-{
-    return getCallData(this, callData);
-}
-
 CallType JSCallbackFunction::getCallData(JSCell*, CallData& callData)
 {
     callData.native.function = call;
@@ -93,9 +88,9 @@ JSValueRef JSCallbackFunction::toStringCallback(JSContextRef ctx, JSObjectRef, J
 {
     JSObject* object = toJS(thisObject);
     if (object->inherits(&JSCallbackObject<JSNonFinalObject>::s_info))
-        return static_cast<JSCallbackObject<JSNonFinalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeString, exception);
+        return jsCast<JSCallbackObject<JSNonFinalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeString, exception);
     if (object->inherits(&JSCallbackObject<JSGlobalObject>::s_info))
-        return static_cast<JSCallbackObject<JSGlobalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeString, exception);
+        return jsCast<JSCallbackObject<JSGlobalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeString, exception);
     return 0;
 }
 
@@ -103,9 +98,9 @@ JSValueRef JSCallbackFunction::valueOfCallback(JSContextRef ctx, JSObjectRef, JS
 {
     JSObject* object = toJS(thisObject);
     if (object->inherits(&JSCallbackObject<JSNonFinalObject>::s_info))
-        return static_cast<JSCallbackObject<JSNonFinalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeNumber, exception);
+        return jsCast<JSCallbackObject<JSNonFinalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeNumber, exception);
     if (object->inherits(&JSCallbackObject<JSGlobalObject>::s_info))
-        return static_cast<JSCallbackObject<JSGlobalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeNumber, exception);
+        return jsCast<JSCallbackObject<JSGlobalObject>*>(object)->classRef()->convertToType(ctx, thisObject, kJSTypeNumber, exception);
     return 0;
 }
 

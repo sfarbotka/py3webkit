@@ -33,28 +33,90 @@ namespace WebCore {
 
 TextTrackCueList::TextTrackCueList()
 {
-    // FIXME(62883): Implement.
 }
 
-TextTrackCue* TextTrackCueList::getCueById(const String&) const
+unsigned long TextTrackCueList::length() const
 {
-    // FIXME(62883): Implement.
+    return m_list.size();
+}
+
+TextTrackCue* TextTrackCueList::item(unsigned index) const
+{
+    if (index < m_list.size())
+        return m_list[index].get();
     return 0;
 }
 
-void TextTrackCueList::append(Vector<PassRefPtr<TextTrackCue> >&)
+TextTrackCue* TextTrackCueList::getCueById(const String& id) const
 {
-    // FIXME(62883): Implement.
+    for (size_t i = 0; i < m_list.size(); ++i) {
+        if (m_list[i]->id() == id)
+            return m_list[i].get();
+    }
+    return 0;
 }
 
-void TextTrackCueList::append(const PassRefPtr<TextTrackCue>&)
+TextTrackCueList* TextTrackCueList::activeCues()
 {
-    // FIXME(62883): Implement.
+    if (!m_activeCues)
+        m_activeCues = create();
+
+    m_activeCues->clear();
+    for (size_t i = 0; i < m_list.size(); ++i) {
+        RefPtr<TextTrackCue> cue = m_list[i];
+        if (cue->isActive())
+            m_activeCues->add(cue);
+    }
+    return m_activeCues.get();
 }
 
-void TextTrackCueList::remove(const PassRefPtr<TextTrackCue>&)
+bool TextTrackCueList::add(PassRefPtr<TextTrackCue> cue)
 {
-    // FIXME(62883): Implement.
+    return add(cue, 0, m_list.size());
+}
+
+bool TextTrackCueList::add(PassRefPtr<TextTrackCue> prpCue, size_t start, size_t end)
+{
+    ASSERT(start <= m_list.size());
+    ASSERT(end <= m_list.size());
+
+    // Maintain text track cue order:
+    // http://www.whatwg.org/specs/web-apps/current-work/#text-track-cue-order
+    RefPtr<TextTrackCue> cue = prpCue;
+    if (start == end) {
+        if (!m_list.isEmpty() && (m_list[start - 1].get() == cue.get()))
+            return false;
+
+       m_list.insert(start, cue);
+       return true;
+    }
+
+    size_t index = (start + end) / 2;
+    if (cue->startTime() < m_list[index]->startTime() || (cue->startTime() == m_list[index]->startTime() && cue->endTime() > m_list[index]->endTime()))
+        return add(cue.release(), start, index);
+
+    return add(cue.release(), index + 1, end);
+}
+
+bool TextTrackCueList::remove(TextTrackCue* cue)
+{
+    size_t index = m_list.find(cue);
+    if (index == notFound)
+        return false;
+
+    cue->setIsActive(false);
+    m_list.remove(index);
+    return true;
+}
+
+bool TextTrackCueList::contains(TextTrackCue* cue) const
+{
+    return m_list.contains(cue);
+}
+
+void TextTrackCueList::clear()
+{
+    m_list.clear();
 }
 
 } // namespace WebCore

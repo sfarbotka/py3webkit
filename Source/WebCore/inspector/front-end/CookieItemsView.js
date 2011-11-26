@@ -39,10 +39,10 @@ WebInspector.CookieItemsView = function(treeElement, cookieDomain)
 
     this._deleteButton = new WebInspector.StatusBarButton(WebInspector.UIString("Delete"), "delete-storage-status-bar-item");
     this._deleteButton.visible = false;
-    this._deleteButton.addEventListener("click", this._deleteButtonClicked.bind(this), false);
+    this._deleteButton.addEventListener("click", this._deleteButtonClicked, this);
 
     this._refreshButton = new WebInspector.StatusBarButton(WebInspector.UIString("Refresh"), "refresh-storage-status-bar-item");
-    this._refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this), false);
+    this._refreshButton.addEventListener("click", this._refreshButtonClicked, this);
 
     this._treeElement = treeElement;
     this._cookieDomain = cookieDomain;
@@ -59,22 +59,14 @@ WebInspector.CookieItemsView.prototype = {
         return [this._refreshButton.element, this._deleteButton.element];
     },
 
-    show: function(parentElement)
+    wasShown: function()
     {
-        WebInspector.View.prototype.show.call(this, parentElement);
         this._update();
     },
 
-    hide: function()
+    willHide: function()
     {
-        WebInspector.View.prototype.hide.call(this);
         this._deleteButton.visible = false;
-    },
-
-    onResize: function()
-    {
-        if (this._cookiesTable)
-            this._cookiesTable.updateWidths();
     },
 
     _update: function()
@@ -91,24 +83,21 @@ WebInspector.CookieItemsView.prototype = {
             this._emptyView.show(this.element);
             this._deleteButton.visible = false;
             if (this._cookiesTable)
-                this._cookiesTable.element.addStyleClass("hidden");
+                this._cookiesTable.detach();
             return;
         }
 
-        if (!this._cookiesTable) {
+        if (!this._cookiesTable)
             this._cookiesTable = isAdvanced ? new WebInspector.CookiesTable(this._cookieDomain, false, this._deleteCookie.bind(this), this._update.bind(this)) : new WebInspector.SimpleCookiesTable();
-            this.element.appendChild(this._cookiesTable.element);
-        }
 
         this._cookiesTable.setCookies(this._cookies);
-        this._cookiesTable.element.removeStyleClass("hidden");
-        this._emptyView.hide();
+        this._emptyView.detach();
+        this._cookiesTable.show(this.element);
         if (isAdvanced) {
             this._treeElement.subtitle = String.sprintf(WebInspector.UIString("%d cookies (%s)"), this._cookies.length,
                 Number.bytesToString(this._totalSize));
             this._deleteButton.visible = true;
         }
-        this._cookiesTable.updateWidths();
     },
 
     _filterCookiesForDomain: function(allCookies)
@@ -173,10 +162,12 @@ WebInspector.CookieItemsView.prototype.__proto__ = WebInspector.View.prototype;
 
 /**
  * @constructor
+ * @extends {WebInspector.View}
  */
 WebInspector.SimpleCookiesTable = function()
 {
-    this.element = document.createElement("div");
+    WebInspector.View.call(this);
+
     var columns = {};
     columns[0] = {};
     columns[1] = {};
@@ -185,8 +176,7 @@ WebInspector.SimpleCookiesTable = function()
 
     this._dataGrid = new WebInspector.DataGrid(columns);
     this._dataGrid.autoSizeColumns(20, 80);
-    this.element.appendChild(this._dataGrid.element);
-    this._dataGrid.updateWidths();
+    this._dataGrid.show(this.element);
 }
 
 WebInspector.SimpleCookiesTable.prototype = {
@@ -207,15 +197,10 @@ WebInspector.SimpleCookiesTable.prototype = {
             this._dataGrid.appendChild(node);
         }
         this._dataGrid.children[0].selected = true;
-    },
-
-    onResize: function()
-    {
-        if (this._dataGrid)
-            this._dataGrid.updateWidths();
     }
 }
 
+WebInspector.SimpleCookiesTable.prototype.__proto__ = WebInspector.View.prototype;
 
 WebInspector.Cookies = {}
 

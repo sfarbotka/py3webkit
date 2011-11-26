@@ -35,7 +35,7 @@
 
 #include <QtNetwork/QNetworkRequest>
 
-#if defined(QT_CONFIGURED_WITH_OPENGL)
+#ifndef QT_NO_OPENGL
 #include <QtOpenGL/QGLWidget>
 #endif
 
@@ -56,10 +56,6 @@
 #include <qwebinspector.h>
 #include <qwebsettings.h>
 
-#ifdef Q_WS_MAEMO_5
-#include <qx11info_x11.h>
-#endif
-
 #include "DumpRenderTreeSupportQt.h"
 #include "mainwindow.h"
 #include "urlloader.h"
@@ -67,12 +63,6 @@
 #include "webinspector.h"
 #include "webpage.h"
 #include "webview.h"
-
-#ifdef Q_WS_MAEMO_5
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#undef KeyPress
-#endif
 
 class QPropertyAnimation;
 
@@ -84,11 +74,7 @@ public:
         , useCompositing(true)
         , useTiledBackingStore(false)
         , useWebGL(false)
-#if defined(Q_WS_MAEMO_5) || defined(Q_OS_SYMBIAN)
-        , useFrameFlattening(true)
-#else
         , useFrameFlattening(false)
-#endif
         , cacheWebView(false)
         , showFrameRate(false)
         , resizesToContents(false)
@@ -98,18 +84,14 @@ public:
         , useOfflineWebApplicationCache(false)
         , useDiskCookies(true)
         , offlineStorageDefaultQuotaSize(0)
-#if defined(QT_CONFIGURED_WITH_OPENGL)
+#ifndef QT_NO_OPENGL
         , useQGLWidgetViewport(false)
 #endif
 #if defined(Q_WS_X11)
         , useTestFonts(false)
 #endif
         , printLoadedUrls(false)
-#if defined(Q_OS_SYMBIAN)
-        , startMaximized(true)
-#else
         , startMaximized(false)
-#endif
     {
     }
 
@@ -128,7 +110,7 @@ public:
     bool useOfflineWebApplicationCache;
     bool useDiskCookies;
     quint64 offlineStorageDefaultQuotaSize;
-#if defined(QT_CONFIGURED_WITH_OPENGL)
+#ifndef QT_NO_OPENGL
     bool useQGLWidgetViewport;
 #endif
 #if defined(Q_WS_X11)
@@ -146,9 +128,6 @@ class LauncherWindow : public MainWindow {
 public:
     LauncherWindow(WindowOptions* data = 0, QGraphicsScene* sharedScene = 0);
     virtual ~LauncherWindow();
-
-    virtual void keyPressEvent(QKeyEvent* event);
-    void grabZoomKeys(bool grab);
 
     void sendTouchEvent();
 
@@ -200,7 +179,7 @@ protected slots:
     void showFindBar();
     void find(int mode);
 #endif
-#if defined(QT_CONFIGURED_WITH_OPENGL)
+#ifndef QT_NO_OPENGL
     void toggleQGLWidgetViewport(bool enable);
 #endif
 

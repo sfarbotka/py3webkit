@@ -28,7 +28,6 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
-#include "ExceptionCode.h"
 #include "IDBKey.h"
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefCounted.h>
@@ -43,6 +42,8 @@ class IDBRequest;
 class IDBTransaction;
 class ScriptExecutionContext;
 class SerializedScriptValue;
+
+typedef int ExceptionCode;
 
 class IDBCursor : public RefCounted<IDBCursor> {
 public:
@@ -62,7 +63,7 @@ public:
     unsigned short direction() const;
     PassRefPtr<IDBKey> key() const;
     PassRefPtr<IDBKey> primaryKey() const;
-    PassRefPtr<SerializedScriptValue> value() const;
+    PassRefPtr<IDBAny> value() const;
     IDBAny* source() const;
 
     PassRefPtr<IDBRequest> update(ScriptExecutionContext*, PassRefPtr<SerializedScriptValue>, ExceptionCode&);

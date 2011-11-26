@@ -33,11 +33,13 @@
 #include "WebData.h"
 #include "WebPageProxy.h"
 #include "WebProcessProxy.h"
+#include <WebCore/Page.h>
 
 #ifdef __BLOCKS__
 #include <Block.h>
 #endif
 
+using namespace WebCore;
 using namespace WebKit;
 
 WKTypeID WKPageGetTypeID()
@@ -239,13 +241,13 @@ void WKPageTerminate(WKPageRef pageRef)
 
 WKStringRef WKPageGetSessionHistoryURLValueType()
 {
-    static WebString* sessionHistoryURLValueType = WebString::create("SessionHistoryURL").releaseRef();
+    static WebString* sessionHistoryURLValueType = WebString::create("SessionHistoryURL").leakRef();
     return toAPI(sessionHistoryURLValueType);
 }
 
 WKDataRef WKPageCopySessionState(WKPageRef pageRef, void *context, WKPageSessionStateFilterCallback filter)
 {
-    return toAPI(toImpl(pageRef)->sessionStateData(filter, context).releaseRef());
+    return toAPI(toImpl(pageRef)->sessionStateData(filter, context).leakRef());
 }
 
 void WKPageRestoreFromSessionState(WKPageRef pageRef, WKDataRef sessionStateData)
@@ -341,6 +343,55 @@ bool WKPageIsPinnedToLeftSide(WKPageRef pageRef)
 bool WKPageIsPinnedToRightSide(WKPageRef pageRef)
 {
     return toImpl(pageRef)->isPinnedToRightSide();
+}
+
+void WKPageSetPaginationMode(WKPageRef pageRef, WKPaginationMode paginationMode)
+{
+    Page::Pagination::Mode mode;
+    switch (paginationMode) {
+    case kWKPaginationModeUnpaginated:
+        mode = Page::Pagination::Unpaginated;
+        break;
+    case kWKPaginationModeHorizontal:
+        mode = Page::Pagination::HorizontallyPaginated;
+        break;
+    case kWKPaginationModeVertical:
+        mode = Page::Pagination::VerticallyPaginated;
+        break;
+    default:
+        return;
+    }
+    toImpl(pageRef)->setPaginationMode(mode);
+}
+
+WKPaginationMode WKPageGetPaginationMode(WKPageRef pageRef)
+{
+    switch (toImpl(pageRef)->paginationMode()) {
+    case Page::Pagination::Unpaginated:
+        return kWKPaginationModeUnpaginated;
+    case Page::Pagination::HorizontallyPaginated:
+        return kWKPaginationModeHorizontal;
+    case Page::Pagination::VerticallyPaginated:
+        return kWKPaginationModeVertical;
+    }
+
+    ASSERT_NOT_REACHED();
+    return kWKPaginationModeUnpaginated;
+}
+
+void WKPageSetGapBetweenPages(WKPageRef pageRef, double gap)
+{
+    toImpl(pageRef)->setGapBetweenPages(gap);
+}
+
+double WKPageGetGapBetweenPages(WKPageRef pageRef)
+{
+    return toImpl(pageRef)->gapBetweenPages();
+}
+
+unsigned WKPageGetPageCount(WKPageRef pageRef)
+{
+    return toImpl(pageRef)->pageCount();
 }
 
 bool WKPageCanDelete(WKPageRef pageRef)
@@ -504,6 +555,21 @@ WK_EXPORT WKURLRef WKPageCopyPendingAPIRequestURL(WKPageRef pageRef)
     if (toImpl(pageRef)->pendingAPIRequestURL().isNull())
         return 0;
     return toCopiedURLAPI(toImpl(pageRef)->pendingAPIRequestURL());
+}
+
+WKURLRef WKPageCopyActiveURL(WKPageRef pageRef)
+{
+    return toCopiedURLAPI(toImpl(pageRef)->activeURL());
+}
+
+WKURLRef WKPageCopyProvisionalURL(WKPageRef pageRef)
+{
+    return toCopiedURLAPI(toImpl(pageRef)->provisionalURL());
+}
+
+WKURLRef WKPageCopyCommittedURL(WKPageRef pageRef)
+{
+    return toCopiedURLAPI(toImpl(pageRef)->committedURL());
 }
 
 void WKPageSetDebugPaintFlags(WKPageDebugPaintFlags flags)

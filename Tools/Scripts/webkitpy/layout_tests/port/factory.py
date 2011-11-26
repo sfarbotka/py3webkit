@@ -67,12 +67,23 @@ class PortFactory(object):
             raise NotImplementedError('unknown port; sys.platform = "%s"' % sys.platform)
         return port_to_use
 
-    def _get_kwargs(self, **kwargs):
+    def _set_default_overriding_none(self, dictionary, key, default):
+        # dict.setdefault almost works, but won't actually override None values, which we want.
+        if not dictionary.get(key):
+            dictionary[key] = default
+        return dictionary[key]
+
+    def _get_kwargs(self, host=None, **kwargs):
         port_to_use = self._port_name_from_arguments_and_options(**kwargs)
 
         if port_to_use.startswith('test'):
             import test
             maker = test.TestPort
+            # FIXME: This is a hack to override the "default" filesystem
+            # provided to the port.  The unit_test_filesystem has an extra
+            # _tests attribute which a bunch of unittests depend on.
+            from .test import unit_test_filesystem
+            self._set_default_overriding_none(kwargs, 'filesystem', unit_test_filesystem())
         elif port_to_use.startswith('dryrun'):
             import dryrun
             maker = dryrun.DryRunPort
@@ -106,18 +117,14 @@ class PortFactory(object):
         elif port_to_use.startswith('google-chrome'):
             import google_chrome
             maker = google_chrome.GetGoogleChromePort
+        elif port_to_use.startswith('efl'):
+            import efl
+            maker = efl.EflPort
         else:
             raise NotImplementedError('unsupported port: %s' % port_to_use)
 
-        # Make sure that any Ports created by this factory inherit
-        # the executive/user/filesystem from the provided host.
-        # FIXME: Eventually NRWT will use a Host object and Port will no longer store these pointers.
-        if self._host:
-            kwargs.setdefault('executive', self._host.executive)
-            kwargs.setdefault('user', self._host.user)
-            kwargs.setdefault('filesystem', self._host.filesystem)
-
-        return maker(**kwargs)
+        host = host or self._host
+        return maker(host, **kwargs)
 
     def all_port_names(self):
         """Return a list of all valid, fully-specified, "real" port names.
@@ -145,15 +152,3 @@ class PortFactory(object):
         port = self.get(port_name, BuilderOptions(builder_name))
         assert(port)  # Need to update port_name_for_builder_name
         return port
-
-
-
-# FIXME: These free functions are all deprecated.  Callers should be using PortFactory instead.
-def all_port_names():
-    return PortFactory().all_port_names()
-
-def get(port_name=None, options=None, **kwargs):
-    return PortFactory().get(port_name, options, **kwargs)
-
-def get_from_builder_name(builder_name):
-    return PortFactory().get_from_builder_name(builder_name)

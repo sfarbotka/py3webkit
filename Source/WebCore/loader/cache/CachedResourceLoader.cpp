@@ -2,7 +2,7 @@
     Copyright (C) 1998 Lars Knoll (knoll@mpi-hd.mpg.de)
     Copyright (C) 2001 Dirk Mueller (mueller@kde.org)
     Copyright (C) 2002 Waldo Bastian (bastian@kde.org)
-    Copyright (C) 2004, 2005, 2006, 2008 Apple Inc. All rights reserved.
+    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011 Apple Inc. All rights reserved.
     Copyright (C) 2009 Torch Mobile Inc. http://www.torchmobile.com/
 
     This library is free software; you can redistribute it and/or
@@ -31,7 +31,6 @@
 #include "CachedFont.h"
 #include "CachedImage.h"
 #include "CachedRawResource.h"
-#include "CachedResourceRequest.h"
 #include "CachedScript.h"
 #include "CachedXSLStyleSheet.h"
 #include "Console.h"
@@ -51,6 +50,14 @@
 #include <wtf/UnusedParam.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/WTFString.h>
+
+#if ENABLE(VIDEO_TRACK)
+#include "CachedTextTrack.h"
+#endif
+
+#if ENABLE(CSS_SHADERS)
+#include "CachedShader.h"
+#endif
 
 #define PRELOAD_DEBUG 0
 
@@ -80,6 +87,14 @@ static CachedResource* createResource(CachedResource::Type type, ResourceRequest
         return new CachedResource(request, CachedResource::LinkPrerender);
     case CachedResource::LinkSubresource:
         return new CachedResource(request, CachedResource::LinkSubresource);
+#endif
+#if ENABLE(VIDEO_TRACK)
+    case CachedResource::TextTrackResource:
+        return new CachedTextTrack(request);
+#endif
+#if ENABLE(CSS_SHADERS)
+    case CachedResource::ShaderResource:
+        return new CachedShader(request);
 #endif
     }
     ASSERT_NOT_REACHED();
@@ -153,6 +168,20 @@ CachedFont* CachedResourceLoader::requestFont(ResourceRequest& request)
     return static_cast<CachedFont*>(requestResource(CachedResource::FontResource, request, String(), defaultCachedResourceOptions()));
 }
 
+#if ENABLE(VIDEO_TRACK)
+CachedTextTrack* CachedResourceLoader::requestTextTrack(ResourceRequest& request)
+{
+    return static_cast<CachedTextTrack*>(requestResource(CachedResource::TextTrackResource, request, String(), defaultCachedResourceOptions()));
+}
+#endif
+
+#if ENABLE(CSS_SHADERS)
+CachedShader* CachedResourceLoader::requestShader(ResourceRequest& request)
+{
+    return static_cast<CachedShader*>(requestResource(CachedResource::ShaderResource, request, String(), defaultCachedResourceOptions()));
+}
+#endif
+
 CachedCSSStyleSheet* CachedResourceLoader::requestCSSStyleSheet(ResourceRequest& request, const String& charset, ResourceLoadPriority priority)
 {
     return static_cast<CachedCSSStyleSheet*>(requestResource(CachedResource::CSSStyleSheet, request, charset, defaultCachedResourceOptions(), priority));
@@ -224,6 +253,12 @@ bool CachedResourceLoader::checkInsecureContent(CachedResource::Type type, const
             if (!f->loader()->checkIfRunInsecureContent(m_document->securityOrigin(), url))
                 return false;
         break;
+#if ENABLE(VIDEO_TRACK)
+    case CachedResource::TextTrackResource:
+#endif
+#if ENABLE(CSS_SHADERS)
+    case CachedResource::ShaderResource:
+#endif
     case CachedResource::ImageResource:
     case CachedResource::FontResource: {
         // These resources can corrupt only the frame's pixels.
@@ -269,6 +304,12 @@ bool CachedResourceLoader::canRequest(CachedResource::Type type, const KURL& url
     case CachedResource::LinkPrerender:
     case CachedResource::LinkSubresource:
 #endif
+#if ENABLE(VIDEO_TRACK)
+    case CachedResource::TextTrackResource:
+#endif
+#if ENABLE(CSS_SHADERS)
+    case CachedResource::ShaderResource:
+#endif
         // These types of resources can be loaded from any origin.
         // FIXME: Are we sure about CachedResource::FontResource?
         break;
@@ -282,22 +323,25 @@ bool CachedResourceLoader::canRequest(CachedResource::Type type, const KURL& url
 #endif
     }
 
-    // Given that the load is allowed by the same-origin policy, we should
-    // check whether the load passes the mixed-content policy.
-    //
-    // FIXME: Should we consider forPreload here?
-    if (!checkInsecureContent(type, url))
-        return false;
-
-    // FIXME: Consider letting the embedder block mixed content loads.
-
     switch (type) {
+#if ENABLE(XSLT)
+    case CachedResource::XSLStyleSheet:
+#endif
     case CachedResource::Script:
         if (!m_document->contentSecurityPolicy()->allowScriptFromSource(url))
             return false;
+
+        if (frame()) {
+            Settings* settings = frame()->settings();
+            if (!frame()->loader()->client()->allowScriptFromSource(!settings || settings->isScriptEnabled(), url)) {
+                frame()->loader()->client()->didNotAllowScript();
+                return false;
+            }
+        }
         break;
-#if ENABLE(XSLT)
-    case CachedResource::XSLStyleSheet:
+#if ENABLE(CSS_SHADERS)
+    case CachedResource::ShaderResource:
+        // Since shaders are referenced from CSS Styles use the same rules here.
 #endif
     case CachedResource::CSSStyleSheet:
         if (!m_document->contentSecurityPolicy()->allowStyleFromSource(url))
@@ -325,7 +369,23 @@ bool CachedResourceLoader::canRequest(CachedResource::Type type, const KURL& url
     case CachedResource::LinkSubresource:
 #endif
         break;
+#if ENABLE(VIDEO_TRACK)
+    case CachedResource::TextTrackResource:
+        // Cues aren't called out in the CPS spec yet, but they only work with a media element
+        // so use the media policy.
+        if (!m_document->contentSecurityPolicy()->allowMediaFromSource(url))
+            return false;
+        break;
+#endif
     }
+
+    // Last of all, check for insecure content. We do this last so that when
+    // folks block insecure content with a CSP policy, they don't get a warning.
+    // They'll still get a warning in the console about CSP blocking the load.
+
+    // FIXME: Should we consider forPreload here?
+    if (!checkInsecureContent(type, url))
+        return false;
 
     return true;
 }
@@ -381,7 +441,6 @@ CachedResource* CachedResourceLoader::requestResource(CachedResource::Type type,
 
     ASSERT(resource->url() == url.string());
     m_documentResources.set(resource->url(), resource);
-    
     return resource;
 }
     
@@ -593,6 +652,8 @@ void CachedResourceLoader::removeCachedResource(CachedResource* resource) const
 void CachedResourceLoader::loadDone()
 {
     m_loadFinishing = false;
+
+    RefPtr<Document> protect(m_document);
     if (frame())
         frame()->loader()->loadDone();
     performPostLoadActions();

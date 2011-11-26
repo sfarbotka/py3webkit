@@ -31,6 +31,7 @@
 #include "JSFunction.h"
 #include "JSLock.h"
 #include "JSString.h"
+#include "MainThread.h"
 #include "SamplingTool.h"
 #include <math.h>
 #include <stdio.h>
@@ -155,7 +156,13 @@ public:
         object->finishCreation(globalData, arguments);
         return object;
     }
-    virtual UString className() const { return "global"; }
+
+    static const ClassInfo s_info;
+
+    static Structure* createStructure(JSGlobalData& globalData, JSValue prototype)
+    {
+        return Structure::create(globalData, 0, prototype, TypeInfo(GlobalObjectType, StructureFlags), &s_info);
+    }
 
 protected:
     void finishCreation(JSGlobalData& globalData, const Vector<UString>& arguments)
@@ -182,7 +189,7 @@ protected:
 
         JSObject* array = constructEmptyArray(globalExec());
         for (size_t i = 0; i < arguments.size(); ++i)
-            array->put(globalExec(), i, jsString(globalExec(), arguments[i]));
+            array->methodTable()->putByIndex(array, globalExec(), i, jsString(globalExec(), arguments[i]));
         putDirect(globalData, Identifier(globalExec(), "arguments"), array);
     }
 
@@ -194,6 +201,8 @@ protected:
 };
 COMPILE_ASSERT(!IsInteger<GlobalObject>::value, WTF_IsInteger_GlobalObject_false);
 ASSERT_CLASS_FITS_IN_CELL(GlobalObject);
+
+const ClassInfo GlobalObject::s_info = { "global", &JSGlobalObject::s_info, 0, ExecState::globalObjectTable, CREATE_METHOD_TABLE(GlobalObject) };
 
 GlobalObject::GlobalObject(JSGlobalData& globalData, Structure* structure)
     : JSGlobalObject(globalData, structure)
@@ -396,6 +405,9 @@ int main(int argc, char** argv)
 #endif
 
     // Initialize JSC before getting JSGlobalData.
+#if ENABLE(SAMPLING_REGIONS)
+    WTF::initializeMainThread();
+#endif
     JSC::initializeThreading();
 
     // We can't use destructors in the following code because it uses Windows
@@ -463,6 +475,9 @@ static bool runWithScripts(GlobalObject* globalObject, const Vector<Script>& scr
 
 #if ENABLE(SAMPLING_FLAGS)
     SamplingFlags::stop();
+#endif
+#if ENABLE(SAMPLING_REGIONS)
+    SamplingRegion::dump();
 #endif
     globalData.dumpSampleData(globalObject->globalExec());
 #if ENABLE(SAMPLING_COUNTERS)

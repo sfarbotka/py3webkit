@@ -39,7 +39,12 @@
 
 namespace WebCore {
 
-class MediaStream;
+class MediaStreamDescriptorOwner {
+public:
+    virtual ~MediaStreamDescriptorOwner() { }
+
+    virtual void streamEnded() = 0;
+};
 
 class MediaStreamDescriptor : public RefCounted<MediaStreamDescriptor> {
 public:
@@ -48,8 +53,8 @@ public:
         return adoptRef(new MediaStreamDescriptor(label, sources));
     }
 
-    MediaStream* owner() const { return m_owner; }
-    void setOwner(MediaStream* owner) { m_owner = owner; }
+    MediaStreamDescriptorOwner* owner() const { return m_owner; }
+    void setOwner(MediaStreamDescriptorOwner* owner) { m_owner = owner; }
 
     String label() const { return m_label; }
 
@@ -69,7 +74,7 @@ private:
             m_components.append(MediaStreamComponent::create(sources[i]));
     }
 
-    MediaStream* m_owner;
+    MediaStreamDescriptorOwner* m_owner;
     String m_label;
     Vector<RefPtr<MediaStreamComponent> > m_components;
     bool m_ended;

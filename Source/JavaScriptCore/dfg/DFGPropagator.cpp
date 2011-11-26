@@ -28,6 +28,7 @@
 
 #if ENABLE(DFG_JIT)
 
+#include "DFGAbstractState.h"
 #include "DFGGraph.h"
 #include "DFGScoreBoard.h"
 #include <wtf/FixedArray.h>
@@ -54,63 +55,36 @@ public:
     
     void fixpoint()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
-    m_graph.dump(m_codeBlock);
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        m_graph.dump(m_codeBlock);
 #endif
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
-        m_count = 0;
-#endif
-        do {
-            m_changed = false;
-            
-            // Up here we start with a backward pass because we suspect that to be
-            // more profitable.
-            propagateArithNodeFlagsBackward();
-            if (!m_changed)
-                break;
-            
-            m_changed = false;
-            propagateArithNodeFlagsForward();
-        } while (m_changed);
-        
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
-        m_count = 0;
-#endif
-        do {
-            m_changed = false;
-            
-            // Forward propagation is near-optimal for both topologically-sorted and
-            // DFS-sorted code.
-            propagatePredictionsForward();
-            if (!m_changed)
-                break;
-            
-            // Backward propagation reduces the likelihood that pathological code will
-            // cause slowness. Loops (especially nested ones) resemble backward flow.
-            // This pass captures two cases: (1) it detects if the forward fixpoint
-            // found a sound solution and (2) short-circuits backward flow.
-            m_changed = false;
-            propagatePredictionsBackward();
-        } while (m_changed);
-        
+        propagateArithNodeFlags();
+        propagatePredictions();
         fixup();
         
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Graph after propagation fixup:\n");
         m_graph.dump(m_codeBlock);
 #endif
 
         localCSE();
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Graph after CSE:\n");
         m_graph.dump(m_codeBlock);
 #endif
 
         allocateVirtualRegisters();
 
-#if ENABLE(DFG_DEBUG_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("Graph after virtual register allocation:\n");
+        m_graph.dump(m_codeBlock);
+#endif
+
+        globalCFA();
+
+#if DFG_ENABLE(DEBUG_VERBOSE)
         printf("Graph after propagation:\n");
         m_graph.dump(m_codeBlock);
 #endif
@@ -143,7 +117,7 @@ private:
         if (node.hasArithNodeFlags())
             flags = node.rawArithNodeFlags();
         
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   %s @%u: %s ", Graph::opName(op), m_compileIndex, arithNodeFlagsAsString(flags));
 #endif
         
@@ -249,7 +223,7 @@ private:
             break;
         }
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("%s\n", changed ? "CHANGED" : "");
 #endif
         
@@ -258,7 +232,7 @@ private:
     
     void propagateArithNodeFlagsForward()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Propagating arithmetic node flags forward [%u]\n", ++m_count);
 #endif
         for (m_compileIndex = 0; m_compileIndex < m_graph.size(); ++m_compileIndex)
@@ -267,11 +241,30 @@ private:
     
     void propagateArithNodeFlagsBackward()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Propagating arithmetic node flags backward [%u]\n", ++m_count);
 #endif
         for (m_compileIndex = m_graph.size(); m_compileIndex-- > 0;)
             propagateArithNodeFlags(m_graph[m_compileIndex]);
+    }
+    
+    void propagateArithNodeFlags()
+    {
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        m_count = 0;
+#endif
+        do {
+            m_changed = false;
+            
+            // Up here we start with a backward pass because we suspect that to be
+            // more profitable.
+            propagateArithNodeFlagsBackward();
+            if (!m_changed)
+                break;
+            
+            m_changed = false;
+            propagateArithNodeFlagsForward();
+        } while (m_changed);
     }
     
     bool setPrediction(PredictedType prediction)
@@ -301,14 +294,15 @@ private:
         
         NodeType op = node.op;
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   %s @%u: ", Graph::opName(op), m_compileIndex);
 #endif
         
         bool changed = false;
         
         switch (op) {
-        case JSConstant: {
+        case JSConstant:
+        case WeakJSConstant: {
             changed |= setPrediction(predictionFromValue(m_graph.valueOfJSConstant(m_codeBlock, m_compileIndex)));
             break;
         }
@@ -447,7 +441,21 @@ private:
             break;
         }
             
-        case GetById:
+        case GetById: {
+            if (node.getHeapPrediction())
+                changed |= mergePrediction(node.getHeapPrediction());
+            else if (m_codeBlock->identifier(node.identifierNumber()) == m_globalData.propertyNames->length) {
+                // If there is no prediction from value profiles, check if we might be
+                // able to infer the type ourselves.
+                bool isArray = isArrayPrediction(m_graph[node.child1()].prediction());
+                bool isString = isStringPrediction(m_graph[node.child1()].prediction());
+                bool isByteArray = m_graph[node.child1()].shouldSpeculateByteArray();
+                if (isArray || isString || isByteArray)
+                    changed |= mergePrediction(PredictInt32);
+            }
+            break;
+        }
+            
         case GetMethod:
         case GetByVal: {
             if (node.getHeapPrediction())
@@ -466,11 +474,6 @@ private:
             break;
         }
             
-        case CheckMethod: {
-            changed |= setPrediction(m_graph.getMethodCheckPrediction(node));
-            break;
-        }
-
         case Call:
         case Construct: {
             if (node.getHeapPrediction())
@@ -519,7 +522,7 @@ private:
         }
             
         case GetCallee: {
-            changed |= setPrediction(PredictObjectOther);
+            changed |= setPrediction(PredictFunction);
             break;
         }
             
@@ -568,6 +571,7 @@ private:
             
         case ValueToDouble:
         case GetArrayLength:
+        case GetByteArrayLength:
         case GetStringLength: {
             // This node should never be visible at this stage of compilation. It is
             // inserted by fixup(), which follows this phase.
@@ -584,6 +588,7 @@ private:
         case Return:
         case CheckHasInstance:
         case Phi:
+        case Flush:
         case Throw:
         case ThrowReferenceError:
         case ForceOSRExit:
@@ -598,8 +603,9 @@ private:
         case PutByOffset:
             break;
             
-        // This gets ignored because it doesn't do anything.
+        // These gets ignored because it doesn't do anything.
         case Phantom:
+        case InlineStart:
             break;
 #else
         default:
@@ -607,8 +613,8 @@ private:
 #endif
         }
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
-        printf("%s ", predictionToString(m_graph[m_compileIndex].prediction()));
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("%s\n", predictionToString(m_graph[m_compileIndex].prediction()));
 #endif
         
         m_changed |= changed;
@@ -616,7 +622,7 @@ private:
     
     void propagatePredictionsForward()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Propagating predictions forward [%u]\n", ++m_count);
 #endif
         for (m_compileIndex = 0; m_compileIndex < m_graph.size(); ++m_compileIndex)
@@ -625,17 +631,40 @@ private:
     
     void propagatePredictionsBackward()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Propagating predictions backward [%u]\n", ++m_count);
 #endif
         for (m_compileIndex = m_graph.size(); m_compileIndex-- > 0;)
             propagateNodePredictions(m_graph[m_compileIndex]);
     }
     
+    void propagatePredictions()
+    {
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        m_count = 0;
+#endif
+        do {
+            m_changed = false;
+            
+            // Forward propagation is near-optimal for both topologically-sorted and
+            // DFS-sorted code.
+            propagatePredictionsForward();
+            if (!m_changed)
+                break;
+            
+            // Backward propagation reduces the likelihood that pathological code will
+            // cause slowness. Loops (especially nested ones) resemble backward flow.
+            // This pass captures two cases: (1) it detects if the forward fixpoint
+            // found a sound solution and (2) short-circuits backward flow.
+            m_changed = false;
+            propagatePredictionsBackward();
+        } while (m_changed);
+    }
+    
     void toDouble(NodeIndex nodeIndex)
     {
         if (m_graph[nodeIndex].op == ValueToNumber) {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
             printf("  @%u -> ValueToDouble", nodeIndex);
 #endif
             m_graph[nodeIndex].op = ValueToDouble;
@@ -649,7 +678,7 @@ private:
         
         NodeType op = node.op;
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   %s @%u: ", Graph::opName(op), m_compileIndex);
 #endif
         
@@ -718,17 +747,25 @@ private:
         case GetById: {
             bool isArray = isArrayPrediction(m_graph[node.child1()].prediction());
             bool isString = isStringPrediction(m_graph[node.child1()].prediction());
-            if (!isArray && !isString)
-                break;
+            bool isByteArray = m_graph[node.child1()].shouldSpeculateByteArray();
             if (!isInt32Prediction(m_graph[m_compileIndex].prediction()))
+                break;
+            if (!isArray && !isString && !isByteArray)
                 break;
             if (m_codeBlock->identifier(node.identifierNumber()) != m_globalData.propertyNames->length)
                 break;
             
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
             printf("  @%u -> %s", m_compileIndex, isArray ? "GetArrayLength" : "GetStringLength");
 #endif
-            node.op = isArray ? GetArrayLength : GetStringLength;
+            if (isArray)
+                node.op = GetArrayLength;
+            else if (isString)
+                node.op = GetStringLength;
+            else if (isByteArray)
+                node.op = GetByteArrayLength;
+            else
+                ASSERT_NOT_REACHED();
             break;
         }
             
@@ -736,14 +773,14 @@ private:
             break;
         }
 
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("\n");
 #endif
     }
     
     void fixup()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Performing Fixup\n");
 #endif
         for (m_compileIndex = 0; m_compileIndex < m_graph.size(); ++m_compileIndex)
@@ -803,7 +840,7 @@ private:
     NodeIndex startIndexForChildren(NodeIndex child1 = NoNode, NodeIndex child2 = NoNode, NodeIndex child3 = NoNode)
     {
         NodeIndex result = computeStartIndexForChildren(child1, child2, child3);
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("  lookback %u: ", result);
 #endif
         return result;
@@ -823,7 +860,7 @@ private:
         else
             result++;
         ASSERT(result <= m_compileIndex);
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("  limit %u: ", result);
 #endif
         return result;
@@ -880,6 +917,12 @@ private:
         return isBooleanPrediction(prediction) || !prediction;
     }
     
+    bool byValHasIntBase(Node& node)
+    {
+        PredictedType prediction = m_graph[node.child2()].prediction();
+        return (prediction & PredictInt32) || !prediction;
+    }
+    
     bool clobbersWorld(NodeIndex nodeIndex)
     {
         Node& node = m_graph[nodeIndex];
@@ -897,6 +940,8 @@ private:
             return !isPredictedNumerical(node);
         case LogicalNot:
             return !logicalNotIsPure(node);
+        case GetByVal:
+            return !byValHasIntBase(node);
         default:
             ASSERT_NOT_REACHED();
             return true; // If by some oddity we hit this case in release build it's safer to have CSE assume the worst.
@@ -936,18 +981,18 @@ private:
         return NoNode;
     }
     
-    NodeIndex globalVarLoadElimination(unsigned varNumber)
+    NodeIndex globalVarLoadElimination(unsigned varNumber, JSGlobalObject* globalObject)
     {
         NodeIndex start = startIndexForChildren();
         for (NodeIndex index = m_compileIndex; index-- > start;) {
             Node& node = m_graph[index];
             switch (node.op) {
             case GetGlobalVar:
-                if (node.varNumber() == varNumber)
+                if (node.varNumber() == varNumber && m_codeBlock->globalObjectFor(node.codeOrigin) == globalObject)
                     return index;
                 break;
             case PutGlobalVar:
-                if (node.varNumber() == varNumber)
+                if (node.varNumber() == varNumber && m_codeBlock->globalObjectFor(node.codeOrigin) == globalObject)
                     return node.child1();
                 break;
             default:
@@ -983,44 +1028,6 @@ private:
             case ArrayPush:
                 // A push cannot affect previously existing elements in the array.
                 break;
-            default:
-                if (clobbersWorld(index))
-                    return NoNode;
-                break;
-            }
-        }
-        return NoNode;
-    }
-
-    NodeIndex getMethodLoadElimination(const MethodCheckData& methodCheckData, unsigned identifierNumber, NodeIndex child1)
-    {
-        NodeIndex start = startIndexForChildren(child1);
-        for (NodeIndex index = m_compileIndex; index-- > start;) {
-            Node& node = m_graph[index];
-            switch (node.op) {
-            case CheckMethod:
-                if (node.child1() == child1
-                    && node.identifierNumber() == identifierNumber
-                    && m_graph.m_methodCheckData[node.methodCheckDataIndex()] == methodCheckData)
-                    return index;
-                break;
-                
-            case PutByOffset:
-                // If a put was optimized to by-offset then it's not changing the structure
-                break;
-                
-            case PutByVal:
-            case PutByValAlias:
-                // PutByVal currently always speculates that it's accessing an array with an
-                // integer index, which means that it's impossible for it to cause a structure
-                // change.
-                break;
-                
-            case ArrayPush:
-            case ArrayPop:
-                // Pushing and popping cannot despecify a function.
-                break;
-                
             default:
                 if (clobbersWorld(index))
                     return NoNode;
@@ -1076,10 +1083,13 @@ private:
                 
             case PutByVal:
             case PutByValAlias:
-                // PutByVal currently always speculates that it's accessing an array with an
-                // integer index, which means that it's impossible for it to cause a structure
-                // change.
-                break;
+                if (byValHasIntBase(node)) {
+                    // If PutByVal speculates that it's accessing an array with an
+                    // integer index, then it's impossible for it to cause a structure
+                    // change.
+                    break;
+                }
+                return false;
                 
             default:
                 if (clobbersWorld(index))
@@ -1116,10 +1126,13 @@ private:
                 
             case PutByVal:
             case PutByValAlias:
-                // PutByVal currently always speculates that it's accessing an array with an
-                // integer index, which means that it's impossible for it to cause a structure
-                // change.
-                break;
+                if (byValHasIntBase(node)) {
+                    // If PutByVal speculates that it's accessing an array with an
+                    // integer index, then it's impossible for it to cause a structure
+                    // change.
+                    break;
+                }
+                return NoNode;
                 
             default:
                 if (clobbersWorld(index))
@@ -1149,10 +1162,13 @@ private:
                 
             case PutByVal:
             case PutByValAlias:
-                // PutByVal currently always speculates that it's accessing an array with an
-                // integer index, which means that it's impossible for it to cause a structure
-                // change.
-                break;
+                if (byValHasIntBase(node)) {
+                    // If PutByVal speculates that it's accessing an array with an
+                    // integer index, then it's impossible for it to cause a structure
+                    // change.
+                    break;
+                }
+                return NoNode;
                 
             default:
                 if (clobbersWorld(index))
@@ -1205,7 +1221,7 @@ private:
         if (m_graph[m_compileIndex].prediction() != m_graph[replacement].prediction())
             return;
         
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   Replacing @%u -> @%u", m_compileIndex, replacement);
 #endif
         
@@ -1219,7 +1235,7 @@ private:
     
     void eliminate()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   Eliminating @%u", m_compileIndex);
 #endif
         
@@ -1243,7 +1259,7 @@ private:
         if (!node.shouldGenerate())
             return;
         
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("   %s @%u: ", Graph::opName(m_graph[m_compileIndex].op), m_compileIndex);
 #endif
         
@@ -1274,6 +1290,7 @@ private:
         case ArithMin:
         case ArithMax:
         case ArithSqrt:
+        case GetByteArrayLength:
         case GetCallee:
         case GetStringLength:
         case StringCharAt:
@@ -1317,20 +1334,17 @@ private:
         // Finally handle heap accesses. These are not quite pure, but we can still
         // optimize them provided that some subtle conditions are met.
         case GetGlobalVar:
-            setReplacement(globalVarLoadElimination(node.varNumber()));
+            setReplacement(globalVarLoadElimination(node.varNumber(), m_codeBlock->globalObjectFor(node.codeOrigin)));
             break;
             
         case GetByVal:
-            setReplacement(getByValLoadElimination(node.child1(), node.child2()));
+            if (byValHasIntBase(node))
+                setReplacement(getByValLoadElimination(node.child1(), node.child2()));
             break;
             
         case PutByVal:
-            if (getByValLoadElimination(node.child1(), node.child2()) != NoNode)
+            if (byValHasIntBase(node) && getByValLoadElimination(node.child1(), node.child2()) != NoNode)
                 node.op = PutByValAlias;
-            break;
-            
-        case CheckMethod:
-            setReplacement(getMethodLoadElimination(m_graph.m_methodCheckData[node.methodCheckDataIndex()], node.identifierNumber(), node.child1()));
             break;
             
         case CheckStructure:
@@ -1357,7 +1371,7 @@ private:
         }
         
         m_lastSeen[node.op & NodeIdMask] = m_compileIndex;
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("\n");
 #endif
     }
@@ -1372,7 +1386,7 @@ private:
     
     void localCSE()
     {
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
         printf("Performing local CSE:");
 #endif
         for (unsigned block = 0; block < m_graph.m_blocks.size(); ++block)
@@ -1381,6 +1395,11 @@ private:
     
     void allocateVirtualRegisters()
     {
+#if DFG_ENABLE(DEBUG_VERBOSE)
+        printf("Preserved vars: ");
+        m_graph.m_preservedVars.dump(stdout);
+        printf("\n");
+#endif
         ScoreBoard scoreBoard(m_graph, m_graph.m_preservedVars);
         unsigned sizeExcludingPhiNodes = m_graph.m_blocks.last()->end;
         for (size_t i = 0; i < sizeExcludingPhiNodes; ++i) {
@@ -1419,9 +1438,87 @@ private:
         // 'm_numCalleeRegisters' is the number of locals and temporaries allocated
         // for the function (and checked for on entry). Since we perform a new and
         // different allocation of temporaries, more registers may now be required.
-        unsigned calleeRegisters = scoreBoard.allocatedCount() + m_graph.m_preservedVars + m_graph.m_parameterSlots;
+        unsigned calleeRegisters = scoreBoard.highWatermark() + m_graph.m_parameterSlots;
         if ((unsigned)m_codeBlock->m_numCalleeRegisters < calleeRegisters)
             m_codeBlock->m_numCalleeRegisters = calleeRegisters;
+#if DFG_ENABLE(DEBUG_VERBOSE)
+        printf("Num callee registers: %u\n", calleeRegisters);
+#endif
+    }
+    
+    void performBlockCFA(AbstractState& state, BlockIndex blockIndex)
+    {
+        BasicBlock* block = m_graph.m_blocks[blockIndex].get();
+        if (!block->cfaShouldRevisit)
+            return;
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("   Block #%u (bc#%u):\n", blockIndex, block->bytecodeBegin);
+#endif
+        state.beginBasicBlock(block);
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("      head vars: ");
+        dumpOperands(block->valuesAtHead, stdout);
+        printf("\n");
+#endif
+        for (NodeIndex nodeIndex = block->begin; nodeIndex < block->end; ++nodeIndex) {
+            if (!m_graph[nodeIndex].shouldGenerate())
+                continue;
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+            printf("      %s @%u: ", Graph::opName(m_graph[nodeIndex].op), nodeIndex);
+            state.dump(stdout);
+            printf("\n");
+#endif
+            if (!state.execute(nodeIndex))
+                break;
+        }
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("      tail regs: ");
+        state.dump(stdout);
+        printf("\n");
+#endif
+        m_changed |= state.endBasicBlock(AbstractState::MergeToSuccessors);
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("      tail vars: ");
+        dumpOperands(block->valuesAtTail, stdout);
+        printf("\n");
+#endif
+    }
+    
+    void performForwardCFA(AbstractState& state)
+    {
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        printf("CFA [%u]\n", ++m_count);
+#endif
+        
+        for (BlockIndex block = 0; block < m_graph.m_blocks.size(); ++block)
+            performBlockCFA(state, block);
+    }
+    
+    void globalCFA()
+    {
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
+        m_count = 0;
+#endif
+        
+        // This implements a pseudo-worklist-based forward CFA, except that the visit order
+        // of blocks is the bytecode program order (which is nearly topological), and
+        // instead of a worklist we just walk all basic blocks checking if cfaShouldRevisit
+        // is set to true. This is likely to balance the efficiency properties of both
+        // worklist-based and forward fixpoint-based approaches. Like a worklist-based
+        // approach, it won't visit code if it's meaningless to do so (nothing changed at
+        // the head of the block or the predecessors have not been visited). Like a forward
+        // fixpoint-based approach, it has a high probability of only visiting a block
+        // after all predecessors have been visited. Only loops will cause this analysis to
+        // revisit blocks, and the amount of revisiting is proportional to loop depth.
+        
+        AbstractState::initialize(m_graph);
+        
+        AbstractState state(m_codeBlock, m_graph);
+        
+        do {
+            m_changed = false;
+            performForwardCFA(state);
+        } while (m_changed);
     }
     
     Graph& m_graph;
@@ -1432,7 +1529,7 @@ private:
     NodeIndex m_start;
     NodeIndex m_compileIndex;
     
-#if ENABLE(DFG_DEBUG_PROPAGATION_VERBOSE)
+#if DFG_ENABLE(DEBUG_PROPAGATION_VERBOSE)
     unsigned m_count;
 #endif
     

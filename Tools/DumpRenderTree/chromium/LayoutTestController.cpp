@@ -63,6 +63,7 @@
 #include <clocale>
 #include <cstdlib>
 #include <limits>
+#include <sstream>
 #include <wtf/text/WTFString.h>
 
 #if OS(WINDOWS)
@@ -112,6 +113,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("dumpStatusCallbacks", &LayoutTestController::dumpWindowStatusChanges);
     bindMethod("dumpTitleChanges", &LayoutTestController::dumpTitleChanges);
     bindMethod("dumpPermissionClientCallbacks", &LayoutTestController::dumpPermissionClientCallbacks);
+    bindMethod("dumpCreateView", &LayoutTestController::dumpCreateView);
     bindMethod("elementDoesAutoCompleteForElementWithId", &LayoutTestController::elementDoesAutoCompleteForElementWithId);
     bindMethod("evaluateInWebInspector", &LayoutTestController::evaluateInWebInspector);
     bindMethod("evaluateScriptInIsolatedWorld", &LayoutTestController::evaluateScriptInIsolatedWorld);
@@ -121,6 +123,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("grantDesktopNotificationPermission", &LayoutTestController::grantDesktopNotificationPermission);
     bindMethod("hasSpellingMarker", &LayoutTestController::hasSpellingMarker);
     bindMethod("isCommandEnabled", &LayoutTestController::isCommandEnabled);
+    bindMethod("isPageBoxVisible", &LayoutTestController::isPageBoxVisible);
     bindMethod("layerTreeAsText", &LayoutTestController::layerTreeAsText);
     bindMethod("loseCompositorContext", &LayoutTestController::loseCompositorContext);
     bindMethod("markerTextForListItem", &LayoutTestController::markerTextForListItem);
@@ -131,6 +134,8 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("objCIdentityIsEqual", &LayoutTestController::objCIdentityIsEqual);
     bindMethod("overridePreference", &LayoutTestController::overridePreference);
     bindMethod("pageNumberForElementById", &LayoutTestController::pageNumberForElementById);
+    bindMethod("pageProperty", &LayoutTestController::pageProperty);
+    bindMethod("pageSizeAndMarginsInPixels", &LayoutTestController::pageSizeAndMarginsInPixels);
     bindMethod("pathToLocalResource", &LayoutTestController::pathToLocalResource);
     bindMethod("pauseAnimationAtTimeOnElementWithId", &LayoutTestController::pauseAnimationAtTimeOnElementWithId);
     bindMethod("pauseTransitionAtTimeOnElementWithId", &LayoutTestController::pauseTransitionAtTimeOnElementWithId);
@@ -174,6 +179,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("setPluginsEnabled", &LayoutTestController::setPluginsEnabled);
     bindMethod("setPopupBlockingEnabled", &LayoutTestController::setPopupBlockingEnabled);
     bindMethod("setPOSIXLocale", &LayoutTestController::setPOSIXLocale);
+    bindMethod("setPrinting", &LayoutTestController::setPrinting);
     bindMethod("setScrollbarPolicy", &LayoutTestController::setScrollbarPolicy);
     bindMethod("setSelectTrailingWhitespaceEnabled", &LayoutTestController::setSelectTrailingWhitespaceEnabled);
     bindMethod("setSmartInsertDeleteEnabled", &LayoutTestController::setSmartInsertDeleteEnabled);
@@ -198,6 +204,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     bindMethod("windowCount", &LayoutTestController::windowCount);
     bindMethod("setTextDirection", &LayoutTestController::setTextDirection);
     bindMethod("setImagesAllowed", &LayoutTestController::setImagesAllowed);
+    bindMethod("setScriptsAllowed", &LayoutTestController::setScriptsAllowed);
     bindMethod("setStorageAllowed", &LayoutTestController::setStorageAllowed);
     bindMethod("setPluginsAllowed", &LayoutTestController::setPluginsAllowed);
 
@@ -239,6 +246,7 @@ LayoutTestController::LayoutTestController(TestShell* shell)
     // webHistoryItemCount is used by tests in LayoutTests\http\tests\history
     bindProperty("webHistoryItemCount", &m_webHistoryItemCount);
     bindProperty("titleTextDirection", &m_titleTextDirection);
+    bindProperty("platformName", &m_platformName);
 }
 
 LayoutTestController::~LayoutTestController()
@@ -380,6 +388,12 @@ void LayoutTestController::dumpTitleChanges(const CppArgumentList&, CppVariant* 
 void LayoutTestController::dumpPermissionClientCallbacks(const CppArgumentList&, CppVariant* result)
 {
     m_dumpPermissionClientCallbacks = true;
+    result->setNull();
+}
+
+void LayoutTestController::dumpCreateView(const CppArgumentList&, CppVariant* result)
+{
+    m_dumpCreateView = true;
     result->setNull();
 }
 
@@ -558,7 +572,7 @@ void LayoutTestController::queueLoadHTMLString(const CppArgumentList& arguments,
 {
     if (arguments.size() > 0 && arguments[0].isString()) {
         string html = arguments[0].toString();
-        WebURL baseURL;
+        WebURL baseURL(GURL(""));
         if (arguments.size() > 1 && arguments[1].isString())
             baseURL = WebURL(GURL(arguments[1].toString()));
         if (arguments.size() > 2 && arguments[2].isString())
@@ -593,6 +607,7 @@ void LayoutTestController::reset()
     }
     m_dumpAsText = false;
     m_dumpAsAudio = false;
+    m_dumpCreateView = false;
     m_dumpEditingCallbacks = false;
     m_dumpFrameLoadCallbacks = false;
     m_dumpProgressFinishedCallback = false;
@@ -618,7 +633,9 @@ void LayoutTestController::reset()
     m_globalFlag.set(false);
     m_webHistoryItemCount.set(0);
     m_titleTextDirection.set("ltr");
+    m_platformName.set("chromium");
     m_userStyleSheetLocation = WebURL();
+    m_isPrinting = false;
 
     webkit_support::SetAcceptAllCookies(false);
     WebSecurityPolicy::resetOriginAccessWhitelists();
@@ -785,6 +802,13 @@ void LayoutTestController::setImagesAllowed(const CppArgumentList& arguments, Cp
 {
     if (arguments.size() > 0 && arguments[0].isBool())
         m_shell->webPermissions()->setImagesAllowed(arguments[0].toBoolean());
+    result->setNull();
+}
+
+void LayoutTestController::setScriptsAllowed(const CppArgumentList& arguments, CppVariant* result)
+{
+    if (arguments.size() > 0 && arguments[0].isBool())
+        m_shell->webPermissions()->setScriptsAllowed(arguments[0].toBoolean());
     result->setNull();
 }
 
@@ -1123,7 +1147,9 @@ void LayoutTestController::grantDesktopNotificationPermission(const CppArgumentL
         result->set(false);
         return;
     }
+#if ENABLE(NOTIFICATIONS)
     m_shell->notificationPresenter()->grantPermission(cppVariantToWebString(arguments[0]));
+#endif
     result->set(true);
 }
 
@@ -1133,9 +1159,11 @@ void LayoutTestController::simulateDesktopNotificationClick(const CppArgumentLis
         result->set(false);
         return;
     }
+#if ENABLE(NOTIFICATIONS)
     if (m_shell->notificationPresenter()->simulateClick(cppVariantToWebString(arguments[0])))
         result->set(true);
     else
+#endif
         result->set(false);
 }
 
@@ -1362,6 +1390,36 @@ WebString LayoutTestController::cppVariantToWebString(const CppVariant& value)
     return WebString::fromUTF8(value.toString());
 }
 
+Vector<WebString> LayoutTestController::cppVariantToWebStringArray(const CppVariant& value)
+{
+    if (!value.isObject()) {
+        logErrorToConsole("Invalid value for preference. Expected object value.");
+        return Vector<WebString>();
+    }
+    Vector<WebString> resultVector;
+    Vector<string> stringVector = value.toStringVector();
+    for (size_t i = 0; i < stringVector.size(); ++i)
+        resultVector.append(WebString::fromUTF8(stringVector[i].c_str()));
+    return resultVector;
+}
+
+// Sets map based on scriptFontPairs, a collapsed vector of pairs of ISO 15924
+// four-letter script code and font such as:
+// { "Arab", "My Arabic Font", "Grek", "My Greek Font" }
+static void setFontMap(WebPreferences::ScriptFontFamilyMap& map, const Vector<WebString>& scriptFontPairs)
+{
+    map.clear();
+    size_t i = 0;
+    while (i + 1 < scriptFontPairs.size()) {
+        const WebString& script = scriptFontPairs[i++];
+        const WebString& font = scriptFontPairs[i++];
+
+        int32_t code = u_getPropertyValueEnum(UCHAR_SCRIPT, script.utf8().data());
+        if (code >= 0 && code < USCRIPT_CODE_LIMIT)
+            map.set(static_cast<int>(code), font);
+    }
+}
+
 void LayoutTestController::overridePreference(const CppArgumentList& arguments, CppVariant* result)
 {
     result->setNull();
@@ -1383,6 +1441,18 @@ void LayoutTestController::overridePreference(const CppArgumentList& arguments, 
         prefs->cursiveFontFamily = cppVariantToWebString(value);
     else if (key == "WebKitFantasyFont")
         prefs->fantasyFontFamily = cppVariantToWebString(value);
+    else if (key == "WebKitStandardFontMap")
+        setFontMap(prefs->standardFontMap, cppVariantToWebStringArray(value));
+    else if (key == "WebKitFixedFontMap")
+        setFontMap(prefs->fixedFontMap, cppVariantToWebStringArray(value));
+    else if (key == "WebKitSerifFontMap")
+        setFontMap(prefs->serifFontMap, cppVariantToWebStringArray(value));
+    else if (key == "WebKitSansSerifFontMap")
+        setFontMap(prefs->sansSerifFontMap, cppVariantToWebStringArray(value));
+    else if (key == "WebKitCursiveFontMap")
+        setFontMap(prefs->cursiveFontMap, cppVariantToWebStringArray(value));
+    else if (key == "WebKitFantasyFontMap")
+        setFontMap(prefs->fantasyFontMap, cppVariantToWebStringArray(value));
     else if (key == "WebKitDefaultFontSize")
         prefs->defaultFontSize = cppVariantToInt32(value);
     else if (key == "WebKitDefaultFixedFontSize")
@@ -1437,7 +1507,9 @@ void LayoutTestController::overridePreference(const CppArgumentList& arguments, 
         prefs->allowRunningOfInsecureContent = cppVariantToBool(value);
     else if (key == "WebKitHixie76WebSocketProtocolEnabled")
         prefs->hixie76WebSocketProtocolEnabled = cppVariantToBool(value);
-    else {
+    else if (key == "WebKitWebAudioEnabled") {
+        ASSERT(cppVariantToBool(value));
+    } else {
         string message("Invalid name for preference: ");
         message.append(key);
         logErrorToConsole(message);
@@ -1523,6 +1595,22 @@ void LayoutTestController::counterValueForElementById(const CppArgumentList& arg
     result->set(counterValue.utf8());
 }
 
+// Parse a single argument. The method returns true if there is an argument that
+// is a number or if there is no argument at all. It returns false only if there
+// is some argument that is not a number. The value parameter is filled with the
+// parsed number, or given the default if there is no argument.
+static bool parseCppArgumentInt32(const CppArgumentList& arguments, int argIndex, int* value, int defaultValue)
+{
+    if (static_cast<int>(arguments.size()) > argIndex) {
+        if (!arguments[argIndex].isNumber())
+            return false;
+        *value = arguments[argIndex].toInt32();
+        return true;
+    }
+    *value = defaultValue;
+    return true;
+}
+
 static bool parsePageSizeParameters(const CppArgumentList& arguments,
                                     int argOffset,
                                     int* pageWidthInPixels,
@@ -1530,22 +1618,47 @@ static bool parsePageSizeParameters(const CppArgumentList& arguments,
 {
     // WebKit is using the window width/height of DumpRenderTree as the
     // default value of the page size.
-    // FIXME: share these values with other ports.
-    *pageWidthInPixels = 800;
-    *pageHeightInPixels = 600;
-    switch (arguments.size() - argOffset) {
-    case 2:
-        if (!arguments[argOffset].isNumber() || !arguments[1 + argOffset].isNumber())
-            return false;
-        *pageWidthInPixels = arguments[argOffset].toInt32();
-        *pageHeightInPixels = arguments[1 + argOffset].toInt32();
-        // fall through.
-    case 0:
-        break;
-    default:
+    // FIXME: share the default values with other ports.
+    int argCount = static_cast<int>(arguments.size()) - argOffset;
+    if (argCount && argCount != 2)
         return false;
-    }
+    if (!parseCppArgumentInt32(arguments, argOffset, pageWidthInPixels, 800)
+        || !parseCppArgumentInt32(arguments, argOffset + 1, pageHeightInPixels, 600))
+        return false;
     return true;
+}
+
+static bool parsePageNumber(const CppArgumentList& arguments, int argOffset, int* pageNumber)
+{
+    if (static_cast<int>(arguments.size()) > argOffset + 1)
+        return false;
+    if (!parseCppArgumentInt32(arguments, argOffset, pageNumber, 0))
+        return false;
+    return true;
+}
+
+static bool parsePageNumberSizeMargins(const CppArgumentList& arguments, int argOffset,
+                                       int* pageNumber, int* width, int* height,
+                                       int* marginTop, int* marginRight, int* marginBottom, int* marginLeft)
+{
+    int argCount = static_cast<int>(arguments.size()) - argOffset;
+    if (argCount && argCount != 7)
+        return false;
+    if (!parseCppArgumentInt32(arguments, argOffset, pageNumber, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 1, width, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 2, height, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 3, marginTop, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 4, marginRight, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 5, marginBottom, 0)
+        || !parseCppArgumentInt32(arguments, argOffset + 6, marginLeft, 0))
+        return false;
+    return true;
+}
+
+void LayoutTestController::setPrinting(const CppArgumentList& arguments, CppVariant* result)
+{
+    setIsPrinting(true);
+    result->setNull();
 }
 
 void LayoutTestController::pageNumberForElementById(const CppArgumentList& arguments, CppVariant* result)
@@ -1564,6 +1677,60 @@ void LayoutTestController::pageNumberForElementById(const CppArgumentList& argum
     result->set(frame->pageNumberForElementById(cppVariantToWebString(arguments[0]),
                                                 static_cast<float>(pageWidthInPixels),
                                                 static_cast<float>(pageHeightInPixels)));
+}
+
+void LayoutTestController::pageSizeAndMarginsInPixels(const CppArgumentList& arguments, CppVariant* result)
+{
+    result->set("");
+    int pageNumber = 0;
+    int width = 0;
+    int height = 0;
+    int marginTop = 0;
+    int marginRight = 0;
+    int marginBottom = 0;
+    int marginLeft = 0;
+    if (!parsePageNumberSizeMargins(arguments, 0, &pageNumber, &width, &height, &marginTop, &marginRight, &marginBottom,
+                                    &marginLeft))
+        return;
+
+    WebFrame* frame = m_shell->webView()->mainFrame();
+    if (!frame)
+        return;
+    WebSize pageSize(width, height);
+    frame->pageSizeAndMarginsInPixels(pageNumber, pageSize, marginTop, marginRight, marginBottom, marginLeft);
+    stringstream resultString;
+    resultString << "(" << pageSize.width << ", " << pageSize.height << ") " << marginTop << " " << marginRight << " "
+                 << marginBottom << " " << marginLeft;
+    result->set(resultString.str());
+}
+
+void LayoutTestController::isPageBoxVisible(const CppArgumentList& arguments, CppVariant* result)
+{
+    result->setNull();
+    int pageNumber = 0;
+    if (!parsePageNumber(arguments, 0, &pageNumber))
+        return;
+    WebFrame* frame = m_shell->webView()->mainFrame();
+    if (!frame)
+        return;
+    result->set(frame->isPageBoxVisible(pageNumber));
+}
+
+void LayoutTestController::pageProperty(const CppArgumentList& arguments, CppVariant* result)
+{
+    result->set("");
+    int pageNumber = 0;
+    if (!parsePageNumber(arguments, 1, &pageNumber))
+        return;
+    if (!arguments[0].isString())
+        return;
+    WebFrame* frame = m_shell->webView()->mainFrame();
+    if (!frame)
+        return;
+    WebSize pageSize(800, 800);
+    frame->printBegin(pageSize);
+    result->set(frame->pageProperty(cppVariantToWebString(arguments[0]), pageNumber).utf8());
+    frame->printEnd();
 }
 
 void LayoutTestController::numberOfPages(const CppArgumentList& arguments, CppVariant* result)
@@ -1718,7 +1885,8 @@ void LayoutTestController::addMockSpeechInputResult(const CppArgumentList& argum
     if (arguments.size() < 3 || !arguments[0].isString() || !arguments[1].isNumber() || !arguments[2].isString())
         return;
 
-    m_shell->webViewHost()->speechInputControllerMock()->addMockRecognitionResult(cppVariantToWebString(arguments[0]), arguments[1].toDouble(), cppVariantToWebString(arguments[2]));
+    if (WebSpeechInputControllerMock* controller = m_shell->webViewHost()->speechInputControllerMock())
+        controller->addMockRecognitionResult(cppVariantToWebString(arguments[0]), arguments[1].toDouble(), cppVariantToWebString(arguments[2]));
 }
 
 void LayoutTestController::startSpeechInput(const CppArgumentList& arguments, CppVariant* result)

@@ -34,11 +34,6 @@ namespace JSC {
 
 class MacroAssemblerX86 : public MacroAssemblerX86Common {
 public:
-    MacroAssemblerX86()
-        : m_isSSE2Present(isSSE2Present())
-    {
-    }
-
     static const Scale ScalePtr = TimesFour;
 
     using MacroAssemblerX86Common::add32;
@@ -51,6 +46,7 @@ public:
     using MacroAssemblerX86Common::store32;
     using MacroAssemblerX86Common::branch32;
     using MacroAssemblerX86Common::call;
+    using MacroAssemblerX86Common::jump;
     using MacroAssemblerX86Common::addDouble;
     using MacroAssemblerX86Common::loadDouble;
     using MacroAssemblerX86Common::storeDouble;
@@ -66,11 +62,12 @@ public:
         m_assembler.addl_im(imm.m_value, address.m_ptr);
     }
     
-    void addWithCarry32(TrustedImm32 imm, AbsoluteAddress address)
+    void add64(TrustedImm32 imm, AbsoluteAddress address)
     {
-        m_assembler.adcl_im(imm.m_value, address.m_ptr);
+        m_assembler.addl_im(imm.m_value, address.m_ptr);
+        m_assembler.adcl_im(imm.m_value >> 31, reinterpret_cast<const char*>(address.m_ptr) + sizeof(int32_t));
     }
-    
+
     void and32(TrustedImm32 imm, AbsoluteAddress address)
     {
         m_assembler.andl_im(imm.m_value, address.m_ptr);
@@ -113,6 +110,14 @@ public:
         m_assembler.cvtsi2sd_mr(src.m_ptr, dest);
     }
 
+    void absDouble(FPRegisterID src, FPRegisterID dst)
+    {
+        ASSERT(src != dst);
+        static const double negativeZeroConstant = -0.0;
+        loadDouble(&negativeZeroConstant, dst);
+        m_assembler.andnpd_rr(src, dst);
+    }
+
     void store32(TrustedImm32 imm, void* address)
     {
         m_assembler.movl_i32m(imm.m_value, address);
@@ -152,6 +157,12 @@ public:
         return Call(m_assembler.call(), Call::Linkable);
     }
 
+    // Address is a memory location containing the address to jump to
+    void jump(AbsoluteAddress address)
+    {
+        m_assembler.jmp_m(address.m_ptr);
+    }
+
     Call tailRecursiveCall()
     {
         return Call::fromTailJump(jump());
@@ -189,15 +200,19 @@ public:
         return DataLabelPtr(this);
     }
 
-    bool supportsFloatingPoint() const { return m_isSSE2Present; }
+    static bool supportsFloatingPoint() { return isSSE2Present(); }
     // See comment on MacroAssemblerARMv7::supportsFloatingPointTruncate()
-    bool supportsFloatingPointTruncate() const { return m_isSSE2Present; }
-    bool supportsFloatingPointSqrt() const { return m_isSSE2Present; }
-    bool supportsDoubleBitops() const { return m_isSSE2Present; }
+    static bool supportsFloatingPointTruncate() { return isSSE2Present(); }
+    static bool supportsFloatingPointSqrt() { return isSSE2Present(); }
+    static bool supportsFloatingPointAbs() { return isSSE2Present(); }
+    
+    static FunctionPtr readCallTarget(CodeLocationCall call)
+    {
+        intptr_t offset = reinterpret_cast<int32_t*>(call.dataLocation())[-1];
+        return FunctionPtr(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(call.dataLocation()) + offset));
+    }
 
 private:
-    const bool m_isSSE2Present;
-
     friend class LinkBuffer;
     friend class RepatchBuffer;
 

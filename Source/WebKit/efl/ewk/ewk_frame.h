@@ -319,12 +319,14 @@ EAPI Eina_Bool    ewk_frame_contents_alternate_set(Evas_Object *o, const char *c
 /**
  * Requests execution of the given script.
  *
+ * The returned string @b should be freed after use.
+ *
  * @param o frame object to execute script
  * @param script Java Script to execute
  *
- * @return @c EINA_TRUE if request was done, @c EINA_FALSE on errors
+ * @return newly allocated string for result or @c 0 if the result cannot be converted to string or failure
  */
-EAPI Eina_Bool    ewk_frame_script_execute(Evas_Object *o, const char *script);
+EAPI char        *ewk_frame_script_execute(Evas_Object *o, const char *script);
 
 /**
  * Queries if the frame is editable.
@@ -520,44 +522,50 @@ EAPI Eina_Bool    ewk_frame_forward_possible(Evas_Object *o);
 EAPI Eina_Bool    ewk_frame_navigate_possible(Evas_Object *o, int steps);
 
 /**
- * Gets the current zoom level used by this frame.
+ * Gets the current page zoom level used by this frame.
  *
  * @param o frame object to get zoom level
  *
- * @return zoom level for the frame or @c -1.0 on failure
+ * @return page zoom level for the frame or @c -1.0 on failure
+ *
+ * @see ewk_frame_text_zoom_get()
  */
-EAPI float        ewk_frame_zoom_get(const Evas_Object *o);
+EAPI float        ewk_frame_page_zoom_get(const Evas_Object *o);
 
 /**
- * Sets the current zoom level used by this frame.
+ * Sets the current page zoom level used by this frame.
  *
  * @param o frame object to change zoom level
- * @param zoom a new zoom level
+ * @param page_zoom_factor a new zoom level
  *
  * @return @c EINA_TRUE on success or @c EINA_FALSE on failure
  *
- * @see ewk_frame_zoom_text_only_set()
+ * @see ewk_frame_text_zoom_set()
  */
-EAPI Eina_Bool    ewk_frame_zoom_set(Evas_Object *o, float zoom);
+EAPI Eina_Bool    ewk_frame_page_zoom_set(Evas_Object *o, float page_zoom_factor);
 
 /**
- * Queries if zoom level just applies to text only and not other elements.
+ * Gets the current text zoom level used by this frame.
  *
- * @param o frame to query zoom level for text only
+ * @param o frame object to get zoom level
  *
- * @return @c EINA_TRUE if zoom level is applied to text only, @c EINA_FALSE if not or on failure
+ * @return text zoom level for the frame or @c -1.0 on failure
+ *
+ * @see ewk_frame_page_zoom_get()
  */
-EAPI Eina_Bool    ewk_frame_zoom_text_only_get(const Evas_Object *o);
+EAPI float        ewk_frame_text_zoom_get(const Evas_Object *o);
 
 /**
- * Sets if zoom level just applies to text only and not other elements.
+ * Sets the current text zoom level used by this frame.
  *
- * @param o frame to apply zoom level for text only
- * @param setting @c EINA_TRUE if zoom level should be applied to text only, @c EINA_FALSE if not
+ * @param o frame object to change zoom level
+ * @param textZoomFactor a new zoom level
  *
- * @return @c EINA_TRUE on success, @c EINA_FALSE otherwise
+ * @return @c EINA_TRUE on success or @c EINA_FALSE on failure
+ *
+ * @see ewk_frame_page_zoom_set()
  */
-EAPI Eina_Bool    ewk_frame_zoom_text_only_set(Evas_Object *o, Eina_Bool setting);
+EAPI Eina_Bool    ewk_frame_text_zoom_set(Evas_Object *o, float text_zoom_factor);
 
 /**
  * Frees hit test instance created by ewk_frame_hit_test_new().
@@ -693,6 +701,21 @@ EAPI Eina_Bool    ewk_frame_feed_focus_in(Evas_Object *o);
  * @return @c EINA_FALSE since the feature is not implemented
  */
 EAPI Eina_Bool    ewk_frame_feed_focus_out(Evas_Object *o);
+
+/**
+ * Gets the geometry, relative to the frame, of the focused element in the
+ * document.
+ *
+ * @param o frame object containing the focused element
+ * @param x pointer where to store the X value of the geometry, may be @c 0
+ * @param x pointer where to store the Y value of the geometry, may be @c 0
+ * @param x pointer where to store width of the geometry, may be @c 0
+ * @param x pointer where to store height of the geometry, may be @c 0
+ *
+ * @return @c EINA_TRUE if the frame contains the currently focused element and
+ * its geometry was correctly fetched, @c EINA_FALSE in any other case
+ */
+EAPI Eina_Bool ewk_frame_focused_element_geometry_get(const Evas_Object *o, int *x, int *y, int *w, int *h);
 
 /**
  * Feeds the mouse wheel event to the frame.

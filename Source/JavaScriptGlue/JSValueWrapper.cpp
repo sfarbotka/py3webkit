@@ -77,7 +77,7 @@ CFArrayRef JSValueWrapper::JSObjectCopyPropertyNames(void *data)
         ExecState* exec = getThreadGlobalExecState();
         JSObject* object = ptr->GetValue().toObject(exec);
         PropertyNameArray propNames(exec);
-        object->getPropertyNames(exec, propNames);
+        object->methodTable()->getPropertyNames(object, exec, propNames, ExcludeDontEnumProperties);
         PropertyNameArray::const_iterator iterator = propNames.begin();
 
         while (iterator != propNames.end()) {
@@ -136,7 +136,7 @@ void JSValueWrapper::JSObjectSetProperty(void *data, CFStringRef propertyName, J
         JSValue value = JSObjectKJSValue((JSUserObject*)jsValue);
         JSObject *objValue = ptr->GetValue().toObject(exec);
         PutPropertySlot slot;
-        objValue->put(exec, CFStringToIdentifier(propertyName, exec), value, slot);
+        objValue->methodTable()->put(objValue, exec, CFStringToIdentifier(propertyName, exec), value, slot);
     }
 }
 
@@ -164,7 +164,7 @@ JSObjectRef JSValueWrapper::JSObjectCallFunction(void *data, JSObjectRef thisObj
         }
 
         CallData callData;
-        CallType callType = objValue->getCallDataVirtual(callData);
+        CallType callType = objValue->methodTable()->getCallData(objValue, callData);
         if (callType == CallTypeNone)
             return 0;
         JSValue  resultValue = call(exec, objValue, callType, callData, ksjThisObj, listArgs);

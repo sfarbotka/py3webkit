@@ -33,6 +33,7 @@
 #include "Page.h"
 #include "SMILTimeContainer.h"
 #include "SVGElement.h"
+#include "SVGResourcesCache.h"
 #include "SVGSMILElement.h"
 #include "SVGSVGElement.h"
 #include "ScriptableDocumentParser.h"
@@ -205,14 +206,14 @@ void SVGDocumentExtensions::addPendingResource(const AtomicString& id, SVGStyled
     if (id.isEmpty())
         return;
 
-    if (m_pendingResources.contains(id))
-        m_pendingResources.get(id)->add(element);
-    else {
-        SVGPendingElements* set = new SVGPendingElements;
-        set->add(element);
-
-        m_pendingResources.add(id, set);
-    }
+    // The HashMap add function leaves the map alone and returns a pointer to the element in the
+    // map if the element already exists. So we add with a value of 0, and it either finds the
+    // existing element or adds a new one in a single operation. The ".first->second" idiom gets
+    // us to the iterator from add's result, and then to the value inside the hash table.
+    SVGPendingElements*& set = m_pendingResources.add(id, 0).first->second;
+    if (!set)
+        set = new SVGPendingElements;
+    set->add(element);
 
     element->setHasPendingResources();
 }
@@ -227,10 +228,10 @@ bool SVGDocumentExtensions::hasPendingResources(const AtomicString& id) const
 
 bool SVGDocumentExtensions::isElementInPendingResources(SVGStyledElement* element) const
 {
-    ASSERT(element);
+    // This algorithm takes time proportional to the number of pending resources and need not.
+    // If performance becomes an issue we can keep a counted set of elements and answer the question efficiently.
 
-    if (m_pendingResources.isEmpty())
-        return false;
+    ASSERT(element);
 
     HashMap<AtomicString, SVGPendingElements*>::const_iterator end = m_pendingResources.end();
     for (HashMap<AtomicString, SVGPendingElements*>::const_iterator it = m_pendingResources.begin(); it != end; ++it) {
@@ -264,21 +265,16 @@ void SVGDocumentExtensions::removeElementFromPendingResources(SVGStyledElement* 
 
     element->clearHasPendingResourcesIfPossible();
 
-    if (toBeRemoved.isEmpty())
-        return;
-
+    // We use the removePendingResource function here because it deals with set lifetime correctly.
     Vector<AtomicString>::iterator endVector = toBeRemoved.end();
     for (Vector<AtomicString>::iterator it = toBeRemoved.begin(); it != endVector; ++it)
-        m_pendingResources.remove(*it);
+        removePendingResource(*it);
 }
 
 PassOwnPtr<SVGDocumentExtensions::SVGPendingElements> SVGDocumentExtensions::removePendingResource(const AtomicString& id)
 {
     ASSERT(m_pendingResources.contains(id));
-
-    OwnPtr<SVGPendingElements> set = adoptPtr(m_pendingResources.get(id));
-    m_pendingResources.remove(id);
-    return set.release();
+    return adoptPtr(m_pendingResources.take(id));
 }
 
 }

@@ -92,6 +92,7 @@ typedef void (*WKBundlePageDidReceiveTitleForFrameCallback)(WKBundlePageRef page
 typedef void (*WKBundlePageDidRemoveFrameFromHierarchyCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
 typedef void (*WKBundlePageDidDisplayInsecureContentForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
 typedef void (*WKBundlePageDidRunInsecureContentForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
+typedef void (*WKBundlePageDidDetectXSSForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
 typedef void (*WKBundlePageDidFirstLayoutForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
 typedef void (*WKBundlePageDidFirstVisuallyNonEmptyLayoutForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, WKTypeRef* userData, const void *clientInfo);
 typedef void (*WKBundlePageDidLayoutForFrameCallback)(WKBundlePageRef page, WKBundleFrameRef frame, const void* clientInfo);
@@ -126,6 +127,7 @@ struct WKBundlePageLoaderClient {
 
     // Version 1.
     WKBundlePageDidLayoutForFrameCallback                               didLayoutForFrame;
+    WKBundlePageDidDetectXSSForFrameCallback                            didDetectXSSForFrame;
 };
 typedef struct WKBundlePageLoaderClient WKBundlePageLoaderClient;
 
@@ -338,6 +340,8 @@ WK_EXPORT bool WKBundlePageFindString(WKBundlePageRef page, WKStringRef target, 
 WK_EXPORT WKImageRef WKBundlePageCreateSnapshotInViewCoordinates(WKBundlePageRef page, WKRect rect, WKImageOptions options);
 WK_EXPORT WKImageRef WKBundlePageCreateSnapshotInDocumentCoordinates(WKBundlePageRef page, WKRect rect, WKImageOptions options);
 WK_EXPORT WKImageRef WKBundlePageCreateScaledSnapshotInDocumentCoordinates(WKBundlePageRef page, WKRect rect, double scaleFactor, WKImageOptions options);
+
+WK_EXPORT double WKBundlePageGetBackingScaleFactor(WKBundlePageRef page);
 
 #if defined(ENABLE_INSPECTOR) && ENABLE_INSPECTOR
 WK_EXPORT WKBundleInspectorRef WKBundlePageGetInspector(WKBundlePageRef page);

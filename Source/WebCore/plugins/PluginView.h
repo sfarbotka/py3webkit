@@ -67,7 +67,7 @@ QT_BEGIN_NAMESPACE
 class QPainter;
 QT_END_NAMESPACE
 #endif
-#if PLATFORM(QT) && USE(ACCELERATED_COMPOSITING) && ENABLE(NETSCAPE_PLUGIN_API) && (defined(XP_UNIX) || OS(SYMBIAN))
+#if PLATFORM(QT) && USE(ACCELERATED_COMPOSITING) && ENABLE(NETSCAPE_PLUGIN_API) && defined(XP_UNIX)
 #ifndef WTF_USE_ACCELERATED_COMPOSITING_PLUGIN_LAYER
 #define WTF_USE_ACCELERATED_COMPOSITING_PLUGIN_LAYER 1
 #endif
@@ -388,7 +388,7 @@ public:
 
 private:
 
-#if defined(XP_UNIX) || OS(SYMBIAN) || PLATFORM(GTK)
+#if defined(XP_UNIX) || PLATFORM(GTK)
         void setNPWindowIfNeeded();
 #elif defined(XP_MACOSX)
         NP_CGContext m_npCgContext;
@@ -419,11 +419,6 @@ private:
 #endif
 
 #if PLATFORM(QT) 
-#if defined(MOZ_PLATFORM_MAEMO) && (MOZ_PLATFORM_MAEMO >= 5)
-        QImage m_image;
-        bool m_renderToImage;
-        void paintUsingImageSurfaceExtension(QPainter* painter, const IntRect& exposedRect);
-#endif
 #if defined(XP_UNIX) && ENABLE(NETSCAPE_PLUGIN_API)
         void paintUsingXPixmap(QPainter* painter, const QRect &exposedRect);
 #endif

@@ -52,6 +52,9 @@
 
 namespace WebCore {
 
+#if ENABLE(CSS_FILTERS)
+class FilterEffectRenderer;
+#endif
 class HitTestRequest;
 class HitTestResult;
 class HitTestingTransformState;
@@ -259,8 +262,8 @@ public:
     const LayoutPoint& location() const { return m_topLeft; }
     void setLocation(LayoutUnit x, LayoutUnit y) { m_topLeft = LayoutPoint(x, y); }
 
-    const LayoutSize& size() const { return m_layerSize; }
-    void setSize(const LayoutSize& size) { m_layerSize = size; }
+    const IntSize& size() const { return m_layerSize; }
+    void setSize(const IntSize& size) { m_layerSize = size; }
 
     LayoutRect rect() const { return LayoutRect(location(), size()); }
 
@@ -279,9 +282,9 @@ public:
 
     LayoutSize scrolledContentOffset() const { return scrollOffset() + m_scrollOverflow; }
 
-    LayoutUnit scrollXOffset() const { return m_scrollOffset.width() + m_scrollOrigin.x(); }
-    LayoutUnit scrollYOffset() const { return m_scrollOffset.height() + m_scrollOrigin.y(); }
-    LayoutSize scrollOffset() const { return LayoutSize(scrollXOffset(), scrollYOffset()); }
+    int scrollXOffset() const { return m_scrollOffset.width() + scrollOrigin().x(); }
+    int scrollYOffset() const { return m_scrollOffset.height() + scrollOrigin().y(); }
+    IntSize scrollOffset() const { return IntSize(scrollXOffset(), scrollYOffset()); }
 
     void scrollToOffset(LayoutUnit, LayoutUnit, ScrollOffsetClamping = ScrollOffsetUnclamped);
     void scrollToXOffset(LayoutUnit x, ScrollOffsetClamping clamp = ScrollOffsetUnclamped) { scrollToOffset(x, scrollYOffset(), clamp); }
@@ -385,6 +388,8 @@ public:
     void updateNormalFlowList();
     Vector<RenderLayer*>* normalFlowList() const { return m_normalFlowList; }
 
+    // FIXME: We should ASSERT(!m_visibleContentStatusDirty) here, but see https://bugs.webkit.org/show_bug.cgi?id=71044
+    // ditto for hasVisibleDescendant(), see https://bugs.webkit.org/show_bug.cgi?id=71277
     bool hasVisibleContent() const { return m_hasVisibleContent; }
     bool hasVisibleDescendant() const { return m_hasVisibleDescendant; }
     void setHasVisibleContent(bool);
@@ -419,6 +424,9 @@ public:
         PaintLayerTemporaryClipRects = 1 << 2,
         PaintLayerPaintingReflection = 1 << 3,
         PaintLayerPaintingOverlayScrollbars = 1 << 4
+#if ENABLE(CSS_FILTERS)
+        , PaintLayerPaintingFilter = 1 << 5
+#endif
     };
     
     typedef unsigned PaintLayerFlags;
@@ -466,13 +474,22 @@ public:
     // Return a cached repaint rect, computed relative to the layer renderer's containerForRepaint.
     LayoutRect repaintRect() const { return m_repaintRect; }
     LayoutRect repaintRectIncludingDescendants() const;
-    void updateLayerPositionsAfterScroll(bool fixed = false);
+
+    enum UpdateLayerPositionsAfterScrollFlag {
+        NoFlag = 0,
+        HasSeenFixedPositionedAncestor = 1 << 0,
+        HasSeenAncestorWithOverflowClip = 1 << 1
+    };
+
+    typedef unsigned UpdateLayerPositionsAfterScrollFlags;
+    void updateLayerPositionsAfterScroll(UpdateLayerPositionsAfterScrollFlags = NoFlag);
     void setNeedsFullRepaint(bool f = true) { m_needsFullRepaint = f; }
     
-    int staticInlinePosition() const { return m_staticInlinePosition; }
-    int staticBlockPosition() const { return m_staticBlockPosition; }
-    void setStaticInlinePosition(int position) { m_staticInlinePosition = position; }
-    void setStaticBlockPosition(int position) { m_staticBlockPosition = position; }
+    LayoutUnit staticInlinePosition() const { return m_staticInlinePosition; }
+    LayoutUnit staticBlockPosition() const { return m_staticBlockPosition; }
+   
+    void setStaticInlinePosition(LayoutUnit position) { m_staticInlinePosition = position; }
+    void setStaticBlockPosition(LayoutUnit position) { m_staticBlockPosition = position; }
 
     bool hasTransform() const { return renderer()->hasTransform(); }
     // Note that this transform has the transform-origin baked in.
@@ -491,7 +508,11 @@ public:
     bool preserves3D() const { return renderer()->style()->transformStyle3D() == TransformStyle3DPreserve3D; }
     bool has3DTransform() const { return m_transform && !m_transform->isAffine(); }
 
-     // Overloaded new operator.  Derived classes must override operator new
+#if ENABLE(CSS_FILTERS)
+    bool hasFilter() const { return renderer()->hasFilter(); }
+#endif
+
+    // Overloaded new operator. Derived classes must override operator new
     // in order to allocate out of the RenderArena.
     void* operator new(size_t, RenderArena*) throw();
 
@@ -543,7 +564,7 @@ private:
     LayoutUnit renderBoxX() const { return renderBoxLocation().x(); }
     LayoutUnit renderBoxY() const { return renderBoxLocation().y(); }
 
-    void collectLayers(Vector<RenderLayer*>*&, Vector<RenderLayer*>*&);
+    void collectLayers(bool includeHiddenLayers, Vector<RenderLayer*>*&, Vector<RenderLayer*>*&);
 
     void updateLayerListsIfNeeded();
     void updateCompositingAndLayerListsIfNeeded();
@@ -589,42 +610,42 @@ private:
 
     bool shouldBeNormalFlowOnly() const; 
 
-    LayoutUnit scrollPosition(Scrollbar*) const;
+    int scrollPosition(Scrollbar*) const;
     
     // ScrollableArea interface
-    virtual void invalidateScrollbarRect(Scrollbar*, const LayoutRect&);
-    virtual void invalidateScrollCornerRect(const LayoutRect&);
+    virtual void invalidateScrollbarRect(Scrollbar*, const IntRect&);
+    virtual void invalidateScrollCornerRect(const IntRect&);
     virtual bool isActive() const;
     virtual bool isScrollCornerVisible() const;
-    virtual LayoutRect scrollCornerRect() const;
-    virtual LayoutRect convertFromScrollbarToContainingView(const Scrollbar*, const LayoutRect&) const;
-    virtual LayoutRect convertFromContainingViewToScrollbar(const Scrollbar*, const LayoutRect&) const;
-    virtual LayoutPoint convertFromScrollbarToContainingView(const Scrollbar*, const LayoutPoint&) const;
-    virtual LayoutPoint convertFromContainingViewToScrollbar(const Scrollbar*, const LayoutPoint&) const;
-    virtual LayoutUnit scrollSize(ScrollbarOrientation) const;
-    virtual void setScrollOffset(const LayoutPoint&);
-    virtual LayoutPoint scrollPosition() const;
-    virtual LayoutPoint minimumScrollPosition() const;
-    virtual LayoutPoint maximumScrollPosition() const;
-    virtual LayoutRect visibleContentRect(bool includeScrollbars) const;
-    virtual LayoutUnit visibleHeight() const;
-    virtual LayoutUnit visibleWidth() const;
-    virtual LayoutSize contentsSize() const;
-    virtual LayoutSize overhangAmount() const;
-    virtual LayoutPoint currentMousePosition() const;
-    virtual void didCompleteRubberBand(const LayoutSize&) const;
+    virtual IntRect scrollCornerRect() const;
+    virtual IntRect convertFromScrollbarToContainingView(const Scrollbar*, const IntRect&) const;
+    virtual IntRect convertFromContainingViewToScrollbar(const Scrollbar*, const IntRect&) const;
+    virtual IntPoint convertFromScrollbarToContainingView(const Scrollbar*, const IntPoint&) const;
+    virtual IntPoint convertFromContainingViewToScrollbar(const Scrollbar*, const IntPoint&) const;
+    virtual int scrollSize(ScrollbarOrientation) const;
+    virtual void setScrollOffset(const IntPoint&);
+    virtual IntPoint scrollPosition() const;
+    virtual IntPoint minimumScrollPosition() const;
+    virtual IntPoint maximumScrollPosition() const;
+    virtual IntRect visibleContentRect(bool includeScrollbars) const;
+    virtual int visibleHeight() const;
+    virtual int visibleWidth() const;
+    virtual IntSize contentsSize() const;
+    virtual IntSize overhangAmount() const;
+    virtual IntPoint currentMousePosition() const;
+    virtual void didCompleteRubberBand(const IntSize&) const;
     virtual bool shouldSuspendScrollAnimations() const;
     virtual bool isOnActivePage() const;
 
     // Rectangle encompassing the scroll corner and resizer rect.
-    LayoutRect scrollCornerAndResizerRect() const;
+    IntRect scrollCornerAndResizerRect() const;
 
     virtual void disconnectFromPage() { m_scrollableAreaPage = 0; }
 
     // NOTE: This should only be called by the overriden setScrollOffset from ScrollableArea.
-    void scrollTo(LayoutUnit, LayoutUnit);
+    void scrollTo(int, int);
 
-    LayoutSize scrollbarOffset(const Scrollbar*) const;
+    IntSize scrollbarOffset(const Scrollbar*) const;
     
     void updateOverflowStatus(bool horizontalOverflow, bool verticalOverflow);
 
@@ -648,7 +669,12 @@ private:
     void updateReflectionStyle();
     bool paintingInsideReflection() const { return m_paintingInsideReflection; }
     void setPaintingInsideReflection(bool b) { m_paintingInsideReflection = b; }
-    
+
+#if ENABLE(CSS_FILTERS)
+    void updateOrRemoveFilterEffect();
+    void updateFilterBackingStore();
+#endif
+
     void parentClipRects(const RenderLayer* rootLayer, RenderRegion*, ClipRects&, bool temporaryClipRects = false, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const;
     ClipRect backgroundClipRect(const RenderLayer* rootLayer, RenderRegion*, bool temporaryClipRects, OverlayScrollbarSizeRelevancy = IgnoreOverlayScrollbarSize) const;
 
@@ -697,53 +723,7 @@ private:
     }
 
 protected:
-    RenderBoxModelObject* m_renderer;
-
-    RenderLayer* m_parent;
-    RenderLayer* m_previous;
-    RenderLayer* m_next;
-    RenderLayer* m_first;
-    RenderLayer* m_last;
-
-    LayoutRect m_repaintRect; // Cached repaint rects. Used by layout.
-    LayoutRect m_outlineBox;
-
-    // Our current relative position offset.
-    LayoutSize m_relativeOffset;
-
-    // Our (x,y) coordinates are in our parent layer's coordinate space.
-    LayoutPoint m_topLeft;
-
-    // The layer's width/height
-    LayoutSize m_layerSize;
-
-    // Our scroll offsets if the view is scrolled.
-    LayoutSize m_scrollOffset;
-
-    LayoutSize m_scrollOverflow;
-    
-    // The width/height of our scrolled area.
-    LayoutSize m_scrollSize;
-
-    // For layers with overflow, we have a pair of scrollbars.
-    RefPtr<Scrollbar> m_hBar;
-    RefPtr<Scrollbar> m_vBar;
-
-    // For layers that establish stacking contexts, m_posZOrderList holds a sorted list of all the
-    // descendant layers within the stacking context that have z-indices of 0 or greater
-    // (auto will count as 0).  m_negZOrderList holds descendants within our stacking context with negative
-    // z-indices.
-    Vector<RenderLayer*>* m_posZOrderList;
-    Vector<RenderLayer*>* m_negZOrderList;
-
-    // This list contains child layers that cannot create stacking contexts.  For now it is just
-    // overflow layers, but that may change in the future.
-    Vector<RenderLayer*>* m_normalFlowList;
-
-    ClipRects* m_clipRects;      // Cached clip rects used when painting and hit testing.
-#ifndef NDEBUG
-    const RenderLayer* m_clipRectsRoot;   // Root layer used to compute clip rects.
-#endif
+    // The bitfields are up here so they will fall into the padding from ScrollableArea on 64-bit.
 
     // Keeps track of whether the layer is currently resizing, so events can cause resizing to start and stop.
     bool m_inResizeMode : 1;
@@ -780,19 +760,76 @@ protected:
 
     bool m_containsDirtyOverlayScrollbars : 1;
 
+    // This is an optimization added for <table>.
+    // Currently cells do not need to update their repaint rectangles when scrolling. This also
+    // saves a lot of time when scrolling on a table.
+    bool m_canSkipRepaintRectsUpdateOnScroll : 1;
+
+    RenderBoxModelObject* m_renderer;
+
+    RenderLayer* m_parent;
+    RenderLayer* m_previous;
+    RenderLayer* m_next;
+    RenderLayer* m_first;
+    RenderLayer* m_last;
+
+    LayoutRect m_repaintRect; // Cached repaint rects. Used by layout.
+    LayoutRect m_outlineBox;
+
+    // Our current relative position offset.
+    LayoutSize m_relativeOffset;
+
+    // Our (x,y) coordinates are in our parent layer's coordinate space.
+    LayoutPoint m_topLeft;
+
+    // The layer's width/height
+    IntSize m_layerSize;
+
+    // Our scroll offsets if the view is scrolled.
+    IntSize m_scrollOffset;
+
+    LayoutSize m_scrollOverflow;
+    
+    // The width/height of our scrolled area.
+    IntSize m_scrollSize;
+
+    // For layers with overflow, we have a pair of scrollbars.
+    RefPtr<Scrollbar> m_hBar;
+    RefPtr<Scrollbar> m_vBar;
+
+    // For layers that establish stacking contexts, m_posZOrderList holds a sorted list of all the
+    // descendant layers within the stacking context that have z-indices of 0 or greater
+    // (auto will count as 0).  m_negZOrderList holds descendants within our stacking context with negative
+    // z-indices.
+    Vector<RenderLayer*>* m_posZOrderList;
+    Vector<RenderLayer*>* m_negZOrderList;
+
+    // This list contains child layers that cannot create stacking contexts.  For now it is just
+    // overflow layers, but that may change in the future.
+    Vector<RenderLayer*>* m_normalFlowList;
+
+    ClipRects* m_clipRects;      // Cached clip rects used when painting and hit testing.
+#ifndef NDEBUG
+    const RenderLayer* m_clipRectsRoot;   // Root layer used to compute clip rects.
+#endif
+
     LayoutPoint m_cachedOverlayScrollbarOffset;
 
     RenderMarquee* m_marquee; // Used by layers with overflow:marquee
     
     // Cached normal flow values for absolute positioned elements with static left/top values.
-    int m_staticInlinePosition;
-    int m_staticBlockPosition;
-    
+    LayoutUnit m_staticInlinePosition;
+    LayoutUnit m_staticBlockPosition;
+
     OwnPtr<TransformationMatrix> m_transform;
     
     // May ultimately be extended to many replicas (with their own paint order).
     RenderReplica* m_reflection;
-    
+  
+#if ENABLE(CSS_FILTERS)
+    RefPtr<FilterEffectRenderer> m_filter;
+#endif
+        
     // Renderers to hold our custom scroll corner and resizer.
     RenderScrollbarPart* m_scrollCorner;
     RenderScrollbarPart* m_resizer;

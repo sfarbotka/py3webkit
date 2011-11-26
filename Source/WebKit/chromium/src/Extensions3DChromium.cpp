@@ -77,6 +77,11 @@ void Extensions3DChromium::renderbufferStorageMultisample(unsigned long target, 
     m_private->renderbufferStorageMultisampleCHROMIUM(target, samples, internalformat, width, height);
 }
 
+void Extensions3DChromium::postSubBufferCHROMIUM(int x, int y, int width, int height)
+{
+    m_private->postSubBufferCHROMIUM(x, y, width, height);
+}
+
 void* Extensions3DChromium::mapBufferSubDataCHROMIUM(unsigned target, int offset, int size, unsigned access)
 {
     return m_private->mapBufferSubDataCHROMIUM(target, offset, size, access);
@@ -97,6 +102,11 @@ void Extensions3DChromium::unmapTexSubImage2DCHROMIUM(const void* data)
     m_private->unmapTexSubImage2DCHROMIUM(data);
 }
 
+void Extensions3DChromium::setVisibilityCHROMIUM(bool visibility)
+{
+    m_private->setVisibilityCHROMIUM(visibility);
+}
+
 Platform3DObject Extensions3DChromium::createVertexArrayOES()
 {
     return 0;
@@ -115,6 +125,11 @@ void Extensions3DChromium::bindVertexArrayOES(Platform3DObject)
 {
 }
 
+String Extensions3DChromium::getTranslatedShaderSourceANGLE(Platform3DObject shader)
+{
+    return m_private->getTranslatedShaderSourceANGLE(shader);
+}
+
 void Extensions3DChromium::setSwapBuffersCompleteCallbackCHROMIUM(PassOwnPtr<SwapBuffersCompleteCallbackCHROMIUM> callback)
 {
     m_private->setSwapBuffersCompleteCallbackCHROMIUM(callback);
@@ -128,6 +143,11 @@ void Extensions3DChromium::rateLimitOffscreenContextCHROMIUM()
 void Extensions3DChromium::paintFramebufferToCanvas(int framebuffer, int width, int height, bool premultiplyAlpha, ImageBuffer* imageBuffer)
 {
     m_private->paintFramebufferToCanvas(framebuffer, width, height, premultiplyAlpha, imageBuffer);
+}
+
+void Extensions3DChromium::texImageIOSurface2DCHROMIUM(unsigned target, int width, int height, uint32_t ioSurfaceId, unsigned plane)
+{
+    m_private->texImageIOSurface2DCHROMIUM(target, width, height, ioSurfaceId, plane);
 }
 
 } // namespace WebCore

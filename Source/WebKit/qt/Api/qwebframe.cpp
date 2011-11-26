@@ -282,7 +282,7 @@ WebCore::Scrollbar* QWebFramePrivate::verticalScrollBar() const
     return frame->view()->verticalScrollbar();
 }
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 void QWebFramePrivate::renderFromTiledBackingStore(GraphicsContext* context, const QRegion& clip)
 {
     ASSERT(frame->tiledBackingStore());
@@ -513,7 +513,7 @@ void QWebFramePrivate::addQtSenderToGlobalObject()
     JSObjectRef function = JSObjectMakeFunctionWithCallback(context, propertyName.get(), qtSenderCallback);
 
     // JSC public API doesn't support setting a Getter for a property of a given object, https://bugs.webkit.org/show_bug.cgi?id=61374.
-    window->defineGetter(exec, propertyName.get()->identifier(&exec->globalData()), ::toJS(function),
+    window->methodTable()->defineGetter(window, exec, propertyName.get()->identifier(&exec->globalData()), ::toJS(function),
                          JSC::ReadOnly | JSC::DontEnum | JSC::DontDelete);
 }
 #endif
@@ -688,7 +688,7 @@ void QWebFrame::addToJavaScriptWindowObject(const QString &name, QObject *object
             JSC::Bindings::QtInstance::getQtInstance(object, root, ownership)->createRuntimeObject(exec);
 
     JSC::PutPropertySlot slot;
-    window->put(exec, JSC::Identifier(exec, reinterpret_cast_ptr<const UChar*>(name.constData()), name.length()), runtimeObject, slot);
+    window->methodTable()->put(window, exec, JSC::Identifier(&exec->globalData(), reinterpret_cast_ptr<const UChar*>(name.constData()), name.length()), runtimeObject, slot);
 #elif USE(V8)
     QScriptEngine* engine = d->frame->script()->qtScriptEngine();
     if (!engine)

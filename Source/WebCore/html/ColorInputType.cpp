@@ -66,7 +66,7 @@ PassOwnPtr<InputType> ColorInputType::create(HTMLInputElement* element)
 
 ColorInputType::~ColorInputType()
 {
-    cleanupColorChooserIfCurrentClient();
+    cleanupColorChooser();
 }
 
 bool ColorInputType::isColorControl() const
@@ -84,16 +84,13 @@ bool ColorInputType::supportsRequired() const
     return false;
 }
 
-String ColorInputType::fallbackValue()
+String ColorInputType::fallbackValue() const
 {
     return String("#000000");
 }
 
-String ColorInputType::sanitizeValue(const String& proposedValue)
+String ColorInputType::sanitizeValue(const String& proposedValue) const
 {
-    if (proposedValue.isNull())
-        return proposedValue;
-
     if (!isValidColorString(proposedValue))
         return fallbackValue();
 
@@ -121,7 +118,7 @@ void ColorInputType::createShadowSubtree()
     updateColorSwatch();
 }
 
-void ColorInputType::setValue(const String& value, bool valueChanged, bool sendChangeEvent);
+void ColorInputType::setValue(const String& value, bool valueChanged, bool sendChangeEvent)
 {
     InputType::setValue(value, valueChanged, sendChangeEvent);
 
@@ -129,25 +126,9 @@ void ColorInputType::setValue(const String& value, bool valueChanged, bool sendC
         return;
 
     updateColorSwatch();
-    if (ColorChooser::chooser()->client() == this) {
-        if (Chrome* chrome = this->chrome())
-            chrome->setSelectedColorInColorChooser(valueAsColor());
-    }
-}
-
-void ColorInputType::handleClickEvent(MouseEvent* event)
-{
-    if (event->isSimulated())
-        return;
-
-    if (element()->disabled() || element()->readOnly())
-        return;
-
-    if (Chrome* chrome = this->chrome()) {
-        ColorChooser::chooser()->connectClient(this);
-        chrome->openColorChooser(ColorChooser::chooser(), valueAsColor());
-    }
-    event->setDefaultHandled();
+    Chrome* chrome = this->chrome();
+    if (chrome && chooser())
+        chrome->setSelectedColorInColorChooser(chooser(), valueAsColor());
 }
 
 void ColorInputType::handleDOMActivateEvent(Event* event)
@@ -158,16 +139,14 @@ void ColorInputType::handleDOMActivateEvent(Event* event)
     if (!ScriptController::processingUserGesture())
         return;
 
-    if (Chrome* chrome = this->chrome()) {
-        ColorChooser::chooser()->connectClient(this);
-        chrome->openColorChooser(ColorChooser::chooser(), valueAsColor());
-    }
+    if (Chrome* chrome = this->chrome())
+        chrome->openColorChooser(newColorChooser(), valueAsColor());
     event->setDefaultHandled();
 }
 
 void ColorInputType::detach()
 {
-    cleanupColorChooserIfCurrentClient();
+    cleanupColorChooser();
 }
 
 void ColorInputType::didChooseColor(const Color& color)
@@ -179,17 +158,17 @@ void ColorInputType::didChooseColor(const Color& color)
     element()->dispatchFormControlChangeEvent();
 }
 
-bool ColorInputType::isColorInputType() const
+void ColorInputType::didCleanup()
 {
-    return true;
+    discardChooser();
 }
 
-void ColorInputType::cleanupColorChooserIfCurrentClient() const
+void ColorInputType::cleanupColorChooser()
 {
-    if (ColorChooser::chooser()->client() != this)
-        return;
-    if (Chrome* chrome = this->chrome())
-        chrome->cleanupColorChooser();
+    Chrome* chrome = this->chrome();
+    if (chrome && chooser())
+        chrome->cleanupColorChooser(chooser());
+    discardChooser();
 }
 
 void ColorInputType::updateColorSwatch()

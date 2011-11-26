@@ -31,7 +31,6 @@
 #ifndef ChromiumDataObject_h
 #define ChromiumDataObject_h
 
-#include "Clipboard.h"
 #include "KURL.h"
 #include "PlatformString.h"
 #include "SharedBuffer.h"
@@ -47,15 +46,27 @@ namespace WebCore {
 // of and is not specific to a platform.
 class ChromiumDataObject : public RefCounted<ChromiumDataObject> {
 public:
-    static PassRefPtr<ChromiumDataObject> create(Clipboard::ClipboardType clipboardType)
+    enum StorageMode {
+        Buffered,
+        Pasteboard,
+    };
+
+    static PassRefPtr<ChromiumDataObject> createFromPasteboard()
     {
-        return adoptRef(new ChromiumDataObject(clipboardType));
+        return adoptRef(new ChromiumDataObject(Pasteboard));
+    }
+
+    static PassRefPtr<ChromiumDataObject> create()
+    {
+        return adoptRef(new ChromiumDataObject(Buffered));
     }
 
     PassRefPtr<ChromiumDataObject> copy() const
     {
         return adoptRef(new ChromiumDataObject(*this));
     }
+
+    StorageMode storageMode() const { return m_storageMode; }
 
     void clearData(const String& type);
     void clearAll();
@@ -66,7 +77,6 @@ public:
     HashSet<String> types() const;
     String getData(const String& type, bool& success);
     bool setData(const String& type, const String& data);
-    uint64_t getSequenceNumber();
 
     // Special handlers for URL/HTML metadata.
     String urlTitle() const { return m_urlTitle; }
@@ -88,10 +98,10 @@ public:
     void setFileContent(PassRefPtr<SharedBuffer> fileContent) { m_fileContent = fileContent; }
 
 private:
-    ChromiumDataObject(Clipboard::ClipboardType);
-    ChromiumDataObject(const ChromiumDataObject&);
+    explicit ChromiumDataObject(StorageMode);
+    explicit ChromiumDataObject(const ChromiumDataObject&);
 
-    Clipboard::ClipboardType m_clipboardType;
+    StorageMode m_storageMode;
 
     String m_urlTitle;
 

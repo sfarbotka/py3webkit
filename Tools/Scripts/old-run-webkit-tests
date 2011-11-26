@@ -238,6 +238,8 @@ if (isAppleMacWebKit()) {
         $platform = "qt-arm";
     } elsif (getQtVersion() eq "4.8") {
         $platform = "qt-4.8";
+    } elsif (getQtVersion() eq "5.0") {
+        $platform = "qt-5.0";
     } elsif (isLinux()) {
         $platform = "qt-linux";
     } elsif (isWindows() || isCygwin()) {
@@ -440,7 +442,7 @@ chdirWebKit();
 
 if (!defined($root) && !$noBuildDumpTool) {
     # FIXME: We build both DumpRenderTree and WebKitTestRunner for
-    # WebKitTestRunner runs becuase DumpRenderTree still includes
+    # WebKitTestRunner runs because DumpRenderTree still includes
     # the DumpRenderTreeSupport module and the TestNetscapePlugin.
     # These two projects should be factored out into their own
     # projects.
@@ -618,10 +620,6 @@ if (!checkWebCoreFeatureSupport("3D Canvas", 0)) {
     $ignoredDirectories{'fast/canvas/webgl'} = 1;
     $ignoredDirectories{'compositing/webgl'} = 1;
     $ignoredDirectories{'http/tests/canvas/webgl'} = 1;
-}
-
-if (!checkWebCoreFeatureSupport("XHTMLMP", 0)) {
-    $ignoredDirectories{'fast/xhtmlmp'} = 1;
 }
 
 if (isAppleMacWebKit() && $platform ne "mac-wk2" && osXVersion()->{minor} >= 6 && architecture() =~ /x86_64/) {
@@ -1220,7 +1218,10 @@ if (isGtk()) {
   push(@configurationArgs, '-2') if $useWebKitTestRunner;
   system "Tools/Scripts/run-launcher", @configurationArgs, "file://".$testResults if $launchSafari;
 } elsif (isQt()) {
-  unshift @configurationArgs, qw(-graphicssystem raster -style windows);
+  unshift @configurationArgs, qw(-style windows);
+  if (getQtVersion() lt "5.0") {
+    unshift @configurationArgs, qw(-graphicssystem raster);
+  }
   if (isCygwin()) {
     $testResults = "/" . toWindowsPath($testResults);
     $testResults =~ s/\\/\//g;
@@ -1255,7 +1256,8 @@ sub countAndPrintLeaks($$$)
     );
 
     my @callStacksToExclude = (
-        "Flash_EnforceLocalSecurity" # leaks in Flash plug-in code, rdar://problem/4449747
+        "Flash_EnforceLocalSecurity", # leaks in Flash plug-in code, rdar://problem/4449747
+        "ScanFromString", # <http://code.google.com/p/angleproject/issues/detail?id=249> leak in ANGLE
     );
 
     if (isLeopard()) {
@@ -1280,6 +1282,15 @@ sub countAndPrintLeaks($$$)
             "Java_java_lang_System_initProperties", # <rdar://problem/7714465> leak in Java
             "glrCompExecuteKernel", # <rdar://problem/7815391> leak in graphics driver while using OpenGL
             "NSNumberFormatter getObjectValue:forString:errorDescription:", # <rdar://problem/7149350> Leak in NSNumberFormatter
+        );
+    }
+
+    if (isLion()) {
+        push @callStacksToExclude, (
+            "FigByteFlumeCustomURLCreateWithURL", # <rdar://problem/10461926> leak in CoreMedia
+            "PDFPage\\(PDFPageInternal\\) pageLayoutIfAvail", # <rdar://problem/10462055> leak in PDFKit
+            "SecTransformExecute", # <rdar://problem/10470667> leak in Security.framework
+            "_NSCopyStyleRefForFocusRingStyleClip", # <rdar://problem/10462031> leak in AppKit
         );
     }
 
@@ -1476,6 +1487,7 @@ sub openDumpTool()
     # unique temporary directory for each DumpRendertree - needed for running more DumpRenderTree in parallel
     $CLEAN_ENV{DUMPRENDERTREE_TEMP} = File::Temp::tempdir('DumpRenderTree-XXXXXX', TMPDIR => 1, CLEANUP => 1);
     $CLEAN_ENV{XML_CATALOG_FILES} = ""; # work around missing /etc/catalog <rdar://problem/4292995>
+    $CLEAN_ENV{LOCAL_RESOURCE_ROOT} = $testDirectory; # Used by layoutTestConstroller.pathToLocalResource()
 
     # Platform spesifics
     if (isLinux()) {
@@ -2476,6 +2488,10 @@ sub readSkippedFiles($)
     # cross-platform issues, the Windows and Qt ports use the Mac skipped list
     # additionally to their own to avoid maintaining separate lists.
     push(@skippedFileDirectories, catdir($platformBaseDirectory, "wk2")) if ($platform eq "win-wk2" || $platform eq "qt-wk2" || $platform eq "mac-wk2" || $platform eq "gtk-wk2");
+
+    # Add Qt WK1-only skipped tests.
+    push(@skippedFileDirectories, catdir($platformBaseDirectory, "qt-wk1")) if (isQt() && !$useWebKitTestRunner);
+
     foreach my $level (@skippedFileDirectories) {
         if (open SKIPPED, "<", "$level/Skipped") {
             if ($verbose) {

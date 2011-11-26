@@ -20,7 +20,7 @@
  * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
  * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef WebKitCSSFilterValue_h
@@ -50,23 +50,24 @@ public:
         BlurFilterOperation,
         SharpenFilterOperation,
         DropShadowFilterOperation
+#if ENABLE(CSS_SHADERS)
+        , CustomFilterOperation
+#endif
     };
+
+    static bool typeUsesSpaceSeparator(FilterOperationType);
 
     static PassRefPtr<WebKitCSSFilterValue> create(FilterOperationType type)
     {
         return adoptRef(new WebKitCSSFilterValue(type));
     }
 
-    virtual ~WebKitCSSFilterValue();
+    String customCssText() const;
 
-    virtual String cssText() const;
- 
     FilterOperationType operationType() const { return m_type; }
-    
+
 private:
     WebKitCSSFilterValue(FilterOperationType);
-
-    virtual bool isWebKitCSSFilterValue() const { return true; }
 
     FilterOperationType m_type;
 };

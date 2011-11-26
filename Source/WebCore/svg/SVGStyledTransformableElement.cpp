@@ -29,6 +29,7 @@
 #include "RenderSVGResource.h"
 #include "SVGElementInstance.h"
 #include "SVGNames.h"
+#include "SVGPathData.h"
 
 namespace WebCore {
 
@@ -63,7 +64,19 @@ AffineTransform SVGStyledTransformableElement::getScreenCTM(StyleUpdateStrategy 
 AffineTransform SVGStyledTransformableElement::animatedLocalTransform() const
 {
     AffineTransform matrix;
-    transform().concatenate(matrix);
+    RenderStyle* style = renderer()->style();
+
+    // if CSS property was set, use that, otherwise fallback to attribute (if set)
+    if (style->hasTransform()) {
+        TransformationMatrix t;
+        // For now, the transform-origin is not taken into account
+        // Also, any percentage values will not be taken into account
+        style->applyTransform(t, IntSize(0, 0), RenderStyle::ExcludeTransformOrigin);
+        // Flatten any 3D transform
+        matrix = t.toAffineTransform();
+    } else
+        transform().concatenate(matrix);
+
     if (m_supplementalTransform)
         return *m_supplementalTransform * matrix;
     return matrix;
@@ -148,7 +161,7 @@ RenderObject* SVGStyledTransformableElement::createRenderer(RenderArena* arena, 
 
 void SVGStyledTransformableElement::toClipPath(Path& path)
 {
-    toPathData(path);
+    updatePathFromGraphicsElement(this, path);
     // FIXME: How do we know the element has done a layout?
     path.transform(animatedLocalTransform());
 }

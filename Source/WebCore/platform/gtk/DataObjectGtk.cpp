@@ -33,14 +33,14 @@ static void replaceNonBreakingSpaceWithSpace(String& str)
     str.replace(NonBreakingSpaceCharacter, SpaceCharacter);
 }
 
-String DataObjectGtk::text()
+String DataObjectGtk::text() const
 {
     if (m_range)
         return m_range->text();
     return m_text;
 }
 
-String DataObjectGtk::markup()
+String DataObjectGtk::markup() const
 {
     if (m_range)
         return createMarkup(m_range.get(), 0, AnnotateForInterchange, false, ResolveNonLocalURLs);
@@ -133,7 +133,7 @@ void DataObjectGtk::clearMarkup()
     m_markup = "";
 }
 
-String DataObjectGtk::urlLabel()
+String DataObjectGtk::urlLabel() const
 {
     if (hasText())
         return text();
@@ -144,7 +144,7 @@ String DataObjectGtk::urlLabel()
     return String();
 }
 
-void DataObjectGtk::clear()
+void DataObjectGtk::clearAllExceptFilenames()
 {
     m_text = "";
     m_markup = "";
@@ -152,11 +152,12 @@ void DataObjectGtk::clear()
     m_url = KURL();
     m_image = 0;
     m_range = 0;
+}
 
-    // We do not clear filenames. According to the spec: "The clearData() method
-    // does not affect whether any files were included in the drag, so the types
-    // attribute's list might still not be empty after calling clearData() (it would 
-    // still contain the "Files" string if any files were included in the drag)."
+void DataObjectGtk::clearAll()
+{
+    clearAllExceptFilenames();
+    m_filenames.clear();
 }
 
 DataObjectGtk* DataObjectGtk::forClipboard(GtkClipboard* clipboard)

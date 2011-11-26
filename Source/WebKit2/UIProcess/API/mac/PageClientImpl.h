@@ -66,7 +66,7 @@ private:
     virtual void toolTipChanged(const String& oldToolTip, const String& newToolTip);
     virtual void setCursor(const WebCore::Cursor&);
     virtual void setCursorHiddenUntilMouseMoves(bool);
-    virtual void setViewportArguments(const WebCore::ViewportArguments&);
+    virtual void didChangeViewportProperties(const WebCore::ViewportArguments&);
 
     virtual void registerEditCommand(PassRefPtr<WebEditCommandProxy>, WebPageProxy::UndoOrRedo);
     virtual void clearAllEditCommands();
@@ -88,7 +88,7 @@ private:
     virtual PassRefPtr<WebPopupMenuProxy> createPopupMenuProxy(WebPageProxy*);
     virtual PassRefPtr<WebContextMenuProxy> createContextMenuProxy(WebPageProxy*);
 
-    void setFindIndicator(PassRefPtr<FindIndicator>, bool fadeOut);
+    void setFindIndicator(PassRefPtr<FindIndicator>, bool fadeOut, bool animate);
 
     virtual void enterAcceleratedCompositingMode(const LayerTreeContext&);
     virtual void exitAcceleratedCompositingMode();

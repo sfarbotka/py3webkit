@@ -32,18 +32,27 @@ use constant MODE_UNDEF    => 0; # Default mode.
 
 use constant MODE_MODULE  => 10; # 'module' section
 use constant MODE_INTERFACE  => 11; # 'interface' section
-use constant MODE_EXCEPTION  => 12; # 'exception' section
-use constant MODE_ALIAS    => 13; # 'alias' section
 
 # Helper variables
-my @temporaryContent = "";
+my @temporaryContent;
 
-my $parseMode = MODE_UNDEF;
-my $preservedParseMode = MODE_UNDEF;
+my $parseMode;
+my $preservedParseMode;
 
 my $beQuiet; # Should not display anything on STDOUT?
-my $document = 0; # Will hold the resulting 'idlDocument'
-my $parentsOnly = 0; # If 1, parse only enough to populate parents list
+my $document; # Will hold the resulting 'idlDocument'
+my $parentsOnly; # If 1, parse only enough to populate parents list
+
+sub InitializeGlobalData
+{
+    @temporaryContent = "";
+
+    $parseMode = MODE_UNDEF;
+    $preservedParseMode = MODE_UNDEF;
+
+    $document = 0;
+    $parentsOnly = 0;
+}
 
 # Default Constructor
 sub new
@@ -51,7 +60,8 @@ sub new
     my $object = shift;
     my $reference = { };
 
-    $document = 0;
+    InitializeGlobalData();
+
     $beQuiet = shift;
 
     bless($reference, $object);
@@ -153,17 +163,41 @@ sub parseExtendedAttributes
         $str =~ s/^\s*([\w\d]+)//;
 
         if ($str =~ /^\s*=/) {
-            # Parse '=' value | '=' value ','
             $str =~ s/^\s*=//;
-            if ($str =~ /^\s*([^,]*),?/) {
-                $attrs{$name} = $1;
-                $attrs{$name} =~ s/^(.*?)\s*$/$1/;
-                $str =~ s/^\s*([^,]*),?//;
+            if ($name eq "NamedConstructor") {
+                # Parse '=' name '(' arguments ')' ','?
+                if ($str =~ /^\s*([\w\d]+)/) {
+                    # For now ignore the name, since the name is managed by DOMWindow.idl.
+                    $str =~ s/^\s*([\w\d]+)//;
+                }
+                if ($str =~ /^\s*\(/) {
+                    # Parse '(' arguments ')' ','?
+                    $str =~ s/^\s*\(//;
+                    if ($str =~ /^([^)]*)\),?/) {
+                        $attrs{$name} = $1;
+                        $attrs{$name} =~ s/^(.*?)\s*$/$1/;
+                        $str =~ s/^([^)]*)\),?//;
+                    } else {
+                        die("Invalid extended attribute: '$str'\n");
+                    }
+                } elsif ($str =~ /^\s*,?/) {
+                    $attrs{$name} = "";
+                    $str =~ s/^\s*,?//;
+                } else {
+                    die("Invalid extended attribute: '$str'\n");
+                }
             } else {
-                die("Invalid extended attribute: '$str'\n");
+                # Parse '=' value ','?
+                if ($str =~ /^\s*([^,]*),?/) {
+                    $attrs{$name} = $1;
+                    $attrs{$name} =~ s/^(.*?)\s*$/$1/;
+                    $str =~ s/^\s*([^,]*),?//;
+                } else {
+                    die("Invalid extended attribute: '$str'\n");
+                }
             }
         } elsif ($str =~ /^\s*\(/) {
-            # Parse '(' arguments ')' | '(' arguments ')' ','
+            # Parse '(' arguments ')' ','?
             $str =~ s/^\s*\(//;
             if ($str =~ /^([^)]*)\),?/) {
                 $attrs{$name} = $1;
@@ -236,41 +270,7 @@ sub ParseInterface
     $data =~ s/[\n\r]/ /g;
 
     # Beginning of the regexp parsing magic
-    if ($sectionName eq "exception") {
-        print " |- Trying to parse exception...\n" unless $beQuiet;
-
-        my $exceptionName = "";
-        my $exceptionData = "";
-        my $exceptionDataName = "";
-        my $exceptionDataType = "";
-
-        # Match identifier of the exception, and enclosed data...
-        $data =~ /$IDLStructure::exceptionSelector/;
-        $exceptionName = (defined($1) ? $1 : die("Parsing error!\nSource:\n$data\n)"));
-        $exceptionData = (defined($2) ? $2 : die("Parsing error!\nSource:\n$data\n)"));
-
-        ('' =~ /^/); # Reset variables needed for regexp matching
-
-        # ... parse enclosed data (get. name & type)
-        $exceptionData =~ /$IDLStructure::exceptionSubSelector/;
-        $exceptionDataType = (defined($1) ? $1 : die("Parsing error!\nSource:\n$data\n)"));
-        $exceptionDataName = (defined($2) ? $2 : die("Parsing error!\nSource:\n$data\n)"));
-
-        # Fill in domClass datastructure
-        $dataNode->name($exceptionName);
-
-        my $newDataNode = new domAttribute();
-        $newDataNode->type("readonly attribute");
-        $newDataNode->signature(new domSignature());
-
-        $newDataNode->signature->name($exceptionDataName);
-        $newDataNode->signature->type($exceptionDataType);
-
-        my $arrayRef = $dataNode->attributes;
-        push(@$arrayRef, $newDataNode);
-
-        print "  |----> Exception; NAME \"$exceptionName\" DATA TYPE \"$exceptionDataType\" DATA NAME \"$exceptionDataName\"\n |-\n |\n" unless $beQuiet;
-    } elsif ($sectionName eq "interface") {
+    if ($sectionName eq "interface") {
         print " |- Trying to parse interface...\n" unless $beQuiet;
 
         my $interfaceName = "";
@@ -294,6 +294,14 @@ sub ParseInterface
             $newDataNode->signature->extendedAttributes($extendedAttributes);
             parseParameters($newDataNode, $extendedAttributes->{"Constructor"});
             $extendedAttributes->{"Constructor"} = 1;
+            $dataNode->constructor($newDataNode);
+        } elsif (defined $extendedAttributes->{"NamedConstructor"}) {
+            my $newDataNode = new domFunction();
+            $newDataNode->signature(new domSignature());
+            $newDataNode->signature->name("NamedConstructor");
+            $newDataNode->signature->extendedAttributes($extendedAttributes);
+            parseParameters($newDataNode, $extendedAttributes->{"NamedConstructor"});
+            $extendedAttributes->{"NamedConstructor"} = 1;
             $dataNode->constructor($newDataNode);
         }
         $dataNode->extendedAttributes($extendedAttributes);
@@ -415,12 +423,6 @@ sub DetermineParseMode
         $mode = MODE_MODULE;
     } elsif ($_ =~ /interface/) {
         $mode = MODE_INTERFACE;
-    } elsif ($_ =~ /exception/) {
-        $mode = MODE_EXCEPTION;
-    } elsif ($_ =~ /(\A|\b)alias/) {
-        # The (\A|\b) above is needed so we don't match attributes
-        # whose names contain the substring "alias".
-        $mode = MODE_ALIAS;
     }
 
     return $mode;
@@ -442,27 +444,6 @@ sub ProcessSection
         die ("No module specified! Fatal Error!\n") if ($document eq 0);
         my $arrayRef = $document->classes;
         push(@$arrayRef, $node);
-    } elsif($parseMode eq MODE_EXCEPTION) {
-        my $node = new domClass();
-        $object->ParseInterface($node, "exception");
-
-        die ("No module specified! Fatal Error!\n") if ($document eq 0);
-        my $arrayRef = $document->classes;
-        push(@$arrayRef, $node);
-    } elsif($parseMode eq MODE_ALIAS) {
-        print " |- Trying to parse alias...\n" unless $beQuiet;
-    
-        my $line = join("", @temporaryContent);
-        $line =~ /$IDLStructure::aliasSelector/;
-
-        my $interfaceName = (defined($1) ? $1 : die("Parsing error!\nSource:\n$line\n)"));
-        my $wrapperName = (defined($2) ? $2 : die("Parsing error!\nSource:\n$line\n)"));
-    
-        print "  |----> Alias; INTERFACE \"$interfaceName\" WRAPPER \"$wrapperName\"\n |-\n |\n" unless $beQuiet;
-
-        # FIXME: Check if alias is already in aliases
-        my $aliases = $document->aliases;
-        $aliases->{$interfaceName} = $wrapperName;
     }
 
     @temporaryContent = "";

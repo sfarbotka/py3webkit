@@ -508,12 +508,12 @@ bool InputType::getTypeSpecificValue(String&)
     return false;
 }
 
-String InputType::fallbackValue()
+String InputType::fallbackValue() const
 {
     return String();
 }
 
-String InputType::defaultValue()
+String InputType::defaultValue() const
 {
     return String();
 }
@@ -573,7 +573,7 @@ bool InputType::isAcceptableValue(const String&)
     return true;
 }
 
-String InputType::sanitizeValue(const String& proposedValue)
+String InputType::sanitizeValue(const String& proposedValue) const
 {
     return proposedValue;
 }
@@ -720,6 +720,11 @@ void InputType::disabledAttributeChanged()
 
 void InputType::readonlyAttributeChanged()
 {
+}
+
+String InputType::defaultToolTip() const
+{
+    return String();
 }
 
 namespace InputTypeNames {

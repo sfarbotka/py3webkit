@@ -45,18 +45,15 @@ public:
 
     virtual ~RuntimeObject();
 
-    virtual bool getOwnPropertySlot(ExecState*, const Identifier& propertyName, PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier& propertyName, PropertyDescriptor&);
-    virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+    static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier& propertyName, PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier& propertyName, PropertyDescriptor&);
     static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
-    virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
     static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
-    virtual JSValue defaultValue(ExecState*, PreferredPrimitiveType) const;
-    virtual CallType getCallDataVirtual(CallData&);
+    static JSValue defaultValue(const JSObject*, ExecState*, PreferredPrimitiveType);
     static CallType getCallData(JSCell*, CallData&);
-    virtual ConstructType getConstructData(ConstructData&);
+    static ConstructType getConstructData(JSCell*, ConstructData&);
 
-    virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
+    static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
 
     void invalidate();
 

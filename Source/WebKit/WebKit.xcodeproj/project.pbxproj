@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 42;
+	objectVersion = 46;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -115,6 +115,7 @@
 		598AD9281201CF3200ABAE4E /* WebDeviceOrientationProviderMock.mm in Sources */ = {isa = PBXBuildFile; fileRef = 598AD9271201CF3200ABAE4E /* WebDeviceOrientationProviderMock.mm */; };
 		598AD92A1201CF3B00ABAE4E /* WebDeviceOrientationProviderMockInternal.h in Headers */ = {isa = PBXBuildFile; fileRef = 598AD9291201CF3B00ABAE4E /* WebDeviceOrientationProviderMockInternal.h */; };
 		598ADA461202275000ABAE4E /* WebDeviceOrientationProvider.h in Headers */ = {isa = PBXBuildFile; fileRef = 598ADA451202275000ABAE4E /* WebDeviceOrientationProvider.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		5D4DE0991479CBDF00EA3DF4 /* DiskArbitration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D4DE0981479CBDF00EA3DF4 /* DiskArbitration.framework */; };
 		5D7BF8140C2A1D90008CE06D /* WebInspector.h in Headers */ = {isa = PBXBuildFile; fileRef = 5D7BF8120C2A1D90008CE06D /* WebInspector.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		5D7BF8150C2A1D90008CE06D /* WebInspector.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5D7BF8130C2A1D90008CE06D /* WebInspector.mm */; };
 		5DE83A7A0D0F7F9400CAD12A /* WebJavaScriptTextInputPanel.nib in Resources */ = {isa = PBXBuildFile; fileRef = 5DE83A740D0F7F9400CAD12A /* WebJavaScriptTextInputPanel.nib */; };
@@ -320,6 +321,8 @@
 		A5687BDA135B791A0074CBCB /* WebNodeHighlighter.h in Headers */ = {isa = PBXBuildFile; fileRef = A5687BD8135B791A0074CBCB /* WebNodeHighlighter.h */; };
 		A5687BDB135B791A0074CBCB /* WebNodeHighlighter.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5687BD9135B791A0074CBCB /* WebNodeHighlighter.mm */; };
 		A57E2F24120749E600048DF3 /* WebQuotaManager.h in Headers */ = {isa = PBXBuildFile; fileRef = A57E2F22120749E600048DF3 /* WebQuotaManager.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		A58A5799143E727000125F50 /* WebOpenPanelResultListener.h in Headers */ = {isa = PBXBuildFile; fileRef = A58A5797143E727000125F50 /* WebOpenPanelResultListener.h */; };
+		A58A579A143E727000125F50 /* WebOpenPanelResultListener.mm in Sources */ = {isa = PBXBuildFile; fileRef = A58A5798143E727000125F50 /* WebOpenPanelResultListener.mm */; };
 		A5DEFC0A11D5331C00885273 /* WebSecurityOrigin.mm in Sources */ = {isa = PBXBuildFile; fileRef = A5DEFC0711D5331C00885273 /* WebSecurityOrigin.mm */; };
 		A5DEFC0B11D5331C00885273 /* WebSecurityOriginInternal.h in Headers */ = {isa = PBXBuildFile; fileRef = A5DEFC0811D5331C00885273 /* WebSecurityOriginInternal.h */; };
 		A5DEFC0C11D5331C00885273 /* WebSecurityOriginPrivate.h in Headers */ = {isa = PBXBuildFile; fileRef = A5DEFC0911D5331C00885273 /* WebSecurityOriginPrivate.h */; settings = {ATTRIBUTES = (Private, ); }; };
@@ -534,6 +537,7 @@
 		598AD9271201CF3200ABAE4E /* WebDeviceOrientationProviderMock.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = WebDeviceOrientationProviderMock.mm; sourceTree = "<group>"; };
 		598AD9291201CF3B00ABAE4E /* WebDeviceOrientationProviderMockInternal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebDeviceOrientationProviderMockInternal.h; sourceTree = "<group>"; };
 		598ADA451202275000ABAE4E /* WebDeviceOrientationProvider.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebDeviceOrientationProvider.h; sourceTree = "<group>"; };
+		5D4DE0981479CBDF00EA3DF4 /* DiskArbitration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DiskArbitration.framework; path = /System/Library/Frameworks/DiskArbitration.framework; sourceTree = "<absolute>"; };
 		5D7BF8120C2A1D90008CE06D /* WebInspector.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = WebInspector.h; sourceTree = "<group>"; };
 		5D7BF8130C2A1D90008CE06D /* WebInspector.mm */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.cpp.objcpp; path = WebInspector.mm; sourceTree = "<group>"; };
 		5DE83A750D0F7F9400CAD12A /* English */ = {isa = PBXFileReference; lastKnownFileType = wrapper.nib; name = English; path = English.lproj/WebJavaScriptTextInputPanel.nib; sourceTree = SOURCE_ROOT; };
@@ -629,6 +633,8 @@
 		A5687BD8135B791A0074CBCB /* WebNodeHighlighter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebNodeHighlighter.h; sourceTree = "<group>"; };
 		A5687BD9135B791A0074CBCB /* WebNodeHighlighter.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = WebNodeHighlighter.mm; sourceTree = "<group>"; };
 		A57E2F22120749E600048DF3 /* WebQuotaManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebQuotaManager.h; sourceTree = "<group>"; };
+		A58A5797143E727000125F50 /* WebOpenPanelResultListener.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebOpenPanelResultListener.h; sourceTree = "<group>"; };
+		A58A5798143E727000125F50 /* WebOpenPanelResultListener.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = WebOpenPanelResultListener.mm; sourceTree = "<group>"; };
 		A5DEFC0711D5331C00885273 /* WebSecurityOrigin.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = WebSecurityOrigin.mm; sourceTree = "<group>"; };
 		A5DEFC0811D5331C00885273 /* WebSecurityOriginInternal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebSecurityOriginInternal.h; sourceTree = "<group>"; };
 		A5DEFC0911D5331C00885273 /* WebSecurityOriginPrivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WebSecurityOriginPrivate.h; sourceTree = "<group>"; };
@@ -768,6 +774,7 @@
 				1A20D08B0ED384F20043FA9F /* QuartzCore.framework in Frameworks */,
 				9398112F0824BF01008DF038 /* Security.framework in Frameworks */,
 				9398112C0824BF01008DF038 /* WebCore.framework in Frameworks */,
+				5D4DE0991479CBDF00EA3DF4 /* DiskArbitration.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -815,6 +822,7 @@
 			children = (
 				F5C2869402846DCD018635CA /* Carbon.framework */,
 				F5C2869502846DCD018635CA /* Cocoa.framework */,
+				5D4DE0981479CBDF00EA3DF4 /* DiskArbitration.framework */,
 				CD8EAC7211CAC9A300774075 /* IOKit.framework */,
 				F738C9E903FAD3DF0321FBE0 /* JavaScriptCore.framework */,
 				93D623DD051E791F002F47DD /* libicucore.dylib */,
@@ -1303,6 +1311,8 @@
 				9345D4EB0365C5B2008635CE /* WebJavaScriptTextInputPanel.m */,
 				84723BE3056D719E0044BFEA /* WebKeyGenerator.h */,
 				84723BE4056D719E0044BFEA /* WebKeyGenerator.mm */,
+				A58A5797143E727000125F50 /* WebOpenPanelResultListener.h */,
+				A58A5798143E727000125F50 /* WebOpenPanelResultListener.mm */,
 				1AA879B411CBE9BF003C664F /* WebPlatformStrategies.h */,
 				1AA879B511CBE9BF003C664F /* WebPlatformStrategies.mm */,
 				A5DEFC0711D5331C00885273 /* WebSecurityOrigin.mm */,
@@ -1614,6 +1624,7 @@
 				BC42D324131ED1E00075FA4B /* WebLocalizableStringsInternal.h in Headers */,
 				B82958D3132707D0000D0E79 /* CorrectionPanel.h in Headers */,
 				A5687BDA135B791A0074CBCB /* WebNodeHighlighter.h in Headers */,
+				A58A5799143E727000125F50 /* WebOpenPanelResultListener.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1654,8 +1665,11 @@
 /* Begin PBXProject section */
 		0867D690FE84028FC02AAC07 /* Project object */ = {
 			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0440;
+			};
 			buildConfigurationList = 149C283208902B0F008A9EFC /* Build configuration list for PBXProject "WebKit" */;
-			compatibilityVersion = "Xcode 2.4";
+			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 1;
 			knownRegions = (
@@ -1995,6 +2009,7 @@
 				BC42D34D131ED3880075FA4B /* WebLocalizableStringsInternal.mm in Sources */,
 				B82958D4132707D0000D0E79 /* CorrectionPanel.mm in Sources */,
 				A5687BDB135B791A0074CBCB /* WebNodeHighlighter.mm in Sources */,
+				A58A579A143E727000125F50 /* WebOpenPanelResultListener.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

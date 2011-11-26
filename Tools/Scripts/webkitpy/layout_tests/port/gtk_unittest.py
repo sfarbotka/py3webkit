@@ -31,12 +31,11 @@ import unittest
 from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.layout_tests.port.gtk import GtkPort
 from webkitpy.layout_tests.port import port_testcase
-from webkitpy.tool.mocktool import MockExecutive
+from webkitpy.common.system.executive_mock import MockExecutive
 
 
 class GtkPortTest(port_testcase.PortTestCase):
-    def port_maker(self, platform):
-        return GtkPort
+    port_maker = GtkPort
 
     def test_show_results_html_file(self):
         port = self.make_port()

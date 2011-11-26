@@ -33,6 +33,7 @@
 #include "GCController.h"
 #include "LayoutTestController.h"
 #include "NotImplemented.h"
+#include "WebCoreSupport/DumpRenderTreeSupportEfl.h"
 #include "WorkQueue.h"
 #include "ewk_private.h" // FIXME: create some WebCoreSupport/DumpRenderTree.cpp instead
 
@@ -69,7 +70,7 @@ Evas_Object* DumpRenderTreeChrome::createNewWindow()
 {
     Evas_Object* newView = createView();
 
-    ewk_view_setting_scripts_window_open_set(newView, EINA_TRUE);
+    ewk_view_setting_scripts_can_open_windows_set(newView, EINA_TRUE);
     ewk_view_setting_scripts_can_close_windows_set(newView, EINA_TRUE);
 
     m_extraViews.append(newView);
@@ -79,7 +80,7 @@ Evas_Object* DumpRenderTreeChrome::createNewWindow()
 
 Evas_Object* DumpRenderTreeChrome::createView() const
 {
-    Evas_Object* view = drtViewTiledAdd(m_evas);
+    Evas_Object* view = drtViewAdd(m_evas);
     if (!view)
         return 0;
 
@@ -108,6 +109,8 @@ void DumpRenderTreeChrome::removeWindow(Evas_Object* view)
 
 bool DumpRenderTreeChrome::initialize()
 {
+    DumpRenderTreeSupportEfl::setMockScrollbarsEnabled(true);
+
     m_mainView = createView();
     if (!m_mainView)
         return false;
@@ -154,7 +157,7 @@ void DumpRenderTreeChrome::resetDefaultsToConsistentValues()
     ewk_view_setting_private_browsing_set(mainView(), EINA_FALSE);
     ewk_view_setting_spatial_navigation_set(mainView(), EINA_FALSE);
     ewk_view_setting_enable_frame_flattening_set(mainView(), EINA_FALSE);
-    ewk_view_setting_offline_app_cache_set(mainView(), EINA_TRUE);
+    ewk_view_setting_application_cache_set(mainView(), EINA_TRUE);
     ewk_view_setting_enable_scripts_set(mainView(), EINA_TRUE);
     ewk_view_font_family_name_set(mainView(), EWK_FONT_FAMILY_STANDARD, "Times");
     ewk_view_font_family_name_set(mainView(), EWK_FONT_FAMILY_MONOSPACE, "Courier");
@@ -169,22 +172,19 @@ void DumpRenderTreeChrome::resetDefaultsToConsistentValues()
     ewk_view_setting_page_cache_set(mainView(), EINA_FALSE);
     ewk_view_setting_enable_auto_resize_window_set(mainView(), EINA_TRUE);
     ewk_view_setting_enable_plugins_set(mainView(), EINA_TRUE);
-    ewk_view_setting_scripts_window_open_set(mainView(), EINA_TRUE);
+    ewk_view_setting_scripts_can_open_windows_set(mainView(), EINA_TRUE);
     ewk_view_setting_scripts_can_close_windows_set(mainView(), EINA_TRUE);
 
     ewk_view_zoom_set(mainView(), 1.0, 0, 0);
-    ewk_view_page_scale(mainView(), 1.0, 0, 0);
+    ewk_view_scale_set(mainView(), 1.0, 0, 0);
 
-    Ewk_History* history = ewk_view_history_get(mainView());
-    int limit = ewk_history_limit_get(history);
-    ewk_history_limit_set(history, 0);
-    ewk_history_limit_set(history, limit);
+    ewk_history_clear(ewk_view_history_get(mainView()));
 
     ewk_cookies_clear();
     ewk_cookies_policy_set(EWK_COOKIE_JAR_ACCEPT_NO_THIRD_PARTY);
 
-    ewk_frame_name_clear(mainFrame());
-    ewk_frame_opener_clear(mainFrame());
+    DumpRenderTreeSupportEfl::clearFrameName(mainFrame());
+    DumpRenderTreeSupportEfl::clearOpener(mainFrame());
 }
 
 // Smart Callbacks
@@ -208,7 +208,7 @@ void DumpRenderTreeChrome::onWindowObjectCleared(void* userData, Evas_Object*, v
     JSRetainPtr<JSStringRef> controllerName(JSStringCreateWithUTF8CString("eventSender"));
     JSObjectSetProperty(objectClearedInfo->context, objectClearedInfo->windowObject,
                         controllerName.get(),
-                        makeEventSender(objectClearedInfo->context, false), // FIXME: s/false/!get_parent/.
+                        makeEventSender(objectClearedInfo->context, !DumpRenderTreeSupportEfl::frameParent(objectClearedInfo->frame)),
                         kJSPropertyAttributeReadOnly | kJSPropertyAttributeDontDelete, 0);
 }
 
@@ -270,12 +270,12 @@ void DumpRenderTreeChrome::onTitleChanged(void*, Evas_Object*, void*)
 void DumpRenderTreeChrome::onDocumentLoadFinished(void*, Evas_Object*, void* eventInfo)
 {
     const Evas_Object* frame = static_cast<Evas_Object*>(eventInfo);
-    const String frameName(ewk_frame_suitable_drt_name_get(frame));
+    const String frameName(DumpRenderTreeSupportEfl::suitableDRTFrameName(frame));
 
     if (!done && gLayoutTestController->dumpFrameLoadCallbacks())
         printf("%s - didFinishDocumentLoadForFrame\n", frameName.utf8().data());
     else if (!done) {
-        const unsigned pendingFrameUnloadEvents = ewk_frame_pending_unload_event_count_get(frame);
+        const unsigned pendingFrameUnloadEvents = DumpRenderTreeSupportEfl::pendingUnloadEventCount(frame);
         if (pendingFrameUnloadEvents)
             printf("%s - has %u onunload handler(s)\n", frameName.utf8().data(), pendingFrameUnloadEvents);
     }

@@ -69,9 +69,11 @@ String WebContext::applicationCacheDirectory()
 
 void WebContext::platformInitializeWebProcess(WebProcessCreationParameters& parameters)
 {
-    // We want to use a PDF view in the UI process for PDF MIME types.
-    HashSet<String, CaseFoldingHash> mimeType = pdfAndPostScriptMIMETypes();
-    parameters.mimeTypesWithCustomRepresentation.appendRange(mimeType.begin(), mimeType.end());
+    if (!omitPDFSupport()) {
+        // We want to use a PDF view in the UI process for PDF MIME types.
+        HashSet<String, CaseFoldingHash> mimeType = pdfAndPostScriptMIMETypes();
+        parameters.mimeTypesWithCustomRepresentation.appendRange(mimeType.begin(), mimeType.end());
+    }
 
     RetainPtr<CFStringRef> cachePath(AdoptCF, WKCopyFoundationCacheDirectory());
     if (!cachePath)
@@ -137,6 +139,12 @@ String WebContext::platformDefaultLocalStorageDirectory() const
     if (!localStorageDirectory || ![localStorageDirectory isKindOfClass:[NSString class]])
         localStorageDirectory = @"~/Library/WebKit/LocalStorage";
     return [localStorageDirectory stringByStandardizingPath];
+}
+
+bool WebContext::omitPDFSupport()
+{
+    // Since this is a "secret default" we don't bother registering it.
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"WebKitOmitPDFSupport"];
 }
 
 } // namespace WebKit

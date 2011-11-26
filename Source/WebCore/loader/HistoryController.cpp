@@ -125,7 +125,8 @@ void HistoryController::restoreScrollPositionAndViewState()
     if (FrameView* view = m_frame->view()) {
         if (!view->wasScrolledByUser()) {
             view->setScrollPosition(m_currentItem->scrollPoint());
-            if (Page* page = m_frame->page())
+            Page* page = m_frame->page();
+            if (page && page->mainFrame() == m_frame)
                 page->setPageScaleFactor(m_currentItem->pageScaleFactor(), m_currentItem->scrollPoint());
         }
     }
@@ -472,24 +473,26 @@ void HistoryController::recursiveUpdateForCommit()
     // For each frame that already had the content the item requested (based on
     // (a matching URL and frame tree snapshot), just restore the scroll position.
     // Save form state (works from currentItem, since m_frameLoadComplete is true)
-    ASSERT(m_frameLoadComplete);
-    saveDocumentState();
-    saveScrollPositionAndViewStateToItem(m_currentItem.get());
+    if (m_currentItem && itemsAreClones(m_currentItem.get(), m_provisionalItem.get())) {
+        ASSERT(m_frameLoadComplete);
+        saveDocumentState();
+        saveScrollPositionAndViewStateToItem(m_currentItem.get());
 
-    if (FrameView* view = m_frame->view())
-        view->setWasScrolledByUser(false);
+        if (FrameView* view = m_frame->view())
+            view->setWasScrolledByUser(false);
 
-    // Now commit the provisional item
-    m_frameLoadComplete = false;
-    m_previousItem = m_currentItem;
-    m_currentItem = m_provisionalItem;
-    m_provisionalItem = 0;
+        // Now commit the provisional item
+        m_frameLoadComplete = false;
+        m_previousItem = m_currentItem;
+        m_currentItem = m_provisionalItem;
+        m_provisionalItem = 0;
 
-    // Restore form state (works from currentItem)
-    restoreDocumentState();
+        // Restore form state (works from currentItem)
+        restoreDocumentState();
 
-    // Restore the scroll position (we choose to do this rather than going back to the anchor point)
-    restoreScrollPositionAndViewState();
+        // Restore the scroll position (we choose to do this rather than going back to the anchor point)
+        restoreScrollPositionAndViewState();
+    }
 
     // Iterate over the rest of the tree
     for (Frame* child = m_frame->tree()->firstChild(); child; child = child->tree()->nextSibling())

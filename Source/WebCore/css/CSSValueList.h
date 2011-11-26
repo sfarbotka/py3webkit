@@ -44,8 +44,6 @@ public:
         return adoptRef(new CSSValueList(list));
     }
 
-    virtual ~CSSValueList();
-
     size_t length() const { return m_values.size(); }
     CSSValue* item(size_t index) { return index < m_values.size() ? m_values[index].get() : 0; }
     CSSValue* itemWithoutBoundsCheck(size_t index) { return m_values[index].get(); }
@@ -56,18 +54,16 @@ public:
     bool hasValue(CSSValue*) const;
     PassRefPtr<CSSValueList> copy();
 
-    virtual String cssText() const;
+    String customCssText() const;
 
-    virtual void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
+    void addSubresourceStyleURLs(ListHashSet<KURL>&, const CSSStyleSheet*);
 
 protected:
-    CSSValueList(bool isSpaceSeparated);
-    CSSValueList(CSSParserValueList*);
+    CSSValueList(ClassType, bool isSpaceSeparated);
 
 private:
-    virtual bool isValueList() const { return true; }
-
-    virtual unsigned short cssValueType() const;
+    explicit CSSValueList(bool isSpaceSeparated);
+    explicit CSSValueList(CSSParserValueList*);
 
     Vector<RefPtr<CSSValue> > m_values;
     bool m_isSpaceSeparated;
@@ -94,6 +90,7 @@ public:
     CSSValueListIterator(CSSValue* value) : m_inspector(value), m_position(0) { }
     bool hasMore() const { return m_position < m_inspector.length(); }
     CSSValue* value() const { return m_inspector.item(m_position); }
+    bool isPrimitiveValue() const { return value()->isPrimitiveValue(); }
     void advance() { m_position++; ASSERT(m_position <= m_inspector.length());}
     size_t index() const { return m_position; }
 private:

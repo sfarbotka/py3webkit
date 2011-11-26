@@ -49,20 +49,16 @@ public:
 
     static const ClassInfo s_info;
 
-    virtual CallType getCallDataVirtual(CallData&);
     static CallType getCallData(JSCell*, CallData&);
 
-    virtual void getOwnPropertyNames(ExecState*, PropertyNameArray&, EnumerationMode mode = ExcludeDontEnumProperties);
+    static void getOwnPropertyNames(JSObject*, ExecState*, PropertyNameArray&, EnumerationMode);
 
     virtual JSValue callAsFunction(ExecState *exec);
-    virtual bool getOwnPropertySlot(ExecState *, const Identifier&, PropertySlot&);
-    virtual void put(ExecState *exec, const Identifier &propertyName, JSValue value, PutPropertySlot&);
+    static bool getOwnPropertySlot(JSCell*, ExecState *, const Identifier&, PropertySlot&);
     static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
 
     JSValue toPrimitive(ExecState*, PreferredPrimitiveType preferredType = NoPreference) const;
     virtual bool toBoolean(ExecState *exec) const;
-    virtual double toNumber(ExecState *exec) const;
-    virtual UString toString(ExecState *exec) const;
 
     static void visitChildren(JSCell*, SlotVisitor&);
 

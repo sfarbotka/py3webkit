@@ -31,7 +31,6 @@
 #ifndef WebFrameClient_h
 #define WebFrameClient_h
 
-#include "WebCommon.h"
 #include "WebFileSystem.h"
 #include "WebIconURL.h"
 #include "WebNavigationPolicy.h"
@@ -39,6 +38,7 @@
 #include "WebStorageQuotaType.h"
 #include "WebTextDirection.h"
 #include "WebURLError.h"
+#include "platform/WebCommon.h"
 
 #if WEBKIT_USING_V8
 #include <v8.h>
@@ -52,6 +52,8 @@ class WebCookieJar;
 class WebDataSource;
 class WebFormElement;
 class WebFrame;
+class WebIntentServiceInfo;
+class WebIntent;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebNode;
@@ -286,6 +288,9 @@ public:
     // spread to other frames in the same origin.
     virtual void didRunInsecureContent(WebFrame*, const WebSecurityOrigin&, const WebURL& insecureURL) { }
 
+    // A reflected XSS was encountered in the page and suppressed.
+    virtual void didDetectXSS(WebFrame*, const WebURL&, bool didBlockEntirePage) { }
+
     // This frame adopted the resource that is being loaded. This happens when
     // an iframe, that is loading a subresource, is transferred between windows.
     virtual void didAdoptURLLoader(WebURLLoader*) { }
@@ -377,6 +382,15 @@ public:
         WebFrame*, WebStorageQuotaType,
         unsigned long long newQuotaInBytes,
         WebStorageQuotaCallbacks*) { }
+
+    // Web Intents ---------------------------------------------------
+
+    // Register a service to handle Web Intents.
+    virtual void registerIntentService(WebFrame*, const WebIntentServiceInfo&) { }
+
+    // Start a Web Intents activity. Replies to this request should be sent to
+    // the WebFrame starting the activity.
+    virtual void dispatchIntent(WebFrame*, const WebIntent&) { }
 
 protected:
     ~WebFrameClient() { }

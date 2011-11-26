@@ -39,8 +39,26 @@ void dfgBuildGetByIDList(ExecState*, JSValue, const Identifier&, const PropertyS
 void dfgBuildGetByIDProtoList(ExecState*, JSValue, const Identifier&, const PropertySlot&, StructureStubInfo&);
 void dfgRepatchPutByID(ExecState*, JSValue, const Identifier&, const PutPropertySlot&, StructureStubInfo&, PutKind);
 void dfgLinkFor(ExecState*, CallLinkInfo&, CodeBlock*, JSFunction* callee, MacroAssemblerCodePtr, CodeSpecializationKind);
+void dfgResetGetByID(RepatchBuffer&, StructureStubInfo&);
+void dfgResetPutByID(RepatchBuffer&, StructureStubInfo&);
 
 } } // namespace JSC::DFG
 
-#endif
-#endif
+#else // ENABLE(DFG_JIT)
+
+#include <wtf/Assertions.h>
+
+namespace JSC {
+
+class RepatchBuffer;
+class StructureStubInfo;
+
+namespace DFG {
+
+inline NO_RETURN_DUE_TO_ASSERT void dfgResetGetByID(RepatchBuffer&, StructureStubInfo&) { ASSERT_NOT_REACHED(); }
+inline NO_RETURN_DUE_TO_ASSERT void dfgResetPutByID(RepatchBuffer&, StructureStubInfo&) { ASSERT_NOT_REACHED(); }
+
+} } // namespace JSC::DFG
+
+#endif // ENABLE(DFG_JIT)
+#endif // DFGRepatch_h

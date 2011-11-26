@@ -90,6 +90,11 @@ void CCThreadImpl::postTask(PassOwnPtr<CCThread::Task> task)
     m_thread->postTask(new CCThreadTaskAdapter(task));
 }
 
+void CCThreadImpl::postDelayedTask(PassOwnPtr<CCThread::Task> task, long long delayMs)
+{
+    m_thread->postDelayedTask(new CCThreadTaskAdapter(task), delayMs);
+}
+
 ThreadIdentifier CCThreadImpl::threadID() const
 {
     return m_threadID;
@@ -98,6 +103,11 @@ ThreadIdentifier CCThreadImpl::threadID() const
 CCThreadImpl::CCThreadImpl(WebThread* thread)
     : m_thread(thread)
 {
+    if (thread == webKitPlatformSupport()->currentThread()) {
+        m_threadID = currentThread();
+        return;
+    }
+
     // Get the threadId for the newly-created thread by running a task
     // on that thread, blocking on the result.
     m_threadID = currentThread();

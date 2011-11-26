@@ -92,7 +92,7 @@ void InspectorAgent::inspectedPageDestroyed()
 void InspectorAgent::restore()
 {
     if (m_didCommitLoadFired)
-        m_frontend->inspector()->frontendReused();
+        InspectorInstrumentation::didCommitLoad(m_inspectedPage->mainFrame(), m_inspectedPage->mainFrame()->loader()->documentLoader());
 }
 
 void InspectorAgent::didClearWindowObjectInWorld(Frame* frame, DOMWrapperWorld* world)
@@ -108,10 +108,6 @@ void InspectorAgent::setFrontend(InspectorFrontend* inspectorFrontend)
 {
     m_frontend = inspectorFrontend;
 
-    if (!m_showPanelAfterVisible.isEmpty()) {
-        m_frontend->inspector()->showPanel(m_showPanelAfterVisible);
-        m_showPanelAfterVisible = String();
-    }
 #if ENABLE(JAVASCRIPT_DEBUGGER) && ENABLE(WORKERS)
     WorkersMap::iterator workersEnd = m_workers.end();
     for (WorkersMap::iterator it = m_workers.begin(); it != workersEnd; ++it) {
@@ -130,14 +126,12 @@ void InspectorAgent::clearFrontend()
     m_pendingEvaluateTestCommands.clear();
     m_frontend = 0;
     m_didCommitLoadFired = false;
+    m_injectedScriptManager->discardInjectedScripts();
 }
 
 void InspectorAgent::didCommitLoad()
 {
     m_didCommitLoadFired = true;
-    if (m_frontend)
-        m_frontend->inspector()->reset();
-
     m_injectedScriptManager->discardInjectedScripts();
 #if ENABLE(WORKERS)
     m_workers.clear();
@@ -223,13 +217,6 @@ void InspectorAgent::didDestroyWorker(intptr_t id)
 }
 #endif // ENABLE(WORKERS)
 
-#if ENABLE(JAVASCRIPT_DEBUGGER)
-void InspectorAgent::showProfilesPanel()
-{
-    showPanel(profilesPanelName);
-}
-#endif
-
 void InspectorAgent::evaluateForTestInFrontend(long callId, const String& script)
 {
     m_pendingEvaluateTestCommands.append(pair<long, String>(callId, script));
@@ -259,20 +246,6 @@ bool InspectorAgent::enabled() const
     if (!m_inspectedPage)
         return false;
     return m_inspectedPage->settings()->developerExtrasEnabled();
-}
-
-void InspectorAgent::showConsole()
-{
-    showPanel(consolePanelName);
-}
-
-void InspectorAgent::showPanel(const String& panel)
-{
-    if (!m_frontend) {
-        m_showPanelAfterVisible = panel;
-        return;
-    }
-    m_frontend->inspector()->showPanel(panel);
 }
 
 void InspectorAgent::issueEvaluateForTestCommands()

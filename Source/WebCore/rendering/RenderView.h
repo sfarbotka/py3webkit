@@ -76,8 +76,9 @@ public:
     virtual void paint(PaintInfo&, const LayoutPoint&);
     virtual void paintBoxDecorations(PaintInfo&, const IntPoint&);
 
-    enum SelectionRepaintMode { RepaintNewXOROld, RepaintNewMinusOld };
+    enum SelectionRepaintMode { RepaintNewXOROld, RepaintNewMinusOld, RepaintNothing };
     void setSelection(RenderObject* start, int startPos, RenderObject* end, int endPos, SelectionRepaintMode = RepaintNewXOROld);
+    void getSelection(RenderObject*& startRenderer, int& startOffset, RenderObject*& endRenderer, int& endOffset) const;
     void clearSelection();
     RenderObject* selectionStart() const { return m_selectionStart; }
     RenderObject* selectionEnd() const { return m_selectionEnd; }
@@ -166,6 +167,7 @@ public:
 #endif
 
     IntRect unscaledDocumentRect() const;
+    LayoutRect backgroundRect(RenderBox* backgroundRenderer) const;
 
     IntRect documentRect() const;
 
@@ -189,6 +191,7 @@ public:
 protected:
     virtual void mapLocalToContainer(RenderBoxModelObject* repaintContainer, bool useTransforms, bool fixed, TransformState&, bool* wasFixed = 0) const;
     virtual void mapAbsoluteToLocalPoint(bool fixed, bool useTransforms, TransformState&) const;
+    virtual bool requiresColumns(int desiredColumnCount) const OVERRIDE;
 
 private:
     bool shouldRepaint(const IntRect& r) const;

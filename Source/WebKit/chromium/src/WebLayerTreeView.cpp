@@ -27,6 +27,7 @@
 #include "WebLayerTreeView.h"
 
 #include "WebLayerTreeViewImpl.h"
+#include "WebRect.h"
 #include "WebSize.h"
 #include "cc/CCLayerTreeHost.h"
 
@@ -38,13 +39,9 @@ WebLayerTreeView::Settings::operator CCSettings() const
     CCSettings settings;
     settings.acceleratePainting = acceleratePainting;
     settings.compositeOffscreen = compositeOffscreen;
-
-    // FIXME: compositor thread isn't supported currently.
-    settings.enableCompositorThread = false;
-
-    // FIXME: showFPSCounter / showPlatformLayerTree aren't supported currently.
-    settings.showFPSCounter = false;
-    settings.showPlatformLayerTree = false;
+    settings.enableCompositorThread = enableCompositorThread;
+    settings.showFPSCounter = showFPSCounter;
+    settings.showPlatformLayerTree = showPlatformLayerTree;
     return settings;
 }
 
@@ -70,9 +67,10 @@ bool WebLayerTreeView::equals(const WebLayerTreeView& n) const
 
 void WebLayerTreeView::composite()
 {
-#if !USE(THREADED_COMPOSITING)
-    m_private->composite();
-#endif
+    if (m_private->settings().enableCompositorThread)
+        m_private->setNeedsCommit();
+    else
+        m_private->composite();
 }
 
 void WebLayerTreeView::setViewportSize(const WebSize& viewportSize)
@@ -83,6 +81,11 @@ void WebLayerTreeView::setViewportSize(const WebSize& viewportSize)
 WebSize WebLayerTreeView::viewportSize() const
 {
     return WebSize(m_private->viewportSize());
+}
+
+bool WebLayerTreeView::compositeAndReadback(void *pixels, const WebRect& rect)
+{
+    return m_private->compositeAndReadback(pixels, rect);
 }
 
 WebLayerTreeView::WebLayerTreeView(const PassRefPtr<CCLayerTreeHost>& node)

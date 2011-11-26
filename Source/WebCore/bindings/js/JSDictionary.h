@@ -37,6 +37,7 @@ class EventTarget;
 class Node;
 class ScriptValue;
 class SerializedScriptValue;
+class TrackBase;
 
 class JSDictionary {
 public:
@@ -53,6 +54,14 @@ public:
     bool tryGetProperty(const char* propertyName, T* context, void (*setter)(T* context, const Result&));
 
 private:
+    template <typename Result>
+    struct IdentitySetter {
+        static void identitySetter(Result* context, const Result& result)
+        {
+            *context = result;
+        }
+    };
+
     enum GetPropertyResult {
         ExceptionThrown,
         NoPropertyFound,
@@ -73,6 +82,9 @@ private:
     static void convertValue(JSC::ExecState*, JSC::JSValue, RefPtr<EventTarget>& result);
     static void convertValue(JSC::ExecState*, JSC::JSValue, RefPtr<Node>& result);
     static void convertValue(JSC::ExecState*, JSC::JSValue, MessagePortArray& result);
+#if ENABLE(VIDEO_TRACK)
+    static void convertValue(JSC::ExecState*, JSC::JSValue, RefPtr<TrackBase>& result);
+#endif
 
     JSC::ExecState* m_exec;
     JSC::JSObject* m_initializerObject;
@@ -106,14 +118,7 @@ bool JSDictionary::tryGetProperty(const char* propertyName, T* context, void (*s
 template <typename Result>
 bool JSDictionary::tryGetProperty(const char* propertyName, Result& finalResult)
 {
-    struct IdentitySetter {
-        static void identitySetter(Result* context, const Result& result)
-        {
-            *context = result;
-        }
-    };
-
-    return tryGetProperty(propertyName, &finalResult, IdentitySetter::identitySetter);
+    return tryGetProperty(propertyName, &finalResult, IdentitySetter<Result>::identitySetter);
 }
 
 } // namespace WebCore

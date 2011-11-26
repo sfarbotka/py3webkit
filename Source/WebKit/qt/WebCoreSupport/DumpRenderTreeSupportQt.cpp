@@ -57,6 +57,7 @@
 #include "HistoryItem.h"
 #include "HTMLInputElement.h"
 #include "InspectorController.h"
+#include "JSNode.h"
 #include "NodeList.h"
 #include "NotificationPresenterClientQt.h"
 #include "Page.h"
@@ -66,10 +67,12 @@
 #include "PrintContext.h"
 #include "RenderListItem.h"
 #include "RenderTreeAsText.h"
+#include "SchemeRegistry.h"
 #include "ScriptController.h"
 #include "ScriptSourceCode.h"
 #include "ScriptValue.h"
 #include "SecurityOrigin.h"
+#include "SecurityPolicy.h"
 #include "Settings.h"
 #if ENABLE(SVG)
 #include "SVGDocumentExtensions.h"
@@ -81,6 +84,7 @@
 #include "WorkerThread.h"
 #include <wtf/CurrentTime.h>
 
+#include "qt_runtime.h"
 #include "qwebelement.h"
 #include "qwebframe.h"
 #include "qwebframe_p.h"
@@ -147,6 +151,37 @@ QDRTNode& QDRTNode::operator=(const QDRTNode& other)
     return *this;
 }
 
+QDRTNode QtDRTNodeRuntime::create(WebCore::Node* node)
+{
+    return QDRTNode(node);
+}
+
+WebCore::Node* QtDRTNodeRuntime::get(const QDRTNode& node)
+{
+    return node.m_node;
+}
+
+static QVariant convertJSValueToNodeVariant(JSC::JSObject* object, int *distance, HashSet<JSC::JSObject*>*)
+{
+    if (!object || !object->inherits(&JSNode::s_info))
+        return QVariant();
+    return QVariant::fromValue<QDRTNode>(QtDRTNodeRuntime::create((static_cast<JSNode*>(object))->impl()));
+}
+
+static JSC::JSValue convertNodeVariantToJSValue(JSC::ExecState* exec, WebCore::JSDOMGlobalObject* globalObject, const QVariant& variant)
+{
+    return toJS(exec, globalObject, QtDRTNodeRuntime::get(variant.value<QDRTNode>()));
+}
+
+void QtDRTNodeRuntime::initialize()
+{
+    static bool initialized = false;
+    if (initialized)
+        return;
+    initialized = true;
+    int id = qRegisterMetaType<QDRTNode>();
+    JSC::Bindings::registerCustomType(id, convertJSValueToNodeVariant, convertNodeVariantToJSValue);
+}
 
 DumpRenderTreeSupportQt::DumpRenderTreeSupportQt()
 {
@@ -154,6 +189,11 @@ DumpRenderTreeSupportQt::DumpRenderTreeSupportQt()
 
 DumpRenderTreeSupportQt::~DumpRenderTreeSupportQt()
 {
+}
+
+void DumpRenderTreeSupportQt::initialize()
+{
+    QtDRTNodeRuntime::initialize();
 }
 
 void DumpRenderTreeSupportQt::overwritePluginDirectories()
@@ -463,22 +503,22 @@ void DumpRenderTreeSupportQt::resumeActiveDOMObjects(QWebFrame* frame)
 
 void DumpRenderTreeSupportQt::whiteListAccessFromOrigin(const QString& sourceOrigin, const QString& destinationProtocol, const QString& destinationHost, bool allowDestinationSubdomains)
 {
-    SecurityOrigin::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
+    SecurityPolicy::addOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
 }
 
 void DumpRenderTreeSupportQt::removeWhiteListAccessFromOrigin(const QString& sourceOrigin, const QString& destinationProtocol, const QString& destinationHost, bool allowDestinationSubdomains)
 {
-    SecurityOrigin::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
+    SecurityPolicy::removeOriginAccessWhitelistEntry(*SecurityOrigin::createFromString(sourceOrigin), destinationProtocol, destinationHost, allowDestinationSubdomains);
 }
 
 void DumpRenderTreeSupportQt::resetOriginAccessWhiteLists()
 {
-    SecurityOrigin::resetOriginAccessWhitelists();
+    SecurityPolicy::resetOriginAccessWhitelists();
 }
 
 void DumpRenderTreeSupportQt::setDomainRelaxationForbiddenForURLScheme(bool forbidden, const QString& scheme)
 {
-    SecurityOrigin::setDomainRelaxationForbiddenForURLScheme(forbidden, scheme);
+    SchemeRegistry::setDomainRelaxationForbiddenForURLScheme(forbidden, scheme);
 }
 
 void DumpRenderTreeSupportQt::setCaretBrowsingEnabled(QWebPage* page, bool value)
@@ -616,9 +656,7 @@ QVariantList DumpRenderTreeSupportQt::firstRectForCharacterRange(QWebPage* page,
     if ((location + length < location) && (location + length))
         length = 0;
 
-    Element* selectionRoot = frame->selection()->rootEditableElement();
-    Element* scope = selectionRoot ? selectionRoot : frame->document()->documentElement();
-    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(scope, location, length);
+    RefPtr<Range> range = TextIterator::rangeFromLocationAndLength(frame->selection()->rootEditableElementOrDocumentElement(), location, length);
 
     if (!range)
         return QVariantList();
@@ -767,6 +805,8 @@ QString DumpRenderTreeSupportQt::viewportAsText(QWebPage* page, int deviceDPI, c
         /* device-height */ deviceSize.height(),
         /* device-dpi    */ deviceDPI,
         availableSize);
+    WebCore::restrictMinimumScaleFactorToViewportSize(conf, availableSize);
+    WebCore::restrictScaleFactorToInitialScaleIfNotUserScalable(conf);
 
     QString res;
     res = res.sprintf("viewport size %dx%d scale %f with limits [%f, %f] and userScalable %f\n",
@@ -1035,6 +1075,7 @@ void DumpRenderTreeSupportQt::setInteractiveFormValidationEnabled(QWebPage* page
         corePage->settings()->setInteractiveFormValidationEnabled(enable);
 }
 
+#ifndef QT_NO_MENU
 static QStringList iterateContextMenu(QMenu* menu)
 {
     if (!menu)
@@ -1052,6 +1093,7 @@ static QStringList iterateContextMenu(QMenu* menu)
     }
     return items;
 }
+#endif
 
 QStringList DumpRenderTreeSupportQt::contextMenu(QWebPage* page)
 {
@@ -1077,9 +1119,10 @@ void DumpRenderTreeSupportQt::setMinimumTimerInterval(QWebPage* page, double int
 }
 
 #if QT_VERSION >= QT_VERSION_CHECK(4, 8, 0)
-bool DumpRenderTreeSupportQt::thirdPartyCookiePolicyAllows(QNetworkCookieJar* jar, const QUrl& url, const QUrl& firstPartyUrl)
+bool DumpRenderTreeSupportQt::thirdPartyCookiePolicyAllows(QWebPage *page, const QUrl& url, const QUrl& firstPartyUrl)
 {
-    return thirdPartyCookiePolicyPermits(jar, url, firstPartyUrl);
+    Page* corePage = QWebPagePrivate::core(page);
+    return thirdPartyCookiePolicyPermits(corePage->mainFrame()->loader()->networkingContext(), url, firstPartyUrl);
 }
 #endif
 
@@ -1169,6 +1212,13 @@ void DumpRenderTreeSupportQt::injectInternalsObject(QWebFrame* frame)
 #endif
 }
 
+void DumpRenderTreeSupportQt::injectInternalsObject(JSContextRef context)
+{
+#if USE(JSC)
+    WebCoreTestSupport::injectInternalsObject(context);
+#endif
+}
+
 void DumpRenderTreeSupportQt::resetInternalsObject(QWebFrame* frame)
 {
     WebCore::Frame* coreFrame = QWebFramePrivate::core(frame);
@@ -1185,6 +1235,22 @@ void DumpRenderTreeSupportQt::resetInternalsObject(QWebFrame* frame)
     WebCoreTestSupport::resetInternalsObject(context);
 #elif USE(V8)
     WebCoreTestSupport::resetInternalsObject(V8Proxy::mainWorldContext(coreFrame));
+#endif
+}
+
+bool DumpRenderTreeSupportQt::defaultHixie76WebSocketProtocolEnabled()
+{
+    return true;
+}
+
+void DumpRenderTreeSupportQt::setHixie76WebSocketProtocolEnabled(QWebPage* page, bool enabled)
+{
+#if ENABLE(WEB_SOCKETS)
+    if (Page* corePage = QWebPagePrivate::core(page))
+        corePage->settings()->setUseHixie76WebSocketProtocol(enabled);
+#else
+    UNUSED_PARAM(page);
+    UNUSED_PARAM(enabled);
 #endif
 }
 

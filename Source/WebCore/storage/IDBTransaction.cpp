@@ -28,7 +28,6 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
-#include "Document.h"
 #include "EventException.h"
 #include "EventQueue.h"
 #include "IDBDatabase.h"
@@ -42,7 +41,7 @@
 namespace WebCore {
 
 PassRefPtr<IDBTransaction> IDBTransaction::create(ScriptExecutionContext* context, PassRefPtr<IDBTransactionBackendInterface> backend, IDBDatabase* db)
-{ 
+{
     return adoptRef(new IDBTransaction(context, backend, db));
 }
 
@@ -51,7 +50,8 @@ IDBTransaction::IDBTransaction(ScriptExecutionContext* context, PassRefPtr<IDBTr
     , m_backend(backend)
     , m_database(db)
     , m_mode(m_backend->mode())
-    , m_finished(false)
+    , m_transactionFinished(false)
+    , m_contextStopped(false)
 {
     ASSERT(m_backend);
     IDBPendingTransactionMonitor::addPendingTransaction(m_backend.get());
@@ -68,7 +68,7 @@ IDBTransactionBackendInterface* IDBTransaction::backend() const
 
 bool IDBTransaction::finished() const
 {
-    return m_finished;
+    return m_transactionFinished;
 }
 
 unsigned short IDBTransaction::mode() const
@@ -83,7 +83,7 @@ IDBDatabase* IDBTransaction::db() const
 
 PassRefPtr<IDBObjectStore> IDBTransaction::objectStore(const String& name, ExceptionCode& ec)
 {
-    if (m_finished) {
+    if (m_transactionFinished) {
         ec = IDBDatabaseException::NOT_ALLOWED_ERR;
         return 0;
     }
@@ -98,6 +98,8 @@ PassRefPtr<IDBObjectStore> IDBTransaction::objectStore(const String& name, Excep
 
 void IDBTransaction::abort()
 {
+    if (m_transactionFinished)
+        return;
     RefPtr<IDBTransaction> selfRef = this;
     if (m_backend)
         m_backend->abort();
@@ -116,17 +118,31 @@ void IDBTransaction::unregisterRequest(IDBRequest* request)
 
 void IDBTransaction::onAbort()
 {
+    ASSERT(!m_transactionFinished);
     while (!m_childRequests.isEmpty()) {
         IDBRequest* request = *m_childRequests.begin();
         m_childRequests.remove(request);
         request->abort();
     }
 
+    if (m_mode == IDBTransaction::VERSION_CHANGE)
+        m_database->clearVersionChangeTransaction(this);
+
+    if (m_contextStopped || !scriptExecutionContext())
+        return;
+
     enqueueEvent(Event::create(eventNames().abortEvent, true, false));
 }
 
 void IDBTransaction::onComplete()
 {
+    ASSERT(!m_transactionFinished);
+    if (m_mode == IDBTransaction::VERSION_CHANGE)
+        m_database->clearVersionChangeTransaction(this);
+
+    if (m_contextStopped || !scriptExecutionContext())
+        return;
+
     enqueueEvent(Event::create(eventNames().completeEvent, false, false));
 }
 
@@ -135,7 +151,12 @@ bool IDBTransaction::hasPendingActivity() const
     // FIXME: In an ideal world, we should return true as long as anyone has a or can
     //        get a handle to us or any child request object and any of those have
     //        event listeners. This is  in order to handle user generated events properly.
-    return !m_finished || ActiveDOMObject::hasPendingActivity();
+    return !m_transactionFinished || ActiveDOMObject::hasPendingActivity();
+}
+
+const AtomicString& IDBTransaction::interfaceName() const
+{
+    return eventNames().interfaceForIDBTransaction;
 }
 
 ScriptExecutionContext* IDBTransaction::scriptExecutionContext() const
@@ -145,11 +166,10 @@ ScriptExecutionContext* IDBTransaction::scriptExecutionContext() const
 
 bool IDBTransaction::dispatchEvent(PassRefPtr<Event> event)
 {
-    ASSERT(!m_finished);
+    ASSERT(!m_transactionFinished);
     ASSERT(scriptExecutionContext());
     ASSERT(event->target() == this);
-    ASSERT(!m_finished);
-    m_finished = true;
+    m_transactionFinished = true;
 
     Vector<RefPtr<EventTarget> > targets;
     targets.append(this);
@@ -164,30 +184,24 @@ bool IDBTransaction::canSuspend() const
 {
     // FIXME: Technically we can suspend before the first request is schedule
     //        and after the complete/abort event is enqueued.
-    return m_finished;
+    return m_transactionFinished;
 }
 
-void IDBTransaction::contextDestroyed()
+void IDBTransaction::stop()
 {
-    ActiveDOMObject::contextDestroyed();
+    ActiveDOMObject::stop();
+    m_contextStopped = true;
 
-    // Must happen in contextDestroyed since it can result in ActiveDOMObjects being destructed
-    // (and contextDestroyed is the only one resilient against this).
-    RefPtr<IDBTransaction> selfRef = this;
-    if (m_backend)
-        m_backend->abort();
-
-    m_finished = true;
+    abort();
 }
 
 void IDBTransaction::enqueueEvent(PassRefPtr<Event> event)
 {
-    ASSERT_WITH_MESSAGE(!m_finished, "A finished transaction tried to enqueue an event of type %s.", event->type().string().utf8().data());
-    if (!scriptExecutionContext())
+    ASSERT_WITH_MESSAGE(!m_transactionFinished, "A finished transaction tried to enqueue an event of type %s.", event->type().string().utf8().data());
+    if (m_contextStopped || !scriptExecutionContext())
         return;
 
-    ASSERT(scriptExecutionContext()->isDocument());
-    EventQueue* eventQueue = static_cast<Document*>(scriptExecutionContext())->eventQueue();
+    EventQueue* eventQueue = scriptExecutionContext()->eventQueue();
     event->setTarget(this);
     eventQueue->enqueueEvent(event);
 }

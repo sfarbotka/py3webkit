@@ -12,7 +12,6 @@ SET(WTF_HEADERS
     ByteArray.h
     Compiler.h
     Complex.h
-    CrossThreadRefCounted.h
     CryptographicallyRandomNumber.h
     CurrentTime.h
     DateMath.h
@@ -116,24 +115,12 @@ SET(WTF_HEADERS
     dtoa/strtod.h
     dtoa/utils.h
 
-    dtoa/bignum-dtoa.h
-    dtoa/bignum.h
-    dtoa/cached-powers.h
-    dtoa/diy-fp.h
-    dtoa/double-conversion.h
-    dtoa/double.h
-    dtoa/fast-dtoa.h
-    dtoa/fixed-dtoa.h
-    dtoa/strtod.h
-    dtoa/utils.h
-
     text/AtomicString.h
     text/AtomicStringImpl.h
     text/CString.h
     text/StringBuffer.h
     text/StringHash.h
     text/StringImpl.h
-    text/StringImplBase.h
     text/WTFString.h
 
     threads/BinarySemaphore.h
@@ -180,15 +167,6 @@ SET(WTF_SOURCES
     dtoa/fixed-dtoa.cc
     dtoa/strtod.cc
 
-    dtoa/bignum-dtoa.cc
-    dtoa/bignum.cc
-    dtoa/cached-powers.cc
-    dtoa/diy-fp.cc
-    dtoa/double-conversion.cc
-    dtoa/fast-dtoa.cc
-    dtoa/fixed-dtoa.cc
-    dtoa/strtod.cc
-
     text/AtomicString.cpp
     text/CString.cpp
     text/StringBuilder.cpp
@@ -212,12 +190,22 @@ SET(WTF_INCLUDE_DIRECTORIES
 SET(WTF_LIBRARIES
 )
 
+
+IF (ENABLE_FAST_MALLOC)
+    LIST(APPEND WTF_SOURCES
+        TCSystemAlloc.cpp
+    )
+ELSE ()
+    ADD_DEFINITIONS(-DUSE_SYSTEM_MALLOC=1)
+ENDIF()
+
+
 SET(WTF_PORT_FLAGS )
-INCLUDE_IF_EXISTS(${JAVASCRIPTCORE_DIR}/wtf/CMakeLists${PORT}.txt)
+INCLUDE_IF_EXISTS(${JAVASCRIPTCORE_DIR}/wtf/Platform${PORT}.cmake)
 
 LIST(APPEND WTF_INCLUDE_DIRECTORIES
     "${CMAKE_BINARY_DIR}"
-    "${CMAKE_SOURCE_DIR}/ThirdParty"
+    "${CMAKE_SOURCE_DIR}/Source/ThirdParty"
 )
 
 WEBKIT_WRAP_SOURCELIST(${WTF_SOURCES})

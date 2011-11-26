@@ -27,6 +27,8 @@
 #include <QNetworkCookieJar>
 #include <QVariant>
 
+typedef const struct OpaqueJSContext* JSContextRef;
+
 namespace WebCore {
 class Text;
 class Node;
@@ -75,13 +77,20 @@ private:
 #if defined(WTF_USE_V8) && WTF_USE_V8
     friend class V8::Bindings::QtDRTNodeRuntime;
 #else
-    friend class JSC::Bindings::QtDRTNodeRuntime;
+    friend class QtDRTNodeRuntime;
 #endif
 
     WebCore::Node* m_node;
 };
 
 Q_DECLARE_METATYPE(QDRTNode)
+
+class QtDRTNodeRuntime {
+public:
+    static QDRTNode create(WebCore::Node*);
+    static WebCore::Node* get(const QDRTNode&);
+    static void initialize();
+};
 
 class QWEBKIT_EXPORT DumpRenderTreeSupportQt {
 
@@ -90,6 +99,7 @@ public:
     DumpRenderTreeSupportQt();
     ~DumpRenderTreeSupportQt();
 
+    static void initialize();
 
     static void executeCoreCommandByName(QWebPage* page, const QString& name, const QString& value);
     static bool isCommandEnabled(QWebPage* page, const QString& name);
@@ -214,6 +224,7 @@ public:
     static QString layerTreeAsText(QWebFrame*);
 
     static void injectInternalsObject(QWebFrame*);
+    static void injectInternalsObject(JSContextRef);
     static void resetInternalsObject(QWebFrame*);
 
     static void setInteractiveFormValidationEnabled(QWebPage*, bool);
@@ -222,8 +233,11 @@ public:
     static void goBack(QWebPage*);
 
 #if QT_VERSION >= QT_VERSION_CHECK(4, 8, 0)
-    static bool thirdPartyCookiePolicyAllows(QNetworkCookieJar*, const QUrl&, const QUrl& firstPartyUrl);
+    static bool thirdPartyCookiePolicyAllows(QWebPage*, const QUrl&, const QUrl& firstPartyUrl);
 #endif
+
+    static bool defaultHixie76WebSocketProtocolEnabled();
+    static void setHixie76WebSocketProtocolEnabled(QWebPage*, bool);
 };
 
 #endif

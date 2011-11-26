@@ -56,6 +56,7 @@ public:
     void clearFrontend();
 
     // Called from InspectorInstrumentation
+    bool shouldPauseDedicatedWorkerOnStart();
     void didStartWorkerContext(WorkerContextProxy*, const KURL&);
     void workerContextTerminated(WorkerContextProxy*);
 
@@ -68,6 +69,9 @@ public:
 
 private:
     InspectorWorkerAgent(InstrumentingAgents*, InspectorState*);
+    void createWorkerFrontendChannelsForExistingWorkers();
+    void createWorkerFrontendChannel(WorkerContextProxy*, const String& url);
+    void destroyWorkerFrontendChannels();
 
     InstrumentingAgents* m_instrumentingAgents;
     InspectorFrontend* m_inspectorFrontend;
@@ -76,6 +80,8 @@ private:
     class WorkerFrontendChannel;
     typedef HashMap<int, WorkerFrontendChannel*> WorkerChannels;
     WorkerChannels m_idToChannel;
+    typedef HashMap<WorkerContextProxy*, String> DedicatedWorkers;
+    DedicatedWorkers m_dedicatedWorkers;
 };
 
 } // namespace WebCore

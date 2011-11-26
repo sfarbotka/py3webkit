@@ -64,10 +64,10 @@ DocumentWriter::DocumentWriter(Frame* frame)
 // This is only called by ScriptController::executeIfJavaScriptURL
 // and always contains the result of evaluating a javascript: url.
 // This is the <iframe src="javascript:'html'"> case.
-void DocumentWriter::replaceDocument(const String& source)
+void DocumentWriter::replaceDocument(const String& source, Document* ownerDocument)
 {
     m_frame->loader()->stopAllLoaders();
-    begin(m_frame->document()->url(), true, InheritSecurityOrigin);
+    begin(m_frame->document()->url(), true, ownerDocument);
 
     if (!source.isNull()) {
         if (!m_hasReceivedSomeData) {
@@ -106,10 +106,8 @@ PassRefPtr<Document> DocumentWriter::createDocument(const KURL& url)
     return DOMImplementation::createDocument(m_mimeType, m_frame, url, m_frame->inViewSourceMode());
 }
 
-void DocumentWriter::begin(const KURL& urlReference, bool dispatch, SecurityOriginSource originSource)
+void DocumentWriter::begin(const KURL& urlReference, bool dispatch, Document* ownerDocument)
 {
-    RefPtr<Document> oldDocument = m_frame->document();
-
     // We grab a local copy of the URL because it's easy for callers to supply
     // a URL that will be deallocated during the execution of this function.
     // For example, see <https://bugs.webkit.org/show_bug.cgi?id=66360>.
@@ -121,12 +119,12 @@ void DocumentWriter::begin(const KURL& urlReference, bool dispatch, SecurityOrig
     
     // If the new document is for a Plugin but we're supposed to be sandboxed from Plugins,
     // then replace the document with one whose parser will ignore the incoming data (bug 39323)
-    if (document->isPluginDocument() && m_frame->loader()->isSandboxed(SandboxPlugins))
+    if (document->isPluginDocument() && document->isSandboxed(SandboxPlugins))
         document = SinkDocument::create(m_frame, url);
 
     // FIXME: Do we need to consult the content security policy here about blocked plug-ins?
 
-    bool resetScripting = !(m_frame->loader()->stateMachine()->isDisplayingInitialEmptyDocument() && m_frame->document()->securityOrigin()->isSecureTransitionTo(url));
+    bool resetScripting = !(m_frame->loader()->stateMachine()->isDisplayingInitialEmptyDocument() && m_frame->document()->isSecureTransitionTo(url));
     m_frame->loader()->clear(resetScripting, resetScripting);
     clear();
     if (resetScripting)
@@ -137,9 +135,9 @@ void DocumentWriter::begin(const KURL& urlReference, bool dispatch, SecurityOrig
 
     if (m_decoder)
         document->setDecoder(m_decoder.get());
-    if (originSource == InheritSecurityOrigin) {
-        document->setCookieURL(oldDocument->cookieURL());
-        document->setSecurityOrigin(oldDocument->securityOrigin());
+    if (ownerDocument) {
+        document->setCookieURL(ownerDocument->cookieURL());
+        document->setSecurityOrigin(ownerDocument->securityOrigin());
     }
 
     m_frame->domWindow()->setURL(document->url());
@@ -246,7 +244,8 @@ void DocumentWriter::setEncoding(const String& name, bool userChosen)
 #if PLATFORM(MAC) || PLATFORM(WIN)
 String DocumentWriter::deprecatedFrameEncoding() const
 {
-    if (m_frame->document()->url().isEmpty())
+    Document* document = m_frame->document();
+    if (!document || document->url().isEmpty())
         return m_encoding;
 
     if (m_encodingWasChosenByUser && !m_encoding.isEmpty())

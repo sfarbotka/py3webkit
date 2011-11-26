@@ -48,20 +48,19 @@ private:
     virtual bool isColorControl() const;
     virtual const AtomicString& formControlType() const;
     virtual bool supportsRequired() const;
-    virtual String fallbackValue();
-    virtual String sanitizeValue(const String&);
+    virtual String fallbackValue() const OVERRIDE;
+    virtual String sanitizeValue(const String&) const;
     virtual Color valueAsColor() const;
     virtual void createShadowSubtree();
     virtual void setValue(const String&, bool valueChanged, bool sendChangeEvent);
-    virtual void handleClickEvent(MouseEvent*);
     virtual void handleDOMActivateEvent(Event*);
     virtual void detach();
 
     // ColorChooserClient implementation.
-    virtual void didChooseColor(const Color&);
-    virtual bool isColorInputType() const;
+    virtual void didChooseColor(const Color&) OVERRIDE;
+    virtual void didCleanup() OVERRIDE;
 
-    void cleanupColorChooserIfCurrentClient() const;
+    void cleanupColorChooser();
     void updateColorSwatch();
     HTMLElement* shadowColorSwatch() const;
 };

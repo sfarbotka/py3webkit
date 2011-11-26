@@ -123,15 +123,12 @@ protected:
 private:
     ObjcFallbackObjectImp(JSGlobalObject*, Structure*, ObjcInstance*, const Identifier& propertyName);
     static const unsigned StructureFlags = OverridesGetOwnPropertySlot | JSObject::StructureFlags;
-    virtual bool getOwnPropertySlot(ExecState*, const Identifier&, PropertySlot&);
-    virtual bool getOwnPropertyDescriptor(ExecState*, const Identifier&, PropertyDescriptor&);
-    virtual void put(ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
+    static bool getOwnPropertySlot(JSCell*, ExecState*, const Identifier&, PropertySlot&);
+    static bool getOwnPropertyDescriptor(JSObject*, ExecState*, const Identifier&, PropertyDescriptor&);
     static void put(JSCell*, ExecState*, const Identifier& propertyName, JSValue, PutPropertySlot&);
-    virtual CallType getCallDataVirtual(CallData&);
     static CallType getCallData(JSCell*, CallData&);
-    virtual bool deleteProperty(ExecState*, const Identifier& propertyName);
     static bool deleteProperty(JSCell*, ExecState*, const Identifier& propertyName);
-    virtual JSValue defaultValue(ExecState*, PreferredPrimitiveType) const;
+    static JSValue defaultValue(const JSObject*, ExecState*, PreferredPrimitiveType);
 
     virtual bool toBoolean(ExecState*) const;
 

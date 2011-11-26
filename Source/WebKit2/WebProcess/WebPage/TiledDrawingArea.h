@@ -26,7 +26,7 @@
 #ifndef TiledDrawingArea_h
 #define TiledDrawingArea_h
 
-#if ENABLE(TILED_BACKING_STORE)
+#if USE(TILED_BACKING_STORE)
 
 #include "DrawingArea.h"
 #include "TiledBackingStoreClient.h"
@@ -48,7 +48,7 @@ public:
     virtual void detachCompositingContext() { }
     virtual void setRootCompositingLayer(WebCore::GraphicsLayer*) { }
     virtual void scheduleCompositingLayerSync() { }
-    virtual void syncCompositingLayers() { }
+    virtual void didReceiveLayerTreeHostMessage(CoreIPC::Connection*, CoreIPC::MessageID, CoreIPC::ArgumentDecoder*);
 #endif
 
 private:
@@ -85,6 +85,6 @@ private:
 
 } // namespace WebKit
 
-#endif // TILED_BACKING_STORE
+#endif // USE(TILED_BACKING_STORE)
 
 #endif // TiledDrawingArea_h

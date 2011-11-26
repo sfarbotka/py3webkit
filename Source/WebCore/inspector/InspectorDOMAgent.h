@@ -60,7 +60,6 @@ class InspectorFrontend;
 class InspectorPageAgent;
 class IntRect;
 class HitTestResult;
-class MatchJob;
 class HTMLElement;
 struct HighlightData;
 class InspectorState;
@@ -126,8 +125,9 @@ public:
     void setOuterHTML(ErrorString*, int nodeId, const String& outerHTML, int* newId);
     void setNodeValue(ErrorString*, int nodeId, const String& value);
     void getEventListenersForNode(ErrorString*, int nodeId, RefPtr<InspectorArray>* listenersArray);
-    void performSearch(ErrorString*, const String& whitespaceTrimmedQuery, const bool* const runSynchronously);
-    void cancelSearch(ErrorString*);
+    void performSearch(ErrorString*, const String& whitespaceTrimmedQuery, String* searchId, int* resultCount);
+    void getSearchResults(ErrorString*, const String& searchId, int fromIndex, int toIndex, RefPtr<InspectorArray>*);
+    void discardSearchResults(ErrorString*, const String& searchId);
     void resolveNode(ErrorString*, int nodeId, const String* const objectGroup, RefPtr<InspectorObject>* result);
     void getAttributes(ErrorString*, int nodeId, RefPtr<InspectorArray>* result);
     void setInspectModeEnabled(ErrorString*, bool enabled, const RefPtr<InspectorObject>* highlightConfig);
@@ -161,7 +161,7 @@ public:
     void copyNode(ErrorString*, int nodeId);
     void setDOMListener(DOMListener*);
 
-    String documentURLString(Document*) const;
+    static String documentURLString(Document*);
 
     PassRefPtr<InspectorObject> resolveNode(Node*, const String& objectGroup);
     bool handleMousePress();
@@ -209,9 +209,6 @@ private:
     PassRefPtr<InspectorArray> buildArrayForContainerChildren(Node* container, int depth, NodeToIdMap* nodesMap);
     PassRefPtr<InspectorObject> buildObjectForEventListener(const RegisteredEventListener&, const AtomicString& eventType, Node*);
 
-    void onMatchJobsTimer(Timer<InspectorDOMAgent>*);
-    void reportNodesAsSearchResults(ListHashSet<Node*>& resultCollector);
-
     Node* nodeForPath(const String& path);
 
     void discardBindings();
@@ -231,9 +228,8 @@ private:
     HashSet<int> m_childrenRequested;
     int m_lastNodeId;
     RefPtr<Document> m_document;
-    Deque<MatchJob*> m_pendingMatchJobs;
-    Timer<InspectorDOMAgent> m_matchJobsTimer;
-    HashSet<RefPtr<Node> > m_searchResults;
+    typedef HashMap<String, Vector<RefPtr<Node> > > SearchResults;
+    SearchResults m_searchResults;
     OwnPtr<RevalidateStyleAttributeTask> m_revalidateStyleAttrTask;
     OwnPtr<HighlightData> m_highlightData;
     RefPtr<Node> m_nodeToFocus;

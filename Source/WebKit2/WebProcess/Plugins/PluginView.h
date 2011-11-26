@@ -63,9 +63,13 @@ public:
 #if PLATFORM(MAC)
     void setWindowIsVisible(bool);
     void setWindowIsFocused(bool);
+    void setDeviceScaleFactor(float);
     void windowAndViewFramesChanged(const WebCore::IntRect& windowFrameInScreenCoordinates, const WebCore::IntRect& viewFrameInWindowCoordinates);
     bool sendComplexTextInput(uint64_t pluginComplexTextInputIdentifier, const String& textInput);
 #endif
+
+    // FIXME: Remove this; nobody should have to know about the plug-in view's renderer except the plug-in view itself.
+    WebCore::RenderBoxModelObject* renderer() const;
 
 private:
     PluginView(PassRefPtr<WebCore::HTMLPlugInElement>, PassRefPtr<Plugin>, const Plugin::Parameters& parameters);
@@ -118,6 +122,7 @@ private:
     virtual void notifyWidget(WebCore::WidgetNotification);
     virtual void show();
     virtual void hide();
+    virtual bool transformsAffectFrameRect();
 
     // WebCore::MediaCanStartListener
     virtual void mediaCanStart();
@@ -147,6 +152,7 @@ private:
     virtual void setComplexTextInputState(PluginComplexTextInputState);
     virtual mach_port_t compositingRenderServerPort();
 #endif
+    virtual float contentsScaleFactor();
     virtual String proxiesForURL(const String&);
     virtual String cookiesForURL(const String&);
     virtual void setCookiesForURL(const String& urlString, const String& cookieString);

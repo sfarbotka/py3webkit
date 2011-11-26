@@ -49,32 +49,57 @@ NonCompositedContentHost::~NonCompositedContentHost()
 {
 }
 
-void NonCompositedContentHost::setRootLayer(GraphicsLayer* layer)
+void NonCompositedContentHost::setBackgroundColor(const Color& color)
 {
-    m_graphicsLayer->removeAllChildren();
-    m_graphicsLayer->setNeedsDisplay();
-    if (layer)
-        m_graphicsLayer->addChild(layer);
+    if (color.isValid())
+        m_graphicsLayer->platformLayer()->setBackgroundColor(color);
     else
-        m_graphicsLayer->platformLayer()->setLayerTreeHost(0);
+        m_graphicsLayer->platformLayer()->setBackgroundColor(Color::white);
 }
 
-void NonCompositedContentHost::setViewport(const IntSize& viewportSize, const IntSize& contentsSize, const IntPoint& scrollPosition)
+void NonCompositedContentHost::setScrollLayer(GraphicsLayer* layer)
 {
+    m_graphicsLayer->setNeedsDisplay();
+
+    if (!layer) {
+        m_graphicsLayer->removeFromParent();
+        m_graphicsLayer->platformLayer()->setLayerTreeHost(0);
+        return;
+    }
+
+    if (layer->platformLayer() == scrollLayer())
+        return;
+
+    layer->addChildAtIndex(m_graphicsLayer.get(), 0);
+    ASSERT(scrollLayer());
+}
+
+void NonCompositedContentHost::setViewport(const IntSize& viewportSize, const IntSize& contentsSize, const IntPoint& scrollPosition, float pageScale)
+{
+    if (!scrollLayer())
+        return;
+
     bool visibleRectChanged = m_viewportSize != viewportSize;
 
     m_viewportSize = viewportSize;
-    m_graphicsLayer->platformLayer()->setScrollPosition(scrollPosition);
-    IntSize maxScroll = contentsSize - viewportSize;
-    // The viewport may be larger than the contents in some cases, such as
-    // having a vertical scrollbar but no horizontal overflow.
-    maxScroll.clampNegativeToZero();
-
-    m_graphicsLayer->platformLayer()->setMaxScrollPosition(maxScroll);
+    scrollLayer()->setScrollPosition(scrollPosition);
+    // Due to the possibility of pinch zoom, the noncomposited layer is always
+    // assumed to be scrollable.
+    scrollLayer()->setScrollable(true);
     m_graphicsLayer->setSize(contentsSize);
 
     if (visibleRectChanged)
         m_graphicsLayer->setNeedsDisplay();
+
+    if (m_graphicsLayer->pageScaleFactor() != pageScale)
+        m_graphicsLayer->deviceOrPageScaleFactorChanged();
+}
+
+LayerChromium* NonCompositedContentHost::scrollLayer()
+{
+    if (!m_graphicsLayer->parent())
+        return 0;
+    return m_graphicsLayer->parent()->platformLayer();
 }
 
 void NonCompositedContentHost::protectVisibleTileTextures()

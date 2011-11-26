@@ -154,7 +154,7 @@ void PageClientImpl::setCursorHiddenUntilMouseMoves(bool hiddenUntilMouseMoves)
     notImplemented();
 }
 
-void PageClientImpl::setViewportArguments(const WebCore::ViewportArguments&)
+void PageClientImpl::didChangeViewportProperties(const WebCore::ViewportArguments&)
 {
     notImplemented();
 }
@@ -225,7 +225,7 @@ PassRefPtr<WebContextMenuProxy> PageClientImpl::createContextMenuProxy(WebPagePr
     return WebContextMenuProxyGtk::create(m_viewWidget, page);
 }
 
-void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator>, bool fadeOut)
+void PageClientImpl::setFindIndicator(PassRefPtr<FindIndicator>, bool fadeOut, bool animate)
 {
     notImplemented();
 }
@@ -283,6 +283,11 @@ void PageClientImpl::findStringInCustomRepresentation(const String&, FindOptions
 void PageClientImpl::countStringMatchesInCustomRepresentation(const String&, FindOptions, unsigned)
 {
     notImplemented();
+}
+
+void PageClientImpl::startDrag(const WebCore::DragData& dragData, PassRefPtr<ShareableBitmap> dragImage)
+{
+    webkitWebViewBaseStartDrag(WEBKIT_WEB_VIEW_BASE(m_viewWidget), dragData, dragImage);
 }
 
 } // namespace WebKit

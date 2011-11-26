@@ -52,7 +52,7 @@ namespace WebCore {
         virtual bool isSharedWorkerContext() const { return true; }
 
         // EventTarget
-        virtual SharedWorkerContext* toSharedWorkerContext() { return this; }
+        virtual const AtomicString& interfaceName() const;
 
         // Setters/Getters for attributes in SharedWorkerContext.idl
         DEFINE_ATTRIBUTE_EVENT_LISTENER(connect);
@@ -61,6 +61,9 @@ namespace WebCore {
         SharedWorkerThread* thread();
     private:
         SharedWorkerContext(const String& name, const KURL&, const String&, SharedWorkerThread*);
+
+        virtual void logExceptionToConsole(const String& errorMessage, int lineNumber, const String& sourceURL, PassRefPtr<ScriptCallStack>);
+
         String m_name;
     };
 

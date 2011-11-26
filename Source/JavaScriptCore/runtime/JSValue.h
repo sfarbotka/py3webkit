@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <wtf/AlwaysInline.h>
 #include <wtf/Assertions.h>
+#include <wtf/HashMap.h>
 #include <wtf/HashTraits.h>
 #include <wtf/MathExtras.h>
 #include <wtf/StdLibExtras.h>
@@ -46,8 +47,11 @@ namespace JSC {
     class UString;
 #if ENABLE(DFG_JIT)
     namespace DFG {
+        class AssemblyHelpers;
         class JITCompiler;
         class JITCodeGenerator;
+        class JSValueSource;
+        class OSRExitCompiler;
         class SpeculativeJIT;
     }
 #endif
@@ -107,8 +111,11 @@ namespace JSC {
         friend class JSInterfaceJIT;
         friend class SpecializedThunkJIT;
 #if ENABLE(DFG_JIT)
+        friend class DFG::AssemblyHelpers;
         friend class DFG::JITCompiler;
         friend class DFG::JITCodeGenerator;
+        friend class DFG::JSValueSource;
+        friend class DFG::OSRExitCompiler;
         friend class DFG::SpeculativeJIT;
 #endif
 
@@ -161,6 +168,7 @@ namespace JSC {
         double asNumber() const;
 
         // Querying the type.
+        bool isEmpty() const;
         bool isUndefined() const;
         bool isNull() const;
         bool isUndefinedOrNull() const;
@@ -190,7 +198,7 @@ namespace JSC {
         // been set in the ExecState already.
         double toNumber(ExecState*) const;
         UString toString(ExecState*) const;
-        UString toPrimitiveString(ExecState*) const;
+        JSString* toPrimitiveString(ExecState*) const;
         JSObject* toObject(ExecState*) const;
         JSObject* toObject(ExecState*, JSGlobalObject*) const;
 
@@ -378,6 +386,8 @@ namespace JSC {
         static bool isDeletedValue(EncodedJSValue value) { return value == JSValue::encode(JSValue(JSValue::HashTableDeletedValue)); }
     };
 #endif
+
+    typedef HashMap<EncodedJSValue, unsigned, EncodedJSValueHash, EncodedJSValueHashTraits> JSValueMap;
 
     // Stand-alone helper functions.
     inline JSValue jsNull()

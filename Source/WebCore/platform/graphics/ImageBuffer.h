@@ -126,6 +126,8 @@ namespace WebCore {
 
         friend class GraphicsContext;
         friend class GeneratedImage;
+        friend class CrossfadeGeneratedImage;
+        friend class GeneratorGeneratedImage;
 
     private:
         ImageBufferData m_data;
@@ -140,11 +142,11 @@ namespace WebCore {
 
         // This constructor will place its success into the given out-variable
         // so that create() knows when it should return failure.
-        ImageBuffer(const IntSize&, ColorSpace colorSpace, RenderingMode renderingMode, bool& success);
+        ImageBuffer(const IntSize&, ColorSpace, RenderingMode, bool& success);
     };
 
 #if USE(CG) || USE(SKIA)
-    String ImageDataToDataURL(const ImageData& input, const String& mimeType, const double* quality);
+    String ImageDataToDataURL(const ImageData&, const String& mimeType, const double* quality);
 #endif
 
 } // namespace WebCore

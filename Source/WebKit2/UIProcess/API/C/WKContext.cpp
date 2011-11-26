@@ -52,13 +52,13 @@ WKTypeID WKContextGetTypeID()
 WKContextRef WKContextCreate()
 {
     RefPtr<WebContext> context = WebContext::create(String());
-    return toAPI(context.release().releaseRef());
+    return toAPI(context.release().leakRef());
 }
 
 WKContextRef WKContextCreateWithInjectedBundlePath(WKStringRef pathRef)
 {
     RefPtr<WebContext> context = WebContext::create(toImpl(pathRef)->string());
-    return toAPI(context.release().releaseRef());
+    return toAPI(context.release().leakRef());
 }
 
 WKContextRef WKContextGetSharedProcessContext()
@@ -84,6 +84,11 @@ void WKContextSetHistoryClient(WKContextRef contextRef, const WKContextHistoryCl
 void WKContextSetDownloadClient(WKContextRef contextRef, const WKContextDownloadClient* wkClient)
 {
     toImpl(contextRef)->initializeDownloadClient(wkClient);
+}
+
+void WKContextSetConnectionClient(WKContextRef contextRef, const WKContextConnectionClient* wkClient)
+{
+    toImpl(contextRef)->initializeConnectionClient(wkClient);
 }
 
 WKDownloadRef WKContextDownloadURLRequest(WKContextRef contextRef, const WKURLRequestRef requestRef)
@@ -223,6 +228,21 @@ void WKContextSetDatabaseDirectory(WKContextRef contextRef, WKStringRef database
 void WKContextSetLocalStorageDirectory(WKContextRef contextRef, WKStringRef localStorageDirectory)
 {
     toImpl(contextRef)->setLocalStorageDirectory(toImpl(localStorageDirectory)->string());
+}
+
+void WKContextSetOverrideWebInspectorBaseDirectory(WKContextRef contextRef, WKStringRef webInspectorBaseDirectory)
+{
+    toImpl(contextRef)->setOverrideWebInspectorBaseDirectory(toImpl(webInspectorBaseDirectory)->string());
+}
+
+void WKContextSetOverrideWebInspectorPagePath(WKContextRef contextRef, WKStringRef webInspectorPagePath)
+{
+    toImpl(contextRef)->setOverrideWebInspectorPagePath(toImpl(webInspectorPagePath)->string());
+}
+
+void WKContextSetOverrideWebInspectorLocalizedStringsPath(WKContextRef contextRef, WKStringRef webInspectorLocalizedStringsPath)
+{
+    toImpl(contextRef)->setOverrideWebInspectorLocalizedStringsPath(toImpl(webInspectorLocalizedStringsPath)->string());
 }
 
 void WKContextDisableProcessTermination(WKContextRef contextRef)

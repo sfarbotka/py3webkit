@@ -25,6 +25,9 @@
 
 #include "config.h"
 
+#include <sys/time.h>
+#include <sys/sysctl.h>
+
 #include "ScrollAnimatorChromiumMac.h"
 
 #include "FloatPoint.h"
@@ -46,8 +49,30 @@ using namespace std;
 @protocol NSAnimationDelegate
 @end
 
-@interface NSProcessInfo (NSObject)
+@interface NSProcessInfo (ScrollAnimatorChromiumMacExt)
 - (NSTimeInterval)systemUptime;
+@end
+
+@implementation NSProcessInfo (ScrollAnimatorChromiumMacExt)
+- (NSTimeInterval)systemUptime
+{
+    // Get how long system has been up. Found by looking getting "boottime" from the kernel.
+    static struct timeval boottime = {0};
+    if (!boottime.tv_sec) {
+        int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+        size_t size = sizeof(boottime);
+        if (-1 == sysctl(mib, 2, &boottime, &size, 0, 0))
+            boottime.tv_sec = 0;
+    }
+    struct timeval now;
+    if (boottime.tv_sec && -1 != gettimeofday(&now, 0)) {
+        struct timeval uptime;
+        timersub(&now, &boottime, &uptime);
+        NSTimeInterval result = uptime.tv_sec + (uptime.tv_usec / 1E+6);
+        return result;
+    }
+    return 0;
+}
 @end
 #endif
 
@@ -461,6 +486,12 @@ PassOwnPtr<ScrollAnimator> ScrollAnimator::create(ScrollableArea* scrollableArea
     return adoptPtr(new ScrollAnimatorChromiumMac(scrollableArea));
 }
 
+static ScrollbarThemeChromiumMac* chromiumScrollbarTheme()
+{
+    ScrollbarTheme* scrollbarTheme = ScrollbarTheme::theme();
+    return !scrollbarTheme->isMockTheme() ? static_cast<ScrollbarThemeChromiumMac*>(scrollbarTheme) : 0;
+}
+
 ScrollAnimatorChromiumMac::ScrollAnimatorChromiumMac(ScrollableArea* scrollableArea)
     : ScrollAnimator(scrollableArea)
 #if USE(WK_SCROLLBAR_PAINTER)
@@ -566,9 +597,6 @@ void ScrollAnimatorChromiumMac::immediateScrollToPoint(const FloatPoint& newPosi
 {
     FloatPoint adjustedPosition = adjustScrollPositionIfNecessary(newPosition);
  
-    if (adjustedPosition.x() == m_currentPosX && adjustedPosition.y() == m_currentPosY)
-        return;
-    
     m_currentPosX = adjustedPosition.x();
     m_currentPosY = adjustedPosition.y();
     notifyPositionChanged();
@@ -682,8 +710,11 @@ void ScrollAnimatorChromiumMac::didEndScrollGesture() const
 
 void ScrollAnimatorChromiumMac::didAddVerticalScrollbar(Scrollbar* scrollbar)
 {
-    if (isScrollbarOverlayAPIAvailable()) {
-        WKScrollbarPainterRef painter = static_cast<WebCore::ScrollbarThemeChromiumMac*>(WebCore::ScrollbarTheme::nativeTheme())->painterForScrollbar(scrollbar);
+    if (!isScrollbarOverlayAPIAvailable())
+        return;
+        
+    if (ScrollbarThemeChromiumMac* theme = chromiumScrollbarTheme()) {
+        WKScrollbarPainterRef painter = theme->painterForScrollbar(scrollbar);
         wkScrollbarPainterSetDelegate(painter, m_scrollbarPainterDelegate.get());
         wkSetPainterForPainterController(m_scrollbarPainterController.get(), painter, false);
         if (scrollableArea()->inLiveResize())
@@ -693,8 +724,11 @@ void ScrollAnimatorChromiumMac::didAddVerticalScrollbar(Scrollbar* scrollbar)
 
 void ScrollAnimatorChromiumMac::willRemoveVerticalScrollbar(Scrollbar* scrollbar)
 {
-    if (isScrollbarOverlayAPIAvailable()) {
-        WKScrollbarPainterRef painter = static_cast<WebCore::ScrollbarThemeChromiumMac*>(WebCore::ScrollbarTheme::nativeTheme())->painterForScrollbar(scrollbar);
+    if (!isScrollbarOverlayAPIAvailable())
+        return;
+
+    if (ScrollbarThemeChromiumMac* theme = chromiumScrollbarTheme()) {
+        WKScrollbarPainterRef painter = theme->painterForScrollbar(scrollbar);
         wkScrollbarPainterSetDelegate(painter, nil);
         wkSetPainterForPainterController(m_scrollbarPainterController.get(), nil, false);
     }
@@ -702,8 +736,11 @@ void ScrollAnimatorChromiumMac::willRemoveVerticalScrollbar(Scrollbar* scrollbar
 
 void ScrollAnimatorChromiumMac::didAddHorizontalScrollbar(Scrollbar* scrollbar)
 {
-    if (isScrollbarOverlayAPIAvailable()) {
-        WKScrollbarPainterRef painter = static_cast<WebCore::ScrollbarThemeChromiumMac*>(WebCore::ScrollbarTheme::nativeTheme())->painterForScrollbar(scrollbar);
+    if (!isScrollbarOverlayAPIAvailable())
+        return;
+
+    if (ScrollbarThemeChromiumMac* theme = chromiumScrollbarTheme()) {
+        WKScrollbarPainterRef painter = theme->painterForScrollbar(scrollbar);
         wkScrollbarPainterSetDelegate(painter, m_scrollbarPainterDelegate.get());
         wkSetPainterForPainterController(m_scrollbarPainterController.get(), painter, true);
         if (scrollableArea()->inLiveResize())
@@ -713,8 +750,11 @@ void ScrollAnimatorChromiumMac::didAddHorizontalScrollbar(Scrollbar* scrollbar)
 
 void ScrollAnimatorChromiumMac::willRemoveHorizontalScrollbar(Scrollbar* scrollbar)
 {
-    if (isScrollbarOverlayAPIAvailable()) {
-        WKScrollbarPainterRef painter = static_cast<WebCore::ScrollbarThemeChromiumMac*>(WebCore::ScrollbarTheme::nativeTheme())->painterForScrollbar(scrollbar);
+    if (!isScrollbarOverlayAPIAvailable())
+        return;
+
+    if (ScrollbarThemeChromiumMac* theme = chromiumScrollbarTheme()) {
+        WKScrollbarPainterRef painter = theme->painterForScrollbar(scrollbar);
         wkScrollbarPainterSetDelegate(painter, nil);
         wkSetPainterForPainterController(m_scrollbarPainterController.get(), nil, true);
     }
@@ -1218,7 +1258,12 @@ void ScrollAnimatorChromiumMac::updateScrollerStyle()
         return;
     }
 
-    ScrollbarThemeChromiumMac* macTheme = (ScrollbarThemeChromiumMac*)ScrollbarTheme::nativeTheme();
+    ScrollbarThemeChromiumMac* macTheme = chromiumScrollbarTheme();
+    if (!macTheme) {
+        setNeedsScrollerStyleUpdate(false);
+        return;
+    }
+
     int newStyle = wkScrollbarPainterControllerStyle(m_scrollbarPainterController.get());
 
     if (Scrollbar* verticalScrollbar = scrollableArea()->verticalScrollbar()) {

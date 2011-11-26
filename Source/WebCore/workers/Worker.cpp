@@ -56,7 +56,7 @@ inline Worker::Worker(ScriptExecutionContext* context)
 {
 }
 
-PassRefPtr<Worker> Worker::create(const String& url, ScriptExecutionContext* context, ExceptionCode& ec)
+PassRefPtr<Worker> Worker::create(ScriptExecutionContext* context, const String& url, ExceptionCode& ec)
 {
     RefPtr<Worker> worker = adoptRef(new Worker(context));
 
@@ -83,6 +83,11 @@ Worker::~Worker()
     ASSERT(isMainThread());
     ASSERT(scriptExecutionContext()); // The context is protected by worker context proxy, so it cannot be destroyed while a Worker exists.
     m_contextProxy->workerObjectDestroyed();
+}
+
+const AtomicString& Worker::interfaceName() const
+{
+    return eventNames().interfaceForWorker;
 }
 
 // FIXME: remove this when we update the ObjC bindings (bug #28774).
@@ -139,7 +144,10 @@ void Worker::notifyFinished()
     if (m_scriptLoader->failed())
         dispatchEvent(Event::create(eventNames().errorEvent, false, true));
     else {
-        m_contextProxy->startWorkerContext(m_scriptLoader->url(), scriptExecutionContext()->userAgent(m_scriptLoader->url()), m_scriptLoader->script());
+        WorkerThreadStartMode startMode = DontPauseWorkerContextOnStart;
+        if (InspectorInstrumentation::shouldPauseDedicatedWorkerOnStart(scriptExecutionContext()))
+            startMode = PauseWorkerContextOnStart;
+        m_contextProxy->startWorkerContext(m_scriptLoader->url(), scriptExecutionContext()->userAgent(m_scriptLoader->url()), m_scriptLoader->script(), startMode);
         InspectorInstrumentation::didStartWorkerContext(scriptExecutionContext(), m_contextProxy, m_scriptLoader->url());
         InspectorInstrumentation::scriptImported(scriptExecutionContext(), m_scriptLoader->identifier(), m_scriptLoader->script());
     }

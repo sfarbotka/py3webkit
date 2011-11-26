@@ -52,7 +52,7 @@ inline SVGFontFaceElement::SVGFontFaceElement(const QualifiedName& tagName, Docu
     , m_styleDeclaration(CSSMutableStyleDeclaration::create())
 {
     ASSERT(hasTagName(font_faceTag));
-    m_styleDeclaration->setParent(document->mappedElementSheet());
+    m_styleDeclaration->setParentStyleSheet(document->mappedElementSheet());
     m_styleDeclaration->setStrictParsing(true);
     m_fontFaceRule->setDeclaration(m_styleDeclaration.get());
 }
@@ -321,7 +321,7 @@ void SVGFontFaceElement::insertedIntoDocument()
 {
     SVGElement::insertedIntoDocument();
     document()->mappedElementSheet()->append(m_fontFaceRule);
-    m_fontFaceRule->setParent(document()->mappedElementSheet());
+    m_fontFaceRule->setParentStyleSheet(document()->mappedElementSheet());
     rebuildFontFace();
 }
 

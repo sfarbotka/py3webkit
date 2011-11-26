@@ -52,6 +52,7 @@ IDBTransactionBackendImpl::IDBTransactionBackendImpl(DOMStringList* objectStores
     , m_pendingEvents(0)
 {
     ASSERT(m_objectStoreNames);
+    ASSERT(m_mode == IDBTransaction::VERSION_CHANGE || !m_objectStoreNames->isEmpty());
     m_database->transactionCoordinator()->didCreateTransaction(this);
 }
 
@@ -69,7 +70,7 @@ PassRefPtr<IDBObjectStoreBackendInterface> IDBTransactionBackendImpl::objectStor
     }
 
     // Does a linear search, but it really shouldn't be that slow in practice.
-    if (!m_objectStoreNames->isEmpty() && !m_objectStoreNames->contains(name)) {
+    if (m_mode != IDBTransaction::VERSION_CHANGE && !m_objectStoreNames->contains(name)) {
         ec = IDBDatabaseException::NOT_FOUND_ERR;
         return 0;
     }
@@ -128,9 +129,11 @@ void IDBTransactionBackendImpl::abort()
         task->performTask(0);
     }
 
-    m_callbacks->onAbort();
+    if (m_callbacks)
+        m_callbacks->onAbort();
     m_database->transactionCoordinator()->didFinishTransaction(this);
     ASSERT(!m_database->transactionCoordinator()->isActive(this));
+    m_database->transactionFinished(this);
     m_database = 0;
 }
 
@@ -171,6 +174,7 @@ void IDBTransactionBackendImpl::start()
 
     m_state = StartPending;
     m_database->transactionCoordinator()->didStartTransaction(this);
+    m_database->transactionStarted(this);
 }
 
 void IDBTransactionBackendImpl::commit()
@@ -180,12 +184,14 @@ void IDBTransactionBackendImpl::commit()
     // alive while executing this method.
     RefPtr<IDBTransactionBackendImpl> self(this);
     ASSERT(m_state == Running);
+    ASSERT(m_taskQueue.isEmpty());
 
     m_state = Finished;
     closeOpenCursors();
     m_transaction->commit();
     m_callbacks->onComplete();
     m_database->transactionCoordinator()->didFinishTransaction(this);
+    m_database->transactionFinished(this);
     m_database = 0;
 }
 

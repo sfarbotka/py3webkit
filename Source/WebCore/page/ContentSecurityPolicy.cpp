@@ -190,17 +190,20 @@ private:
     bool parsePort(const UChar* begin, const UChar* end, int& port, bool& portHasWildcard);
 
     void addSourceSelf();
+    void addSourceStar();
     void addSourceUnsafeInline();
     void addSourceUnsafeEval();
 
     SecurityOrigin* m_origin;
     Vector<CSPSource> m_list;
+    bool m_allowStar;
     bool m_allowInline;
     bool m_allowEval;
 };
 
 CSPSourceList::CSPSourceList(SecurityOrigin* origin)
     : m_origin(origin)
+    , m_allowStar(false)
     , m_allowInline(false)
     , m_allowEval(false)
 {
@@ -213,10 +216,14 @@ void CSPSourceList::parse(const String& value)
 
 bool CSPSourceList::matches(const KURL& url)
 {
+    if (m_allowStar)
+        return true;
+
     for (size_t i = 0; i < m_list.size(); ++i) {
         if (m_list[i].matches(url))
             return true;
     }
+
     return false;
 }
 
@@ -262,6 +269,11 @@ bool CSPSourceList::parseSource(const UChar* begin, const UChar* end,
 {
     if (begin == end)
         return false;
+
+    if (end - begin == 1 && *begin == '*') {
+        addSourceStar();
+        return false;
+    }
 
     if (equalIgnoringCase("'self'", begin, end - begin)) {
         addSourceSelf();
@@ -429,6 +441,11 @@ void CSPSourceList::addSourceSelf()
     m_list.append(CSPSource(m_origin->protocol(), m_origin->host(), m_origin->port(), false, false));
 }
 
+void CSPSourceList::addSourceStar()
+{
+    m_allowStar = true;
+}
+
 void CSPSourceList::addSourceUnsafeInline()
 {
     m_allowInline = true;
@@ -441,16 +458,17 @@ void CSPSourceList::addSourceUnsafeEval()
 
 class CSPDirective {
 public:
-    CSPDirective(const String& name, const String& value, SecurityOrigin* origin)
-        : m_sourceList(origin)
+    CSPDirective(const String& name, const String& value, ScriptExecutionContext* context)
+        : m_sourceList(context->securityOrigin())
         , m_text(name + ' ' + value)
+        , m_selfURL(context->url())
     {
         m_sourceList.parse(value);
     }
 
     bool allows(const KURL& url)
     {
-        return m_sourceList.matches(url);
+        return m_sourceList.matches(url.isEmpty() ? m_selfURL : url);
     }
 
     bool allowInline() const { return m_sourceList.allowInline(); }
@@ -461,12 +479,14 @@ public:
 private:
     CSPSourceList m_sourceList;
     String m_text;
+    KURL m_selfURL;
 };
 
 ContentSecurityPolicy::ContentSecurityPolicy(ScriptExecutionContext* scriptExecutionContext)
     : m_havePolicy(false)
     , m_scriptExecutionContext(scriptExecutionContext)
     , m_reportOnly(false)
+    , m_haveSandboxPolicy(false)
 {
 }
 
@@ -498,7 +518,7 @@ void ContentSecurityPolicy::didReceiveHeader(const String& header, HeaderType ty
 void ContentSecurityPolicy::reportViolation(const String& directiveText, const String& consoleMessage) const
 {
     String message = m_reportOnly ? "[Report Only] " + consoleMessage : consoleMessage;
-    m_scriptExecutionContext->addMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message, 1, String(), 0);
+    m_scriptExecutionContext->addConsoleMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message);
 
     if (m_reportURLs.isEmpty())
         return;
@@ -531,6 +551,12 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
 
     for (size_t i = 0; i < m_reportURLs.size(); ++i)
         PingLoader::reportContentSecurityPolicyViolation(frame, m_reportURLs[i], report);
+}
+
+void ContentSecurityPolicy::logUnrecognizedDirective(const String& name) const
+{
+    String message = makeString("Unrecognized Content-Security-Policy directive '", name, "'.\n");
+    m_scriptExecutionContext->addConsoleMessage(JSMessageSource, LogMessageType, ErrorMessageLevel, message);
 }
 
 bool ContentSecurityPolicy::checkEval(CSPDirective* directive) const
@@ -736,7 +762,14 @@ void ContentSecurityPolicy::parseReportURI(const String& value)
 
 PassOwnPtr<CSPDirective> ContentSecurityPolicy::createCSPDirective(const String& name, const String& value)
 {
-    return adoptPtr(new CSPDirective(name, value, m_scriptExecutionContext->securityOrigin()));
+    return adoptPtr(new CSPDirective(name, value, m_scriptExecutionContext));
+}
+
+void ContentSecurityPolicy::applySandboxPolicy(const String& sandboxPolicy)
+{
+    ASSERT(!m_haveSandboxPolicy);
+    m_haveSandboxPolicy = true;
+    m_scriptExecutionContext->enforceSandboxFlags(SecurityContext::parseSandboxPolicy(sandboxPolicy));
 }
 
 void ContentSecurityPolicy::addDirective(const String& name, const String& value)
@@ -750,6 +783,7 @@ void ContentSecurityPolicy::addDirective(const String& name, const String& value
     DEFINE_STATIC_LOCAL(String, fontSrc, ("font-src"));
     DEFINE_STATIC_LOCAL(String, mediaSrc, ("media-src"));
     DEFINE_STATIC_LOCAL(String, connectSrc, ("connect-src"));
+    DEFINE_STATIC_LOCAL(String, sandbox, ("sandbox"));
     DEFINE_STATIC_LOCAL(String, reportURI, ("report-uri"));
 
     ASSERT(!name.isEmpty());
@@ -772,8 +806,12 @@ void ContentSecurityPolicy::addDirective(const String& name, const String& value
         m_mediaSrc = createCSPDirective(name, value);
     else if (!m_connectSrc && equalIgnoringCase(name, connectSrc))
         m_connectSrc = createCSPDirective(name, value);
+    else if (!m_haveSandboxPolicy && equalIgnoringCase(name, sandbox))
+        applySandboxPolicy(value);
     else if (m_reportURLs.isEmpty() && equalIgnoringCase(name, reportURI))
         parseReportURI(value);
+    else
+        logUnrecognizedDirective(name);
 }
 
 }

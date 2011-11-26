@@ -33,8 +33,6 @@
 
 #include "RenderBlock.h"
 
-#if ENABLE(CSS3_FLEXBOX)
-
 namespace WebCore {
 
 class RenderFlexibleBox : public RenderBlock {
@@ -54,46 +52,58 @@ private:
     typedef WTF::HashMap<const RenderBox*, LayoutUnit> InflexibleFlexItemSize;
 
     bool hasOrthogonalFlow(RenderBox* child) const;
+    bool isColumnFlow() const;
     bool isHorizontalFlow() const;
     bool isLeftToRightFlow() const;
-    void setFlowAwareLogicalHeight(LayoutUnit);
-    LayoutUnit flowAwareLogicalHeightForChild(RenderBox* child);
-    LayoutUnit flowAwareLogicalWidthForChild(RenderBox* child);
-    LayoutUnit flowAwareLogicalHeight() const;
-    LayoutUnit flowAwareLogicalWidth() const;
-    LayoutUnit flowAwareContentLogicalWidth() const;
+    Length crossAxisLength() const;
+    Length mainAxisLengthForChild(RenderBox* child) const;
+    void setCrossAxisExtent(LayoutUnit);
+    LayoutUnit crossAxisExtentForChild(RenderBox* child);
+    LayoutUnit mainAxisExtentForChild(RenderBox* child);
+    LayoutUnit crossAxisExtent() const;
+    LayoutUnit mainAxisExtent() const;
+    LayoutUnit crossAxisContentExtent() const;
+    LayoutUnit mainAxisContentExtent() const;
+    WritingMode transformedWritingMode() const;
     LayoutUnit flowAwareBorderStart() const;
     LayoutUnit flowAwareBorderBefore() const;
     LayoutUnit flowAwareBorderAfter() const;
+    LayoutUnit crossAxisBorderAndPaddingExtent() const;
     LayoutUnit flowAwarePaddingStart() const;
     LayoutUnit flowAwarePaddingBefore() const;
     LayoutUnit flowAwarePaddingAfter() const;
     LayoutUnit flowAwareMarginStartForChild(RenderBox* child) const;
+    LayoutUnit flowAwareMarginEndForChild(RenderBox* child) const;
     LayoutUnit flowAwareMarginBeforeForChild(RenderBox* child) const;
     LayoutUnit flowAwareMarginAfterForChild(RenderBox* child) const;
+    LayoutUnit crossAxisMarginExtentForChild(RenderBox* child) const;
+    LayoutPoint flowAwareLocationForChild(RenderBox* child) const;
     void setFlowAwareMarginStartForChild(RenderBox* child, LayoutUnit);
     void setFlowAwareMarginEndForChild(RenderBox* child, LayoutUnit);
     // FIXME: Supporting layout deltas.
-    void setFlowAwareLogicalLocationForChild(RenderBox* child, const LayoutPoint&);
-    LayoutUnit logicalBorderAndPaddingWidthForChild(RenderBox* child) const;
-    LayoutUnit logicalScrollbarHeightForChild(RenderBox* child) const;
+    void setFlowAwareLocationForChild(RenderBox* child, const LayoutPoint&);
+    void adjustAlignmentForChild(RenderBox* child, LayoutUnit);
+    LayoutUnit mainAxisBorderAndPaddingExtentForChild(RenderBox* child) const;
+    LayoutUnit mainAxisScrollbarExtentForChild(RenderBox* child) const;
     Length marginStartStyleForChild(RenderBox* child) const;
     Length marginEndStyleForChild(RenderBox* child) const;
-    LayoutUnit preferredLogicalContentWidthForFlexItem(RenderBox* child) const;
+    LayoutUnit preferredMainAxisContentExtentForFlexItem(RenderBox* child) const;
 
     void layoutInlineDirection(bool relayoutChildren);
 
-    float logicalPositiveFlexForChild(RenderBox* child) const;
-    float logicalNegativeFlexForChild(RenderBox* child) const;
+    float positiveFlexForChild(RenderBox* child) const;
+    float negativeFlexForChild(RenderBox* child) const;
 
-    void computePreferredLogicalWidth(bool relayoutChildren, TreeOrderIterator&, LayoutUnit&, float& totalPositiveFlexibility, float& totalNegativeFlexibility);
+    LayoutUnit availableAlignmentSpaceForChild(RenderBox*);
+    LayoutUnit marginBoxAscent(RenderBox*);
+
+    void computePreferredMainAxisExtent(bool relayoutChildren, TreeOrderIterator&, LayoutUnit&, float& totalPositiveFlexibility, float& totalNegativeFlexibility);
     bool runFreeSpaceAllocationAlgorithmInlineDirection(FlexOrderIterator&, LayoutUnit& availableFreeSpace, float& totalPositiveFlexibility, float& totalNegativeFlexibility, InflexibleFlexItemSize&, WTF::Vector<LayoutUnit>& childSizes);
     void setLogicalOverrideSize(RenderBox* child, LayoutUnit childPreferredSize);
     void layoutAndPlaceChildrenInlineDirection(FlexOrderIterator&, const WTF::Vector<LayoutUnit>& childSizes, LayoutUnit availableFreeSpace, float totalPositiveFlexibility);
+    void alignChildrenBlockDirection(FlexOrderIterator&, LayoutUnit maxAscent);
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(CSS3_FLEXBOX)
 
 #endif // RenderFlexibleBox_h

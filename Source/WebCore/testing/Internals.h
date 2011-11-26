@@ -26,7 +26,6 @@
 #ifndef Internals_h
 #define Internals_h
 
-#include "ExceptionCode.h"
 #include "PlatformString.h"
 #include <wtf/PassRefPtr.h>
 #include <wtf/RefCounted.h>
@@ -39,6 +38,8 @@ class Document;
 class Element;
 class Node;
 class Range;
+
+typedef int ExceptionCode;
 
 class Internals : public RefCounted<Internals> {
 public:
@@ -60,8 +61,7 @@ public:
     Element* getElementByIdInShadowRoot(Node* shadowRoot, const String& id, ExceptionCode&);
 
 #if ENABLE(INPUT_COLOR)
-    bool connectColorChooserClient(Element*);
-    void selectColorInColorChooser(const String& colorValue);
+    void selectColorInColorChooser(Element*, const String& colorValue);
 #endif
 
 #if ENABLE(INSPECTOR)
@@ -72,25 +72,43 @@ public:
 
     PassRefPtr<ClientRect> boundingBox(Element*, ExceptionCode&);
 
-    unsigned markerCountForNode(Node*, ExceptionCode&);
-    PassRefPtr<Range> markerRangeForNode(Node*, unsigned, ExceptionCode&);
+    unsigned markerCountForNode(Node*, const String&, ExceptionCode&);
+    PassRefPtr<Range> markerRangeForNode(Node*, const String&, unsigned, ExceptionCode&);
 
     void setForceCompositingMode(Document*, bool enabled, ExceptionCode&);
-    void setZoomAnimatorTransform(Document*, double scale, double tx, double ty, ExceptionCode&);
+    void setEnableCompositingForFixedPosition(Document*, bool enabled, ExceptionCode&);
+    void setEnableCompositingForScrollableFrames(Document*, bool enabled, ExceptionCode&);
+    void setAcceleratedDrawingEnabled(Document*, bool enabled, ExceptionCode&);
+
+    void setEnableScrollAnimator(Document*, bool enabled, ExceptionCode&);
+    void setZoomAnimatorTransform(Document*, float scale, float tx, float ty, ExceptionCode&);
+    float getPageScaleFactor(Document*,  ExceptionCode&);
+    void setZoomParameters(Document*, float scale, float x, float y, ExceptionCode&);
+
+    void setMockScrollbarsEnabled(Document*, bool enabled, ExceptionCode&);
 
     void setPasswordEchoEnabled(Document*, bool enabled, ExceptionCode&);
     void setPasswordEchoDurationInSeconds(Document*, double durationInSeconds, ExceptionCode&);
 
     void setScrollViewPosition(Document*, long x, long y, ExceptionCode&);
 
+    void setPagination(Document*, const String& mode, int gap, ExceptionCode&);
+
     bool wasLastChangeUserEdit(Element* textField, ExceptionCode&);
     String suggestedValue(Element* inputElement, ExceptionCode&);
     void setSuggestedValue(Element* inputElement, const String&, ExceptionCode&);
     void scrollElementToRect(Element*, long x, long y, long w, long h, ExceptionCode&);
 
-    static const char* internalsId;
-
     void paintControlTints(Document*, ExceptionCode&);
+
+    PassRefPtr<Range> rangeFromLocationAndLength(Element* scope, int rangeLocation, int rangeLength, ExceptionCode&);
+    unsigned locationFromRange(Element* scope, const Range*, ExceptionCode&);
+    unsigned lengthFromRange(Element* scope, const Range*, ExceptionCode&);
+
+    void setUnifiedTextCheckingEnabled(Document*, bool, ExceptionCode&);
+    bool unifiedTextCheckingEnabled(Document*, ExceptionCode&);
+
+    static const char* internalsId;
 
 private:
     Internals();
