@@ -23,10 +23,9 @@ headers
 %%
 body
 
-static void py_wk_exc(WebCore::ExceptionCode &ec)
+void py_wk_exc(WebCore::ExceptionCode &ec)
 {
-    WebCore::ExceptionCodeDescription ecdesc;
-    WebCore::getExceptionCodeDescription(ec, ecdesc);
+    WebCore::ExceptionCodeDescription ecdesc(ec);
     PyErr_SetString(PyExc_Exception, ecdesc.name);
 }
 

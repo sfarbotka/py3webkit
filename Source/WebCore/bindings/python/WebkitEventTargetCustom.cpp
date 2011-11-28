@@ -34,18 +34,25 @@
 
 #include "config.h"
 
+#include "EventTargetHeaders.h"
+#include "EventTargetInterfaces.h"
 #include "CString.h"
 #include "PythonBinding.h"
-#include "XMLHttpRequest.h"
-#include "XMLHttpRequestUpload.h"
-
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
-#include "DOMApplicationCache.h"
-#endif
 
 namespace WebKit {
 
 using namespace WebCore;
+
+#define PYTHON_WRAPPER_DECLARE(interfaceName) \
+    PyObject* pywrap##interfaceName(interfaceName*);
+DOM_EVENT_TARGET_INTERFACES_FOR_EACH(PYTHON_WRAPPER_DECLARE)
+#undef PYTHON_WRAPPER_DECLARE
+
+
+#define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
+    if (eventNames().interfaceFor##interfaceName == desiredInterface) \
+        return PythonObjectCache::putDOMObject(target, \
+                pywrap##interfaceName(static_cast<interfaceName*>(target)));
 
 /* derived sources auto-generated */
 PyObject* toPython(XMLHttpRequestUpload* obj);
@@ -55,35 +62,9 @@ PyObject* toPython(EventTarget* target)
     if (!target)
         Py_RETURN_NONE;
 
-#ifdef __TODO_BUG_20586__ /* TODO - see #20586 */
-#if ENABLE(SVG)
-    // SVGElementInstance supports both toSVGElementInstance and
-    // toNode since so much mouse handling code depends on toNode
-    // returning a valid node.
-    SVGElementInstance* instance = target->toSVGElementInstance();
-    if (instance)
-        return toPython(exec, instance);
-#endif
-#endif
+    AtomicString desiredInterface = target->interfaceName();
 
-    Node* node = target->toNode();
-    if (node)
-        return toPython(node);
-
-    if (XMLHttpRequest* xhr = target->toXMLHttpRequest())
-        // XMLHttpRequest is always created via Python, so we don't need
-        // to use cacheDOMObject() here.
-        return PythonObjectCache::getDOMObject(xhr);
-
-    if (XMLHttpRequestUpload* upload = target->toXMLHttpRequestUpload())
-        return toPython(upload);
-
-#if ENABLE(OFFLINE_WEB_APPLICATIONS)
-    if (DOMApplicationCache* cache = target->toDOMApplicationCache())
-        // DOMApplicationCache is always created via Python, so we don't
-        // need to use cacheDOMObject() here.
-        return PythonObjectCache::getDOMObject(cache);
-#endif
+    DOM_EVENT_TARGET_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
     ASSERT_NOT_REACHED();
     Py_RETURN_NONE;

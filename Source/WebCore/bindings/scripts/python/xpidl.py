@@ -905,6 +905,10 @@ class IDLParser(object):
             p[0] = {'attlist': p[2],
                     'doccomments': p.slice[1].doccomments}
 
+    def p_attribute_optional(self, p):
+        """attributes : '[' OPTIONAL ']' """
+        p[0] = {'attlist': [(p[2], None, self.getLocation(p, 2))]}
+
     def p_attlist_start(self, p):
         """attlist : attribute """
         p[0] = [p[1]]
@@ -916,6 +920,7 @@ class IDLParser(object):
 
     def p_attribute_vallist_start(self, p):
         """attvallist : IDENTIFIER
+                      | IDENTIFIER '(' paramlist ')'
                       | number 
                       | IID """
         p[0] = [p[1]]
@@ -930,6 +935,11 @@ class IDLParser(object):
         """attribute : anyident '=' attvallist ','
                      | anyident '=' attvallist """
         p[0] = (p[1]['value'], p[3], p[1]['location'])
+
+    def p_attribute_func(self, p):
+        """attribute : IDENTIFIER '(' paramlist ')' ','
+                     | IDENTIFIER '(' paramlist ')' """
+        p[0] = (p[1], p[3], self.getLocation(p, 1))
 
     def p_attribute(self, p):
         """attribute : anyident attributeval
@@ -1486,6 +1496,9 @@ class IDLDefsParser(defsparser.DefsParser):
                         # XXX HACK! Skip it for now (FSV)
                         continue
                     
+                    if obj.name == 'DedicatedWorkerContext' and m.name == 'postMessage':
+                        # XXX HACK! Skip it for now (FSV)
+                        continue
 
                     
                     params = ['parameters']
@@ -1518,7 +1531,7 @@ class IDLDefsParser(defsparser.DefsParser):
                     mth.return_param = return_param
                     mth.orig_method = m
         # debug output
-        self.write_defs()
+        # self.write_defs()
 
 if __name__ == '__main__':
     modname = "pywebkit"

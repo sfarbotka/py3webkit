@@ -46,6 +46,10 @@ DerivedSources/WebCore/python/PyWebkit.cpp: \
 webcore_sources += \
 	Source/WebCore/bindings/python/pywebkit.cpp \
 	Source/WebCore/bindings/python/PythonBinding.cpp \
+	Source/WebCore/bindings/python/PyXMLHttpRequestCustom.cpp \
+	Source/WebCore/bindings/python/PyDOMFormDataCustom.cpp \
+	Source/WebCore/bindings/python/PyWorkerContextCustom.cpp \
+	Source/WebCore/bindings/python/PyDedicatedWorkerContextCustom.cpp \
 	Source/WebCore/bindings/python/WebkitCSSRuleCustom.cpp \
 	Source/WebCore/bindings/python/WebkitCSSValueCustom.cpp \
 	Source/WebCore/bindings/python/WebkitDocumentCustom.cpp \

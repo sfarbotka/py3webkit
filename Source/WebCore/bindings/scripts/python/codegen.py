@@ -573,6 +573,37 @@ static int
             includes.update(self.find_function_ptypes(meth, handle_return=1))
         return includes
 
+    _custom_methods_implemented = []
+    def _custom_method_implementation(self, mname):
+        """ Return True if custom method is implemented """
+        if self.objinfo.name == 'XMLHttpRequest':
+            return mname == 'send'
+        if self.objinfo.name == 'DOMFormData':
+            return mname == 'append'
+        if self.objinfo.name == 'WorkerContext':
+            return mname == 'importScripts'
+        if self.objinfo.name == 'DedicatedWorkerContext':
+            return mname == 'postMessage'
+        return False
+
+    def custom_method_implementation(self, meth):
+        """ Return True if method has 'Custom' attribute and has custom implementation, else return False.
+            If True, save methon name in list to prevent method redefinition in MethodsDef struct
+        """
+
+        if 'Custom' not in meth.orig_method.attributes:
+            return False
+        mname = meth.name
+
+        ret = self._custom_method_implementation(mname)
+        if ret:
+            Wrapper._custom_methods_implemented.append(mname)
+
+        return ret
+
+    def custom_method_alredy_implemented(self, meth):
+        return meth.name in Wrapper._custom_methods_implemented
+
     def write_methods(self):
         methods = []
         klass = self.objinfo.c_name
@@ -581,6 +612,8 @@ static int
             method_name = meth.c_name
             if self.overrides.is_ignored(method_name):
                 continue
+            if self.custom_method_alredy_implemented(meth):
+                continue
             try:
                 if self.overrides.is_overriden(method_name):
                     if not self.overrides.is_already_included(method_name):
@@ -588,13 +621,21 @@ static int
                         self.write_function(method_name, data)
 
                     methflags = self.get_methflags(method_name)
-                else:
+                elif not self.custom_method_implementation(meth):
                     # write constructor from template ...
                     code, methflags = self.write_function_wrapper(meth,
                         self.method_tmpl, handle_return=1, is_method=1,
                         substdict=self.get_initial_method_substdict(meth),
                         exception_needed=meth.raises)
                     self.fp.write(code)
+                else:
+                    funcname = '_wrap_%s_%s' % (klass, method_name)
+                    code = 'PyObject* _wrap_%s_%s(PyDOMObject *self, PyObject *args, PyObject *kwargs);\n\n' % (
+                            klass, method_name)
+                    self.fp.write(code)
+
+                    methflags = 'METH_VARARGS|METH_KEYWORDS'
+
                 methods.append(self.methdef_tmpl %
                                { 'name':  fixname(meth.name),
                                  'cname': 'WebKit::_wrap_%s_%s' % (klass, method_name),
@@ -2103,7 +2144,10 @@ typedef intobjargproc ssizeobjargproc;
         self.fp.write('\n')
         self.write_object_imports()
         for obj, bases in self.get_classes():
+            cond = get_conditional_substitutions(obj.orig_obj.attributes)
+            self.fp.write(cond['conditional_if'])
             self.write_class_base_link(obj, bases)
+            self.fp.write(cond['conditional_endif'])
         self.fp.write('}\n\n')
         self.fp.write('void register%s(PyObject *m)\n' % self.prefix)
         self.fp.write('{\n')
@@ -2209,12 +2253,15 @@ typedef intobjargproc ssizeobjargproc;
         else:
             bases_str = 'NULL'
 
+        cond = get_conditional_substitutions(obj.orig_obj.attributes)
+        self.fp.write(cond['conditional_if'])
         self.fp.write('%(indent)sPy_INCREF(&PyDOM%(c_name)s_Type);\n'
                 % dict(indent=indent_str, c_name=obj.c_name))
         self.fp.write(
                 '%(indent)sPyModule_AddObject(m, "%(c_name)s", (PyObject*) &PyDOM%(c_name)s_Type);\n'
                 % dict(indent=indent_str, c_name=obj.c_name,
                        py_name=self.prefix))
+        self.fp.write(cond['conditional_endif'])
 
         if obj.class_init_func is not None:
             self.fp.write(
@@ -2268,10 +2315,10 @@ def get_conditional_string(member):
     
     if cond.find('&') != -1:
         vals = cond.split('&')
-        return "ENABLE({)}) && ENABLE({1})".format(vals[0], vals[1])
+        return "ENABLE({}) && ENABLE({})".format(vals[0], vals[1])
     elif cond.find('|') != -1:
         vals = cond.split('|')
-        return "ENABLE({)}) || ENABLE({1})".format(vals[0], vals[1])
+        return "ENABLE({}) || ENABLE({})".format(vals[0], vals[1])
     
     return "ENABLE({0})".format(cond)
 
