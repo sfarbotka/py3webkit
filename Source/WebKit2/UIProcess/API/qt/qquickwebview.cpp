@@ -43,7 +43,6 @@ QQuickWebViewPrivate::QQuickWebViewPrivate(QQuickWebView* viewport, WKContextRef
     , promptDialog(0)
     , postTransitionState(adoptPtr(new PostTransitionState(this)))
     , transitioningToNewPage(false)
-    , useTraditionalDesktopBehaviour(false)
 {
     viewport->setFlags(QQuickItem::ItemClipsChildrenToShape);
 
@@ -54,14 +53,17 @@ QQuickWebViewPrivate::QQuickWebViewPrivate(QQuickWebView* viewport, WKContextRef
     setPageProxy(new QtWebPageProxy(pageView.data(), q_ptr, contextRef, pageGroupRef));
     pageViewPrivate->setPageProxy(pageProxy.data());
 
-    eventHandler.reset(new QtWebPageEventHandler(pageProxy->pageRef()));
-
-    QWebPreferencesPrivate::get(pageProxy->preferences())->setAttribute(QWebPreferencesPrivate::AcceleratedCompositingEnabled, true);
-    pageProxy->init(eventHandler.data());
-
     pageLoadClient.reset(new QtWebPageLoadClient(pageProxy->pageRef(), q_ptr));
     pagePolicyClient.reset(new QtWebPagePolicyClient(pageProxy->pageRef(), q_ptr));
     pageUIClient.reset(new QtWebPageUIClient(pageProxy->pageRef(), q_ptr));
+    eventHandler.reset(new QtWebPageEventHandler(pageProxy->pageRef()));
+
+    // Any page setting should preferrable be set before creating the page, so set them here:
+    setUseTraditionalDesktopBehaviour(false);
+    QWebPreferencesPrivate::get(pageProxy->preferences())->setAttribute(QWebPreferencesPrivate::AcceleratedCompositingEnabled, true);
+
+    // Creates a page with the page creation parameters.
+    pageProxy->init(eventHandler.data());
 }
 
 void QQuickWebViewPrivate::enableMouseEvents()
@@ -85,7 +87,8 @@ void QQuickWebViewPrivate::disableMouseEvents()
 void QQuickWebViewPrivate::initializeDesktop(QQuickWebView* viewport)
 {
     if (interactionEngine) {
-        QObject::disconnect(interactionEngine.data(), SIGNAL(viewportUpdateRequested()), viewport, SLOT(_q_viewportUpdated()));
+        QObject::disconnect(interactionEngine.data(), SIGNAL(contentSuspendRequested()), viewport, SLOT(_q_suspend()));
+        QObject::disconnect(interactionEngine.data(), SIGNAL(contentResumeRequested()), viewport, SLOT(_q_resume()));
         QObject::disconnect(interactionEngine.data(), SIGNAL(viewportTrajectoryVectorChanged(const QPointF&)), viewport, SLOT(_q_viewportTrajectoryVectorChanged(const QPointF&)));
     }
     interactionEngine.reset(0);
@@ -98,7 +101,8 @@ void QQuickWebViewPrivate::initializeTouch(QQuickWebView* viewport)
     interactionEngine.reset(new QtViewportInteractionEngine(viewport, pageView.data()));
     eventHandler->setViewportInteractionEngine(interactionEngine.data());
     disableMouseEvents();
-    QObject::connect(interactionEngine.data(), SIGNAL(viewportUpdateRequested()), viewport, SLOT(_q_viewportUpdated()));
+    QObject::connect(interactionEngine.data(), SIGNAL(contentSuspendRequested()), viewport, SLOT(_q_suspend()));
+    QObject::connect(interactionEngine.data(), SIGNAL(contentResumeRequested()), viewport, SLOT(_q_resume()));
     QObject::connect(interactionEngine.data(), SIGNAL(viewportTrajectoryVectorChanged(const QPointF&)), viewport, SLOT(_q_viewportTrajectoryVectorChanged(const QPointF&)));
     updateViewportSize();
 }
@@ -151,7 +155,16 @@ void QQuickWebViewPrivate::scrollPositionRequested(const QPoint& pos)
         interactionEngine->pagePositionRequest(pos);
 }
 
-void QQuickWebViewPrivate::_q_viewportUpdated()
+void QQuickWebViewPrivate::_q_suspend()
+{
+}
+
+void QQuickWebViewPrivate::_q_resume()
+{
+    updateVisibleContentRect();
+}
+
+void QQuickWebViewPrivate::updateVisibleContentRect()
 {
     Q_Q(QQuickWebView);
     const QRectF visibleRectInPageViewCoordinates = q->mapRectToItem(pageView.data(), q->boundingRect()).intersected(pageView->boundingRect());
@@ -185,7 +198,7 @@ void QQuickWebViewPrivate::updateViewportSize()
     wkPage->setViewportSize(viewportSize);
 
     interactionEngine->applyConstraints(computeViewportConstraints());
-    _q_viewportUpdated();
+    updateVisibleContentRect();
 }
 
 QtViewportInteractionEngine::Constraints QQuickWebViewPrivate::computeViewportConstraints()
@@ -329,8 +342,10 @@ void QQuickWebViewPrivate::_q_onOpenPanelFinished(int result)
 void QQuickWebViewPrivate::setUseTraditionalDesktopBehaviour(bool enable)
 {
     Q_Q(QQuickWebView);
-    if (enable == useTraditionalDesktopBehaviour)
-        return;
+
+    // Do not guard, testing for the same value, as we call this from the constructor.
+
+    toImpl(pageProxy->pageRef())->setUseFixedLayout(!enable);
 
     useTraditionalDesktopBehaviour = enable;
     if (useTraditionalDesktopBehaviour)
@@ -394,6 +409,10 @@ QQuickWebViewExperimental::~QQuickWebViewExperimental()
 void QQuickWebViewExperimental::setUseTraditionalDesktopBehaviour(bool enable)
 {
     Q_D(QQuickWebView);
+
+    if (enable == d->useTraditionalDesktopBehaviour)
+        return;
+
     d->setUseTraditionalDesktopBehaviour(enable);
 }
 
@@ -462,9 +481,6 @@ QQuickWebView::QQuickWebView(WKContextRef contextRef, WKPageGroupRef pageGroupRe
     , d_ptr(new QQuickWebViewPrivate(this, contextRef, pageGroupRef))
     , m_experimental(new QQuickWebViewExperimental(this))
 {
-    Q_D(QQuickWebView);
-    // Used by WebKitTestRunner.
-    d->setUseTraditionalDesktopBehaviour(true);
 }
 
 QQuickWebView::~QQuickWebView()

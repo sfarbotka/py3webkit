@@ -74,7 +74,6 @@ public:
     virtual void attach();
     virtual void reattach(const WebString& savedState);
     virtual void detach();
-    virtual void frontendLoaded();
     virtual void didNavigate();
     virtual void dispatchOnInspectorBackend(const WebString& message);
     virtual void inspectElementAt(const WebPoint& point);
@@ -85,6 +84,8 @@ public:
     // InspectorClient implementation.
     virtual void inspectorDestroyed();
     virtual void openInspectorFrontend(WebCore::InspectorController*);
+    virtual void closeInspectorFrontend();
+
     virtual void bringFrontendToFront();
     virtual void highlight();
     virtual void hideHighlight();

@@ -53,6 +53,8 @@
 #include "MediaCanStartListener.h"
 #include "Navigator.h"
 #include "NetworkStateNotifier.h"
+#include "NotificationController.h"
+#include "NotificationPresenter.h"
 #include "PageGroup.h"
 #include "PluginData.h"
 #include "PluginView.h"
@@ -137,6 +139,9 @@ Page::Page(PageClients& pageClients)
     , m_deviceMotionController(RuntimeEnabledFeatures::deviceMotionEnabled() ? adoptPtr(new DeviceMotionController(pageClients.deviceMotionClient)) : nullptr)
     , m_deviceOrientationController(RuntimeEnabledFeatures::deviceOrientationEnabled() ? adoptPtr(new DeviceOrientationController(this, pageClients.deviceOrientationClient)) : nullptr)
 #endif
+#if ENABLE(NOTIFICATIONS)
+    , m_notificationController(adoptPtr(new NotificationController(this, pageClients.notificationClient)))
+#endif
 #if ENABLE(INPUT_SPEECH)
     , m_speechInputClient(pageClients.speechInputClient)
 #endif
@@ -205,7 +210,6 @@ Page::~Page()
 
     m_editorClient->pageDestroyed();
 
-    InspectorInstrumentation::inspectedPageDestroyed(this);
 #if ENABLE(INSPECTOR)
     m_inspectorController->inspectedPageDestroyed();
 #endif
@@ -1063,6 +1067,7 @@ Page::PageClients::PageClients()
     , deviceMotionClient(0)
     , deviceOrientationClient(0)
     , speechInputClient(0)
+    , notificationClient(0)
     , userMediaClient(0)
 {
 }

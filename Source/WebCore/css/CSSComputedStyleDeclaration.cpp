@@ -25,9 +25,7 @@
 #include "CSSComputedStyleDeclaration.h"
 
 #include "AnimationController.h"
-#include "ContentData.h"
-#include "CounterContent.h"
-#include "CursorList.h"
+#include "CSSAspectRatioValue.h"
 #include "CSSBorderImageValue.h"
 #include "CSSLineBoxContainValue.h"
 #include "CSSMutableStyleDeclaration.h"
@@ -40,6 +38,9 @@
 #include "CSSSelector.h"
 #include "CSSTimingFunctionValue.h"
 #include "CSSValueList.h"
+#include "ContentData.h"
+#include "CounterContent.h"
+#include "CursorList.h"
 #if ENABLE(CSS_SHADERS)
 #include "CustomFilterOperation.h"
 #endif
@@ -52,6 +53,7 @@
 #include "Rect.h"
 #include "RenderBox.h"
 #include "RenderLayer.h"
+#include "RenderStyle.h"
 #include "ShadowValue.h"
 #if ENABLE(CSS_FILTERS)
 #include "WebKitCSSFilterValue.h"
@@ -218,6 +220,10 @@ static const int computedProperties[] = {
     CSSPropertyWebkitFlexAlign,
     CSSPropertyWebkitFlexFlow,
     CSSPropertyWebkitFontSmoothing,
+#if ENABLE(CSS_GRID_LAYOUT)
+    CSSPropertyWebkitGridColumns,
+    CSSPropertyWebkitGridRows,
+#endif
     CSSPropertyWebkitHighlight,
     CSSPropertyWebkitHyphenateCharacter,
     CSSPropertyWebkitHyphenateLimitAfter,
@@ -784,6 +790,19 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::valueForFilter(RenderStyle* st
     }
 
     return list.release();
+}
+#endif
+
+#if ENABLE(CSS_GRID_LAYOUT)
+static PassRefPtr<CSSValue> valueForGridTrackList(const Length& trackLength, const RenderStyle* style, CSSPrimitiveValueCache* primitiveValueCache)
+{
+    if (trackLength.isPercent())
+        return primitiveValueCache->createValue(trackLength);
+    if (trackLength.isAuto())
+        return primitiveValueCache->createIdentifierValue(CSSValueAuto);
+    if (trackLength.isUndefined())
+        return primitiveValueCache->createIdentifierValue(CSSValueNone);
+    return zoomAdjustedPixelValue(trackLength.value(), style, primitiveValueCache);
 }
 #endif
 
@@ -1494,6 +1513,16 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
             }
             return list.release();
         }
+#if ENABLE(CSS_GRID_LAYOUT)
+        case CSSPropertyWebkitGridColumns: {
+            Length gridColumns = style->gridColumns();
+            return valueForGridTrackList(gridColumns, style.get(), primitiveValueCache);
+        }
+        case CSSPropertyWebkitGridRows: {
+            Length gridRows = style->gridRows();
+            return valueForGridTrackList(gridRows, style.get(), primitiveValueCache);
+        }
+#endif
         case CSSPropertyHeight:
             if (renderer)
                 return zoomAdjustedPixelValue(sizingBox(renderer).height(), style.get(), primitiveValueCache);
@@ -1895,7 +1924,7 @@ PassRefPtr<CSSValue> CSSComputedStyleDeclaration::getPropertyCSSValue(int proper
         case CSSPropertyWebkitAspectRatio:
             if (!style->hasAspectRatio())
                 return primitiveValueCache->createIdentifierValue(CSSValueNone);
-            return primitiveValueCache->createValue(style->aspectRatio(), CSSPrimitiveValue::CSS_NUMBER);
+            return CSSAspectRatioValue::create(style->aspectRatioNumerator(), style->aspectRatioDenominator());
         case CSSPropertyWebkitBackfaceVisibility:
             return primitiveValueCache->createIdentifierValue((style->backfaceVisibility() == BackfaceVisibilityHidden) ? CSSValueHidden : CSSValueVisible);
         case CSSPropertyWebkitBorderImage:

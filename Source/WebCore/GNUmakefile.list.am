@@ -1619,10 +1619,6 @@ webcore_sources += \
 	Source/WebCore/html/BaseTextInputType.h \
 	Source/WebCore/html/ButtonInputType.cpp \
 	Source/WebCore/html/ButtonInputType.h \
-	Source/WebCore/html/canvas/ArrayBuffer.cpp \
-	Source/WebCore/html/canvas/ArrayBuffer.h \
-	Source/WebCore/html/canvas/ArrayBufferView.cpp \
-	Source/WebCore/html/canvas/ArrayBufferView.h \
 	Source/WebCore/html/canvas/CanvasContextAttributes.cpp \
 	Source/WebCore/html/canvas/CanvasContextAttributes.h \
 	Source/WebCore/html/canvas/CanvasGradient.cpp \
@@ -1640,24 +1636,6 @@ webcore_sources += \
 	Source/WebCore/html/canvas/CheckedInt.h \
 	Source/WebCore/html/canvas/DataView.cpp \
 	Source/WebCore/html/canvas/DataView.h \
-	Source/WebCore/html/canvas/Float32Array.cpp \
-	Source/WebCore/html/canvas/Float32Array.h \
-	Source/WebCore/html/canvas/Float64Array.cpp \
-	Source/WebCore/html/canvas/Float64Array.h \
-	Source/WebCore/html/canvas/Int16Array.cpp \
-	Source/WebCore/html/canvas/Int16Array.h \
-	Source/WebCore/html/canvas/Int32Array.cpp \
-	Source/WebCore/html/canvas/Int32Array.h \
-	Source/WebCore/html/canvas/Int8Array.cpp \
-	Source/WebCore/html/canvas/Int8Array.h \
-	Source/WebCore/html/canvas/IntegralTypedArrayBase.h \
-	Source/WebCore/html/canvas/TypedArrayBase.h \
-	Source/WebCore/html/canvas/Uint16Array.cpp \
-	Source/WebCore/html/canvas/Uint16Array.h \
-	Source/WebCore/html/canvas/Uint32Array.cpp \
-	Source/WebCore/html/canvas/Uint32Array.h \
-	Source/WebCore/html/canvas/Uint8Array.cpp \
-	Source/WebCore/html/canvas/Uint8Array.h \
 	Source/WebCore/html/DOMSettableTokenList.cpp \
 	Source/WebCore/html/DOMSettableTokenList.h \
 	Source/WebCore/html/DOMTokenList.cpp \
@@ -2056,6 +2034,8 @@ webcore_sources += \
 	Source/WebCore/inspector/InspectorAgent.h \
 	Source/WebCore/inspector/InspectorApplicationCacheAgent.cpp \
 	Source/WebCore/inspector/InspectorApplicationCacheAgent.h \
+	Source/WebCore/inspector/InspectorBaseAgent.cpp \
+	Source/WebCore/inspector/InspectorBaseAgent.h \
 	Source/WebCore/inspector/InspectorClient.cpp \
 	Source/WebCore/inspector/InspectorClient.h \
 	Source/WebCore/inspector/InspectorController.cpp \
@@ -2080,6 +2060,9 @@ webcore_sources += \
 	Source/WebCore/inspector/InspectorDOMStorageAgent.h \
 	Source/WebCore/inspector/InspectorDOMStorageResource.cpp \
 	Source/WebCore/inspector/InspectorDOMStorageResource.h \
+	Source/WebCore/inspector/InspectorFileSystemAgent.cpp \
+	Source/WebCore/inspector/InspectorFileSystemAgent.h \
+	Source/WebCore/inspector/InspectorFileSystemInstrumentation.h \
 	Source/WebCore/inspector/InspectorFrontendChannel.h \
 	Source/WebCore/inspector/InspectorFrontendClient.h \
 	Source/WebCore/inspector/InspectorFrontendClientLocal.cpp \
@@ -2088,6 +2071,8 @@ webcore_sources += \
 	Source/WebCore/inspector/InspectorFrontendHost.h \
 	Source/WebCore/inspector/InspectorInstrumentation.cpp \
 	Source/WebCore/inspector/InspectorInstrumentation.h \
+	Source/WebCore/inspector/InspectorMetaAgent.cpp \
+	Source/WebCore/inspector/InspectorMetaAgent.h \
 	Source/WebCore/inspector/InspectorPageAgent.cpp \
 	Source/WebCore/inspector/InspectorPageAgent.h \
 	Source/WebCore/inspector/InspectorProfilerAgent.cpp \
@@ -2314,6 +2299,8 @@ webcore_sources += \
 	Source/WebCore/notifications/NotificationCenter.cpp \
 	Source/WebCore/notifications/NotificationCenter.h \
 	Source/WebCore/notifications/NotificationContents.h \
+	Source/WebCore/notifications/NotificationController.cpp \
+	Source/WebCore/notifications/NotificationController.h \
 	Source/WebCore/notifications/Notification.cpp \
 	Source/WebCore/notifications/Notification.h \
 	Source/WebCore/notifications/NotificationPresenter.h \
@@ -2631,6 +2618,7 @@ webcore_sources += \
 	Source/WebCore/platform/graphics/Font.h \
 	Source/WebCore/platform/graphics/FontMetrics.h \
 	Source/WebCore/platform/graphics/FontOrientation.h \
+	Source/WebCore/platform/graphics/FontPlatformData.h \
 	Source/WebCore/platform/graphics/FontRenderingMode.h \
 	Source/WebCore/platform/graphics/FontSelector.h \
 	Source/WebCore/platform/graphics/FontSmoothingMode.h \
@@ -2793,6 +2781,7 @@ webcore_sources += \
 	Source/WebCore/platform/mediastream/MediaStreamDescriptor.h \
 	Source/WebCore/platform/mediastream/MediaStreamSource.h \
 	Source/WebCore/platform/mediastream/PeerConnectionHandler.h \
+	Source/WebCore/platform/mediastream/PeerConnectionHandlerClient.h \
 	Source/WebCore/platform/mediastream/gstreamer/PeerConnectionHandler.cpp \
 	Source/WebCore/platform/mock/DeviceOrientationClientMock.cpp \
 	Source/WebCore/platform/mock/DeviceOrientationClientMock.h \
@@ -3293,6 +3282,8 @@ webcore_sources += \
 	Source/WebCore/rendering/style/StyleFlexibleBoxData.h \
 	Source/WebCore/rendering/style/StyleGeneratedImage.cpp \
 	Source/WebCore/rendering/style/StyleGeneratedImage.h \
+	Source/WebCore/rendering/style/StyleGridData.cpp \
+	Source/WebCore/rendering/style/StyleGridData.h \
 	Source/WebCore/rendering/style/StyleImage.h \
 	Source/WebCore/rendering/style/StyleInheritedData.cpp \
 	Source/WebCore/rendering/style/StyleInheritedData.h \

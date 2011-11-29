@@ -394,6 +394,9 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
 #endif
     pageClients.deviceOrientationClient = m_deviceOrientationClientProxy.get();
     pageClients.geolocationClient = m_geolocationClientProxy.get();
+#if ENABLE(NOTIFICATIONS)
+    pageClients.notificationClient = notificationPresenterImpl();
+#endif
     pageClients.backForwardClient = BackForwardListChromium::create(this);
 #if ENABLE(MEDIA_STREAM)
     pageClients.userMediaClient = &m_userMediaClientImpl;
@@ -963,8 +966,8 @@ bool WebViewImpl::propagateScroll(ScrollDirection scrollDirection,
 void  WebViewImpl::popupOpened(WebCore::PopupContainer* popupContainer)
 {
     if (popupContainer->popupType() == WebCore::PopupContainer::Select) {
-        ASSERT(!m_selectPopup);
-        m_selectPopup = popupContainer;
+        if (!m_selectPopup)
+            m_selectPopup = popupContainer;
     }
 }
 

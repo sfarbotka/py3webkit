@@ -87,6 +87,7 @@
 #import "WebNSURLRequestExtras.h"
 #import "WebNSViewExtras.h"
 #import "WebNodeHighlight.h"
+#import "WebNotificationClient.h"
 #import "WebPDFView.h"
 #import "WebPanelAuthenticationHandler.h"
 #import "WebPlatformStrategies.h"
@@ -506,6 +507,18 @@ static CFMutableSetRef allWebViewsSet;
 
 @implementation WebView (WebPrivate)
 
+#if !defined(BUILDING_ON_SNOW_LEOPARD) && !defined(BUILDING_ON_LION)
+
+static NSString *createMacOSXVersionString()
+{
+    // Use underscores instead of dots because when we first added the Mac OS X version to the user agent string
+    // we were concerned about old DHTML libraries interpreting "4." as Netscape 4. That's no longer a concern for us
+    // but we're sticking with the underscores for compatibility with the format used by older versions of Safari.
+    return [[WKGetMacOSXVersionString() stringByReplacingOccurrencesOfString:@"." withString:@"_"] retain];
+}
+
+#else
+
 static inline int callGestalt(OSType selector)
 {
     SInt32 value = 0;
@@ -528,6 +541,8 @@ static NSString *createMacOSXVersionString()
         return [[NSString alloc] initWithFormat:@"%d_%d", major, minor];
     return [[NSString alloc] initWithFormat:@"%d", major];
 }
+
+#endif // !defined(BUILDING_ON_SNOW_LEOPARD) && !defined(BUILDING_ON_LION)
 
 static NSString *createUserVisibleWebKitVersionString()
 {
@@ -724,6 +739,9 @@ static NSString *leakOutlookQuirksUserScriptContents()
     pageClients.inspectorClient = new WebInspectorClient(self);
 #if ENABLE(CLIENT_BASED_GEOLOCATION)
     pageClients.geolocationClient = new WebGeolocationClient(self);
+#endif
+#if ENABLE(NOTIFICATIONS)
+    pageClients.notificationClient = new WebNotificationClient(self);
 #endif
 #if ENABLE(DEVICE_ORIENTATION)
     pageClients.deviceOrientationClient = new WebDeviceOrientationClient(self);
@@ -6283,6 +6301,15 @@ static void glibContextIterationCallback(CFRunLoopObserverRef, CFRunLoopActivity
 }
 #endif
 
+- (NSPoint)_convertPointFromRootView:(NSPoint)point
+{
+    return NSMakePoint(point.x, [self bounds].size.height - point.y);
+}
+
+- (NSRect)_convertRectFromRootView:(NSRect)rect
+{
+    return NSMakeRect(rect.origin.x, [self bounds].size.height - rect.origin.y, rect.size.width, rect.size.height);
+}
 
 @end
 

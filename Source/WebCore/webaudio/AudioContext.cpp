@@ -28,7 +28,6 @@
 
 #include "AudioContext.h"
 
-#include "ArrayBuffer.h"
 #include "AsyncAudioDecoder.h"
 #include "AudioBuffer.h"
 #include "AudioBufferCallback.h"
@@ -69,6 +68,7 @@
 #include <stdio.h>
 #endif
 
+#include <wtf/ArrayBuffer.h>
 #include <wtf/MainThread.h>
 #include <wtf/OwnPtr.h>
 #include <wtf/PassOwnPtr.h>
@@ -215,7 +215,10 @@ void AudioContext::uninitialize()
 {
     ASSERT(isMainThread());
 
-    if (m_isInitialized) {    
+    if (m_isInitialized) {
+        // Protect this object from being deleted before we finish uninitializing.
+        RefPtr<AudioContext> protect(this);
+
         // This stops the audio thread and all audio rendering.
         m_destinationNode->uninitialize();
 

@@ -1,3 +1,444 @@
+2011-11-29  Anders Carlsson  <andersca@apple.com>
+
+        Decorate adoptWK with WARN_UNUSED_RETURN
+        https://bugs.webkit.org/show_bug.cgi?id=73331
+
+        Reviewed by Sam Weinig.
+
+        * UIProcess/API/cpp/WKRetainPtr.h:
+        (WebKit::adoptWK):
+
+2011-11-29  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. Fix GTK+ WebKit2 build after r101312.
+
+        * Scripts/generate-forwarding-headers.pl: Add blackberry to the
+        list of platforms.
+
+2011-11-29  Tor Arne Vestbø  <tor.arne.vestbo@nokia.com>
+
+        [Qt] Don't hard-code the list of WebKit2 generated sources
+
+        The generated sources are... wait for it... generated. So
+        use the generator itself to figure out which sources we need
+        to compile.
+
+        Reviewed by Simon Hausmann.
+
+        * DerivedSources.pri:
+        * Target.pri:
+
+2011-11-29  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        Unreviewed. Fix the GTK+ port build after r101307.
+
+        * GNUmakefile.am: Add missing files to compilation.
+
+2011-11-29  Kenneth Rohde Christiansen  <kenneth@webkit.org>
+
+        [Qt] Add the infrastructure for enabling suspend/resume.
+
+        Reviewed by Simon Hausmann.
+
+        Also, remove the painting optimization as it is broken in some
+        situations, as there is an assumption in that comparison that
+        the guards cannot be nested, which goes against the design and
+        its use.
+
+        * UIProcess/API/qt/qquickwebview.cpp:
+        (QQuickWebViewPrivate::initializeDesktop):
+        (QQuickWebViewPrivate::initializeTouch):
+        (QQuickWebViewPrivate::_q_suspend):
+        (QQuickWebViewPrivate::_q_resume):
+        * UIProcess/API/qt/qquickwebview_p.h:
+        * UIProcess/API/qt/qquickwebview_p_p.h:
+        * UIProcess/qt/QtViewportInteractionEngine.cpp:
+        (WebKit::ViewportUpdateGuard::ViewportUpdateGuard):
+        (WebKit::ViewportUpdateGuard::~ViewportUpdateGuard):
+        (WebKit::QtViewportInteractionEngine::QtViewportInteractionEngine):
+        (WebKit::QtViewportInteractionEngine::scaleAnimationStateChanged):
+        (WebKit::QtViewportInteractionEngine::scrollStateChanged):
+        (WebKit::QtViewportInteractionEngine::event):
+        (WebKit::QtViewportInteractionEngine::pagePositionRequest):
+        (WebKit::QtViewportInteractionEngine::ensureContentWithinViewportBoundary):
+        (WebKit::QtViewportInteractionEngine::reset):
+        (WebKit::QtViewportInteractionEngine::applyConstraints):
+        (WebKit::QtViewportInteractionEngine::panGestureRequestUpdate):
+        (WebKit::QtViewportInteractionEngine::panGestureEnded):
+        (WebKit::QtViewportInteractionEngine::pinchGestureActive):
+        (WebKit::QtViewportInteractionEngine::pinchGestureStarted):
+        (WebKit::QtViewportInteractionEngine::pinchGestureRequestUpdate):
+        (WebKit::QtViewportInteractionEngine::pinchGestureEnded):
+        (WebKit::QtViewportInteractionEngine::itemSizeChanged):
+        * UIProcess/qt/QtViewportInteractionEngine.h:
+
+2011-11-29  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Add WebKitURIResponse to WebKit2 GTK+ API
+        https://bugs.webkit.org/show_bug.cgi?id=72946
+
+        Reviewed by Martin Robinson.
+
+        * GNUmakefile.am: Add new files to compilation.
+        * UIProcess/API/gtk/WebKitURIResponse.cpp: Added.
+        (webkitURIResponseFinalize):
+        (webkitURIResponseGetProperty):
+        (webkitURIResponseSetProperty):
+        (webkit_uri_response_class_init):
+        (webkit_uri_response_init):
+        (webkit_uri_response_get_uri): Return the URI of the response.
+        (webkit_uri_response_get_status_code): Return the status code of
+        the response, or SOUP_STATUS_NONE.
+        (webkit_uri_response_get_content_length): Return the expected
+        content length of the response.
+        (webkitURIResponseCreateForSoupMessage): Private function to
+        create a response object from a SoupMessage.
+        (webkitURIResponseGetSoupMessage): Return the soup message
+        associated to the response.
+        (webkitURIResponseSetContentLength): Set the expected content
+        length of the response. This is useful for non http responses.
+        * UIProcess/API/gtk/WebKitURIResponse.h: Added.
+        * UIProcess/API/gtk/WebKitURIResponsePrivate.h: Added.
+        * UIProcess/API/gtk/docs/webkit2gtk-docs.sgml: Add new section.
+        * UIProcess/API/gtk/docs/webkit2gtk-sections.txt: Add new symbols.
+        * UIProcess/API/gtk/docs/webkit2gtk.types: Add
+        webkit_uri_response_get_type().
+        * UIProcess/API/gtk/webkit2.h: Add WebKitURIResponse.h.
+
+2011-11-29  Kenneth Rohde Christiansen  <kenneth@webkit.org>
+
+        [Qt] QQuickWebView gets wrong position after reload
+        https://bugs.webkit.org/show_bug.cgi?id=73292
+
+        Reviewed by Simon Hausmann.
+
+        The ensureContentWithinViewportBoundary animates the current viewport
+        item into boundaries. That of course breaks when we try to animate it,
+        given the initial-scale which hasn't been applied; so apply it.
+
+        Also put the QScroller settings code in the ctor as it never changes.
+
+        * UIProcess/qt/QtViewportInteractionEngine.cpp:
+        (WebKit::QtViewportInteractionEngine::QtViewportInteractionEngine):
+        (WebKit::QtViewportInteractionEngine::ensureContentWithinViewportBoundary):
+        (WebKit::QtViewportInteractionEngine::reset):
+        (WebKit::QtViewportInteractionEngine::applyConstraints):
+        * UIProcess/qt/QtViewportInteractionEngine.h:
+
+2011-11-29  Roland Steiner  <rolandsteiner@chromium.org>
+
+        <style scoped>: add ENABLE(STYLE_SCOPED) flag to WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=72848
+
+        Reviewed by Dimitri Glazkov.
+
+        * Configurations/FeatureDefines.xcconfig:
+
+2011-11-28  Jon Lee  <jonlee@apple.com>
+
+        Create skeleton framework for notifications support in WK2
+        https://bugs.webkit.org/show_bug.cgi?id=73253
+        <rdar://problem/10356943>
+
+        Reviewed by Sam Weinig.
+
+        * WebKit2.xcodeproj/project.pbxproj: Added classes for notification support.
+        * win/WebKit2.vcproj: Ditto.
+        * Target.pri: Ditto.
+        * Configurations/FeatureDefines.xcconfig: Split out ENABLE_NOTIFICATIONS based on platform.
+        * DerivedSources.make: Add Notifications to VPATH.
+        * Platform/CoreIPC/MessageID.h: List WebNotificationManagerProxy as a class with messages.
+        * Scripts/webkit2/messages.py: Mark WebCore::NotificationContents as a struct.
+
+        * Shared/API/c/WKBase.h: Map opaque types to NotificationProvider, NotificationManager, and Notification.
+        * UIProcess/API/C/WKAPICast.h: Map WK types toNotificationProvider, NotificationManager, and Notification.
+        * Shared/APIObject.h: Add Notification and NotificationManager as APIObjects.
+        * Shared/WebCoreArgumentCoders.cpp: Added coders for KURL.
+        (CoreIPC::::encode):
+        (CoreIPC::::decode):
+        * Shared/WebCoreArgumentCoders.h:
+
+        * UIProcess/WebNotification.cpp: Added.
+        (WebKit::WebNotification::WebNotification):
+        (WebKit::WebNotification::~WebNotification):
+        (WebKit::WebNotification::encode):
+        (WebKit::WebNotification::decode):
+        * UIProcess/WebNotification.h: Added.
+        (WebKit::WebNotification::create):
+        (WebKit::WebNotification::title):
+        (WebKit::WebNotification::body):
+        (WebKit::WebNotification::type):
+        * UIProcess/API/C/WKNotification.cpp: Added as API.
+        (WKNotificationGetTypeID):
+        (WKNotificationCopyTitle):
+        (WKNotificationCopyBody):
+        * UIProcess/API/C/WKNotification.h: Added as API.
+
+        * WebProcess/Notifications/WebNotificationManager.h: Added. Contains for now show() and cancel().
+        The rest of the notification client methods will be added later. These two functions send messages
+        to the manager proxy.
+        * WebProcess/Notifications/WebNotificationManager.cpp: Added.
+        (WebKit::WebNotificationManager::WebNotificationManager):
+        (WebKit::WebNotificationManager::~WebNotificationManager):
+        (WebKit::WebNotificationManager::show):
+        (WebKit::WebNotificationManager::cancel):
+
+        * UIProcess/WebNotificationManagerProxy.cpp: Added.
+        (WebKit::WebNotificationManagerProxy::create):
+        (WebKit::WebNotificationManagerProxy::WebNotificationManagerProxy):
+        (WebKit::WebNotificationManagerProxy::~WebNotificationManagerProxy):
+        (WebKit::WebNotificationManagerProxy::invalidate):
+        (WebKit::WebNotificationManagerProxy::initializeProvider):
+        (WebKit::WebNotificationManagerProxy::didReceiveMessage):
+        (WebKit::WebNotificationManagerProxy::show):
+        (WebKit::WebNotificationManagerProxy::cancel):
+        * UIProcess/WebNotificationManagerProxy.h: Added.
+        (WebKit::WebNotificationManagerProxy::clearContext):
+        (WebKit::WebNotificationManagerProxy::type):
+        * UIProcess/WebNotificationManagerProxy.messages.in: Added.
+        * UIProcess/API/C/WKNotificationManager.cpp: Added.
+        (WKNotificationManagerGetTypeID):
+        (WKNotificationManagerSetProvider):
+        * UIProcess/API/C/WKNotificationManager.h: Added.
+
+        * UIProcess/WebContext.h: Add the notification manager to the web context.
+        (WebKit::WebContext::notificationManagerProxy): Access the manager.
+        * UIProcess/WebContext.cpp:
+        (WebKit::WebContext::WebContext): Boilerplate for managers.
+        (WebKit::WebContext::~WebContext): Boilerplate for managers.
+        (WebKit::WebContext::disconnectProcess): Boilerplate for managers.
+        (WebKit::WebContext::didReceiveMessage): Forward messages to the notification manager.
+        * UIProcess/API/C/WKContext.cpp: Expose as API.
+        (WKContextGetNotificationManager):
+        * UIProcess/API/C/WKContext.h: Expose as API.
+
+        * UIProcess/API/C/WKNotificationProvider.h: Added.
+        * UIProcess/WebNotificationProvider.h: Added as APIClient.
+        * UIProcess/WebNotificationProvider.cpp: Added.
+        (WebKit::WebNotificationProvider::show): Forward call to the client.
+        (WebKit::WebNotificationProvider::cancel): Forward call to the client.
+        * UIProcess/WebProcessProxy.cpp:
+        (WebKit::WebProcessProxy::didReceiveMessage): Forward messages for notification manager to the context.
+
+        * WebProcess/WebCoreSupport/WebChromeClient.cpp: Remove notificationPresenter().
+        * WebProcess/WebCoreSupport/WebChromeClient.h: Remove notificationPresenter().
+
+        * WebProcess/WebCoreSupport/WebNotificationClient.h: Added. Forwards client methods to manager.
+        * WebProcess/WebCoreSupport/WebNotificationClient.cpp: Added. Mostly stub implementation for now.
+        (WebKit::WebNotificationClient::WebNotificationClient):
+        (WebKit::WebNotificationClient::~WebNotificationClient):
+        (WebKit::WebNotificationClient::show):
+        (WebKit::WebNotificationClient::cancel):
+        (WebKit::WebNotificationClient::notificationObjectDestroyed):
+        (WebKit::WebNotificationClient::requestPermission):
+        (WebKit::WebNotificationClient::cancelRequestsForPermission):
+        (WebKit::WebNotificationClient::checkPermission):
+
+        * WebProcess/WebPage/WebPage.h: Added WebNotificationClient as one of its page clients.
+        * WebProcess/WebPage/WebPage.cpp:
+        (WebKit::WebPage::WebPage): Set the notification client to WebNotificationClient.
+        * WebProcess/WebProcess.h: Added WebNotificationManager.
+        (WebKit::WebProcess::notificationManager):
+        * WebProcess/WebProcess.cpp:
+        (WebKit::WebProcess::WebProcess): Initialize notificaton manager.
+
+2011-11-28  Brent Fulgham  <bfulgham@webkit.org>
+
+        [WinCairo] Unreviewed build corrections.
+
+        * UIProcess/BackingStore.h: WinCairo doesn't need the Cairo backing
+          for widgets.
+        * win/WebKit2CFLite.def: Update to match WebKit2.def.
+
+2011-11-28  Beth Dakin  <bdakin@apple.com>
+
+        https://bugs.webkit.org/show_bug.cgi?id=72551
+        When the recommended scrollbar style changes, WKView's tracking options should 
+        adjust accordingly
+        -and corresponding-
+        <rdar://problem/10409328>
+
+        Reviewed by Darin Adler.
+
+        These new functions take care of passing along the 
+        recommendedScrollbarStyleDidChange() message that originates in the ChromeClient. 
+        * UIProcess/API/mac/PageClientImpl.h:
+        * UIProcess/PageClient.h:
+        * UIProcess/WebPageProxy.cpp:
+        (WebKit::WebPageProxy::recommendedScrollbarStyleDidChange):
+        * UIProcess/WebPageProxy.h:
+        * UIProcess/WebPageProxy.messages.in:
+        * WebProcess/WebCoreSupport/WebChromeClient.cpp:
+        (WebKit::WebChromeClient::recommendedScrollbarStyleDidChange):
+        * WebProcess/WebCoreSupport/WebChromeClient.h:
+
+        This is where we actually respond to the recommendedScrollbarStyleDidChange 
+        message. We remove the existing tracking area and create a new tracking area with 
+        the appropriate tracking options.
+        * UIProcess/API/mac/PageClientImpl.mm:
+        (WebKit::PageClientImpl::recommendedScrollbarStyleDidChange):
+
+        BuiltInPDFView inherits from WebCore::ScrollableArea, so scrollbarStyleChanged() 
+        must now take two parameters like the one in ScrollableArea.
+        * WebProcess/Plugins/PDF/BuiltInPDFView.cpp:
+        (WebKit::BuiltInPDFView::scrollbarStyleChanged):
+        * WebProcess/Plugins/PDF/BuiltInPDFView.h:
+
+2011-11-28  Jesus Sanchez-Palencia  <jesus.palencia@openbossa.org>
+
+        [Qt][WK2] Fix panning after r101179
+        https://bugs.webkit.org/show_bug.cgi?id=73224
+
+        Reviewed by Noam Rosenthal.
+
+        We were wrongly checking for interactionEngine() instead of
+        !interactionEngine() after the QtWebPageEventHandler refactor.
+
+        * UIProcess/qt/QtPanGestureRecognizer.cpp:
+        (WebKit::QtPanGestureRecognizer::recognize):
+
+2011-11-28  Kenneth Rohde Christiansen  <kenneth@webkit.org>
+
+        Make sure the useFixedLayout feature is consistently handled
+        https://bugs.webkit.org/show_bug.cgi?id=73212
+
+        Reviewed by Simon Hausmann.
+
+        Set the fixed layout on the UI side so that it is part of the page
+        creation parameters and ensure that the page parameters are set
+        before creating the page.
+
+        The parameters are set to our defaults and are now altered in the
+        WebKitTestRunner.
+
+        * UIProcess/API/qt/qquickwebview.cpp:
+        (QQuickWebViewPrivate::QQuickWebViewPrivate):
+        (QQuickWebViewPrivate::setUseTraditionalDesktopBehaviour):
+        (QQuickWebViewExperimental::setUseTraditionalDesktopBehaviour):
+        (QQuickWebView::QQuickWebView):
+        * UIProcess/WebPageProxy.cpp:
+        (WebKit::WebPageProxy::setUseFixedLayout):
+        * WebProcess/WebPage/WebPage.cpp:
+        (WebKit::WebPage::WebPage):
+
+            On the web process side the default value for useFixedLayout
+            wasn't actually read from the creation parameters. As it now may
+            be different than that of the FrameView, we now call
+            setFixedLayout in the constructor so make sure the value is
+            propagated to the FrameView.
+
+        (WebKit::WebPage::setFixedVisibleContentRect):
+        (WebKit::WebPage::setResizesToContentsUsingLayoutSize):
+        (WebKit::WebPage::resizeToContentsIfNeeded):
+        (WebKit::WebPage::setViewportSize):
+        (WebKit::WebPage::setUseFixedLayout):
+        (WebKit::WebPage::setFixedLayoutSize):
+
+            The methods that depends on fixed layout now have asserts to make
+            sure that they are used properly.
+
+2011-11-28  Carlos Garcia Campos  <cgarcia@igalia.com>
+
+        [GTK] Rename WebKitNetworkRequest to WebKitURIRequest
+        https://bugs.webkit.org/show_bug.cgi?id=73202
+
+        Reviewed by Martin Robinson.
+
+        Network is confusing because the request can be for a local file uri.
+
+        * GNUmakefile.am:
+        * UIProcess/API/gtk/WebKitNetworkRequest.h: Removed.
+        * UIProcess/API/gtk/WebKitURIRequest.cpp: Renamed from Source/WebKit2/UIProcess/API/gtk/WebKitNetworkRequest.cpp.
+        (webkitURIRequestFinalize):
+        (webkitURIRequestGetProperty):
+        (webkitURIRequestSetProperty):
+        (webkit_uri_request_class_init):
+        (webkit_uri_request_init):
+        (webkit_uri_request_new):
+        (webkit_uri_request_get_uri):
+        * UIProcess/API/gtk/WebKitURIRequest.h: Added.
+        * UIProcess/API/gtk/WebKitWebView.cpp:
+        (webkit_web_view_load_request):
+        * UIProcess/API/gtk/WebKitWebView.h:
+        * UIProcess/API/gtk/docs/webkit2gtk-sections.txt:
+        * UIProcess/API/gtk/tests/TestWebKitWebLoaderClient.cpp:
+        (testLoadRequest):
+        * UIProcess/API/gtk/tests/WebViewTest.cpp:
+        (WebViewTest::loadRequest):
+        * UIProcess/API/gtk/tests/WebViewTest.h:
+        * UIProcess/API/gtk/webkit2.h:
+
+2011-11-28  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] WTF should be built as separate static library
+        https://bugs.webkit.org/show_bug.cgi?id=73201
+
+        Reviewed by Tor Arne Vestbø.
+
+        * Target.pri: Require wtf.
+        * UIProcess/API/qt/tests/qmltests/tst_qmltests.cpp: Remove unnecessary config.h
+        inclusion and thus wtf dependency.
+
+2011-11-28  Pavel Feldman  <pfeldman@chromium.org>
+
+        REGRESSION (r101201): Crash inside WebKit::WebInspector::didClose() when closing any tab
+        https://bugs.webkit.org/show_bug.cgi?id=73183
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebProcess/WebCoreSupport/WebInspectorClient.cpp:
+        (WebKit::WebInspectorClient::closeInspectorFrontend):
+
+2011-11-28  Balazs Kelemen  <kbalazs@webkit.org>
+
+        Reviewed by Simon Hausmann.
+
+        [WK2] fast/frames/iframe-plugin-load-remove-document-crash.html crashes
+        https://bugs.webkit.org/show_bug.cgi?id=63321
+
+        * WebProcess/Plugins/Netscape/NetscapePlugin.cpp:
+        (WebKit::NetscapePlugin::manualStreamDidFail): Don't assert that m_manualStream
+        is not null since it is not guaranteed but instead handle the case when it is null
+        with early return.
+
+2011-11-27  Zeno Albisser  <zeno@webkit.org>
+
+        [Qt][WK2] MiniBrowser stops displaying content after surfing a few pages.
+        https://bugs.webkit.org/show_bug.cgi?id=73172
+
+        Properly initialize WebLayerTreeInfo structures.
+
+        Reviewed by Andreas Kling.
+
+        * Shared/WebLayerTreeInfo.h:
+        (WebKit::WebLayerUpdateInfo::WebLayerUpdateInfo):
+        (WebKit::WebLayerAnimation::WebLayerAnimation):
+        (WebKit::WebLayerInfo::WebLayerInfo):
+        (WebKit::WebLayerTreeInfo::WebLayerTreeInfo):
+
+2011-11-27  Mark Rowe  <mrowe@apple.com>
+
+        <http://webkit.org/b/72665> Switch to a more modern approach to retrieving the OS marketing version
+
+        Reviewed by Dan Bernstein.
+
+        * UIProcess/mac/WebPageProxyMac.mm:
+        (WebKit::macOSXVersionString): Use WKGetMacOSXVersionString.
+        * WebProcess/WebCoreSupport/mac/WebSystemInterface.mm:
+        (InitWebCoreSystemInterface): Set up wkGetMacOSXVersionString.
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebProcess/WebCoreSupport/WebInspectorClient.cpp:
+        (WebKit::WebInspectorClient::inspectorDestroyed):
+        * WebProcess/WebCoreSupport/WebInspectorFrontendClient.cpp:
+        * WebProcess/WebCoreSupport/WebInspectorFrontendClient.h:
+
 2011-11-26  Caio Marcelo de Oliveira Filho  <caio.oliveira@openbossa.org>
 
         [Qt] [WK2] QtDownloadManager doesn't need to be RefCounted

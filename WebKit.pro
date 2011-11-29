@@ -14,7 +14,11 @@ isEmpty(QMAKEPATH)|!exists($${QMAKEPATH}/mkspecs) {
     # Otherwise we won't pick up the feature prf files needed for the build
 }
 
-!CONFIG(v8) {
+WTF.file = Source/JavaScriptCore/wtf/wtf.pro
+WTF.makefile = Makefile.WTF
+SUBDIRS += WTF
+
+!v8 {
     JavaScriptCore.file = Source/JavaScriptCore/JavaScriptCore.pro
     JavaScriptCore.makefile = Makefile.JavaScriptCore
 

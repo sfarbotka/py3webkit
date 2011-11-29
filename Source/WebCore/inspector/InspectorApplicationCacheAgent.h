@@ -28,9 +28,10 @@
 #if ENABLE(INSPECTOR)
 
 #include "ApplicationCacheHost.h"
+#include "InspectorBaseAgent.h"
 #include "InspectorFrontend.h"
 #include <wtf/Noncopyable.h>
-#include <wtf/PassRefPtr.h>
+#include <wtf/PassOwnPtr.h>
 
 namespace WebCore {
 
@@ -48,16 +49,19 @@ class ResourceResponse;
 
 typedef String ErrorString;
 
-class InspectorApplicationCacheAgent {
+class InspectorApplicationCacheAgent : public InspectorBaseAgent<InspectorApplicationCacheAgent> {
     WTF_MAKE_NONCOPYABLE(InspectorApplicationCacheAgent); WTF_MAKE_FAST_ALLOCATED;
 public:
-    InspectorApplicationCacheAgent(InstrumentingAgents*, InspectorPageAgent*, InspectorState*);
+    static PassOwnPtr<InspectorApplicationCacheAgent> create(InstrumentingAgents* instrumentingAgents, InspectorState* state, InspectorPageAgent* pageAgent)
+    {
+        return adoptPtr(new InspectorApplicationCacheAgent(instrumentingAgents, state, pageAgent));
+    }
     ~InspectorApplicationCacheAgent() { }
 
-    // Inspector Controller API
-    void setFrontend(InspectorFrontend*);
-    void clearFrontend();
-    void restore();
+    // InspectorBaseAgent
+    virtual void setFrontend(InspectorFrontend*);
+    virtual void clearFrontend();
+    virtual void restore();
 
     // InspectorInstrumentation API
     void updateApplicationCacheStatus(Frame*);
@@ -70,16 +74,15 @@ public:
     void getApplicationCacheForFrame(ErrorString*, const String& frameId, RefPtr<InspectorObject>* applicationCache);
 
 private:
+    InspectorApplicationCacheAgent(InstrumentingAgents*, InspectorState*, InspectorPageAgent*);
     PassRefPtr<InspectorObject> buildObjectForApplicationCache(const ApplicationCacheHost::ResourceInfoList&, const ApplicationCacheHost::CacheInfo&);
     PassRefPtr<InspectorArray> buildArrayForApplicationCacheResources(const ApplicationCacheHost::ResourceInfoList&);
     PassRefPtr<InspectorObject> buildObjectForApplicationCacheResource(const ApplicationCacheHost::ResourceInfo&);
 
     DocumentLoader* assertFrameWithDocumentLoader(ErrorString*, String frameId);
 
-    InstrumentingAgents* m_instrumentingAgents;
     InspectorPageAgent* m_pageAgent;
     InspectorFrontend::ApplicationCache* m_frontend;
-    InspectorState* m_state;
 };
 
 } // namespace WebCore

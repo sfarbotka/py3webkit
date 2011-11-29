@@ -1,3 +1,81 @@
+2011-11-29  Sergio Villar Senin  <svillar@igalia.com>
+
+        [GTK] SIGSEV when a WebKitDownload fails
+        https://bugs.webkit.org/show_bug.cgi?id=72883
+
+        Reviewed by Xan Lopez.
+
+        After r100769 http status codes >= 400 trigger download
+        failures. We must ensure that the download is properly cancelled
+        before clearing the ResourceHandle client to avoid crashes.
+
+        * webkit/webkitdownload.cpp:
+        (DownloadClient::didReceiveResponse):
+
+2011-11-29  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Custom fonts on surlybikes.com and boingboing.net do not load
+        https://bugs.webkit.org/show_bug.cgi?id=69115
+
+        Reviewed by Gustavo Noronha Silva.
+
+        Instead of pretending to be Safari/Linux, pretend to be a Linux Chrome.
+        This fixes pages that assume that if a browser is Safari, but not OS X, it is
+        the iOS version of Safari.
+
+        * tests/testwebsettings.c:
+        (test_webkit_web_settings_user_agent): Update the test to reflect that the
+        user agent does not change.
+        * webkit/webkitwebsettings.cpp:
+        (chromeUserAgent): Renamed this from webkitUserAgent to more accurately
+        describe what it is.
+        (webkit_web_settings_class_init): Just use an empty string when initializing
+        the user agent to reduce code duplication.
+        (webkit_web_settings_set_property): Updated to reflect new method name.
+        (userAgentForURL): We don't need to special case Google Calendar any longer.
+
+2011-11-29  Mario Sanchez Prada  <msanchez@igalia.com>
+
+        [Gtk] Regression: text-inserted events lack text inserted and current line
+        https://bugs.webkit.org/show_bug.cgi?id=72830
+
+        Reviewed by Chris Fleizach.
+
+        Updated unit test to handle the new 'text-insert' and
+        'text-remove' signals, instead of the 'text-changed' one.
+
+        * tests/testatk.c:
+        (textChangedCb): Update a global variable with the result of the
+        text change, so we can check its value later.
+        (testWebkitAtkTextChangedNotifications): Connect to the
+        'text-insert' and 'text-remove' signals and check, in a way more
+        carefully way than it was done before, that the signals are being
+        properly emitted, and that the information attached to them is the
+        right one for each case (insert/remove, offset, count and text).
+
+2011-11-28  Stefan Zwanenburg  <stefanhetzwaantje@gmail.com>
+
+        WebKitGTK+-1.7.2 build error due to a reference to gdk_disable_multidevice()
+        https://bugs.webkit.org/show_bug.cgi?id=73206
+
+        Reviewed by Martin Robinson.
+
+        * tests/testatk.c:
+        (initializeTestingFramework): Don't use gdk_disable_multidevice()
+        when using GTK2.
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/InspectorClientGtk.cpp:
+        (WebKit::InspectorClient::inspectorDestroyed):
+        (WebKit::InspectorClient::closeInspectorFrontend):
+        * WebCoreSupport/InspectorClientGtk.h:
+
 2011-11-26  Sheriff Bot  <webkit.review.bot@gmail.com>
 
         Unreviewed, rolling out r101193.

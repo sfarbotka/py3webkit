@@ -42,6 +42,7 @@
 namespace WebCore {
 
 class CharacterData;
+class DOMFileSystem;
 class DOMWindow;
 class DOMWrapperWorld;
 class Database;
@@ -76,7 +77,6 @@ typedef pair<InstrumentingAgents*, int> InspectorInstrumentationCookie;
 class InspectorInstrumentation {
 public:
     static void didClearWindowObjectInWorld(Frame*, DOMWrapperWorld*);
-    static void inspectedPageDestroyed(Page*);
 
     static void willInsertDOMNode(Document*, Node*, Node* parent);
     static void didInsertDOMNode(Document*, Node*);
@@ -176,6 +176,10 @@ public:
     static void didOpenDatabase(ScriptExecutionContext*, PassRefPtr<Database>, const String& domain, const String& name, const String& version);
 #endif
 
+#if ENABLE(FILE_SYSTEM)
+    static void didOpenFileSystem(PassRefPtr<DOMFileSystem>);
+#endif
+
     static void didUseDOMStorage(Page*, StorageArea*, bool isLocalStorage, Frame*);
 
 #if ENABLE(WORKERS)
@@ -210,7 +214,6 @@ public:
 private:
 #if ENABLE(INSPECTOR)
     static void didClearWindowObjectInWorldImpl(InstrumentingAgents*, Frame*, DOMWrapperWorld*);
-    static void inspectedPageDestroyedImpl(InstrumentingAgents*);
 
     static void willInsertDOMNodeImpl(InstrumentingAgents*, Node*, Node* parent);
     static void didInsertDOMNodeImpl(InstrumentingAgents*, Node*);
@@ -308,6 +311,10 @@ private:
     static void didOpenDatabaseImpl(InstrumentingAgents*, PassRefPtr<Database>, const String& domain, const String& name, const String& version);
 #endif
 
+#if ENABLE(FILE_SYSTEM)
+    static void didOpenFileSystemImpl(InstrumentingAgents*, PassRefPtr<DOMFileSystem>);
+#endif
+
     static void didUseDOMStorageImpl(InstrumentingAgents*, StorageArea*, bool isLocalStorage, Frame*);
 
 #if ENABLE(WORKERS)
@@ -350,14 +357,6 @@ inline void InspectorInstrumentation::didClearWindowObjectInWorld(Frame* frame, 
 #if ENABLE(INSPECTOR)
     if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForFrame(frame))
         didClearWindowObjectInWorldImpl(instrumentingAgents, frame, world);
-#endif
-}
-
-inline void InspectorInstrumentation::inspectedPageDestroyed(Page* page)
-{
-#if ENABLE(INSPECTOR)
-    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsForPage(page))
-        inspectedPageDestroyedImpl(instrumentingAgents);
 #endif
 }
 

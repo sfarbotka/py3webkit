@@ -6,10 +6,11 @@
 
 TEMPLATE = lib
 
-DEFINES += BUILDING_WebCore BUILDING_WTF
+DEFINES += BUILDING_WebCore
 
 load(webcore)
 load(javascriptcore)
+load(wtf)
 
 CONFIG += staticlib
 
@@ -66,9 +67,6 @@ SOURCES += \
 
 v8 {
     include($$PWD/../JavaScriptCore/yarr/yarr.pri)
-    include($$PWD/../JavaScriptCore/wtf/wtf.pri)
-
-    INCLUDEPATH = $$PWD/../JavaScriptCore/wtf/qt $$INCLUDEPATH
 
     SOURCES += \
         platform/qt/PlatformSupportQt.cpp \
@@ -82,6 +80,7 @@ v8 {
 
     SOURCES += \
         bindings/v8/custom/V8ArrayBufferCustom.cpp \
+        bindings/v8/custom/V8ArrayBufferViewCustom.cpp \
         bindings/v8/custom/V8CustomXPathNSResolver.cpp \
         bindings/v8/custom/V8DataViewCustom.cpp \
         bindings/v8/custom/V8DeviceMotionEventCustom.cpp \
@@ -99,6 +98,7 @@ v8 {
         bindings/v8/DOMData.cpp \
         bindings/v8/DOMDataStore.cpp \
         bindings/v8/NPV8Object.cpp \
+        bindings/v8/OptionsObject.cpp \
         bindings/v8/PageScriptDebugServer.cpp \
         bindings/v8/RetainedDOMInfo.cpp \
         bindings/v8/ScheduledAction.cpp \
@@ -809,8 +809,6 @@ SOURCES += \
     html/ValidationMessage.cpp \
     html/ValidityState.cpp \
     html/WeekInputType.cpp \
-    html/canvas/ArrayBuffer.cpp \
-    html/canvas/ArrayBufferView.cpp \
     html/canvas/CanvasGradient.cpp \
     html/canvas/CanvasPattern.cpp \
     html/canvas/CanvasPixelArray.cpp \
@@ -818,14 +816,6 @@ SOURCES += \
     html/canvas/CanvasRenderingContext2D.cpp \
     html/canvas/CanvasStyle.cpp \
     html/canvas/DataView.cpp \
-    html/canvas/Float32Array.cpp \
-    html/canvas/Float64Array.cpp \
-    html/canvas/Int16Array.cpp \
-    html/canvas/Int32Array.cpp \
-    html/canvas/Int8Array.cpp \
-    html/canvas/Uint16Array.cpp \
-    html/canvas/Uint32Array.cpp \
-    html/canvas/Uint8Array.cpp \
     html/parser/CSSPreloadScanner.cpp \
     html/parser/HTMLConstructionSite.cpp \
     html/parser/HTMLDocumentParser.cpp \
@@ -861,6 +851,7 @@ SOURCES += \
     inspector/InjectedScriptManager.cpp \
     inspector/InspectorAgent.cpp \
     inspector/InspectorApplicationCacheAgent.cpp \
+    inspector/InspectorBaseAgent.cpp \
     inspector/InspectorCSSAgent.cpp \
     inspector/InspectorClient.cpp \
     inspector/InspectorConsoleAgent.cpp \
@@ -875,6 +866,7 @@ SOURCES += \
     inspector/InspectorFrontendClientLocal.cpp \
     inspector/InspectorFrontendHost.cpp \
     inspector/InspectorInstrumentation.cpp \
+    inspector/InspectorMetaAgent.cpp \
     inspector/InspectorPageAgent.cpp \
     inspector/InspectorProfilerAgent.cpp \
     inspector/InspectorResourceAgent.cpp \
@@ -953,6 +945,7 @@ SOURCES += \
     loader/ThreadableLoader.cpp \
     notifications/Notification.cpp \
     notifications/NotificationCenter.cpp \
+    notifications/NotificationController.cpp \
     page/animation/AnimationBase.cpp \
     page/animation/AnimationController.cpp \
     page/animation/CompositeAnimation.cpp \
@@ -1262,6 +1255,7 @@ SOURCES += \
     rendering/style/StyleFilterData.cpp \
     rendering/style/StyleFlexibleBoxData.cpp \
     rendering/style/StyleGeneratedImage.cpp \
+    rendering/style/StyleGridData.cpp \
     rendering/style/StyleInheritedData.cpp \
     rendering/style/StyleMarqueeData.cpp \
     rendering/style/StyleMultiColData.cpp \
@@ -1348,7 +1342,6 @@ v8 {
         bindings/v8/custom/V8CustomXPathNSResolver.h \
         bindings/v8/custom/V8HTMLImageElementConstructor.h \
         bindings/v8/custom/V8HTMLSelectElementCustom.h \
-        bindings/v8/custom/V8MessagePortCustom.h \
         bindings/v8/custom/V8NamedNodesCollection.h \
         \
         bindings/v8/DateExtension.h \
@@ -1750,8 +1743,6 @@ HEADERS += \
     history/CachedPage.h \
     history/HistoryItem.h \
     history/PageCache.h \
-    html/canvas/ArrayBuffer.h \
-    html/canvas/ArrayBufferView.h \
     html/canvas/CanvasGradient.h \
     html/canvas/CanvasPattern.h \
     html/canvas/CanvasPixelArray.h \
@@ -1759,14 +1750,6 @@ HEADERS += \
     html/canvas/CanvasRenderingContext2D.h \
     html/canvas/CanvasStyle.h \
     html/canvas/DataView.h \
-    html/canvas/Float32Array.h \
-    html/canvas/Float64Array.h \
-    html/canvas/Int16Array.h \
-    html/canvas/Int32Array.h \
-    html/canvas/Int8Array.h \
-    html/canvas/Uint16Array.h \
-    html/canvas/Uint32Array.h \
-    html/canvas/Uint8Array.h \
     html/ClassList.h \
     html/CollectionCache.h \
     html/DOMFormData.h \
@@ -1912,6 +1895,7 @@ HEADERS += \
     inspector/InjectedScriptManager.h \
     inspector/InspectorAgent.h \
     inspector/InspectorApplicationCacheAgent.h \
+    inspector/InspectorBaseAgent.h \
     inspector/InspectorConsoleAgent.h \
     inspector/InspectorConsoleInstrumentation.h \
     inspector/InspectorController.h \
@@ -1928,6 +1912,7 @@ HEADERS += \
     inspector/InspectorFrontendClientLocal.h \
     inspector/InspectorFrontendHost.h \
     inspector/InspectorInstrumentation.h \
+    inspector/InspectorMetaAgent.h \
     inspector/InspectorPageAgent.h \
     inspector/InspectorProfilerAgent.h \
     inspector/InspectorResourceAgent.h \
@@ -2003,6 +1988,7 @@ HEADERS += \
     notifications/NotificationCenter.h \
     notifications/NotificationPresenter.h \
     notifications/NotificationContents.h \
+    notifications/NotificationController.h \
     page/animation/AnimationBase.h \
     page/animation/AnimationController.h \
     page/animation/CompositeAnimation.h \
@@ -3662,7 +3648,10 @@ contains(DEFINES, ENABLE_WEBGL=1) {
         platform/graphics/gpu/DrawingBuffer.h \
         platform/graphics/qt/Extensions3DQt.h
 
-    !v8 {
+    v8 {
+        SOURCES += \
+            bindings/v8/custom/V8WebGLRenderingContextCustom.cpp
+    } else {
         SOURCES += \
             bindings/js/JSWebGLRenderingContextCustom.cpp
     }

@@ -823,8 +823,6 @@ SET(WebCore_SOURCES
     html/ValidityState.cpp
     html/WeekInputType.cpp
 
-    html/canvas/ArrayBuffer.cpp
-    html/canvas/ArrayBufferView.cpp
     html/canvas/CanvasContextAttributes.cpp
     html/canvas/CanvasGradient.cpp
     html/canvas/CanvasPattern.cpp
@@ -833,14 +831,6 @@ SET(WebCore_SOURCES
     html/canvas/CanvasRenderingContext2D.cpp
     html/canvas/CanvasStyle.cpp
     html/canvas/DataView.cpp
-    html/canvas/Float32Array.cpp
-    html/canvas/Float64Array.cpp
-    html/canvas/Int16Array.cpp
-    html/canvas/Int32Array.cpp
-    html/canvas/Int8Array.cpp
-    html/canvas/Uint16Array.cpp
-    html/canvas/Uint32Array.cpp
-    html/canvas/Uint8Array.cpp
 
     html/parser/CSSPreloadScanner.cpp
     html/parser/HTMLConstructionSite.cpp
@@ -879,6 +869,7 @@ SET(WebCore_SOURCES
     inspector/InjectedScriptManager.cpp
     inspector/InspectorAgent.cpp
     inspector/InspectorApplicationCacheAgent.cpp
+    inspector/InspectorBaseAgent.cpp
     inspector/InspectorPageAgent.cpp
     inspector/InspectorCSSAgent.cpp
     inspector/InspectorClient.cpp
@@ -891,9 +882,11 @@ SET(WebCore_SOURCES
     inspector/InspectorDatabaseAgent.cpp
     inspector/InspectorDatabaseResource.cpp
     inspector/InspectorDebuggerAgent.cpp
+    inspector/InspectorFileSystemAgent.cpp
     inspector/InspectorFrontendClientLocal.cpp
     inspector/InspectorFrontendHost.cpp
     inspector/InspectorInstrumentation.cpp
+    inspector/InspectorMetaAgent.cpp
     inspector/InspectorProfilerAgent.cpp
     inspector/InspectorResourceAgent.cpp
     inspector/InspectorRuntimeAgent.cpp
@@ -1325,6 +1318,7 @@ SET(WebCore_SOURCES
     rendering/style/StyleFilterData.cpp
     rendering/style/StyleFlexibleBoxData.cpp
     rendering/style/StyleGeneratedImage.cpp
+    rendering/style/StyleGridData.cpp
     rendering/style/StyleInheritedData.cpp
     rendering/style/StyleMarqueeData.cpp
     rendering/style/StyleMultiColData.cpp

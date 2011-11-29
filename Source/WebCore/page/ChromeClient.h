@@ -75,10 +75,6 @@ namespace WebCore {
     class ColorChooser;
 #endif
 
-#if ENABLE(NOTIFICATIONS)
-    class NotificationPresenter;
-#endif
-
     class ChromeClient {
     public:
         virtual void chromeDestroyed() = 0;
@@ -204,10 +200,6 @@ namespace WebCore {
         virtual void dashboardRegionsChanged();
 #endif
 
-#if ENABLE(NOTIFICATIONS)
-        virtual NotificationPresenter* notificationPresenter() const = 0;
-#endif
-
         virtual void populateVisitedLinks();
 
         virtual FloatRect customHighlightRect(Node*, const AtomicString& type, const FloatRect& lineRect);
@@ -325,6 +317,7 @@ namespace WebCore {
         virtual void didCompleteAnimatedScroll() const { }
         
         virtual void notifyScrollerThumbIsVisibleInRect(const IntRect&) { }
+        virtual void recommendedScrollbarStyleDidChange(int /*newStyle*/) { }
 
         enum DialogType {
             AlertDialog = 0,

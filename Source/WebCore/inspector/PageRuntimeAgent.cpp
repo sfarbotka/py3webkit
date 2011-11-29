@@ -40,8 +40,8 @@
 
 namespace WebCore {
 
-PageRuntimeAgent::PageRuntimeAgent(InstrumentingAgents* instrumentingAgents, InjectedScriptManager* injectedScriptManager, Page* page, InspectorPageAgent* pageAgent)
-    : InspectorRuntimeAgent(instrumentingAgents, injectedScriptManager)
+PageRuntimeAgent::PageRuntimeAgent(InstrumentingAgents* instrumentingAgents, InspectorState* state, InjectedScriptManager* injectedScriptManager, Page* page, InspectorPageAgent* pageAgent)
+    : InspectorRuntimeAgent(instrumentingAgents, state, injectedScriptManager)
     , m_inspectedPage(page)
     , m_pageAgent(pageAgent)
 {

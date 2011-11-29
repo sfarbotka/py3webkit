@@ -1,3 +1,106 @@
+2011-11-15  Anders Carlsson  <andersca@apple.com>
+
+        DragClient::dragSourceActionMaskForPoint should use root view coordinates
+        https://bugs.webkit.org/show_bug.cgi?id=72409
+
+        Reviewed by Sam Weinig.
+
+        * WebCoreSupport/WebDragClient.mm:
+        (WebDragClient::dragSourceActionMaskForPoint):
+        Use -[WebView _convertPointFromRootView:] to convert the point to the web view coordinate system.
+
+2011-11-15  Anders Carlsson  <andersca@apple.com>
+
+        EditorClient::showCorrectionPanel should pass the string bounding box in root view coordinates
+        https://bugs.webkit.org/show_bug.cgi?id=72408
+
+        Reviewed by Sam Weinig.
+
+        * WebCoreSupport/CorrectionPanel.mm:
+        (CorrectionPanel::show):
+        Convert the bounding rect to web view coordinates.
+
+        * WebView/WebView.mm:
+        (-[WebView _convertPointFromRootView:]):
+        (-[WebView _convertRectFromRootView:]):
+        * WebView/WebViewInternal.h:
+        Add helper methods for converting from root view coordinates to web view coordinates.
+
+2011-11-29  Roland Steiner  <rolandsteiner@chromium.org>
+
+        <style scoped>: add ENABLE(STYLE_SCOPED) flag to WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=72848
+
+        Reviewed by Dimitri Glazkov.
+
+        * Configurations/FeatureDefines.xcconfig:
+
+2011-11-28  Jon Lee  <jonlee@apple.com>
+
+        Create skeleton framework for notifications support in WK2
+        https://bugs.webkit.org/show_bug.cgi?id=73253
+        <rdar://problem/10356943>
+
+        Reviewed by Sam Weinig.
+
+        * Configurations/FeatureDefines.xcconfig: Split out ENABLE_NOTIFICATIONS based on platform.
+
+        * WebCoreSupport/WebNotificationClient.h: Added.
+        (WebNotificationClient::webView):
+        * WebCoreSupport/WebNotificationClient.mm: Added. Implemented as stubs for now.
+        (WebNotificationClient::WebNotificationClient):
+        (WebNotificationClient::show):
+        (WebNotificationClient::cancel):
+        (WebNotificationClient::notificationObjectDestroyed):
+        (WebNotificationClient::requestPermission):
+        (WebNotificationClient::cancelRequestsForPermission):
+        (WebNotificationClient::checkPermission):
+        * WebView/WebView.mm: Set PageClient's notification client to an instance of this stubbed class.
+
+2011-11-28  Adam Roben  <aroben@apple.com>
+
+        Properly retain the OS X version string
+
+        Fixes <http://webkit.org/b/73214> REGRESSION (r101215): Crash on launch beneath +[WebView
+        _standardUserAgentWithApplicationName:]
+
+        Reviewed by Antti Koivisto.
+
+        * WebView/WebView.mm:
+        (createMacOSXVersionString): Retain the string we're returning, since this function is
+        supposed to return an owning reference to the caller.
+
+2011-11-28  Hayato Ito  <hayato@chromium.org>
+
+        Fix chromium canary build after r101215.
+        Unreviewed. Build fix.
+
+        * WebCoreSupport/WebSystemInterface.mm:
+        (InitWebCoreSystemInterface):
+
+2011-11-27  Mark Rowe  <mrowe@apple.com>
+
+        <http://webkit.org/b/72665> Switch to a more modern approach to retrieving the OS marketing version
+
+        Reviewed by Dan Bernstein.
+
+        * WebCoreSupport/WebSystemInterface.mm:
+        (InitWebCoreSystemInterface): Set up wkGetMacOSXVersionString.
+        * WebView/WebView.mm:
+        (createMacOSXVersionString): Use WKGetMacOSXVersionString.
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        Reviewed by Yury Semikhatsky.
+
+        * WebCoreSupport/WebInspectorClient.h:
+        * WebCoreSupport/WebInspectorClient.mm:
+        (WebInspectorClient::inspectorDestroyed):
+        (WebInspectorClient::closeInspectorFrontend):
+
 2011-11-26  Sheriff Bot  <webkit.review.bot@gmail.com>
 
         Unreviewed, rolling out r101193.

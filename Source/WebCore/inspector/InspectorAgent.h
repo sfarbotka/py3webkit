@@ -30,9 +30,11 @@
 #ifndef InspectorAgent_h
 #define InspectorAgent_h
 
+#include "InspectorBaseAgent.h"
 #include "PlatformString.h"
 #include <wtf/Forward.h>
 #include <wtf/HashMap.h>
+#include <wtf/PassOwnPtr.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
@@ -50,29 +52,31 @@ class Page;
 
 typedef String ErrorString;
 
-class InspectorAgent {
+class InspectorAgent : public InspectorBaseAgent<InspectorAgent> {
     WTF_MAKE_NONCOPYABLE(InspectorAgent);
-    WTF_MAKE_FAST_ALLOCATED;
 public:
-    InspectorAgent(Page*, InjectedScriptManager*, InstrumentingAgents*);
-    virtual ~InspectorAgent();
+    static PassOwnPtr<InspectorAgent> create(Page* page, InjectedScriptManager* injectedScriptManager, InstrumentingAgents* instrumentingAgents, InspectorState* state)
+    {
+        return adoptPtr(new InspectorAgent(page, injectedScriptManager, instrumentingAgents, state));
+    }
 
-    void inspectedPageDestroyed();
+    virtual ~InspectorAgent();
 
     bool enabled() const;
 
     KURL inspectedURL() const;
     KURL inspectedURLWithoutFragment() const;
 
-    void setFrontend(InspectorFrontend*);
     InspectorFrontend* frontend() const { return m_frontend; }
-    void clearFrontend();
-    void restore();
+
+    virtual void setFrontend(InspectorFrontend*);
+    virtual void clearFrontend();
 
     void didClearWindowObjectInWorld(Frame*, DOMWrapperWorld*);
 
     void didCommitLoad();
     void domContentLoadedEventFired();
+    void emitCommitLoadIfNeeded();
 
 #if ENABLE(WORKERS)
     enum WorkerAction { WorkerCreated, WorkerDestroyed };
@@ -90,6 +94,8 @@ public:
     void setInspectorExtensionAPI(const String& source);
 
 private:
+    InspectorAgent(Page*, InjectedScriptManager*, InstrumentingAgents*, InspectorState*);
+
     void unbindAllResources();
 
 #if ENABLE(JAVASCRIPT_DEBUGGER)
@@ -101,7 +107,6 @@ private:
 
     Page* m_inspectedPage;
     InspectorFrontend* m_frontend;
-    InstrumentingAgents* m_instrumentingAgents;
     InjectedScriptManager* m_injectedScriptManager;
 
     Vector<pair<long, String> > m_pendingEvaluateTestCommands;

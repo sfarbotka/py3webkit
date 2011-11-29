@@ -670,6 +670,14 @@ AC_ARG_ENABLE(file_system,
               [], [enable_file_system="no"])
 AC_MSG_RESULT([$enable_file_system])
 
+# check whether to enable HTML5 <style scoped> support
+AC_MSG_CHECKING([whether to enable HTML5 <style scoped> support])
+AC_ARG_ENABLE(file_system,
+              AC_HELP_STRING([--enable-style-scoped],
+                             [enable support for HTML5 <style scoped> [default=no]]),
+              [], [enable_style_scoped="no"])
+AC_MSG_RESULT([$enable_style_scoped])
+
 # check whether to enable Quota API support
 AC_MSG_CHECKING([whether to enable Quota API support])
 AC_ARG_ENABLE(quota,
@@ -717,11 +725,7 @@ AC_ARG_ENABLE(web_sockets,
 AC_MSG_RESULT([$enable_web_sockets])
 
 # check whether to enable Web Audio support
-AC_MSG_CHECKING([whether to enable Web Audio support])
-AC_ARG_ENABLE(web_audio,
-              AC_HELP_STRING([--enable-web-audio],
-                             [enable support for Web Audio [default=no]]),
-              [],[enable_web_audio="no"])
+enable_web_audio=no
 AC_MSG_RESULT([$enable_web_audio])
 
 # check whether to enable Web Timing support
@@ -1135,9 +1139,6 @@ AM_CONDITIONAL([USE_PANGO], [test "$with_font_backend" = "pango"])
 # GStreamer feature conditional
 AM_CONDITIONAL([USE_GSTREAMER], [test "$have_gstreamer" = "yes"])
 
-# Web Audio feature conditional
-AM_CONDITIONAL([USE_WEBAUDIO_FFTW], [test "$have_fftw" = "yes"])
-
 # WebKit feature conditionals
 AM_CONDITIONAL([ENABLE_DEBUG],[test "$enable_debug_features" = "yes"])
 AM_CONDITIONAL([ENABLE_3D_RENDERING],[test "$enable_3d_rendering" = "yes"])
@@ -1158,6 +1159,7 @@ AM_CONDITIONAL([ENABLE_DATALIST],[test "$enable_datalist" = "yes"])
 AM_CONDITIONAL([ENABLE_DETAILS],[test "$enable_details" = "yes"])
 AM_CONDITIONAL([ENABLE_FAST_MOBILE_SCROLLING],[test "$enable_fast_mobile_scrolling" = "yes"])
 AM_CONDITIONAL([ENABLE_FILE_SYSTEM],[test "$enable_file_system" = "yes"])
+AM_CONDITIONAL([ENABLE_STYLE_SCOPED],[test "$enable_style_scoped" = "yes"])
 AM_CONDITIONAL([ENABLE_QUOTA],[test "$enable_quota" = "yes"])
 AM_CONDITIONAL([ENABLE_ICONDATABASE],[test "$enable_icon_database" = "yes"])
 AM_CONDITIONAL([ENABLE_IMAGE_RESIZER],[test "$enable_image_resizer" = "yes"])

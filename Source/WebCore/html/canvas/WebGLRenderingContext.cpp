@@ -52,7 +52,6 @@
 #include "RenderBox.h"
 #include "RenderLayer.h"
 #include "Settings.h"
-#include "Uint16Array.h"
 #include "WebGLActiveInfo.h"
 #include "WebGLBuffer.h"
 #include "WebGLContextAttributes.h"
@@ -70,6 +69,7 @@
 #include <wtf/ByteArray.h>
 #include <wtf/OwnArrayPtr.h>
 #include <wtf/PassOwnArrayPtr.h>
+#include <wtf/Uint16Array.h>
 #include <wtf/text/StringBuilder.h>
 
 #if PLATFORM(QT)
@@ -541,16 +541,18 @@ void WebGLRenderingContext::markContextChanged()
     m_layerCleared = false;
 #if USE(ACCELERATED_COMPOSITING)
     RenderBox* renderBox = canvas()->renderBox();
-    if (renderBox && renderBox->hasLayer() && renderBox->layer()->hasAcceleratedCompositing())
+    if (renderBox && renderBox->hasLayer() && renderBox->layer()->hasAcceleratedCompositing()) {
+        m_markedCanvasDirty = true;
         renderBox->layer()->contentChanged(RenderLayer::CanvasChanged);
-    else {
+    } else {
 #endif
-        if (!m_markedCanvasDirty)
+        if (!m_markedCanvasDirty) {
+            m_markedCanvasDirty = true;
             canvas()->didDraw(FloatRect(0, 0, canvas()->width(), canvas()->height()));
+        }
 #if USE(ACCELERATED_COMPOSITING)
     }
 #endif
-    m_markedCanvasDirty = true;
 }
 
 bool WebGLRenderingContext::clearIfComposited(GC3Dbitfield mask)

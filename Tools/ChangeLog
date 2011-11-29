@@ -1,3 +1,392 @@
+2011-11-29  Ojan Vafai  <ojan@chromium.org>
+
+        List of builders in the flakiness dashboard is out of date
+        https://bugs.webkit.org/show_bug.cgi?id=73347
+
+        Reviewed by Adam Barth.
+
+        The chromium gpu bots no longer run layout tests, so kill that
+        group entirely.
+
+        * TestResultServer/static-dashboards/builders.js:
+        * TestResultServer/static-dashboards/dashboard_base.js:
+
+2011-11-29  Tor Arne Vestbø  <tor.arne.vestbo@nokia.com>
+
+        [Qt] Don't hard-code the list of WebKit2 generated sources
+
+        The generated sources are... wait for it... generated. So
+        use the generator itself to figure out which sources we need
+        to compile.
+
+        Reviewed by Simon Hausmann.
+
+        * qmake/mkspecs/features/default_post.prf:
+
+2011-11-29  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] Add a method to detect 'make dist' errors without running 'make dist'
+        https://bugs.webkit.org/show_bug.cgi?id=73216
+
+        Reviewed by Philippe Normand.
+
+        Add a script that tries to sniff out 'make dist' problems without running
+        'make dist.' 'make distcheck' takes a very long time to run and this should
+        reduce the amount of times it needs to be run consecutively.
+
+        * gtk/common.py:
+        (get_build_path.is_valid_build_directory): Guess the source directory
+        by the existence of the GNUmakefile instead of the .libs directory. This
+        allows one to run the script after running autogen.sh but before fully
+        building.
+        * gtk/find-make-dist-errors: Added.
+
+2011-11-29  Tor Arne Vestbø  <tor.arne.vestbo@nokia.com>
+
+        [Qt] Remove use of internal headers in the MiniBrowser
+
+        Reviewed by Simon Hausmann.
+
+        * MiniBrowser/qt/MiniBrowser.pro:
+
+2011-11-29  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] Fix debug-shlib build without webkit2
+
+        Reviewed by Tor Arne Vestbø.
+
+        * qmake/mkspecs/features/qtwebkit.prf: Respect no_webkit2.
+
+2011-11-28  Csaba Osztrogonác  <ossy@webkit.org>
+
+        [Qt][WK2] Unreviewed buildfix after r101307.
+
+        * qmake/mkspecs/features/webkit2.prf: Add missing includepath.
+
+2011-11-29  Roland Steiner  <rolandsteiner@chromium.org>
+
+        <style scoped>: add ENABLE(STYLE_SCOPED) flag to WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=72848
+
+        Add option to build-webkit.
+
+        Reviewed by Dimitri Glazkov.
+
+        * Scripts/build-webkit:
+
+2011-11-28  Ojan Vafai  <ojan@chromium.org>
+
+        gtest normalization in the test results server is sometimes wrong
+        https://bugs.webkit.org/show_bug.cgi?id=73262
+
+        Reviewed by Tony Chang.
+
+        If a gtest has it's modified changed (e.g. add FLAKY_) then it will have two
+        entries in the incremental JSON, one of the entries will have the correct data
+        from the run and the other will have dummy no-data values. Make sure to
+        always pick the one with real data.
+
+        * TestResultServer/model/jsonresults.py:
+        (JsonResults._remove_gtest_modifiers):
+        * TestResultServer/model/jsonresults_unittest.py:
+        (JsonResultsTest.test_remove_gtest_modifiers):
+
+2011-11-28  Ojan Vafai  <ojan@chromium.org>
+
+        Some of the results.json files have results/times entries at the directory level
+        https://bugs.webkit.org/show_bug.cgi?id=73261
+
+        Reviewed by Tony Chang.
+
+        This is just a bug that got introduced in a temporary push of the results server.
+        This patch repairs the broken files. After all the bots have cycled, we can simplify
+        this code to just assert that results/times are not at the directory level.
+
+        Also, when catching exceptions, log the full stacktrace.
+
+        * TestResultServer/model/jsonresults.py:
+        (_is_directory):
+        (JsonResults._load_json):
+        (JsonResults._merge_tests):
+        (JsonResults.merge):
+        * TestResultServer/model/jsonresults_unittest.py:
+        (JsonResultsTest.test_merge_directory_hierarchy_extra_results_and_times):
+
+2011-11-28  Tony Chang  <tony@chromium.org>
+
+        ews bots should pass --force to update-webkit-chromium
+        https://bugs.webkit.org/show_bug.cgi?id=73230
+
+        Reviewed by Adam Barth.
+
+        This makes it less likely for gclient changes to break the bots (e.g.,
+        if a DEPS repository moves or is switched to a branch).
+
+        Also pass --force when using |build-webkit --update-chromium| since this
+        appears to only be used by the bots.
+
+        Take 2: Add Options.non_interactive to update.py's options() method.
+
+        * Scripts/update-webkit:
+        * Scripts/webkitdirs.pm:
+        (determineIsChromium): Add --force-update to update-webkit --chromium.
+        (forceChromiumUpdate):
+        (buildChromium): Pass --force to update-webkit-chromium.
+        * Scripts/webkitpy/tool/steps/update.py:
+        (Update.run): Add --force-update if non-interactive (i.e., bots).
+        * Scripts/webkitpy/tool/steps/update_unittest.py:
+
+2011-11-28  Tony Chang  <tony@chromium.org>
+
+        Revert r101279, broke the ews and cq bots.
+
+        * Scripts/update-webkit:
+        * Scripts/webkitdirs.pm:
+        (determineIsChromium):
+        (buildChromium):
+        * Scripts/webkitpy/common/config/ports.py:
+        (WebKitPort.update_webkit_command):
+        (ChromiumPort.update_webkit_command):
+        * Scripts/webkitpy/common/config/ports_mock.py:
+        (MockPort.update_webkit_command):
+        * Scripts/webkitpy/tool/steps/update.py:
+        * Scripts/webkitpy/tool/steps/update_unittest.py: Removed.
+
+2011-11-28  Ojan Vafai  <ojan@chromium.org>
+
+        testlistjson on the test results server doesn't understand hierarchical results format
+        https://bugs.webkit.org/show_bug.cgi?id=73246
+
+        Reviewed by Tony Chang.
+
+        * TestResultServer/model/jsonresults.py:
+        (JsonResults._delete_results_and_times):
+        Instead of just getting the top-level keys, we now walk the tests tree and
+        delete the results and times values.
+
+        * TestResultServer/model/jsonresults_unittest.py:
+        Simplify the test harness to take in the same JSON format for the tests
+        that the actual results.json uses instead of something very similar but
+        needlessly different. This also allows for testing the broken case of
+        results and times values being at non-leaf level.
+
+2011-11-28  Tony Chang  <tony@chromium.org>
+
+        ews bots should pass --force to update-webkit-chromium
+        https://bugs.webkit.org/show_bug.cgi?id=73230
+
+        Reviewed by Adam Barth.
+
+        This makes it less likely for gclient changes to break the bots (e.g.,
+        if a DEPS repository moves or is switched to a branch).
+
+        Also pass --force when using |build-webkit --update-chromium| since this
+        appears to only be used by the bots.
+
+        * Scripts/update-webkit:
+        * Scripts/webkitdirs.pm:
+        (determineIsChromium): Add --force-update to update-webkit --chromium.
+        (forceChromiumUpdate):
+        (buildChromium): Pass --force to update-webkit-chromium.
+        * Scripts/webkitpy/tool/steps/update.py:
+        (Update.run): Add --force-update if non-interactive (i.e., bots).
+        * Scripts/webkitpy/tool/steps/update_unittest.py:
+
+2011-11-28  Michael Saboff  <msaboff@apple.com>
+
+        Fixed help message for --exclude-kraken to say that
+        it excludes Kraken and not SunSpider.
+
+        Rubber-stamped by Filip Pizlo.
+
+        * Scripts/bencher:
+
+2011-11-28  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r101273.
+        http://trac.webkit.org/changeset/101273
+        https://bugs.webkit.org/show_bug.cgi?id=73244
+
+        multiple test failures and timeouts (Requested by tony^work on
+        #webkit).
+
+        * DumpRenderTree/DumpRenderTree.gypi:
+        * DumpRenderTree/chromium/EventSender.cpp:
+        (EventSender::keyDown):
+        * DumpRenderTree/chromium/TestShellAndroid.cpp: Copied from Tools/DumpRenderTree/chromium/TestShellGtk.cpp.
+        (AlarmHandler):
+        (TestShell::waitTestFinished):
+        (platformInit):
+        (openStartupDialog):
+        (checkLayoutTestSystemDependencies):
+        * DumpRenderTree/chromium/TestShellGtk.cpp:
+        (AlarmHandler):
+        (setupFontconfig):
+        (TestShell::waitTestFinished):
+        (platformInit):
+        * DumpRenderTree/chromium/TestShellLinux.cpp: Removed.
+        * DumpRenderTree/chromium/TestShellStub.cpp: Removed.
+
+2011-11-28  John Yani  <vanuan@gmail.com>
+
+        new-run-webkit-tests is locale dependent
+        https://bugs.webkit.org/show_bug.cgi?id=68691
+
+        Reviewed and modified by Eric Seidel.
+
+        This is a simpler version of John's patch which I'm landing.
+        This just engages the hacks from the Host constructor on a global
+        basis.
+
+        * Scripts/webkitpy/common/host.py:
+        (Host.__init__):
+        (Host._engage_awesome_locale_hacks):
+
+2011-11-28  Fady Samuel  <fsamuel@chromium.org>
+
+        [Chromium] Fix broken DRT build for Aura Linux
+        https://bugs.webkit.org/show_bug.cgi?id=72667
+
+        Reviewed by Tony Chang.
+
+        DRT now builds for Aura Linux. This, more or less, shares the same code as Android.
+
+        The following changes have been made:
+
+          1. Renamed TestShellAndroid to TestShellLinux.
+          2. Stub code moved added in TestShellStub that will only compile on non-GTK Linux builds.
+          3. Code common to Gtk, Aura, and Android moved to TestShellLinux.
+
+        * DumpRenderTree/DumpRenderTree.gypi:
+        * DumpRenderTree/chromium/EventSender.cpp:
+        (EventSender::keyDown):
+        * DumpRenderTree/chromium/TestShellAndroid.cpp: Removed.
+        * DumpRenderTree/chromium/TestShellGtk.cpp:
+        * DumpRenderTree/chromium/TestShellLinux.cpp: Copied from Tools/DumpRenderTree/chromium/TestShellGtk.cpp.
+        (AlarmHandler):
+        (TestShell::waitTestFinished):
+        (setupFontconfig):
+        (platformInit):
+        * DumpRenderTree/chromium/TestShellStub.cpp: Added.
+        (checkLayoutTestSystemDependencies):
+        (openStartupDialog):
+
+2011-11-28  Eric Seidel  <eric@webkit.org>
+
+        Add Environment object to Host and fix the GCC smartquotes trouble seen on the commit-queue
+        https://bugs.webkit.org/show_bug.cgi?id=71983
+
+        Reviewed by Adam Barth.
+
+        We'll add more code to Environment overtime,
+        allowing us to mock out more of our direct interactions with os.environ.
+
+        This patch also makes run_command print the passed in environment.
+
+        * Scripts/webkitpy/common/host_mock.py:
+        * Scripts/webkitpy/common/system/environment.py: Copied from Tools/Scripts/webkitpy/tool/steps/build.py.
+        * Scripts/webkitpy/common/system/environment_mock.py: Copied from Tools/Scripts/webkitpy/tool/steps/build.py.
+        * Scripts/webkitpy/common/system/environment_unittest.py: Copied from Tools/Scripts/webkitpy/tool/steps/build.py.
+        * Scripts/webkitpy/common/system/executive.py:
+        * Scripts/webkitpy/common/system/executive_mock.py:
+        * Scripts/webkitpy/layout_tests/port/webkit.py:
+        * Scripts/webkitpy/layout_tests/port/webkit_unittest.py:
+        * Scripts/webkitpy/tool/commands/download_unittest.py:
+        * Scripts/webkitpy/tool/steps/build.py:
+
+2011-11-28  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] Build system fixes against V8.
+
+        Reviewed by Tor Arne Vestbø.
+
+        * qmake/mkspecs/features/webcore.prf: Get rid of old v8 cruft.
+        * qmake/mkspecs/features/wtf.prf: If requested, pull in v8 from Qt and configure
+        WTF accordingly to use v8. (WTF in the implementation needs it as well as users of WTF)
+
+2011-11-28  Kenneth Rohde Christiansen  <kenneth@webkit.org>
+
+        Make sure the useFixedLayout feature is consistently handled
+        https://bugs.webkit.org/show_bug.cgi?id=73212
+
+        Reviewed by Simon Hausmann.
+
+        The web page parameters are set to our Qt defaults and are now altered
+        in the WebKitTestRunner.
+
+        * WebKitTestRunner/qt/PlatformWebViewQt.cpp:
+        (WTR::WrapperWindow::WrapperWindow):
+
+2011-11-28  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] WTF should be built as separate static library
+        https://bugs.webkit.org/show_bug.cgi?id=73201
+
+        Reviewed by Tor Arne Vestbø.
+
+        * DumpRenderTree/qt/DumpRenderTree.pro: Require wtf.
+        * MiniBrowser/qt/BrowserWindow.cpp: Remove unnecessary config.h inclusion and
+        thus wtf dependency.
+        * WebKitTestRunner/InjectedBundle/Target.pri: Require wtf.
+        * WebKitTestRunner/Target.pri: Ditto.
+        * qmake/mkspecs/features/default_post.prf: When re-ordering the static libs
+        consider wtf, too.
+        * qmake/mkspecs/features/javascriptcore.prf: Remove WTF specific build stuff,
+        moved into wtf.prf.
+        * qmake/mkspecs/features/qtwebkit.prf: For debug builds with shared libs, also
+        link in libwtf.
+        * qmake/mkspecs/features/wtf.prf: Added. Stuff needed for building and using WTF.
+
+2011-11-28  Kentaro Hara  <haraken@chromium.org>
+
+        run-bindings-tests shows diff error for a newly added binding test
+        https://bugs.webkit.org/show_bug.cgi?id=73179
+
+        Reviewed by Adam Barth.
+
+        Currently, when we add a new binding test, say bindings/scripts/test/TestSupplemental.idl,
+        run-bindings-tests just shows diff error because reference files
+        (i.e. {V8,JS,...}TestSupplemental.h and {V8,JS,...}TestSupplemental.cpp) do not yet exist:
+
+            FAIL: (V8) V8TestSupplemental.h
+            diff: WebCore/bindings/scripts/test/V8/V8TestSupplemental.h: No such file or directory
+
+        Instead, this patch treats a non-existent reference file as an empty file and
+        shows the result of the newly added binding test, like this:
+
+            FAIL: (V8) V8TestSupplemental.h
+            --- WebCore/bindings/scripts/test/V8/V8TestSupplemental.h       1970-01-01 09:00:00.000000000 +0900
+            +++ /tmp/tmpmX2i2F/V8TestSupplemental.h 2011-11-28 11:08:34.150707677 +0900
+            @@ -0,0 +1,84 @@
+            +/*
+            +    This file is part of the WebKit open source project.
+            +    This file has been generated by generate-bindings.pl. DO NOT MODIFY!
+            +
+            (omitted)
+
+        * Scripts/run-bindings-tests:
+        (detect_changes): Just added an -N option to the diff command.
+
+2011-11-28  Martin Robinson  <mrobinson@igalia.com>
+
+        [Gtk][gtkdoc] Syntax error in Tools/gtk/generate-gtkdoc
+        https://bugs.webkit.org/show_bug.cgi?id=73165
+
+        Reviewed by Philippe Normand.
+
+        Fix some syntax errors in this script and remove an unused variable.
+
+        * gtk/generate-gtkdoc:
+        (get_webkit2_options.src_path): 
+        (get_webkit2_options):
+        (get_webkit1_options.src_path):
+
+2011-11-26  Kevin Ollivier  <kevino@theolliviers.com>
+
+        [wx] Unreviewed build fix. Enable the inspector.
+        
+        * waf/build/settings.py:
+
 2011-11-26  Martin Robinson  <mrobinson@igalia.com>
 
         Try to fix the build after r101174.

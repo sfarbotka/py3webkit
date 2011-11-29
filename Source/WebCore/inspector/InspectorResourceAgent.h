@@ -31,10 +31,11 @@
 #ifndef InspectorResourceAgent_h
 #define InspectorResourceAgent_h
 
+#include "InspectorBaseAgent.h"
 #include "InspectorFrontend.h"
 #include "PlatformString.h"
 
-#include <wtf/PassRefPtr.h>
+#include <wtf/PassOwnPtr.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 
@@ -72,16 +73,16 @@ class WebSocketHandshakeResponse;
 
 typedef String ErrorString;
 
-class InspectorResourceAgent : public RefCounted<InspectorResourceAgent> {
+class InspectorResourceAgent : public InspectorBaseAgent<InspectorResourceAgent> {
 public:
-    static PassRefPtr<InspectorResourceAgent> create(InstrumentingAgents* instrumentingAgents, InspectorPageAgent* pageAgent, InspectorClient* client, InspectorState* state)
+    static PassOwnPtr<InspectorResourceAgent> create(InstrumentingAgents* instrumentingAgents, InspectorPageAgent* pageAgent, InspectorClient* client, InspectorState* state)
     {
-        return adoptRef(new InspectorResourceAgent(instrumentingAgents, pageAgent, client, state));
+        return adoptPtr(new InspectorResourceAgent(instrumentingAgents, pageAgent, client, state));
     }
 
-    void setFrontend(InspectorFrontend*);
-    void clearFrontend();
-    void restore();
+    virtual void setFrontend(InspectorFrontend*);
+    virtual void clearFrontend();
+    virtual void restore();
 
     static PassRefPtr<InspectorResourceAgent> restore(Page*, InspectorState*, InspectorFrontend*);
 
@@ -138,10 +139,8 @@ private:
 
     void enable();
 
-    InstrumentingAgents* m_instrumentingAgents;
     InspectorPageAgent* m_pageAgent;
     InspectorClient* m_client;
-    InspectorState* m_state;
     InspectorFrontend::Network* m_frontend;
     String m_userAgentOverride;
     OwnPtr<NetworkResourcesData> m_resourcesData;

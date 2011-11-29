@@ -86,12 +86,15 @@ TreeOutline.prototype.appendChild = function(child)
     if (!this._childrenListNode) {
         this._childrenListNode = this.treeOutline._childrenListNode.ownerDocument.createElement("ol");
         this._childrenListNode.parentTreeElement = this;
-        this._childrenListNode.addStyleClass("children");
+        this._childrenListNode.classList.add("children");
         if (this.hidden)
-            this._childrenListNode.addStyleClass("hidden");
+            this._childrenListNode.classList.add("hidden");
     }
 
     child._attach();
+
+    if (this.treeOutline.onadd)
+        this.treeOutline.onadd(child);
 }
 
 TreeOutline.prototype.insertChild = function(child, index)
@@ -134,12 +137,15 @@ TreeOutline.prototype.insertChild = function(child, index)
     if (!this._childrenListNode) {
         this._childrenListNode = this.treeOutline._childrenListNode.ownerDocument.createElement("ol");
         this._childrenListNode.parentTreeElement = this;
-        this._childrenListNode.addStyleClass("children");
+        this._childrenListNode.classList.add("children");
         if (this.hidden)
-            this._childrenListNode.addStyleClass("hidden");
+            this._childrenListNode.classList.add("hidden");
     }
 
     child._attach();
+
+    if (this.treeOutline.onadd)
+        this.treeOutline.onadd(child);
 }
 
 TreeOutline.prototype.removeChildAtIndex = function(childIndex)
@@ -335,6 +341,15 @@ TreeOutline.prototype.findTreeElement = function(representedObject, isAncestor, 
     return this.getCachedTreeElement(representedObject);
 }
 
+TreeOutline.prototype._treeElementDidChange = function(treeElement)
+{
+    if (treeElement.treeOutline !== this)
+        return;
+
+    if (this.onchange)
+        this.onchange(treeElement);
+}
+
 TreeOutline.prototype.treeElementFromPoint = function(x, y)
 {
     var node = this._childrenListNode.ownerDocument.elementFromPoint(x, y);
@@ -378,6 +393,8 @@ TreeOutline.prototype._treeKeyDown = function(event)
             handled = true;
             if (this.selectedTreeElement.parent.selectable) {
                 nextSelectedElement = this.selectedTreeElement.parent;
+                while (nextSelectedElement && !nextSelectedElement.selectable)
+                    nextSelectedElement = nextSelectedElement.parent;
                 handled = nextSelectedElement ? true : false;
             } else if (this.selectedTreeElement.parent)
                 this.selectedTreeElement.parent.collapse();
@@ -390,6 +407,8 @@ TreeOutline.prototype._treeKeyDown = function(event)
             handled = true;
             if (this.selectedTreeElement.expanded) {
                 nextSelectedElement = this.selectedTreeElement.children[0];
+                while (nextSelectedElement && !nextSelectedElement.selectable)
+                    nextSelectedElement = nextSelectedElement.nextSibling;
                 handled = nextSelectedElement ? true : false;
             } else {
                 if (event.altKey)
@@ -468,6 +487,7 @@ function TreeElement(title, representedObject, hasChildren)
     }
 
     this._hidden = false;
+    this._selectable = true;
     this.expanded = false;
     this.selected = false;
     this.hasChildren = hasChildren;
@@ -480,8 +500,17 @@ function TreeElement(title, representedObject, hasChildren)
 }
 
 TreeElement.prototype = {
-    selectable: true,
     arrowToggleWidth: 10,
+
+    get selectable() {
+        if (this._hidden)
+            return false;
+        return this._selectable;
+    },
+
+    set selectable(x) {
+        this._selectable = x;
+    },
 
     get listItemElement() {
         return this._listItemNode;
@@ -498,15 +527,7 @@ TreeElement.prototype = {
     set title(x) {
         this._title = x;
         this._setListItemNodeContent();
-    },
-
-    get titleHTML() {
-        return this._titleHTML;
-    },
-
-    set titleHTML(x) {
-        this._titleHTML = x;
-        this._setListItemNodeContent();
+        this.didChange();
     },
 
     get tooltip() {
@@ -517,6 +538,7 @@ TreeElement.prototype = {
         this._tooltip = x;
         if (this._listItemNode)
             this._listItemNode.title = x ? x : "";
+        this.didChange();
     },
 
     get hasChildren() {
@@ -533,11 +555,13 @@ TreeElement.prototype = {
             return;
 
         if (x)
-            this._listItemNode.addStyleClass("parent");
+            this._listItemNode.classList.add("parent");
         else {
-            this._listItemNode.removeStyleClass("parent");
+            this._listItemNode.classList.remove("parent");
             this.collapse();
         }
+
+        this.didChange();
     },
 
     get hidden() {
@@ -552,14 +576,14 @@ TreeElement.prototype = {
 
         if (x) {
             if (this._listItemNode)
-                this._listItemNode.addStyleClass("hidden");
+                this._listItemNode.classList.add("hidden");
             if (this._childrenListNode)
-                this._childrenListNode.addStyleClass("hidden");
+                this._childrenListNode.classList.add("hidden");
         } else {
             if (this._listItemNode)
-                this._listItemNode.removeStyleClass("hidden");
+                this._listItemNode.classList.remove("hidden");
             if (this._childrenListNode)
-                this._childrenListNode.removeStyleClass("hidden");
+                this._childrenListNode.classList.remove("hidden");
         }
     },
 
@@ -573,22 +597,35 @@ TreeElement.prototype = {
             this.expand();
     },
 
+    _fireDidChange: function()
+    {
+        delete this._didChangeTimeoutIdentifier;
+
+        if (this.treeOutline)
+            this.treeOutline._treeElementDidChange(this);
+    },
+
+    didChange: function()
+    {
+        if (!this.treeOutline)
+            return;
+
+        // Prevent telling the TreeOutline multiple times in a row by delaying it with a timeout.
+        if (!this._didChangeTimeoutIdentifier)
+            this._didChangeTimeoutIdentifier = setTimeout(this._fireDidChange.bind(this), 0);
+    },
+
     _setListItemNodeContent: function()
     {
         if (!this._listItemNode)
             return;
 
-        if (!this._titleHTML && !this._title)
-            this._listItemNode.removeChildren();
-        else if (typeof this._titleHTML === "string")
-            this._listItemNode.innerHTML = this._titleHTML;
-        else if (typeof this._title === "string")
+        if (typeof this._title === "string")
             this._listItemNode.textContent = this._title;
         else {
             this._listItemNode.removeChildren();
-            if (this._title.parentNode)
-                this._title.parentNode.removeChild(this._title);
-            this._listItemNode.appendChild(this._title);
+            if (this._title)
+                this._listItemNode.appendChild(this._title);
         }
     }
 }
@@ -612,13 +649,13 @@ TreeElement.prototype._attach = function()
         this._listItemNode.title = this._tooltip ? this._tooltip : "";
 
         if (this.hidden)
-            this._listItemNode.addStyleClass("hidden");
+            this._listItemNode.classList.add("hidden");
         if (this.hasChildren)
-            this._listItemNode.addStyleClass("parent");
+            this._listItemNode.classList.add("parent");
         if (this.expanded)
-            this._listItemNode.addStyleClass("expanded");
+            this._listItemNode.classList.add("expanded");
         if (this.selected)
-            this._listItemNode.addStyleClass("selected");
+            this._listItemNode.classList.add("selected");
 
         this._listItemNode.addEventListener("mousedown", TreeElement.treeElementMouseDown, false);
         this._listItemNode.addEventListener("click", TreeElement.treeElementToggled, false);
@@ -700,9 +737,9 @@ TreeElement.treeElementDoubleClicked = function(event)
 TreeElement.prototype.collapse = function()
 {
     if (this._listItemNode)
-        this._listItemNode.removeStyleClass("expanded");
+        this._listItemNode.classList.remove("expanded");
     if (this._childrenListNode)
-        this._childrenListNode.removeStyleClass("expanded");
+        this._childrenListNode.classList.remove("expanded");
 
     this.expanded = false;
     if (this.treeOutline)
@@ -727,16 +764,24 @@ TreeElement.prototype.expand = function()
     if (!this.hasChildren || (this.expanded && !this._shouldRefreshChildren && this._childrenListNode))
         return;
 
+    // Set this before onpopulate. Since onpopulate can add elements and call onadd, this makes
+    // sure the expanded flag is true before calling those functions. This prevents the possibility
+    // of an infinite loop if onpopulate or onadd were to call expand.
+
+    this.expanded = true;
+    if (this.treeOutline)
+        this.treeOutline._treeElementsExpandedState[this.identifier] = true;
+
     if (this.treeOutline && (!this._childrenListNode || this._shouldRefreshChildren)) {
         if (this._childrenListNode && this._childrenListNode.parentNode)
             this._childrenListNode.parentNode.removeChild(this._childrenListNode);
 
         this._childrenListNode = this.treeOutline._childrenListNode.ownerDocument.createElement("ol");
         this._childrenListNode.parentTreeElement = this;
-        this._childrenListNode.addStyleClass("children");
+        this._childrenListNode.classList.add("children");
 
         if (this.hidden)
-            this._childrenListNode.addStyleClass("hidden");
+            this._childrenListNode.classList.add("hidden");
 
         this.onpopulate();
 
@@ -747,17 +792,13 @@ TreeElement.prototype.expand = function()
     }
 
     if (this._listItemNode) {
-        this._listItemNode.addStyleClass("expanded");
+        this._listItemNode.classList.add("expanded");
         if (this._childrenListNode && this._childrenListNode.parentNode != this._listItemNode.parentNode)
             this.parent._childrenListNode.insertBefore(this._childrenListNode, this._listItemNode.nextSibling);
     }
 
     if (this._childrenListNode)
-        this._childrenListNode.addStyleClass("expanded");
-
-    this.expanded = true;
-    if (this.treeOutline)
-        this.treeOutline._treeElementsExpandedState[this.identifier] = true;
+        this._childrenListNode.classList.add("expanded");
 
     if (this.onexpand)
         this.onexpand(this);
@@ -849,7 +890,7 @@ TreeElement.prototype.select = function(omitFocus, selectedByUser)
         return;
     this.treeOutline.selectedTreeElement = this;
     if (this._listItemNode)
-        this._listItemNode.addStyleClass("selected");
+        this._listItemNode.classList.add("selected");
 
     if (this.onselect)
         this.onselect(this, selectedByUser);
@@ -875,7 +916,7 @@ TreeElement.prototype.deselect = function(supressOnDeselect)
     this.selected = false;
     this.treeOutline.selectedTreeElement = null;
     if (this._listItemNode)
-        this._listItemNode.removeStyleClass("selected");
+        this._listItemNode.classList.remove("selected");
 
     if (this.ondeselect && !supressOnDeselect)
         this.ondeselect(this);
@@ -888,13 +929,13 @@ TreeElement.prototype.onpopulate = function()
 }
 
 /**
- * @param {boolean} skipHidden
+ * @param {boolean} skipUnrevealed
  * @param {(TreeOutline|TreeElement)=} stayWithin
  * @param {boolean=} dontPopulate
  * @param {Object=} info
  * @return {TreeElement}
  */
-TreeElement.prototype.traverseNextTreeElement = function(skipHidden, stayWithin, dontPopulate, info)
+TreeElement.prototype.traverseNextTreeElement = function(skipUnrevealed, stayWithin, dontPopulate, info)
 {
     if (!dontPopulate && this.hasChildren)
         this.onpopulate();
@@ -902,8 +943,8 @@ TreeElement.prototype.traverseNextTreeElement = function(skipHidden, stayWithin,
     if (info)
         info.depthChange = 0;
 
-    var element = skipHidden ? (this.revealed() ? this.children[0] : null) : this.children[0];
-    if (element && (!skipHidden || (skipHidden && this.expanded))) {
+    var element = skipUnrevealed ? (this.revealed() ? this.children[0] : null) : this.children[0];
+    if (element && (!skipUnrevealed || (skipUnrevealed && this.expanded))) {
         if (info)
             info.depthChange = 1;
         return element;
@@ -912,12 +953,12 @@ TreeElement.prototype.traverseNextTreeElement = function(skipHidden, stayWithin,
     if (this === stayWithin)
         return null;
 
-    element = skipHidden ? (this.revealed() ? this.nextSibling : null) : this.nextSibling;
+    element = skipUnrevealed ? (this.revealed() ? this.nextSibling : null) : this.nextSibling;
     if (element)
         return element;
 
     element = this;
-    while (element && !element.root && !(skipHidden ? (element.revealed() ? element.nextSibling : null) : element.nextSibling) && element.parent !== stayWithin) {
+    while (element && !element.root && !(skipUnrevealed ? (element.revealed() ? element.nextSibling : null) : element.nextSibling) && element.parent !== stayWithin) {
         if (info)
             info.depthChange -= 1;
         element = element.parent;
@@ -926,24 +967,24 @@ TreeElement.prototype.traverseNextTreeElement = function(skipHidden, stayWithin,
     if (!element)
         return null;
 
-    return (skipHidden ? (element.revealed() ? element.nextSibling : null) : element.nextSibling);
+    return (skipUnrevealed ? (element.revealed() ? element.nextSibling : null) : element.nextSibling);
 }
 
 /**
- * @param {boolean} skipHidden
+ * @param {boolean} skipUnrevealed
  * @param {boolean=} dontPopulate
  * @return {TreeElement}
  */
-TreeElement.prototype.traversePreviousTreeElement = function(skipHidden, dontPopulate)
+TreeElement.prototype.traversePreviousTreeElement = function(skipUnrevealed, dontPopulate)
 {
-    var element = skipHidden ? (this.revealed() ? this.previousSibling : null) : this.previousSibling;
+    var element = skipUnrevealed ? (this.revealed() ? this.previousSibling : null) : this.previousSibling;
     if (!dontPopulate && element && element.hasChildren)
         element.onpopulate();
 
-    while (element && (skipHidden ? (element.revealed() && element.expanded ? element.children[element.children.length - 1] : null) : element.children[element.children.length - 1])) {
+    while (element && (skipUnrevealed ? (element.revealed() && element.expanded ? element.children[element.children.length - 1] : null) : element.children[element.children.length - 1])) {
         if (!dontPopulate && element.hasChildren)
             element.onpopulate();
-        element = (skipHidden ? (element.revealed() && element.expanded ? element.children[element.children.length - 1] : null) : element.children[element.children.length - 1]);
+        element = (skipUnrevealed ? (element.revealed() && element.expanded ? element.children[element.children.length - 1] : null) : element.children[element.children.length - 1]);
     }
 
     if (element)

@@ -1261,6 +1261,8 @@ void WebPageProxy::setUseFixedLayout(bool fixed)
     if (!isValid())
         return;
 
+    // This check is fine as the value is initialized in the web
+    // process as part of the creation parameters.
     if (fixed == m_useFixedLayout)
         return;
 
@@ -3298,6 +3300,13 @@ void WebPageProxy::runModal()
 void WebPageProxy::notifyScrollerThumbIsVisibleInRect(const IntRect& scrollerThumb)
 {
     m_visibleScrollerThumbRect = scrollerThumb;
+}
+
+void WebPageProxy::recommendedScrollbarStyleDidChange(int32_t newStyle)
+{
+#if PLATFORM(MAC)
+    m_pageClient->recommendedScrollbarStyleDidChange(newStyle);
+#endif
 }
 
 void WebPageProxy::didChangeScrollbarsForMainFrame(bool hasHorizontalScrollbar, bool hasVerticalScrollbar)

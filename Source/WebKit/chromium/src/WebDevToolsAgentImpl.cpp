@@ -219,10 +219,6 @@ void WebDevToolsAgentImpl::detach()
     m_attached = false;
 }
 
-void WebDevToolsAgentImpl::frontendLoaded()
-{
-}
-
 void WebDevToolsAgentImpl::didNavigate()
 {
     ClientMessageLoopAdapter::didNavigate();
@@ -265,6 +261,10 @@ void WebDevToolsAgentImpl::inspectorDestroyed()
 }
 
 void WebDevToolsAgentImpl::openInspectorFrontend(InspectorController*)
+{
+}
+
+void WebDevToolsAgentImpl::closeInspectorFrontend()
 {
 }
 
@@ -385,7 +385,7 @@ WebString WebDevToolsAgent::disconnectEventAsText()
         String m_message;
     } channel;
     InspectorFrontend::Inspector inspector(&channel);
-    inspector.disconnectFromBackend();
+    inspector.disconnectFromWorker();
     return channel.m_message;
 }
 

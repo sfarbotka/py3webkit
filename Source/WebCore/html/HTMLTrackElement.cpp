@@ -43,6 +43,7 @@ using namespace HTMLNames;
 
 inline HTMLTrackElement::HTMLTrackElement(const QualifiedName& tagName, Document* document)
     : HTMLElement(tagName, document)
+    , m_readyState(HTMLTrackElement::NONE)
 {
     LOG(Media, "HTMLTrackElement::HTMLTrackElement - %p", this);
     ASSERT(hasTagName(trackTag));
@@ -90,6 +91,9 @@ void HTMLTrackElement::parseMappedAttribute(Attribute* attribute)
 void HTMLTrackElement::attributeChanged(Attribute* attr, bool preserveDecls)
 {
     HTMLElement::attributeChanged(attr, preserveDecls);
+
+    if (!RuntimeEnabledFeatures::webkitVideoTrackEnabled())
+        return;
 
     const QualifiedName& attrName = attr->name();
     if (attrName == srcAttr) {
@@ -209,14 +213,17 @@ bool HTMLTrackElement::canLoadUrl(LoadableTextTrack*, const KURL& url)
 
 void HTMLTrackElement::didCompleteLoad(LoadableTextTrack*, bool loadingFailed)
 {
+    loadingFailed ? setReadyState(HTMLTrackElement::TRACK_ERROR) : setReadyState(HTMLTrackElement::LOADED);
+
     ExceptionCode ec = 0;
     dispatchEvent(Event::create(loadingFailed ? eventNames().errorEvent : eventNames().loadEvent, false, false), ec);
 }
-    
-void HTMLTrackElement::textTrackReadyStateChanged(TextTrack* track)
+
+void HTMLTrackElement::setReadyState(ReadyState state)
 {
+    m_readyState = state;
     if (HTMLMediaElement* parent = mediaElement())
-        return parent->textTrackReadyStateChanged(track);
+        return parent->textTrackReadyStateChanged(m_track.get());
 }
     
 void HTMLTrackElement::textTrackKindChanged(TextTrack* track)

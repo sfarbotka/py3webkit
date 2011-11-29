@@ -693,13 +693,6 @@ void WebChromeClient::scheduleCompositingLayerSync()
 
 #endif
 
-#if ENABLE(NOTIFICATIONS)
-WebCore::NotificationPresenter* WebChromeClient::notificationPresenter() const
-{
-    return 0;
-}
-#endif
-
 #if ENABLE(TOUCH_EVENTS)
 void WebChromeClient::needTouchEvents(bool needTouchEvents)
 {
@@ -778,6 +771,11 @@ void WebChromeClient::didCompleteAnimatedScroll() const
 void WebChromeClient::notifyScrollerThumbIsVisibleInRect(const IntRect& scrollerThumb)
 {
     m_page->send(Messages::WebPageProxy::NotifyScrollerThumbIsVisibleInRect(scrollerThumb));
+}
+
+void WebChromeClient::recommendedScrollbarStyleDidChange(int32_t newStyle)
+{
+    m_page->send(Messages::WebPageProxy::RecommendedScrollbarStyleDidChange(newStyle));
 }
 
 bool WebChromeClient::shouldRubberBandInDirection(WebCore::ScrollDirection direction) const

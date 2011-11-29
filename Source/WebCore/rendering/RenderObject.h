@@ -367,7 +367,7 @@ public:
     }
 
     bool childrenInline() const { return m_childrenInline; }
-    void setChildrenInline(bool b = true) { m_childrenInline = b; }
+    void setChildrenInline(bool b) { m_childrenInline = b; }
     bool hasColumns() const { return m_hasColumns; }
     void setHasColumns(bool b = true) { m_hasColumns = b; }
 
@@ -714,6 +714,7 @@ public:
     // Given a rect in the object's coordinate space, compute a rect suitable for repainting
     // that rect in the coordinate space of repaintContainer.
     virtual void computeRectForRepaint(RenderBoxModelObject* repaintContainer, LayoutRect&, bool fixed = false) const;
+    virtual void computeFloatRectForRepaint(RenderBoxModelObject* repaintContainer, FloatRect& repaintRect, bool fixed = false) const;
 
     // If multiple-column layout results in applying an offset to the given point, add the same
     // offset to the given size.

@@ -183,10 +183,6 @@ private:
     virtual void scheduleCompositingLayerSync() OVERRIDE;
 #endif
 
-#if ENABLE(NOTIFICATIONS)
-    virtual WebCore::NotificationPresenter* notificationPresenter() const OVERRIDE;
-#endif
-
 #if ENABLE(TOUCH_EVENTS)
     virtual void needTouchEvents(bool) OVERRIDE;
 #endif
@@ -214,6 +210,7 @@ private:
     virtual void didCompleteAnimatedScroll() const OVERRIDE;
 
     virtual void notifyScrollerThumbIsVisibleInRect(const WebCore::IntRect&) OVERRIDE;
+    virtual void recommendedScrollbarStyleDidChange(int32_t newStyle) OVERRIDE;
     virtual bool shouldRubberBandInDirection(WebCore::ScrollDirection) const OVERRIDE;
     
     virtual void numWheelEventHandlersChanged(unsigned) OVERRIDE;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2011 Google Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -28,51 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebThemeEngine_h
-#define WebThemeEngine_h
-
-#include "../WebCanvas.h"
-
-namespace WebKit {
-
-struct WebRect;
-
-class WebThemeEngine {
-public:
-    enum State {
-        StateDisabled,
-        StateInactive,
-        StateActive,
-        StatePressed,
-    };
-
-    enum Size {
-        SizeRegular,
-        SizeSmall,
-    };
-
-    enum ScrollbarOrientation {
-        ScrollbarOrientationHorizontal,
-        ScrollbarOrientationVertical,
-    };
-
-    enum ScrollbarParent {
-        ScrollbarParentScrollView,
-        ScrollbarParentRenderLayer,
-    };
-
-    struct ScrollbarInfo {
-        ScrollbarOrientation orientation;
-        ScrollbarParent parent;
-        int maxValue;
-        int currentValue;
-        int visibleSize;
-        int totalSize;
-    };
-
-    virtual void paintScrollbarThumb(WebCanvas*, State, Size, const WebRect&, const ScrollbarInfo&) {}
-};
-
-} // namespace WebKit
-
+#ifndef WEBKIT_MIGRATE_HEADERS_TO_PLATFORM
+#include "../platform/mac/WebThemeEngine.h"
 #endif

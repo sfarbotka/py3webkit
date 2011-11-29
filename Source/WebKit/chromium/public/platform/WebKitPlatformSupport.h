@@ -50,28 +50,29 @@ typedef void *HANDLE;
 
 namespace WebKit {
 
-class WebApplicationCacheHost;
-class WebApplicationCacheHostClient;
+class WebApplicationCacheHost; // FIXME: Does this belong in platform?
+class WebApplicationCacheHostClient; // FIXME: Does this belong in platform?
 class WebBlobRegistry;
 class WebClipboard;
 class WebCookieJar;
 class WebFileSystem;
 class WebFileUtilities;
 class WebGraphicsContext3D;
-class WebIDBFactory;
-class WebIDBKey;
-class WebMessagePortChannel;
+class WebIDBFactory; // FIXME: Does this belong in platform?
+class WebIDBKey; // FIXME: Does this belong in platform?
+class WebMessagePortChannel; // FIXME: Does this belong in platform?
 class WebMimeRegistry;
 class WebPeerConnectionHandler;
 class WebPeerConnectionHandlerClient;
-class WebPluginListBuilder;
+class WebPluginListBuilder; // FIXME: Does this belong in platform?
 class WebSandboxSupport;
-class WebSharedWorkerRepository;
+class WebSharedWorkerRepository; // FIXME: Does this belong in platform?
 class WebSocketStreamHandle;
-class WebStorageNamespace;
+class WebStorageNamespace; // FIXME: Does this belong in platform?
 class WebThemeEngine;
 class WebThread;
 class WebURLLoader;
+class WebWorkerRunLoop;
 
 class WebKitPlatformSupport {
 public:
@@ -333,6 +334,9 @@ public:
 
     // May return null if WebRTC functionality is not avaliable or out of resources.
     virtual WebPeerConnectionHandler* createPeerConnectionHandler(WebPeerConnectionHandlerClient*) { return 0; }
+
+    virtual void didStartWorkerRunLoop(const WebWorkerRunLoop&) { }
+    virtual void didStopWorkerRunLoop(const WebWorkerRunLoop&) { }
 
 protected:
     ~WebKitPlatformSupport() { }
