@@ -23,6 +23,7 @@
 #include "CSSMutableStyleDeclaration.h"
 
 #include "CSSImageValue.h"
+#include "CSSInlineStyleDeclaration.h"
 #include "CSSParser.h"
 #include "CSSPropertyLonghand.h"
 #include "CSSPropertyNames.h"
@@ -65,14 +66,15 @@ public:
         if (!s_currentDecl->isInlineStyleDeclaration())
             return;
 
-        s_mutationRecipients = MutationObserverInterestGroup::createForAttributesMutation(s_currentDecl->element(), HTMLNames::styleAttr);
+        CSSInlineStyleDeclaration* inlineDecl = toCSSInlineStyleDeclaration(s_currentDecl);
+        s_mutationRecipients = MutationObserverInterestGroup::createForAttributesMutation(inlineDecl->element(), HTMLNames::styleAttr);
         if (s_mutationRecipients->isEmpty()) {
             s_mutationRecipients.clear();
             return;
         }
 
-        AtomicString oldValue = s_mutationRecipients->isOldValueRequested() ? s_currentDecl->element()->getAttribute(HTMLNames::styleAttr) : nullAtom;
-        s_mutation = MutationRecord::createAttributes(s_currentDecl->element(), HTMLNames::styleAttr, oldValue);
+        AtomicString oldValue = s_mutationRecipients->isOldValueRequested() ? inlineDecl->element()->getAttribute(HTMLNames::styleAttr) : nullAtom;
+        s_mutation = MutationRecord::createAttributes(inlineDecl->element(), HTMLNames::styleAttr, oldValue);
     }
 
     ~StyleAttributeMutationScope()
@@ -894,23 +896,9 @@ String CSSMutableStyleDeclaration::cssText() const
 
 void CSSMutableStyleDeclaration::setCssText(const String& text, ExceptionCode& ec)
 {
-    ASSERT(!m_iteratorCount);
-
-#if ENABLE(MUTATION_OBSERVERS)
-    StyleAttributeMutationScope mutationScope(this);
-#endif
-
     ec = 0;
-    m_properties.clear();
-    CSSParser parser(useStrictParsing());
-    parser.parseDeclaration(this, text);
-
-#if ENABLE(MUTATION_OBSERVERS)
-    mutationScope.enqueueMutationRecord();
-#endif
-
     // FIXME: Detect syntax errors and set ec.
-    setNeedsStyleRecalc();
+    parseDeclaration(text);
 }
 
 void CSSMutableStyleDeclaration::merge(const CSSMutableStyleDeclaration* other, bool argOverridesOnConflict)
@@ -1055,6 +1043,13 @@ CSSProperty* CSSMutableStyleDeclaration::findPropertyWithId(int propertyID)
         if (propertyID == m_properties[n].m_id)
             return &m_properties[n];
     }
+    return 0;
+}
+
+CSSStyleSheet* CSSElementStyleDeclaration::styleSheet() const
+{
+    if (m_element && m_element->document())
+        return m_element->document()->elementSheet();
     return 0;
 }
 

@@ -61,10 +61,10 @@ static const char scriptsPanelName[] = "scripts";
 static const char consolePanelName[] = "console";
 static const char profilesPanelName[] = "profiles";
 
-InspectorAgent::InspectorAgent(Page* page, InjectedScriptManager* injectedScriptManager, InstrumentingAgents* instrumentingAgents)
-    : m_inspectedPage(page)
+InspectorAgent::InspectorAgent(Page* page, InjectedScriptManager* injectedScriptManager, InstrumentingAgents* instrumentingAgents, InspectorState* state)
+    : InspectorBaseAgent<InspectorAgent>("Inspector", instrumentingAgents, state)
+    , m_inspectedPage(page)
     , m_frontend(0)
-    , m_instrumentingAgents(instrumentingAgents)
     , m_injectedScriptManager(injectedScriptManager)
     , m_canIssueEvaluateForTestInFrontend(false)
     , m_didCommitLoadFired(false)
@@ -76,20 +76,9 @@ InspectorAgent::InspectorAgent(Page* page, InjectedScriptManager* injectedScript
 InspectorAgent::~InspectorAgent()
 {
     m_instrumentingAgents->setInspectorAgent(0);
-
-    // These should have been cleared in inspectedPageDestroyed().
-    ASSERT(!m_inspectedPage);
 }
 
-void InspectorAgent::inspectedPageDestroyed()
-{
-    if (m_frontend)
-        m_frontend->inspector()->disconnectFromBackend();
-    ASSERT(m_inspectedPage);
-    m_inspectedPage = 0;
-}
-
-void InspectorAgent::restore()
+void InspectorAgent::emitCommitLoadIfNeeded()
 {
     if (m_didCommitLoadFired)
         InspectorInstrumentation::didCommitLoad(m_inspectedPage->mainFrame(), m_inspectedPage->mainFrame()->loader()->documentLoader());
@@ -166,7 +155,7 @@ private:
     virtual void performTask(ScriptExecutionContext* scriptContext)
     {
         if (scriptContext->isDocument()) {
-            if (InspectorAgent* inspectorAgent = static_cast<Document*>(scriptContext)->page()->inspectorController()->m_inspectorAgent.get())
+            if (InspectorAgent* inspectorAgent = static_cast<Document*>(scriptContext)->page()->inspectorController()->m_inspectorAgent)
                 inspectorAgent->postWorkerNotificationToFrontend(*m_worker, m_action);
         }
     }

@@ -48,11 +48,10 @@ namespace ApplicationCacheAgentState {
 static const char applicationCacheAgentEnabled[] = "applicationCacheAgentEnabled";
 }
 
-InspectorApplicationCacheAgent::InspectorApplicationCacheAgent(InstrumentingAgents* instrumentingAgents, InspectorPageAgent* pageAgent, InspectorState* state)
-    : m_instrumentingAgents(instrumentingAgents)
+InspectorApplicationCacheAgent::InspectorApplicationCacheAgent(InstrumentingAgents* instrumentingAgents, InspectorState* state, InspectorPageAgent* pageAgent)
+    : InspectorBaseAgent<InspectorApplicationCacheAgent>("ApplicationCache", instrumentingAgents, state)
     , m_pageAgent(pageAgent)
     , m_frontend(0)
-    , m_state(state)
 {
 }
 

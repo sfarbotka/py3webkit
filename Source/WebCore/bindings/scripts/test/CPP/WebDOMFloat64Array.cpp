@@ -21,7 +21,11 @@
 #include "config.h"
 #include "WebDOMFloat64Array.h"
 
+#include "Float32Array.h"
 #include "Float64Array.h"
+#include "Int32Array.h"
+#include "WebDOMFloat32Array.h"
+#include "WebDOMInt32Array.h"
 #include "WebExceptionHandler.h"
 #include <wtf/GetPtr.h>
 #include <wtf/RefPtr.h>
@@ -39,6 +43,14 @@ WebDOMFloat64Array::WebDOMFloat64Array(WTF::Float64Array* impl)
 WTF::Float64Array* WebDOMFloat64Array::impl() const
 {
     return static_cast<WTF::Float64Array*>(WebDOMArrayBufferView::impl());
+}
+
+WebDOMInt32Array WebDOMFloat64Array::foo(const WebDOMFloat32Array& array)
+{
+    if (!impl())
+        return WebDOMInt32Array();
+
+    return toWebKit(WTF::getPtr(impl()->foo(toWebCore(array))));
 }
 
 WTF::Float64Array* toWebCore(const WebDOMFloat64Array& wrapper)

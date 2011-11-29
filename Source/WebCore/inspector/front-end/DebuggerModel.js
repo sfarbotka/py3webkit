@@ -89,14 +89,20 @@ WebInspector.DebuggerModel.prototype = {
     {
         /**
          * @param {Protocol.Error} error
-         * @param {Array.<string>} capabilities
+         * @param {Array.<MetaAgent.DomainCapabilities>} capabilities
          */
         function callback(error, capabilities)
         {
-            for (var i = 0; i < capabilities.length; ++i)
-                this._capabilitiesObject[capabilities[i]] = true;
+            for (var i = 0; i < capabilities.length; ++i) {
+                if (capabilities[i].domainName !== "Debugger")
+                    continue;
+
+                var capabilitiesList = capabilities[i].capabilities;
+                for (var j = 0; j < capabilitiesList.length; ++j)
+                    this._capabilitiesObject[capabilitiesList[j]] = true;
+            }
         }
-        DebuggerAgent.getCapabilities(callback.bind(this));
+        MetaAgent.getCapabilities(["Debugger"], callback.bind(this));
         DebuggerAgent.enable(this._debuggerWasEnabled.bind(this));
     },
 

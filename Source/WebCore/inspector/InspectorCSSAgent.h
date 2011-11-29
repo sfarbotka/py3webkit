@@ -26,6 +26,7 @@
 #define InspectorCSSAgent_h
 
 #include "CSSSelector.h"
+#include "InspectorBaseAgent.h"
 #include "InspectorDOMAgent.h"
 #include "InspectorStyleSheet.h"
 #include "InspectorValues.h"
@@ -51,17 +52,20 @@ class Node;
 
 #if ENABLE(INSPECTOR)
 
-class InspectorCSSAgent : public InspectorDOMAgent::DOMListener {
+class InspectorCSSAgent : public InspectorBaseAgent<InspectorCSSAgent>, public InspectorDOMAgent::DOMListener {
     WTF_MAKE_NONCOPYABLE(InspectorCSSAgent);
 public:
     static CSSStyleSheet* parentStyleSheet(CSSRule*);
     static CSSStyleRule* asCSSStyleRule(CSSRule*);
 
-    InspectorCSSAgent(InstrumentingAgents*, InspectorDOMAgent*);
+    static PassOwnPtr<InspectorCSSAgent> create(InstrumentingAgents* instrumentingAgents, InspectorState* state, InspectorDOMAgent* domAgent)
+    {
+        return adoptPtr(new InspectorCSSAgent(instrumentingAgents, state, domAgent));
+    }
     ~InspectorCSSAgent();
 
     bool forcePseudoState(Element*, CSSSelector::PseudoType);
-    void clearFrontend();
+    virtual void clearFrontend();
     void reset();
 
     void getComputedStyleForNode(ErrorString*, int nodeId, const RefPtr<InspectorArray>* forcedPseudoClasses, RefPtr<InspectorArray>* style);
@@ -78,12 +82,12 @@ public:
     void getSupportedCSSProperties(ErrorString*, RefPtr<InspectorArray>* result);
 
 private:
+    InspectorCSSAgent(InstrumentingAgents*, InspectorState*, InspectorDOMAgent*);
+
     typedef HashMap<String, RefPtr<InspectorStyleSheet> > IdToInspectorStyleSheet;
     typedef HashMap<CSSStyleSheet*, RefPtr<InspectorStyleSheet> > CSSStyleSheetToInspectorStyleSheet;
     typedef HashMap<Node*, RefPtr<InspectorStyleSheetForInlineStyle> > NodeToInspectorStyleSheet; // bogus "stylesheets" with elements' inline styles
     typedef HashMap<RefPtr<Document>, RefPtr<InspectorStyleSheet> > DocumentToViaInspectorStyleSheet; // "via inspector" stylesheets
-
-    static Element* inlineStyleElement(CSSStyleDeclaration*);
 
     void recalcStyleForPseudoStateIfNeeded(Element*, InspectorArray* forcedPseudoClasses);
     InspectorStyleSheetForInlineStyle* asInspectorStyleSheet(Element* element);
@@ -105,7 +109,6 @@ private:
 
     void clearPseudoState(bool recalcStyles);
 
-    InstrumentingAgents* m_instrumentingAgents;
     InspectorDOMAgent* m_domAgent;
     RefPtr<Element> m_lastElementWithPseudoState;
     unsigned m_lastPseudoState;

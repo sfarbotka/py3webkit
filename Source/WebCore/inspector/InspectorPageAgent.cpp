@@ -261,11 +261,10 @@ String InspectorPageAgent::cachedResourceTypeString(const CachedResource& cached
     return resourceTypeString(cachedResourceType(cachedResource));
 }
 
-InspectorPageAgent::InspectorPageAgent(InstrumentingAgents* instrumentingAgents, Page* page, InspectorState* state, InjectedScriptManager* injectedScriptManager)
-    : m_instrumentingAgents(instrumentingAgents)
+InspectorPageAgent::InspectorPageAgent(InstrumentingAgents* instrumentingAgents, Page* page, InspectorState* inspectorState, InjectedScriptManager* injectedScriptManager)
+    : InspectorBaseAgent<InspectorPageAgent>("Page", instrumentingAgents, inspectorState)
     , m_page(page)
     , m_injectedScriptManager(injectedScriptManager)
-    , m_state(state)
     , m_frontend(0)
     , m_lastScriptIdentifier(0)
 {
@@ -603,7 +602,7 @@ void InspectorPageAgent::frameNavigated(DocumentLoader* loader)
         m_scriptToEvaluateOnLoadOnce = m_pendingScriptToEvaluateOnLoadOnce;
         m_pendingScriptToEvaluateOnLoadOnce = String();
     }
-    m_frontend->frameNavigated(buildObjectForFrame(loader->frame()), loaderId(loader));
+    m_frontend->frameNavigated(buildObjectForFrame(loader->frame()));
 }
 
 void InspectorPageAgent::frameDetached(Frame* frame)

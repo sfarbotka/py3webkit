@@ -184,8 +184,8 @@ CSSStyleRule* InspectorCSSAgent::asCSSStyleRule(CSSRule* rule)
     return static_cast<CSSStyleRule*>(rule);
 }
 
-InspectorCSSAgent::InspectorCSSAgent(InstrumentingAgents* instrumentingAgents, InspectorDOMAgent* domAgent)
-    : m_instrumentingAgents(instrumentingAgents)
+InspectorCSSAgent::InspectorCSSAgent(InstrumentingAgents* instrumentingAgents, InspectorState* state, InspectorDOMAgent* domAgent)
+    : InspectorBaseAgent<InspectorCSSAgent>("CSS", instrumentingAgents, state)
     , m_domAgent(domAgent)
     , m_lastPseudoState(0)
     , m_lastStyleSheetId(1)
@@ -437,14 +437,6 @@ void InspectorCSSAgent::getSupportedCSSProperties(ErrorString*, RefPtr<Inspector
         properties->pushString(propertyNameStrings[i]);
 
     *cssProperties = properties.release();
-}
-
-// static
-Element* InspectorCSSAgent::inlineStyleElement(CSSStyleDeclaration* style)
-{
-    if (!style || !style->isInlineStyleDeclaration())
-        return 0;
-    return static_cast<CSSInlineStyleDeclaration*>(style)->element();
 }
 
 InspectorStyleSheetForInlineStyle* InspectorCSSAgent::asInspectorStyleSheet(Element* element)

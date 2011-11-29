@@ -358,7 +358,7 @@ WebInspector.doLoadedDone = function()
     this.searchController = new WebInspector.SearchController();
     this.advancedSearchController = new WebInspector.AdvancedSearchController();
 
-    if (Preferences.nativeInstrumentationEnabled)
+    if (Capabilities.nativeInstrumentationEnabled)
         this.domBreakpointsSidebarPane = new WebInspector.DOMBreakpointsSidebarPane();
 
     this._createPanels();
@@ -466,12 +466,9 @@ WebInspector.close = function(event)
     InspectorFrontendHost.closeWindow();
 }
 
-WebInspector.disconnectFromBackend = function()
+WebInspector.disconnectFromWorker = function()
 {
-    if (WebInspector.WorkerManager.isWorkerFrontend())
-        WebInspector.WorkerManager.showWorkerTerminatedScreen();
-    else
-        InspectorFrontendHost.disconnectFromBackend();
+    WebInspector.WorkerManager.showWorkerTerminatedScreen();
 }
 
 WebInspector.documentClick = function(event)
@@ -869,6 +866,6 @@ WebInspector.installSourceMappingForTest = function(url)
 {
     // FIXME: remove this method when it's possible to set compiler source mappings via UI.
     var sourceMapping = new WebInspector.ClosureCompilerSourceMapping(url);
-    var uiSourceCode = WebInspector.panels.scripts.visibleView._delegate._uiSourceCode;
+    var uiSourceCode = WebInspector.panels.scripts.visibleView._uiSourceCode;
     uiSourceCode.rawSourceCode.setCompilerSourceMapping(sourceMapping);
 }

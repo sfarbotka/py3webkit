@@ -1,3 +1,462 @@
+2011-11-29  Dirk Pranke  <dpranke@chromium.org>
+
+        add webkit_user_agent to DRT and webkit_unit_tests
+        https://bugs.webkit.org/show_bug.cgi?id=73362
+
+        Reviewed by Tony Chang.
+
+        In preparation for building webkit_glue as a separate component,
+        we need to explicitly declare DRT's and webkit_unit_tests'
+        dependencies on webkit_user_agent.
+
+        * WebKit.gyp:
+
+2011-11-28  Adam Klein  <adamk@chromium.org>
+
+        [chromium] WebKitMutationObserver::deliverAllMutations should be exposed through the Chromium API
+        https://bugs.webkit.org/show_bug.cgi?id=71242
+
+        Reviewed by Darin Fisher.
+
+        Add addTaskObserver and removeTaskObserver to WebThread,
+        along with a new WebThread::TaskObserver interface.
+
+        For mutation observers, add a TaskObserver to the main thread
+        to deliver mutations after each task runs.
+
+        The Chromium side of this patch is http://codereview.chromium.org/8586038/
+
+        * public/platform/WebThread.h:
+        (WebKit::WebThread::TaskObserver::~TaskObserver):
+        * src/WebKit.cpp:
+        (WebKit::initialize):
+        (WebKit::shutdown):
+
+2011-11-29  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: split Preferences into Preferences and Capabilities.
+        https://bugs.webkit.org/show_bug.cgi?id=73321
+
+        Reviewed by Yury Semikhatsky.
+
+        * src/js/DevTools.js:
+
+2011-11-29  Jing Zhao  <jingzhao@chromium.org>
+
+        Assertion fails when opening two popup menus
+        https://bugs.webkit.org/show_bug.cgi?id=73189
+
+        Reviewed by Kent Tamura.
+
+        By using element.dispatchEvent(), a user written script can open two
+        popup menus, which causes the assertion in WebViewImpl::popupOpened()
+        fail.
+
+        Check if there is an opened popup menu before opening a popup menu.
+
+        * src/WebViewImpl.cpp:
+        (WebKit::WebViewImpl::popupOpened):
+
+2011-11-28  David Grogan  <dgrogan@chromium.org>
+
+        WebWorkerRunLoop wrapper around WorkerRunLoop
+        https://bugs.webkit.org/show_bug.cgi?id=71757
+
+        This allows the embedder to post tasks to webcore-created worker
+        threads.  WebWorkerRunLoop is a thin wrapper that just holds a
+        WorkerRunLoop*.  As such, it is not heap allocated and can be copied.
+
+        Reviewed by Darin Fisher.
+
+        * WebKit.gyp: Added WebWorkerRunLoop.{cpp,h}
+
+        * public/WebWorkerRunLoop.h: Added. Interface the embedder will use to
+        post Tasks to worker threads created in WebCore.
+        (WebKit::WebWorkerRunLoop::Task::~Task):
+        (WebKit::operator==): These are the operators necessary to allow
+        WebWorkerRunLoop to be used as a key in a std::map using the value of
+        the underlying WebCore::WorkerRunLoop* for the meaningful comparisons.
+        (WebKit::operator<):
+
+        * public/platform/WebKitPlatformSupport.h: Stubs for the embedder to
+        implement.
+        (WebKit::WebKitPlatformSupport::didStartWorkerRunLoop):
+        (WebKit::WebKitPlatformSupport::didStopWorkerRunLoop):
+
+        * src/PlatformSupport.cpp: Wrap incoming WorkerRunLoop objects in
+        WebWorkerRunLoopImpl objects, forward them to WebKitPlatformSupport.
+        (WebCore::PlatformSupport::didStartWorkerRunLoop):
+        (WebCore::PlatformSupport::didStopWorkerRunLoop):
+
+        * src/WebWorkerRunLoop.cpp: Added.
+        (WebKit::WebWorkerRunLoop::WebWorkerRunLoop): Store incoming
+        WorkerRunLoop pointer.
+        (WebKit::WebWorkerRunLoop::postTask): Wrap incoming Task in
+        ScriptExecutionContext::Task, post to stored WorkerRunLoop.
+        (WebKit::WebWorkerRunLoop::equals): Support for the operators mentioned
+        above.
+        (WebKit::WebWorkerRunLoop::lessThan): Ditto.
+
+2011-11-29  Roland Steiner  <rolandsteiner@chromium.org>
+
+        <style scoped>: add ENABLE(STYLE_SCOPED) flag to WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=72848
+
+        Reviewed by Dimitri Glazkov.
+
+        * features.gypi:
+
+2011-11-28  Shawn Singh  <shawnsingh@chromium.org>
+
+        [chromium] Create CCDamageTracker class to determine regions of change for a surface.
+        https://bugs.webkit.org/show_bug.cgi?id=72520
+
+        Reviewed by James Robinson.
+
+        * WebKit.gypi:
+        * tests/CCDamageTrackerTest.cpp: Added.
+        (WebKitTests::executeCalculateDrawTransformsAndVisibility):
+        (WebKitTests::emulateDrawingOneFrame):
+        (WebKitTests::createTestTreeWithOneSurface):
+        (WebKitTests::createTestTreeWithTwoSurfaces):
+        (WebKitTests::createAndSetUpTestTreeWithOneSurface):
+        (WebKitTests::createAndSetUpTestTreeWithTwoSurfaces):
+        (WebKitTests::TEST_F):
+        * tests/CCLayerImplTest.cpp:
+        (WebCore::TEST):
+        * tests/CCLayerTreeHostCommonTest.cpp:
+        (WebCore::TEST):
+        * tests/CCLayerTreeTestCommon.h: Added.
+        * tests/CCRenderSurfaceTest.cpp:
+        (WebCore::TEST):
+        * tests/LayerChromiumTest.cpp:
+
+2011-11-28  Jon Lee  <jonlee@apple.com>
+
+        Possible fix for test failures in r101307.
+
+        * src/WebViewImpl.cpp:
+        (WebKit::WebViewImpl::WebViewImpl):
+
+2011-11-28  Jon Lee  <jonlee@apple.com>
+
+        Create skeleton framework for notifications support in WK2
+        https://bugs.webkit.org/show_bug.cgi?id=73253
+        <rdar://problem/10356943>
+
+        Reviewed by Sam Weinig.
+
+        Remove notificationPresenter() from the chrome client, since it is now managed by
+        the notification controller.
+
+        * src/ChromeClientImpl.cpp:
+        * src/ChromeClientImpl.h:
+        * src/WebNotification.cpp:
+        (WebKit::WebNotification::title): Refactoring with NotificationContents conversion to struct.
+        (WebKit::WebNotification::body): Ditto.
+        * src/WebViewImpl.cpp:
+        (WebKit::WebViewImpl::WebViewImpl): Set notification client in web view's page clients.
+
+2011-11-28  Beth Dakin  <bdakin@apple.com>
+
+        Speculative Chromium build fix.
+
+        * src/ScrollbarGroup.cpp:
+        (WebKit::ScrollbarGroup::scrollbarStyleChanged):
+        * src/ScrollbarGroup.h:
+
+2011-11-28  Dana Jansens  <danakj@chromium.org>
+
+        FloatQuad::isRectilinear() returns false for 180degree rotations
+        https://bugs.webkit.org/show_bug.cgi?id=73040
+
+        Reviewed by James Robinson.
+
+        * WebKit.gypi:
+        * tests/FloatQuadTest.cpp: Added.
+        (WebCore::TEST):
+
+2011-11-28  Sheriff Bot  <webkit.review.bot@gmail.com>
+
+        Unreviewed, rolling out r101273.
+        http://trac.webkit.org/changeset/101273
+        https://bugs.webkit.org/show_bug.cgi?id=73244
+
+        multiple test failures and timeouts (Requested by tony^work on
+        #webkit).
+
+        * WebKit.gyp:
+
+2011-11-28  Fady Samuel  <fsamuel@chromium.org>
+
+        [Chromium] Fix broken DRT build for Aura Linux
+        https://bugs.webkit.org/show_bug.cgi?id=72667
+
+        Reviewed by Tony Chang.
+
+        * WebKit.gyp:
+
+2011-11-28  Adam Barth  <abarth@webkit.org>
+
+        [Chromium] Move "final" batch of headers into public/platform
+        https://bugs.webkit.org/show_bug.cgi?id=73198
+
+        Reviewed by Darin Fisher.
+
+        This patch moves another group of headers into the platform directory.
+        I found these headers by reading through the list of headers and
+        coorelating them with WebCore concepts.  This patch doesn't move all
+        the APIs that coorespond to WebCore platform concepts because some,
+        such as WebFontCache, are not used to support the WebCore platform but
+        rather to provide the embedder access to the WebCore concept.  This
+        patch should be the last bulk move of headers.
+
+        There are two main groups of headers that make up the bulk of this
+        patch:
+
+        1) URLLoader-related headers.
+        2) Geometry-related headers.
+
+        * public/WebArrayBufferView.h: Replaced.
+        * public/WebBlobData.h: Replaced.
+        * public/WebCookie.h: Replaced.
+        * public/WebExternalTextureLayer.h: Update include.
+        * public/WebFloatPoint.h: Replaced.
+        * public/WebFloatQuad.h: Replaced.
+        * public/WebFloatRect.h: Replaced.
+        * public/WebFrameClient.h: Update include.
+        * public/WebHTTPBody.h: Replaced.
+        * public/WebHTTPHeaderVisitor.h: Replaced.
+        * public/WebHTTPLoadInfo.h: Replaced.
+        * public/WebThreadSafeData.h: Replaced.
+        * public/WebURLError.h: Replaced.
+        * public/WebURLLoadTiming.h: Replaced.
+        * public/WebURLLoaderClient.h: Replaced.
+        * public/WebURLRequest.h: Replaced.
+        * public/WebURLResponse.h: Replaced.
+        * public/platform/WebArrayBufferView.h: Copied from Source/WebKit/chromium/public/WebArrayBufferView.h.
+        * public/platform/WebBlobData.h: Copied from Source/WebKit/chromium/public/WebBlobData.h.
+        * public/platform/WebCookie.h: Copied from Source/WebKit/chromium/public/WebCookie.h.
+        * public/platform/WebFloatPoint.h: Copied from Source/WebKit/chromium/public/WebFloatPoint.h.
+        * public/platform/WebFloatQuad.h: Copied from Source/WebKit/chromium/public/WebFloatQuad.h.
+        * public/platform/WebFloatRect.h: Copied from Source/WebKit/chromium/public/WebFloatRect.h.
+        * public/platform/WebHTTPBody.h: Copied from Source/WebKit/chromium/public/WebHTTPBody.h.
+        * public/platform/WebHTTPHeaderVisitor.h: Copied from Source/WebKit/chromium/public/WebHTTPHeaderVisitor.h.
+        * public/platform/WebHTTPLoadInfo.h: Copied from Source/WebKit/chromium/public/WebHTTPLoadInfo.h.
+        * public/platform/WebThreadSafeData.h: Copied from Source/WebKit/chromium/public/WebThreadSafeData.h.
+        * public/platform/WebURLError.h: Copied from Source/WebKit/chromium/public/WebURLError.h.
+        * public/platform/WebURLLoadTiming.h: Copied from Source/WebKit/chromium/public/WebURLLoadTiming.h.
+        * public/platform/WebURLLoader.h: Remove FIXME.
+        * public/platform/WebURLLoaderClient.h: Copied from Source/WebKit/chromium/public/WebURLLoaderClient.h.
+        * public/platform/WebURLRequest.h: Copied from Source/WebKit/chromium/public/WebURLRequest.h.
+        * public/platform/WebURLResponse.h: Copied from Source/WebKit/chromium/public/WebURLResponse.h.
+
+2011-11-25  Yury Semikhatsky  <yurys@chromium.org>
+
+        [Chromium] Web Inspector: delete WebDevToolsAgent::frontendLoaded
+        https://bugs.webkit.org/show_bug.cgi?id=73131
+
+        Now that the method is not used in Chromium we can delete it.
+
+        Reviewed by Pavel Feldman.
+
+        * public/WebDevToolsAgent.h:
+        * src/WebDevToolsAgentImpl.cpp:
+        * src/WebDevToolsAgentImpl.h:
+
+2011-11-28  Adam Barth  <abarth@webkit.org>
+
+        Update some sloppy includes.
+
+        * public/platform/linux/WebSandboxSupport.h:
+        * public/platform/win/WebThemeEngine.h:
+
+2011-11-28  Adam Barth  <abarth@webkit.org>
+
+        More forwarding headers.  Turns out I forgot to svn add them.  :(
+
+        * public/android/WebSandboxSupport.h: Added.
+        * public/linux/WebFontFamily.h: Added.
+        * public/linux/WebSandboxSupport.h: Added.
+        * public/mac/WebSandboxSupport.h: Added.
+        * public/win/WebSandboxSupport.h: Added.
+
+2011-11-28  Adam Barth  <abarth@webkit.org>
+
+        Add missing forwaring headers.
+
+        * public/android/WebThemeEngine.h: Added.
+        * public/linux/WebThemeEngine.h: Added.
+        * public/mac/WebThemeEngine.h: Added.
+        * public/win/WebThemeEngine.h: Added.
+
+2011-11-27  Yury Semikhatsky  <yurys@chromium.org>
+
+        Unreviewed. Revert r101226.
+
+        * DEPS:
+
+2011-11-27  Yury Semikhatsky  <yurys@chromium.org>
+
+        Unreviewed. Update Chromium revision.
+
+        * DEPS:
+
+2011-11-24  Adam Barth  <abarth@webkit.org>
+
+        [Chromium] Move the next traunch of headers into public/platform
+        https://bugs.webkit.org/show_bug.cgi?id=73073
+
+        Reviewed by Darin Fisher.
+
+        These headers are all the forward-declared classes in
+        WebKitPlatformSupport (and their dependencies) that wrap concepts in
+        WebCore/platform.
+
+        There are a number of forward-declared classes in WebKitPlatformSupport
+        that coorespond to WebCore concepts outside of WebCore/platform.  I've
+        marked these with FIXME comments.  We'll need to study them in more
+        detail to see whether they should move into WebCore/platform or whether
+        we need to move them out of WebKitPlaformSupport.h.  (One possible
+        resolution might be to introducing a WebKitClientSupport.h to hold
+        statics for client concepts).
+
+        * public/WebBlobRegistry.h: Replaced.
+        * public/WebCanvas.h: Replaced.
+        * public/WebClipboard.h: Replaced.
+        * public/WebColor.h: Replaced.
+        * public/WebColorName.h: Replaced.
+        * public/WebCommonWorkerClient.h:
+        * public/WebCompositionUnderline.h:
+        * public/WebContentLayerClient.h:
+        * public/WebContextMenuData.h:
+        * public/WebCookieJar.h: Replaced.
+        * public/WebCursorInfo.h:
+        * public/WebDragData.h: Replaced.
+        * public/WebFileSystem.h: Replaced.
+        * public/WebFloatQuad.h:
+        * public/WebFont.h:
+        * public/WebFrame.h:
+        * public/WebFrameClient.h:
+        * public/WebGeolocationController.h:
+        * public/WebGeolocationPermissionRequestManager.h:
+        * public/WebGraphicsContext3D.h: Replaced.
+        * public/WebHTTPBody.h:
+        * public/WebImage.h: Replaced.
+        * public/WebImageDecoder.h:
+        * public/WebLayer.h:
+        * public/WebMediaPlayer.h:
+        * public/WebMediaStreamDescriptor.h: Replaced.
+        * public/WebMediaStreamSource.h:
+        * public/WebMimeRegistry.h: Replaced.
+        * public/WebNonCopyable.h: Replaced.
+        * public/WebPeerConnectionHandler.h: Replaced.
+        * public/WebPeerConnectionHandlerClient.h: Replaced.
+        * public/WebPlugin.h:
+        * public/WebPoint.h: Replaced.
+        * public/WebRect.h: Replaced.
+        * public/WebRegularExpression.h:
+        * public/WebScreenInfo.h:
+        * public/WebScrollbar.h:
+        * public/WebSize.h: Replaced.
+        * public/WebSocketStreamError.h: Replaced.
+        * public/WebSocketStreamHandle.h: Replaced.
+        * public/WebSocketStreamHandleClient.h: Replaced.
+        * public/WebThread.h: Replaced.
+        * public/WebTouchPoint.h:
+        * public/WebURLLoader.h: Replaced.
+        * public/WebWidget.h:
+        * public/WebWidgetClient.h:
+        * public/android/WebSandboxSupport.h: Removed.
+        * public/android/WebThemeEngine.h: Removed.
+        * public/linux/WebFontFamily.h: Removed.
+        * public/linux/WebSandboxSupport.h: Removed.
+        * public/linux/WebThemeEngine.h: Removed.
+        * public/mac/WebSandboxSupport.h: Removed.
+        * public/mac/WebThemeEngine.h: Removed.
+        * public/platform/WebBlobRegistry.h: Copied from Source/WebKit/chromium/public/WebBlobRegistry.h.
+        * public/platform/WebCanvas.h: Copied from Source/WebKit/chromium/public/WebCanvas.h.
+        * public/platform/WebClipboard.h: Copied from Source/WebKit/chromium/public/WebClipboard.h.
+        * public/platform/WebColor.h: Copied from Source/WebKit/chromium/public/WebColor.h.
+        * public/platform/WebColorName.h: Copied from Source/WebKit/chromium/public/WebColorName.h.
+        * public/platform/WebCookieJar.h: Copied from Source/WebKit/chromium/public/WebCookieJar.h.
+        * public/platform/WebDragData.h: Copied from Source/WebKit/chromium/public/WebDragData.h.
+        * public/platform/WebFileSystem.h: Copied from Source/WebKit/chromium/public/WebFileSystem.h.
+        * public/platform/WebGraphicsContext3D.h: Copied from Source/WebKit/chromium/public/WebGraphicsContext3D.h.
+        * public/platform/WebImage.h: Copied from Source/WebKit/chromium/public/WebImage.h.
+        * public/platform/WebKitPlatformSupport.h:
+        * public/platform/WebMediaStreamDescriptor.h: Copied from Source/WebKit/chromium/public/WebMediaStreamDescriptor.h.
+        * public/platform/WebMimeRegistry.h: Copied from Source/WebKit/chromium/public/WebMimeRegistry.h.
+        * public/platform/WebNonCopyable.h: Copied from Source/WebKit/chromium/public/WebNonCopyable.h.
+        * public/platform/WebPeerConnectionHandler.h: Copied from Source/WebKit/chromium/public/WebPeerConnectionHandler.h.
+        * public/platform/WebPeerConnectionHandlerClient.h: Copied from Source/WebKit/chromium/public/WebPeerConnectionHandlerClient.h.
+        * public/platform/WebPoint.h: Copied from Source/WebKit/chromium/public/WebPoint.h.
+        * public/platform/WebRect.h: Copied from Source/WebKit/chromium/public/WebRect.h.
+        * public/platform/WebSize.h: Copied from Source/WebKit/chromium/public/WebSize.h.
+        * public/platform/WebSocketStreamError.h: Copied from Source/WebKit/chromium/public/WebSocketStreamError.h.
+        * public/platform/WebSocketStreamHandle.h: Copied from Source/WebKit/chromium/public/WebSocketStreamHandle.h.
+        * public/platform/WebSocketStreamHandleClient.h: Copied from Source/WebKit/chromium/public/WebSocketStreamHandleClient.h.
+        * public/platform/WebThread.h: Copied from Source/WebKit/chromium/public/WebThread.h.
+        * public/platform/WebURLLoader.h: Copied from Source/WebKit/chromium/public/WebURLLoader.h.
+        * public/platform/android: Added.
+        * public/platform/android/WebSandboxSupport.h: Copied from Source/WebKit/chromium/public/android/WebSandboxSupport.h.
+        * public/platform/android/WebThemeEngine.h: Copied from Source/WebKit/chromium/public/android/WebThemeEngine.h.
+        * public/platform/linux: Added.
+        * public/platform/linux/WebFontFamily.h: Copied from Source/WebKit/chromium/public/linux/WebFontFamily.h.
+        * public/platform/linux/WebSandboxSupport.h: Copied from Source/WebKit/chromium/public/linux/WebSandboxSupport.h.
+        * public/platform/linux/WebThemeEngine.h: Copied from Source/WebKit/chromium/public/linux/WebThemeEngine.h.
+        (WebKit::WebThemeEngine::paint):
+        * public/platform/mac: Added.
+        * public/platform/mac/WebSandboxSupport.h: Copied from Source/WebKit/chromium/public/mac/WebSandboxSupport.h.
+        * public/platform/mac/WebThemeEngine.h: Copied from Source/WebKit/chromium/public/mac/WebThemeEngine.h.
+        (WebKit::WebThemeEngine::paintScrollbarThumb):
+        * public/platform/win: Added.
+        * public/platform/win/WebSandboxSupport.h: Copied from Source/WebKit/chromium/public/win/WebSandboxSupport.h.
+        * public/platform/win/WebThemeEngine.h: Copied from Source/WebKit/chromium/public/win/WebThemeEngine.h.
+        * public/win/WebSandboxSupport.h: Removed.
+        * public/win/WebThemeEngine.h: Removed.
+
+2011-11-27  Tommy Widenflycht  <tommyw@google.com>
+
+        [chromium] MediaStream API: Updating the licences to the correct one.
+        https://bugs.webkit.org/show_bug.cgi?id=73129
+
+        Replacing the incorrect ones I have submitted with the correct ones.
+
+        Reviewed by Darin Fisher.
+
+        * bridge/PeerConnectionHandler.cpp:
+        * bridge/PeerConnectionHandlerInternal.cpp:
+        * bridge/PeerConnectionHandlerInternal.h:
+        * public/WebMediaStreamDescriptor.h:
+        * public/WebMediaStreamRegistry.h:
+        * public/WebMediaStreamSource.h:
+        * public/WebPeerConnectionHandler.h:
+        * public/WebPeerConnectionHandlerClient.h:
+        * src/WebMediaStreamDescriptor.cpp:
+        * src/WebMediaStreamRegistry.cpp:
+        * src/WebMediaStreamSource.cpp:
+
+2011-11-26  Pavel Feldman  <pfeldman@google.com>
+
+        Web Inspector: remove disconnectFromBackend from the protocol.
+        https://bugs.webkit.org/show_bug.cgi?id=73127
+
+        We should instead use InspectorClient::closeInspectorFrontend that would
+        be closing the front-end window.
+
+        Reviewed by Yury Semikhatsky.
+
+        * src/InspectorClientImpl.cpp:
+        (WebKit::InspectorClientImpl::closeInspectorFrontend):
+        * src/InspectorClientImpl.h:
+        * src/InspectorFrontendClientImpl.cpp:
+        * src/InspectorFrontendClientImpl.h:
+        * src/WebDevToolsAgentImpl.cpp:
+        (WebKit::WebDevToolsAgentImpl::closeInspectorFrontend):
+        (WebKit::WebDevToolsAgent::disconnectEventAsText):
+        * src/WebDevToolsAgentImpl.h:
+
 2011-11-26  Sheriff Bot  <webkit.review.bot@gmail.com>
 
         Unreviewed, rolling out r101193.

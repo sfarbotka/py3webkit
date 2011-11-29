@@ -139,7 +139,8 @@ static inline void notifyObserverEnteredObject(Observer* observer, RenderObject*
     }
 
     // FIXME: Should unicode-bidi: plaintext really be embedding override/embed characters here?
-    observer->embed(embedCharFromDirection(style->direction(), unicodeBidi), FromStyleOrDOM);
+    if (!observer->inIsolate())
+        observer->embed(embedCharFromDirection(style->direction(), unicodeBidi), FromStyleOrDOM);
 }
 
 template <class Observer>
@@ -157,7 +158,8 @@ static inline void notifyObserverWillExitObject(Observer* observer, RenderObject
     }
 
     // Otherwise we pop any embed/override character we added when we opened this tag.
-    observer->embed(WTF::Unicode::PopDirectionalFormat, FromStyleOrDOM);
+    if (!observer->inIsolate())
+        observer->embed(WTF::Unicode::PopDirectionalFormat, FromStyleOrDOM);
 }
 
 static inline bool isIteratorTarget(RenderObject* object)
@@ -404,6 +406,18 @@ static inline RenderObject* containingIsolate(RenderObject* object, RenderObject
     return 0;
 }
 
+static inline unsigned numberOfIsolateAncestors(RenderObject* object, RenderObject* root)
+{
+    ASSERT(object);
+    unsigned count = 0;
+    while (object && object != root) {
+        if (isIsolatedInline(object))
+            count++;
+        object = object->parent();
+    }
+    return count;
+}
+
 // FIXME: This belongs on InlineBidiResolver, except it's a template specialization
 // of BidiResolver which knows nothing about RenderObjects.
 static inline void addPlaceholderRunForIsolatedInline(InlineBidiResolver& resolver, RenderObject* isolatedInline)
@@ -418,8 +432,8 @@ static inline void addPlaceholderRunForIsolatedInline(InlineBidiResolver& resolv
 
 class IsolateTracker {
 public:
-    explicit IsolateTracker(bool inIsolate)
-        : m_nestedIsolateCount(inIsolate ? 1 : 0)
+    explicit IsolateTracker(unsigned nestedIsolateCount)
+        : m_nestedIsolateCount(nestedIsolateCount)
         , m_haveAddedFakeRunForRootIsolate(false)
     {
     }
@@ -468,7 +482,7 @@ inline void InlineBidiResolver::appendRun()
         // Keep track of when we enter/leave "unicode-bidi: isolate" inlines.
         // Initialize our state depending on if we're starting in the middle of such an inline.
         // FIXME: Could this initialize from this->inIsolate() instead of walking up the render tree?
-        IsolateTracker isolateTracker(containingIsolate(m_sor.m_obj, m_sor.root()));
+        IsolateTracker isolateTracker(numberOfIsolateAncestors(m_sor.m_obj, m_sor.root()));
         int start = m_sor.m_pos;
         RenderObject* obj = m_sor.m_obj;
         while (obj && obj != m_eor.m_obj && obj != endOfLine.m_obj) {

@@ -15,6 +15,8 @@ load(features)
 
 include(WebKit/WebKit.pri)
 
+CONFIG += wtf
+
 !v8:CONFIG += javascriptcore
 
 CONFIG += webcore
@@ -26,11 +28,6 @@ CONFIG += webcore
     # Ensure that changes to the WebKit2 API will trigger a qmake of this
     # file, which in turn runs syncqt to update the forwarding headers.
     QMAKE_INTERNAL_INCLUDED_FILES *= WebKit2/Target.pri
-}
-
-v8:linux-* {
-    QMAKE_LIBDIR += $${V8_LIB_DIR}
-    LIBS = -lv8 $$LIBS
 }
 
 QT += network

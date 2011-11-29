@@ -33,6 +33,7 @@
 
 #if ENABLE(INSPECTOR)
 
+#include "DOMFileSystem.h"
 #include "DOMWindow.h"
 #include "Database.h"
 #include "DocumentLoader.h"
@@ -47,6 +48,7 @@
 #include "InspectorDOMAgent.h"
 #include "InspectorDOMStorageAgent.h"
 #include "InspectorDebuggerAgent.h"
+#include "InspectorFileSystemAgent.h"
 #include "InspectorPageAgent.h"
 #include "InspectorProfilerAgent.h"
 #include "InspectorResourceAgent.h"
@@ -104,12 +106,6 @@ void InspectorInstrumentation::didClearWindowObjectInWorldImpl(InstrumentingAgen
             debuggerAgent->didClearMainFrameWindowObject();
     }
 #endif
-}
-
-void InspectorInstrumentation::inspectedPageDestroyedImpl(InstrumentingAgents* instrumentingAgents)
-{
-    if (InspectorAgent* inspectorAgent = instrumentingAgents->inspectorAgent())
-        inspectorAgent->inspectedPageDestroyed();
 }
 
 void InspectorInstrumentation::willInsertDOMNodeImpl(InstrumentingAgents* instrumentingAgents, Node* node, Node* parent)
@@ -767,6 +763,14 @@ void InspectorInstrumentation::didOpenDatabaseImpl(InstrumentingAgents* instrume
         dbAgent->didOpenDatabase(database, domain, name, version);
 }
 #endif
+
+#if ENABLE(FILE_SYSTEM)
+void InspectorInstrumentation::didOpenFileSystemImpl(InstrumentingAgents* instrumentingAgents, PassRefPtr<DOMFileSystem> fileSystem)
+{
+    if (InspectorFileSystemAgent* fileSystemAgent = instrumentingAgents->inspectorFileSystemAgent())
+        fileSystemAgent->didOpenFileSystem(fileSystem);
+}
+#endif // ENABLE(FILE_SYSTEM)
 
 void InspectorInstrumentation::didUseDOMStorageImpl(InstrumentingAgents* instrumentingAgents, StorageArea* storageArea, bool isLocalStorage, Frame* frame)
 {

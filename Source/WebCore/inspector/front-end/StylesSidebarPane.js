@@ -889,8 +889,6 @@ WebInspector.StylePropertiesSection = function(parentPane, styleRule, editable, 
     this._selectorElement = document.createElement("span");
     this._selectorElement.textContent = styleRule.selectorText;
     selectorContainer.appendChild(this._selectorElement);
-    if (Preferences.debugMode)
-        this._selectorElement.addEventListener("click", this._debugShowStyle.bind(this), false);
 
     var openBrace = document.createElement("span");
     openBrace.textContent = " {";
@@ -1135,39 +1133,6 @@ WebInspector.StylePropertiesSection.prototype = {
         return item;
     },
 
-    _debugShowStyle: function(event)
-    {
-        var boundHandler;
-        function removeStyleBox(element, event)
-        {
-            if (event.target === element) {
-                event.stopPropagation();
-                return;
-            }
-            document.body.removeChild(element);
-            document.getElementById("main").removeEventListener("mousedown", boundHandler, true);
-        }
-
-        if (!event.shiftKey)
-            return;
-
-        var container = document.createElement("div");
-        var element = document.createElement("span");
-        container.appendChild(element);
-        element.style.background = "yellow";
-        element.style.display = "inline-block";
-        container.style.cssText = "z-index: 2000000; position: absolute; top: 50px; left: 50px; white-space: pre; overflow: auto; background: white; font-family: monospace; font-size: 12px; border: 1px solid black; opacity: 0.85; -webkit-user-select: text; padding: 2px;";
-        container.style.width = (document.body.offsetWidth - 100) + "px";
-        container.style.height = (document.body.offsetHeight - 100) + "px";
-        document.body.appendChild(container);
-        if (this.rule)
-            element.textContent = this.rule.selectorText + " {" + ((this.styleRule.style.cssText !== undefined) ? this.styleRule.style.cssText : "<no cssText>") + "}";
-        else
-            element.textContent = this.styleRule.style.cssText;
-        boundHandler = removeStyleBox.bind(null, container);
-        document.getElementById("main").addEventListener("mousedown", boundHandler, true);
-    },
-
     _handleEmptySpaceDoubleClick: function(event)
     {
         if (event.target.hasStyleClass("header") || this.element.hasStyleClass("read-only") || event.target.enclosingNodeOrSelfWithClass("media")) {
@@ -1361,12 +1326,17 @@ WebInspector.ComputedStylePropertiesSection.prototype = {
 
                 var treeElement = this._propertyTreeElements[property.name];
                 if (treeElement) {
-                    var selectorText = section.styleRule.selectorText;
-                    var value = property.value;
-                    var title = "<span style='color: gray'>" + selectorText + "</span> - " + value;
-                    var subtitle = " <span style='float:right'>" + section._selectorRefElement.innerHTML + "</span>";
-                    var childElement = new TreeElement(null, null, false);
-                    childElement.titleHTML = title + subtitle;
+                    var fragment = document.createDocumentFragment();
+                    var selector = fragment.createChild("span");
+                    selector.style.color = "gray";
+                    selector.textContent = section.styleRule.selectorText;
+                    fragment.appendChild(document.createTextNode(" - " + property.value + " "));
+                    var subtitle = fragment.createChild("span");
+                    subtitle.style.float = "right";
+                    var selectorRef = section._selectorRefElement.cloneNode(true);
+                    for (var n = 0; n < selectorRef.childNodes.length; ++n)
+                        subtitle.appendChild(selectorRef.childNodes[n]);
+                    var childElement = new TreeElement(fragment, null, false);
                     treeElement.appendChild(childElement);
                     if (section.isPropertyOverloaded(property.name))
                         childElement.listItemElement.addStyleClass("overloaded");

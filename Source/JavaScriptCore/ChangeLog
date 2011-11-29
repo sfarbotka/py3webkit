@@ -1,3 +1,350 @@
+2011-11-28  Filip Pizlo  <fpizlo@apple.com>
+
+        DFG debugCall() mechanism only works on X86 and X86-64
+        https://bugs.webkit.org/show_bug.cgi?id=73282
+
+        Reviewed by Oliver Hunt.
+
+        * dfg/DFGAssemblyHelpers.h:
+        (JSC::DFG::AssemblyHelpers::debugCall):
+
+2011-11-28  Filip Pizlo  <fpizlo@apple.com>
+
+        DFG non-X86 ArithDiv does speculation failure after mutating state,
+        without a value recovery
+        https://bugs.webkit.org/show_bug.cgi?id=73286
+
+        Reviewed by Gavin Barraclough.
+
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+
+2011-11-28  Filip Pizlo  <fpizlo@apple.com>
+
+        Unreviewed build fixes for ARM.
+
+        * assembler/MacroAssemblerARMv7.h:
+        (JSC::MacroAssemblerARMv7::readCallTarget):
+        * dfg/DFGSpeculativeJIT.h:
+        (JSC::DFG::SpeculativeJIT::setupArgumentsWithExecState):
+
+2011-11-20  Roland Steiner  <rolandsteiner@chromium.org>
+
+        <style scoped>: add ENABLE(STYLE_SCOPED) flag to WebKit
+        https://bugs.webkit.org/show_bug.cgi?id=72848
+
+        Add ENABLE_STYLE_SCOPED flag.
+
+        Reviewed by Dimitri Glazkov.
+
+        * Configurations/FeatureDefines.xcconfig:
+
+2011-11-28  Jon Lee  <jonlee@apple.com>
+
+        Create skeleton framework for notifications support in WK2
+        https://bugs.webkit.org/show_bug.cgi?id=73253
+        <rdar://problem/10356943>
+
+        * Configurations/FeatureDefines.xcconfig: Split out ENABLE_NOTIFICATIONS based on platform.
+
+2011-11-28  Oliver Hunt  <oliver@apple.com>
+
+        Fix windows build.
+
+        * JavaScriptCore.vcproj/JavaScriptCore/JavaScriptCore.def:
+
+2011-11-28  Oliver Hunt  <oliver@apple.com>
+
+        Fix gyp build
+
+        * JavaScriptCore.gypi:
+
+2011-11-28  Filip Pizlo  <fpizlo@apple.com>
+
+        GetById should not always speculate cell
+        https://bugs.webkit.org/show_bug.cgi?id=73181
+
+        Reviewed by Gavin Barraclough.
+        
+        GetById will now speculate cell if the predictions of the base are cell.
+        Otherwise it will do like the old JIT (and like the old non-speculative
+        DFG JIT): if not cell, go straight to slow-path but otherwise don't OSR
+        out. This is a 1% speed-up on SunSpider.
+
+        * dfg/DFGAbstractState.cpp:
+        (JSC::DFG::AbstractState::execute):
+        * dfg/DFGOperations.cpp:
+        * dfg/DFGOperations.h:
+        * dfg/DFGSpeculativeJIT.h:
+        (JSC::DFG::SpeculativeJIT::setupArgumentsWithExecState):
+        (JSC::DFG::SpeculativeJIT::callOperation):
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::cachedGetById):
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+
+2011-11-28  Oliver Hunt  <oliver@apple.com>
+
+        Move typed array implementations into wtf
+        https://bugs.webkit.org/show_bug.cgi?id=73248
+
+        Reviewed by Sam Weinig.
+
+        Move typed array implementation files from WebCore to wtf.  Inline the
+        .cpp files for each of the array views to cut down on unnecessary exports
+        and function call overhead for trivial operations.
+
+        Added files to all the project files.
+
+        * GNUmakefile.list.am:
+        * JavaScriptCore.exp:
+        * JavaScriptCore.vcproj/WTF/WTF.vcproj:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * wtf/ArrayBuffer.cpp: Renamed from Source/WebCore/html/canvas/Float32Array.cpp.
+        (WTF::ArrayBuffer::transfer):
+        (WTF::ArrayBuffer::addView):
+        (WTF::ArrayBuffer::removeView):
+        * wtf/ArrayBuffer.h: Renamed from Source/WebCore/html/canvas/ArrayBuffer.cpp.
+        (WTF::ArrayBufferContents::ArrayBufferContents):
+        (WTF::ArrayBufferContents::data):
+        (WTF::ArrayBufferContents::sizeInBytes):
+        (WTF::ArrayBufferContents::transfer):
+        (WTF::ArrayBuffer::~ArrayBuffer):
+        (WTF::ArrayBuffer::clampValue):
+        (WTF::ArrayBuffer::create):
+        (WTF::ArrayBuffer::ArrayBuffer):
+        (WTF::ArrayBuffer::data):
+        (WTF::ArrayBuffer::byteLength):
+        (WTF::ArrayBuffer::slice):
+        (WTF::ArrayBuffer::sliceImpl):
+        (WTF::ArrayBuffer::clampIndex):
+        (WTF::ArrayBufferContents::tryAllocate):
+        (WTF::ArrayBufferContents::~ArrayBufferContents):
+        * wtf/ArrayBufferView.cpp: Copied from Source/WebCore/bindings/js/JSArrayBufferCustom.cpp.
+        (WTF::ArrayBufferView::ArrayBufferView):
+        (WTF::ArrayBufferView::~ArrayBufferView):
+        (WTF::ArrayBufferView::neuter):
+        * wtf/ArrayBufferView.h: Renamed from Source/WebCore/html/canvas/ArrayBufferView.h.
+        (WTF::ArrayBufferView::isByteArray):
+        (WTF::ArrayBufferView::isUnsignedByteArray):
+        (WTF::ArrayBufferView::isShortArray):
+        (WTF::ArrayBufferView::isUnsignedShortArray):
+        (WTF::ArrayBufferView::isIntArray):
+        (WTF::ArrayBufferView::isUnsignedIntArray):
+        (WTF::ArrayBufferView::isFloatArray):
+        (WTF::ArrayBufferView::isDoubleArray):
+        (WTF::ArrayBufferView::isDataView):
+        (WTF::ArrayBufferView::buffer):
+        (WTF::ArrayBufferView::baseAddress):
+        (WTF::ArrayBufferView::byteOffset):
+        (WTF::ArrayBufferView::verifySubRange):
+        (WTF::ArrayBufferView::clampOffsetAndNumElements):
+        (WTF::ArrayBufferView::setImpl):
+        (WTF::ArrayBufferView::setRangeImpl):
+        (WTF::ArrayBufferView::zeroRangeImpl):
+        (WTF::ArrayBufferView::calculateOffsetAndLength):
+        * wtf/CMakeLists.txt:
+        * wtf/Float32Array.h: Renamed from Source/WebCore/html/canvas/Float32Array.h.
+        (WTF::Float32Array::set):
+        (WTF::Float32Array::item):
+        (WTF::Float32Array::isFloatArray):
+        (WTF::Float32Array::create):
+        (WTF::Float32Array::Float32Array):
+        (WTF::Float32Array::subarray):
+        * wtf/Float64Array.h: Renamed from Source/WebCore/html/canvas/Float64Array.h.
+        (WTF::Float64Array::set):
+        (WTF::Float64Array::item):
+        (WTF::Float64Array::isDoubleArray):
+        (WTF::Float64Array::create):
+        (WTF::Float64Array::Float64Array):
+        (WTF::Float64Array::subarray):
+        * wtf/Int16Array.h: Renamed from Source/WebCore/html/canvas/Int16Array.cpp.
+        (WTF::Int16Array::set):
+        (WTF::Int16Array::isShortArray):
+        (WTF::Int16Array::create):
+        (WTF::Int16Array::Int16Array):
+        (WTF::Int16Array::subarray):
+        * wtf/Int32Array.h: Renamed from Source/WebCore/html/canvas/Int32Array.cpp.
+        (WTF::Int32Array::set):
+        (WTF::Int32Array::isIntArray):
+        (WTF::Int32Array::create):
+        (WTF::Int32Array::Int32Array):
+        (WTF::Int32Array::subarray):
+        * wtf/Int8Array.h: Renamed from Source/WebCore/html/canvas/Int8Array.cpp.
+        (WTF::Int8Array::set):
+        (WTF::Int8Array::isByteArray):
+        (WTF::Int8Array::create):
+        (WTF::Int8Array::Int8Array):
+        (WTF::Int8Array::subarray):
+        * wtf/IntegralTypedArrayBase.h: Renamed from Source/WebCore/html/canvas/IntegralTypedArrayBase.h.
+        (WTF::IntegralTypedArrayBase::set):
+        (WTF::IntegralTypedArrayBase::item):
+        (WTF::IntegralTypedArrayBase::IntegralTypedArrayBase):
+        * wtf/TypedArrayBase.h: Renamed from Source/WebCore/html/canvas/TypedArrayBase.h.
+        (WTF::TypedArrayBase::data):
+        (WTF::TypedArrayBase::set):
+        (WTF::TypedArrayBase::setRange):
+        (WTF::TypedArrayBase::zeroRange):
+        (WTF::TypedArrayBase::length):
+        (WTF::TypedArrayBase::byteLength):
+        (WTF::TypedArrayBase::TypedArrayBase):
+        (WTF::TypedArrayBase::create):
+        (WTF::TypedArrayBase::subarrayImpl):
+        * wtf/Uint16Array.h: Renamed from Source/WebCore/html/canvas/Uint16Array.cpp.
+        (WTF::Uint16Array::set):
+        (WTF::Uint16Array::isUnsignedShortArray):
+        (WTF::Uint16Array::create):
+        (WTF::Uint16Array::Uint16Array):
+        (WTF::Uint16Array::subarray):
+        * wtf/Uint32Array.h: Renamed from Source/WebCore/html/canvas/Uint32Array.cpp.
+        (WTF::Uint32Array::set):
+        (WTF::Uint32Array::isUnsignedIntArray):
+        (WTF::Uint32Array::create):
+        (WTF::Uint32Array::Uint32Array):
+        (WTF::Uint32Array::subarray):
+        * wtf/Uint8Array.h: Renamed from Source/WebCore/html/canvas/Uint8Array.h.
+        (WTF::Uint8Array::set):
+        (WTF::Uint8Array::isUnsignedByteArray):
+        (WTF::Uint8Array::create):
+        (WTF::Uint8Array::Uint8Array):
+        (WTF::Uint8Array::subarray):
+        * wtf/wtf.pro:
+
+2011-11-27  Filip Pizlo  <fpizlo@apple.com>
+
+        Don't try to optimize huge code blocks
+        https://bugs.webkit.org/show_bug.cgi?id=73187
+
+        Reviewed by Oliver Hunt.
+        
+        This unifies the heuristics used for deciding if a code block is too big
+        to optimize, and sets this heuristic to 1000, which is intuitively better
+        than numeric_limits<unsigned>::max(). It also results in what looks like
+        a speed-up on both SunSpider and V8 (in Tools/Scripts/bencher).
+
+        * dfg/DFGCapabilities.h:
+        (JSC::DFG::mightCompileEval):
+        (JSC::DFG::mightCompileProgram):
+        (JSC::DFG::mightCompileFunctionForCall):
+        (JSC::DFG::mightCompileFunctionForConstruct):
+        * runtime/Heuristics.cpp:
+        (JSC::Heuristics::initializeHeuristics):
+        * runtime/Heuristics.h:
+
+2011-11-28  Filip Pizlo  <fpizlo@apple.com>
+
+        Either remove the GetMethod node from the DFG backend, or find a use for it
+        https://bugs.webkit.org/show_bug.cgi?id=73178
+
+        Reviewed by Gavin Barraclough.
+        
+        More testing seemed to imply that the GetMethod code was indeed not profitable
+        in any major test. So, it's probably best to just remove it.
+
+        * bytecode/CodeBlock.cpp:
+        (JSC::MethodCallLinkInfo::reset):
+        * dfg/DFGAbstractState.cpp:
+        (JSC::DFG::AbstractState::execute):
+        * dfg/DFGJITCompiler.cpp:
+        (JSC::DFG::JITCompiler::link):
+        * dfg/DFGJITCompiler.h:
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::hasIdentifier):
+        (JSC::DFG::Node::hasHeapPrediction):
+        * dfg/DFGOperations.cpp:
+        * dfg/DFGOperations.h:
+        * dfg/DFGPropagator.cpp:
+        (JSC::DFG::Propagator::propagateNodePredictions):
+        * dfg/DFGRepatch.cpp:
+        * dfg/DFGRepatch.h:
+        * dfg/DFGSpeculativeJIT.h:
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::cachedGetById):
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::cachedGetById):
+        (JSC::DFG::SpeculativeJIT::compile):
+
+2011-11-28  Michael Saboff  <msaboff@apple.com>
+
+        Change set 101187 from bug 73154 removed already lower case optimization
+        https://bugs.webkit.org/show_bug.cgi?id=73174
+
+        Added back the "string is already lower case" optimization.
+
+        Reviewed by Geoffrey Garen.
+
+        * runtime/StringPrototype.cpp:
+        (JSC::stringProtoFuncToLowerCase):
+
+2011-11-28  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        Unreviewed prospective build fix. Touch the file to trigger correct
+        rebuild on the Qt mips/sh4/sl bot.
+
+        * wtf/unicode/qt4/UnicodeQt4.h:
+
+2011-11-28  Tor Arne Vestbø  <tor.arne.vestbo@nokia.com>
+
+        [Qt] Remove cruft from project file
+
+        Reviewed by Simon Hausmann.
+
+        * Target.pri:
+
+2011-11-28  Simon Hausmann  <simon.hausmann@nokia.com>
+
+        [Qt] WTF should be built as separate static library
+        https://bugs.webkit.org/show_bug.cgi?id=73201
+
+        Reviewed by Tor Arne Vestbø.
+
+        * Target.pri: Don't claim to build WTF, as that would cause
+        the debug-with-shlibs build to not link in wtf.
+        * jsc.pro: Require wtf.
+        * wtf/wtf.pri: Removed.
+        * wtf/wtf.pro: Added. Pro file to build wtf statically.
+
+2011-11-28  Martin Robinson  <mrobinson@igalia.com>
+
+        [GTK] JavaScriptCore generated sources should build in the DerivedSources directory
+        https://bugs.webkit.org/show_bug.cgi?id=73197
+
+        Reviewed by Philippe Normand.
+
+        Build all JavaScriptCore generated sources in DerivedSources.
+
+        * GNUmakefile.am: Update generation rules.
+        * GNUmakefile.list.am: Update source lists.
+
+2011-11-27  Filip Pizlo  <fpizlo@apple.com>
+
+        DFG should not emit GetMethod node
+        https://bugs.webkit.org/show_bug.cgi?id=73175
+
+        Reviewed by Gavin Barraclough.
+        
+        Replaces all instances of the GetMethod node with GetById. This appears to
+        be a slight win on V8. This patch leaves GetMethod support in the code-base,
+        making this decision easy to reverse, for now.
+
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+
+2011-11-26  Hajime Morrita  <morrita@chromium.org>
+
+        Needs WTF_INLINE and JS_INLINE
+        https://bugs.webkit.org/show_bug.cgi?id=72853
+
+        Reviewed by Kevin Ollivier.
+
+        Added WTF_HIDDEN, WTF_INLINE and JS_INLINE which
+        indirect __attribute__((visibility("hidden"))
+
+        * config.h:
+        * wtf/ExportMacros.h:
+
 2011-11-25  Michael Saboff  <msaboff@apple.com>
 
         String.prototype.toLower should be optimized for 8 bit strings

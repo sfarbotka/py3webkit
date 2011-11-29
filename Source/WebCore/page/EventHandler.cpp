@@ -928,7 +928,7 @@ DragSourceAction EventHandler::updateDragSourceActionsAllowed() const
     if (!view)
         return DragSourceActionNone;
 
-    return page->dragController()->delegateDragSourceAction(view->contentsToWindow(m_mouseDownPos));
+    return page->dragController()->delegateDragSourceAction(view->contentsToRootView(m_mouseDownPos));
 }
 #endif // ENABLE(DRAG_SUPPORT)
     
@@ -2343,8 +2343,8 @@ bool EventHandler::sendContextMenuEventForKey()
 
     m_frame->view()->setCursor(pointerCursor());
 
-    IntPoint position = view->contentsToWindow(location);
-    IntPoint globalPosition = view->contentsToScreen(IntRect(location, IntSize())).location();
+    IntPoint position = view->contentsToRootView(location);
+    IntPoint globalPosition = view->hostWindow()->rootViewToScreen(IntRect(position, IntSize())).location();
 
     Node* targetNode = doc->focusedNode();
     if (!targetNode)
