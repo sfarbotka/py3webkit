@@ -1012,9 +1012,9 @@ class IDLParser(object):
         p[0] = CDATA(p[1], self.getLocation(p, 1))
 
     def p_member_const(self, p):
-        """member : CONST IDENTIFIER IDENTIFIER '=' number ';' """
-        p[0] = ConstMember(type=p[2], name=p[3],
-                           value=p[5], location=self.getLocation(p, 1),
+        """member : CONST attributes IDENTIFIER IDENTIFIER '=' number ';' """
+        p[0] = ConstMember(type=p[3], name=p[4],
+                           value=p[6], location=self.getLocation(p, 1),
                            doccomments=p.slice[1].doccomments)
 
 # All "number" products return a function(interface)
@@ -1179,21 +1179,13 @@ class IDLParser(object):
 
     def p_optgetter(self, p):
         """optgetter : GETTER raises
-                     | GETTER
                      """
-        if len(p) == 3:
-            p[0] = {'getter': p[2] }
-        elif len(p) == 2:
-            p[0] = {'getter': p.slice[1].doccomments }
+        p[0] = {'getter': p[2] }
 
     def p_optsetter(self, p):
         """optsetter : SETTER raises
-                     | SETTER
                      """
-        if len(p) == 3:
-            p[0] = {'setter': p[2] }
-        elif len(p) == 2:
-            p[0] = {'setter': p.slice[1].doccomments }
+        p[0] = {'setter': p[2] }
 
     def p_optreadonly(self, p):
         """optreadonly : READONLY
