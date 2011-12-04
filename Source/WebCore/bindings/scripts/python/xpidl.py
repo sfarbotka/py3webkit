@@ -42,12 +42,8 @@
 
 """A parser for cross-platform IDL (XPIDL) files."""
 
-import subprocess
 import sys, os.path, re
 from ply import lex, yacc
-import defsparser
-import codegen
-import override
 
 """A type conforms to the following pattern:
 
@@ -827,9 +823,11 @@ class IDLParser(object):
 
     precedence = (
         ('left', '|'),
+        ('left', '&'),
         ('left', 'LSHIFT', 'RSHIFT'),
         ('left', '+', '-'),
         ('left', '*'),
+        ('right', '(', ')'),
         ('left', 'UMINUS'),
     )
 
@@ -910,18 +908,23 @@ class IDLParser(object):
         p[0] = {'attlist': [(p[2], None, self.getLocation(p, 2))]}
 
     def p_attlist_start(self, p):
-        """attlist : attribute """
+        """attlist : attribute"""
         p[0] = [p[1]]
 
     def p_attlist_continue(self, p):
-        """attlist : attribute attlist"""
-        p[0] = list(p[2])
+        """attlist : attribute ',' attlist"""
+        p[0] = list(p[3])
         p[0].insert(0, p[1])
+
+    def p_attlist_end(self, p):
+        """attlist : attribute ',' """
+        p[0] = [p[1]]
 
     def p_attribute_vallist_start(self, p):
         """attvallist : IDENTIFIER
                       | IDENTIFIER '(' paramlist ')'
-                      | number 
+                      | NUMBER
+                      | HEXNUM
                       | IID """
         p[0] = [p[1]]
 
@@ -932,18 +935,15 @@ class IDLParser(object):
         p[0].insert(0, p[1])
 
     def p_attribute_eq(self, p):
-        """attribute : anyident '=' attvallist ','
-                     | anyident '=' attvallist """
+        """attribute : anyident '=' attvallist """
         p[0] = (p[1]['value'], p[3], p[1]['location'])
 
     def p_attribute_func(self, p):
-        """attribute : IDENTIFIER '(' paramlist ')' ','
-                     | IDENTIFIER '(' paramlist ')' """
+        """attribute : IDENTIFIER '(' paramlist ')' """
         p[0] = (p[1], p[3], self.getLocation(p, 1))
 
     def p_attribute(self, p):
-        """attribute : anyident attributeval
-                     | anyident attributeval ',' """
+        """attribute : anyident attributeval"""
         p[0] = (p[1]['value'], p[2], p[1]['location'])
 
     def p_attributeval(self, p):
@@ -1248,311 +1248,8 @@ class IDLParser(object):
     def getLocation(self, p, i):
         return Location(self.lexer, p.lineno(i), p.lexpos(i))
 
-tmap = {
-  "float": "float",
-    "CompareHow": "CompareHow",
-    "double": "double",
-    "boolean": "bool",
-    "char": "char",
-    "long": "long",
-    "short": "short",
-    "uchar": "uchar",
-    "unsigned": "unsigned",
-    "any": "SerializedScriptValue",
-    "TimeoutHandler": "ScheduledActionBase*",
-    "int": "int",
-    "unsigned int": "unsigned int",
-    "unsigned long": "unsigned long",
-    "unsigned long long": "unsigned long long",
-    "unsigned short": "unsigned short",
-    "void": "none",
-    #"EventTarget": "Node*",
-    "DOMString": "char*"
-}
-
-def typeMap(ptype):
-    global tmap
-    if tmap.has_key(ptype):
-        return tmap[ptype]
-    return "%s*" % ptype
-
-class IDLDefsParser(defsparser.DefsParser):
-    def startParsing(self, input, modulename, filename=None):
-        p = IDLParser()
-        x = p.parse(input, filename=self.filename)
-        for obj in x.productions:
-            if isinstance(obj, Interface):
-                atts = []
-                attsd = {}
-                for m in obj.members:
-                    if not isinstance(m, Attribute):
-                        continue
-                    # HACKS!
-                    #if m.attributes.has_key("CustomGetter"):
-                    #    continue
-                    if obj.name == 'DOMWindow' and m.name == 'event':
-                        # XXX HACK! skip it for now
-                        continue
-                    
-                    if obj.name == 'Event' and m.name == 'timeStamp':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLInputElement' and m.name == 'valueAsDate':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLInputElement' and m.name == 'files':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'ImageData' and m.name == 'data':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'XMLHttpRequest' and m.name == 'response':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'XMLHttpRequestProgressEvent' and m.name == 'position':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'XMLHttpRequestProgressEvent' and m.name == 'totalSize':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DOMWindow' and m.name == 'postMessage':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DOMWindow' and m.name == 'crypto':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DOMWindow' and m.name == 'console':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DOMWindow' and m.name == 'PeerConnection':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Navigator' and m.name == 'plugins':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Navigator' and m.name == 'mimeTypes':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-
-                    if obj.name == 'MediaQueryList' and m.name == 'addListener':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'MediaQueryList' and m.name == 'removeListener':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'href':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'protocol':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'host':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'hostname':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'port':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'pathname':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'search':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'hash':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Document' and m.name == 'webkitVisibilityState':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Document' and m.name == 'webkitHidden':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLMediaElement' and m.name == 'webkitAudioDecodedByteCount':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLMediaElement' and m.name == 'webkitVideoDecodedByteCount':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLBodyElement' and m.name == 'onorientationchange':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLFrameSetElement' and m.name == 'onorientationchange':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLVideoElement' and m.name == 'webkitDroppedFrameCount':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'HTMLVideoElement' and m.name == 'webkitDecodedFrameCount':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DOMWindow' and m.name == 'location':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if m.attributes.has_key("Replaceable"):
-                        m.readonly = True
-                    
-                    atts.append((typeMap(m.type), m.name))
-                    attsd[m.name] = m
-                
-                args = [ ("in-module", modulename),
-                         ("gtype-id", "core"+obj.name), # XXX
-                         ("c-name", obj.nativename) # XXX
-                       ]
-                if obj.base:
-                    args.append( ("parent", obj.base[0]) )
-                else:
-                    args.append( ("parent", "DOMObject") )
-                if atts:
-                    args.append( tuple(["fields"] + atts) )
-                odef = self.define_object(obj.name, *args)
-                odef.attributes = attsd
-                odef.orig_obj = obj
-                
-            for m in obj.members:
-                if isinstance(m, CDATA):
-                    continue
-                if isinstance(m, Method):
-                    if obj.name == 'History' \
-                       and m.name in ['pushState', 'replaceState']:
-                        # XXX HACK! skip it for now
-                        continue
-                    if obj.name == 'DOMWindow' \
-                       and m.name in ['setTimeout', 'setInterval']:
-                        # XXX HACK! custom exception
-                        m.raises = 'DOMException'
-                    if obj.name == 'EventListener' \
-                       and m.name == 'handleEvent':
-                        # XXX HACK! skip it for now
-                        continue
-                    if obj.name == 'DOMWindow' and m.name == 'open':
-                        # XXX HACK! skip it for now
-                        continue
-                    if obj.name == 'HTMLMediaElement' \
-                       and m.name in ['pause', 'play', 'load']:
-                        # XXX HACK! skip it for now - needs gesture check
-                        continue
-                    
-                    if obj.name == 'HTMLVideoElement' \
-                       and m.name in ['webkitEnterFullScreen',
-                                      'webkitEnterFullscreen']:
-                        # XXX HACK! skip it for now - needs gesture check
-                        continue
-
-                    if obj.name == 'Location' and m.name == 'replace':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'assign':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'Location' and m.name == 'reload':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'KeyboardEvent' and m.name == 'initKeyboardEvent':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-                    
-                    if obj.name == 'DedicatedWorkerContext' and m.name == 'postMessage':
-                        # XXX HACK! Skip it for now (FSV)
-                        continue
-
-                    
-                    params = ['parameters']
-                    return_param = None
-                    for p in m.params:
-                        rt = p.attributes.has_key("Return")
-                        if p.name == 'url' and obj.name == 'XMLHttpRequest' \
-                           and m.name == 'open':
-                            # HACK! XMLHTTPRequest.open url is WebCore::KURL
-                            p = ('kurl', p.name)
-                        else:
-                            if p.type in ['EventListener', 'TimeoutHandler']:
-                                p = (typeMap(p.type), p.name, ('null-ok',))
-                            else:
-                                p = (typeMap(p.type), p.name)
-                            # XXX TODO: sort out attributes
-                        params.append(p)
-                        if rt:
-                            return_param = p
-                    args = [
-                                    ('of-object', obj.name),
-                                    ("c-name", m.name), # XXX
-                                    tuple(params)
-                           ]
-                    args.append( ('return-type', typeMap(m.type)) )
-
-                    mth = self.define_method(m.name, *args)
-                    mth.attributes = m.attributes
-                    mth.raises = m.raises
-                    mth.return_param = return_param
-                    mth.orig_method = m
-        # debug output
-        # self.write_defs()
-
 if __name__ == '__main__':
-    modname = "pywebkit"
-    p = IDLDefsParser(None)
-    o = override.Overrides(sys.argv[1])
-    output_fname = sys.argv[2]
-    cwd = os.path.abspath(os.getcwd())
-    files = open(sys.argv[3])
-    files_prefix = sys.argv[4]
-    for fname in files.readlines():
-        f = fname.strip()
-        f = os.path.join(files_prefix, f)
+    p = IDLParser()
+    for f in sys.argv[1:]:
         print "Parsing %s" % f
-        (pth, fn) = os.path.split(f)
-        (fn, ext) = os.path.splitext(fn)
-        cmd = 'cpp -DLANGUAGE_PYTHON=1 %s' % f.replace(" ", "\ ")
-        proc = subprocess.Popen(cmd,
-                           stdin=subprocess.PIPE,
-                           stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE,
-                           shell=True,
-                           cwd=cwd,
-                           )
-        stdout_value, stderr_value = proc.communicate('')
-
-        p.startParsing(stdout_value, modname, filename=f)
-        codegen.register_types(p)
-    fo = codegen.FileOutput(open(output_fname, "w"))
-    sw = codegen.SourceWriter(p, o, modname, fo)
-    sw.write()
-    fo.close()
-
+        p.parse(open(f).read(), filename=f)

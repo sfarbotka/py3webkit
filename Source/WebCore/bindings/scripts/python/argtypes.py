@@ -409,13 +409,13 @@ class UInt32Arg(ULongArg):
 class Int64Arg(ArgType):
     def write_param(self, ptype, pname, pdflt, pnull, info):
         if pdflt:
-            info.varlist.add('gint64', pname + ' = ' + pdflt)
+            info.varlist.add('long long', pname + ' = ' + pdflt)
         else:
-            info.varlist.add('gint64', pname)
+            info.varlist.add('long long', pname)
         info.arglist.append(pname)
         info.add_parselist('L', ['&' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('gint64', 'ret')
+        info.varlist.add('long long', 'ret')
         info.codeafter.append('    return PyLong_FromLongLong(ret);')
 
 class UInt64Arg(ArgType):
@@ -424,16 +424,16 @@ class UInt64Arg(ArgType):
     before = '    %(name)s = PyLong_AsUnsignedLongLong(py_%(name)s);\n'
     def write_param(self, ptype, pname, pdflt, pnull, info):
         if pdflt:
-            info.varlist.add('guint64', pname + ' = ' + pdflt)
+            info.varlist.add('unsigned long long', pname + ' = ' + pdflt)
             info.codebefore.append(self.dflt % {'name':pname})
         else:
-            info.varlist.add('guint64', pname)
+            info.varlist.add('unsigned long long', pname)
             info.codebefore.append(self.before % {'name':pname})
         info.varlist.add('PyObject', "*py_" + pname + ' = NULL')
         info.arglist.append(pname)
         info.add_parselist('O!', ['&PyLong_Type', '&py_' + pname], [pname])
     def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('guint64', 'ret')
+        info.varlist.add('unsigned long long', 'ret')
         info.codeafter.append('    return PyLong_FromUnsignedLongLong(ret);')
 
 
@@ -495,48 +495,6 @@ class FileArg(ArgType):
                               '    Py_INCREF(Py_None);\n' +
                               '    return Py_None;')
 
-class EnumArg(ArgType):
-    enum = ('    if (pyg_enum_get_value(%(typecode)s, py_%(name)s, (gpointer)&%(name)s))\n'
-            '        return NULL;\n')
-    def __init__(self, enumname, typecode):
-        self.enumname = enumname
-        self.typecode = typecode
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pdflt:
-            info.varlist.add(self.enumname, pname + ' = ' + pdflt)
-        else:
-            info.varlist.add(self.enumname, pname)
-        info.varlist.add('PyObject', '*py_' + pname + ' = NULL')
-        info.codebefore.append(self.enum % { 'typecode': self.typecode,
-                                             'name': pname})
-        info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname]);
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('gint', 'ret')
-        info.codeafter.append('    return pyg_enum_from_gtype(%s, ret);' % self.typecode)
-
-class FlagsArg(ArgType):
-    flag = ('    if (%(default)spyg_flags_get_value(%(typecode)s, py_%(name)s, (gpointer)&%(name)s))\n'
-            '        return NULL;\n')
-    def __init__(self, flagname, typecode):
-        self.flagname = flagname
-        self.typecode = typecode
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pdflt:
-            info.varlist.add(self.flagname, pname + ' = ' + pdflt)
-            default = "py_%s && " % (pname,)
-        else:
-            info.varlist.add(self.flagname, pname)
-            default = ""
-        info.varlist.add('PyObject', '*py_' + pname + ' = NULL')
-        info.codebefore.append(self.flag % {'default':default,
-                                            'typecode':self.typecode,
-                                            'name':pname})
-        info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname])
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('guint', 'ret')
-        info.codeafter.append('    return pyg_flags_from_gtype(%s, ret);' % self.typecode)
 
 class ObjectArg(ArgType):
     # should change these checks to more typesafe versions that check
@@ -624,271 +582,6 @@ class ObjectArg(ArgType):
             info.codeafter.append('    py_ret = toPython(_ret);\n') 
             info.codeafter.append('    return py_ret;') 
 
-class BoxedArg(ArgType):
-    # haven't done support for default args.  Is it needed?
-    check = ('    if (pyg_boxed_check(py_%(name)s, %(typecode)s))\n'
-             '        %(name)s = pyg_boxed_get(py_%(name)s, %(typename)s);\n'
-             '    else {\n'
-             '        PyErr_SetString(PyExc_TypeError, "%(name)s should be a %(typename)s");\n'
-             '        return NULL;\n'
-             '    }\n')
-    null = ('    if (pyg_boxed_check(py_%(name)s, %(typecode)s))\n'
-            '        %(name)s = pyg_boxed_get(py_%(name)s, %(typename)s);\n'
-            '    else if (py_%(name)s != Py_None) {\n'
-            '        PyErr_SetString(PyExc_TypeError, "%(name)s should be a %(typename)s or None");\n'
-            '        return NULL;\n'
-            '    }\n')
-    def __init__(self, ptype, typecode):
-        self.typename = ptype
-        self.typecode = typecode
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pnull:
-            info.varlist.add(self.typename, '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname + ' = Py_None')
-            info.codebefore.append(self.null % {'name':  pname,
-                                                'typename': self.typename,
-                                                'typecode': self.typecode})
-        else:
-            info.varlist.add(self.typename, '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname)
-            info.codebefore.append(self.check % {'name':  pname,
-                                                 'typename': self.typename,
-                                                 'typecode': self.typecode})
-        if ptype[-1] == '*':
-            typename = ptype[:-1]
-            if typename[:6] == 'const-': typename = typename[6:]
-            if typename != self.typename:
-                info.arglist.append('(%s *)%s' % (ptype[:-1], pname))
-            else:
-                info.arglist.append(pname)
-        else:
-            info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname])
-    ret_tmpl = '    /* pyg_boxed_new handles NULL checking */\n' \
-               '    return pyg_boxed_new(%(typecode)s, %(ret)s, %(copy)s, TRUE);'
-    def write_return(self, ptype, ownsreturn, info):
-        if ptype[-1] == '*':
-            decl_type = self.typename
-            ret = 'ret'
-            if ptype[:6] == 'const-':
-                decl_type = 'const ' + self.typename
-                ret = '(%s*) ret' % (self.typename,)
-            info.varlist.add(decl_type, '*ret')
-        else:
-            info.varlist.add(self.typename, 'ret')
-            ret = '&ret'
-            ownsreturn = 0 # of course it can't own a ref to a local var ...
-        info.codeafter.append(self.ret_tmpl %
-                              { 'typecode': self.typecode,
-                                'ret': ret,
-                                'copy': ownsreturn and 'FALSE' or 'TRUE'})
-
-class CustomBoxedArg(ArgType):
-    # haven't done support for default args.  Is it needed?
-    null = ('    if (%(check)s(py_%(name)s))\n'
-            '        %(name)s = %(get)s(py_%(name)s);\n'
-            '    else if (py_%(name)s != Py_None) {\n'
-            '        PyErr_SetString(PyExc_TypeError, "%(name)s should be a %(type)s or None");\n'
-            '        return NULL;\n'
-            '    }\n')
-    def __init__(self, ptype, pytype, getter, new):
-        self.pytype = pytype
-        self.getter = getter
-        self.checker = 'Py' + ptype + '_Check'
-        self.new = new
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pnull:
-            info.varlist.add(ptype[:-1], '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname + ' = Py_None')
-            info.codebefore.append(self.null % {'name':  pname,
-                                                'get':   self.getter,
-                                                'check': self.checker,
-                                                'type':  ptype[:-1]})
-            info.arglist.append(pname)
-            info.add_parselist('O', ['&py_' + pname], [pname])
-        else:
-            info.varlist.add('PyObject', '*' + pname)
-            info.arglist.append(self.getter + '(' + pname + ')')
-            info.add_parselist('O!', ['&' + self.pytype, '&' + pname], [pname])
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add(ptype[:-1], '*ret')
-        info.codeafter.append('    if (ret)\n' +
-                              '        return ' + self.new + '(ret);\n' +
-                              '    Py_INCREF(Py_None);\n' +
-                              '    return Py_None;')
-
-class PointerArg(ArgType):
-    # haven't done support for default args.  Is it needed?
-    check = ('    if (pyg_pointer_check(py_%(name)s, %(typecode)s))\n'
-             '        %(name)s = pyg_pointer_get(py_%(name)s, %(typename)s);\n'
-             '    else {\n'
-             '        PyErr_SetString(PyExc_TypeError, "%(name)s should be a %(typename)s");\n'
-             '        return NULL;\n'
-             '    }\n')
-    null = ('    if (pyg_pointer_check(py_%(name)s, %(typecode)s))\n'
-            '        %(name)s = pyg_pointer_get(py_%(name)s, %(typename)s);\n'
-            '    else if (py_%(name)s != Py_None) {\n'
-            '        PyErr_SetString(PyExc_TypeError, "%(name)s should be a %(typename)s or None");\n'
-            '        return NULL;\n'
-            '    }\n')
-    def __init__(self, ptype, typecode):
-        self.typename = ptype
-        self.typecode = typecode
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pnull:
-            info.varlist.add(self.typename, '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname + ' = Py_None')
-            info.codebefore.append(self.null % {'name':  pname,
-                                                'typename': self.typename,
-                                                'typecode': self.typecode})
-        else:
-            info.varlist.add(self.typename, '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname)
-            info.codebefore.append(self.check % {'name':  pname,
-                                                 'typename': self.typename,
-                                                 'typecode': self.typecode})
-        info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname])
-    def write_return(self, ptype, ownsreturn, info):
-        if ptype[-1] == '*':
-            info.varlist.add(self.typename, '*ret')
-            info.codeafter.append('    /* pyg_pointer_new handles NULL checking */\n' +
-                                  '    return pyg_pointer_new(' + self.typecode + ', ret);')
-        else:
-            info.varlist.add(self.typename, 'ret')
-            info.codeafter.append('    /* pyg_pointer_new handles NULL checking */\n' +
-                                  '    return pyg_pointer_new(' + self.typecode + ', &ret);')
-
-class AtomArg(IntArg):
-    dflt = '    if (py_%(name)s) {\n' \
-           '        %(name)s = pygdk_atom_from_pyobject(py_%(name)s);\n' \
-           '        if (PyErr_Occurred())\n' \
-           '            return NULL;\n' \
-           '    }\n'
-    atom = ('    %(name)s = pygdk_atom_from_pyobject(py_%(name)s);\n'
-            '    if (PyErr_Occurred())\n'
-            '        return NULL;\n')
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pdflt:
-            info.varlist.add('GdkAtom', pname + ' = ' + pdflt)
-            info.varlist.add('PyObject', '*py_' + pname + ' = NULL')
-            info.codebefore.append(self.dflt % {'name': pname})
-        else:
-            info.varlist.add('GdkAtom', pname)
-            info.varlist.add('PyObject', '*py_' + pname + ' = NULL')
-            info.codebefore.append(self.atom % {'name': pname})
-        info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname])
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('GdkAtom', 'ret')
-        info.varlist.add('PyObject *', 'py_ret')
-        info.varlist.add('gchar *', 'name')
-        info.codeafter.append('    name = gdk_atom_name(ret);\n'
-                              '    py_ret = PyUnicode_FromString(name);\n'
-                              '    g_free(name);\n'
-                              '    return py_ret;')
-
-class GTypeArg(ArgType):
-    gtype = ('    if ((%(name)s = pyg_type_from_object(py_%(name)s)) == 0)\n'
-             '        return NULL;\n')
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        info.varlist.add('GType', pname)
-        info.varlist.add('PyObject', '*py_' + pname + ' = NULL')
-        info.codebefore.append(self.gtype % {'name': pname})
-        info.arglist.append(pname)
-        info.add_parselist('O', ['&py_' + pname], [pname])
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('GType', 'ret')
-        info.codeafter.append('    return pyg_type_wrapper_new(ret);')
-
-# simple GError handler.
-class GErrorArg(ArgType):
-    handleerror = ('    if (pyg_error_check(&%(name)s))\n'
-                   '        return NULL;\n')
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        info.varlist.add('GError', '*' + pname + ' = NULL')
-        info.arglist.append('&' + pname)
-        info.codeafter.append(self.handleerror % { 'name': pname })
-
-class GtkTreePathArg(ArgType):
-    # haven't done support for default args.  Is it needed?
-    normal = ('    %(name)s = pygtk_tree_path_from_pyobject(py_%(name)s);\n'
-              '    if (!%(name)s) {\n'
-              '        PyErr_SetString(PyExc_TypeError, "could not convert %(name)s to a GtkTreePath");\n'
-              '        return NULL;\n'
-              '    }\n')
-    null = ('    if (py_%(name)s != Py_None) {\n'
-            '        %(name)s = pygtk_tree_path_from_pyobject(py_%(name)s);\n'
-            '        if (!%(name)s) {\n'
-            '            PyErr_SetString(PyExc_TypeError, "could not convert %(name)s to a GtkTreePath");\n'
-            '            return NULL;\n'
-            '        }\n'
-            '    }\n')
-    freepath = ('    if (%(name)s)\n'
-                '        gtk_tree_path_free(%(name)s);\n')
-    def __init__(self):
-        pass
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pnull:
-            info.varlist.add('GtkTreePath', '*' + pname + ' = NULL')
-            info.varlist.add('PyObject', '*py_' + pname + ' = Py_None')
-            info.codebefore.append(self.null % {'name':  pname})
-            info.arglist.append(pname)
-            info.add_parselist('O', ['&py_' + pname], [pname])
-        else:
-            info.varlist.add('GtkTreePath', '*' + pname)
-            info.varlist.add('PyObject', '*py_' + pname)
-            info.codebefore.append(self.normal % {'name': pname})
-            info.arglist.append(pname)
-            info.add_parselist('O', ['&py_' + pname], [pname])
-        info.codeafter.append(self.freepath % {'name': pname})
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('GtkTreePath', '*ret')
-        if ownsreturn:
-            info.codeafter.append('    if (ret) {\n'
-                                  '        PyObject *py_ret = pygtk_tree_path_to_pyobject(ret);\n'
-                                  '        gtk_tree_path_free(ret);\n'
-                                  '        return py_ret;\n'
-                                  '    }\n'
-                                  '    Py_INCREF(Py_None);\n'
-                                  '    return Py_None;')
-        else:
-            info.codeafter.append('    if (ret) {\n'
-                                  '        PyObject *py_ret = pygtk_tree_path_to_pyobject(ret);\n'
-                                  '        return py_ret;\n'
-                                  '    }\n'
-                                  '    Py_INCREF(Py_None);\n'
-                                  '    return Py_None;')
-
-class GdkRectanglePtrArg(ArgType):
-    normal = ('    if (!pygdk_rectangle_from_pyobject(py_%(name)s, &%(name)s))\n'
-              '        return NULL;\n')
-    null =   ('    if (py_%(name)s == Py_None)\n'
-              '        %(name)s = NULL;\n'
-              '    else if (pygdk_rectangle_from_pyobject(py_%(name)s, &%(name)s_rect))\n'
-              '        %(name)s = &%(name)s_rect;\n'
-              '    else\n'
-              '            return NULL;\n')
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        if pnull:
-            info.varlist.add('GdkRectangle', pname + '_rect = { 0, 0, 0, 0 }')
-            info.varlist.add('GdkRectangle', '*' + pname)
-            info.varlist.add('PyObject', '*py_' + pname + ' = Py_None')
-            info.add_parselist('O', ['&py_' + pname], [pname])
-            info.arglist.append(pname)
-            info.codebefore.append(self.null % {'name':  pname})
-        else:
-            info.varlist.add('GdkRectangle', pname + ' = { 0, 0, 0, 0 }')
-            info.varlist.add('PyObject', '*py_' + pname)
-            info.add_parselist('O', ['&py_' + pname], [pname])
-            info.arglist.append('&' + pname)
-            info.codebefore.append(self.normal % {'name':  pname})
-
-class GdkRectangleArg(ArgType):
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add('GdkRectangle', 'ret')
-        info.codeafter.append('    return pyg_boxed_new(GDK_TYPE_RECTANGLE, &ret, TRUE, TRUE);')
-
 class PyObjectArg(ArgType):
     def write_param(self, ptype, pname, pdflt, pnull, info):
         info.varlist.add('PyObject', '*' + pname)
@@ -907,119 +600,28 @@ class PyObjectArg(ArgType):
                                   '    Py_INCREF(ret);\n'
                                   '    return ret;')
 
-class CairoArg(ArgType):
-    def write_param(self, ptype, pname, pdflt, pnull, info):
-        info.varlist.add('PycairoContext', '*' + pname)
-        info.add_parselist('O!', ['&PycairoContext_Type', '&' + pname], [pname])
-        info.arglist.append('%s->ctx' % pname)
-    def write_return(self, ptype, ownsreturn, info):
-        info.varlist.add("cairo_t", "*ret")
-        if ownsreturn:
-            info.codeafter.append('    return PycairoContext_FromContext(ret, NULL, NULL);')
-        else:
-            info.codeafter.append('    cairo_reference(ret);\n'
-                                  '    return PycairoContext_FromContext(ret, NULL, NULL);')
-
 
 class ArgMatcher:
     def __init__(self):
         self.argtypes = {}
-        self.reverse_argtypes = {}
-        self.reverse_rettypes = {}
 
     def register(self, ptype, handler, overwrite=False):
         if not overwrite and ptype in self.argtypes:
             return
         self.argtypes[ptype] = handler
-    def register_reverse(self, ptype, handler):
-        self.reverse_argtypes[ptype] = handler
-    def register_reverse_ret(self, ptype, handler):
-        self.reverse_rettypes[ptype] = handler
 
-    def register_enum(self, ptype, typecode):
-        if typecode is None:
-            self.register(ptype, IntArg())
-        else:
-            self.register(ptype, EnumArg(ptype, typecode))
-    def register_flag(self, ptype, typecode):
-        if typecode is None:
-            self.register(ptype, IntArg())
-        else:
-            self.register(ptype, FlagsArg(ptype, typecode))
     def register_object(self, ptype, parent, typecode):
         oa = ObjectArg(ptype, parent, typecode)
         self.register(ptype, oa)  # in case I forget the * in the .defs
         self.register(ptype+'*', oa)
-        self.register('const-'+ptype+'*', oa)
-        if ptype == 'GdkPixmap':
-            # hack to handle GdkBitmap synonym.
-            self.register('GdkBitmap', oa)
-            self.register('GdkBitmap*', oa)
-    def register_boxed(self, ptype, typecode):
-        if self.argtypes.has_key(ptype): return
-        arg = BoxedArg(ptype, typecode)
-        self.register(ptype, arg)
-        self.register(ptype+'*', arg)
-        self.register('const-'+ptype+'*', arg)
-    def register_custom_boxed(self, ptype, pytype, getter, new):
-        arg = CustomBoxedArg(ptype, pytype, getter, new)
-        self.register(ptype+'*', arg)
-        self.register('const-'+ptype+'*', arg)
-    def register_pointer(self, ptype, typecode):
-        arg = PointerArg(ptype, typecode)
-        self.register(ptype, arg)
-        self.register(ptype+'*', arg)
-        self.register('const-'+ptype+'*', arg)
+        self.register('const '+ptype+'*', oa)
 
     def get(self, ptype):
         try:
             return self.argtypes[ptype]
         except KeyError:
-            if ptype[:8] == 'GdkEvent' and ptype[-1] == '*':
-                return self.argtypes['GdkEvent*']
-            print self.argtypes['EventListener']
+            print(self.argtypes['EventListener'])
             raise ArgTypeNotFoundError(ptype)
-    def _get_reverse_common(self, ptype, registry):
-        props = dict(c_type=ptype)
-        try:
-            return registry[ptype], props
-        except KeyError:
-            try:
-                handler = self.argtypes[ptype]
-            except KeyError:
-                if ptype.startswith('GdkEvent') and ptype.endswith('*'):
-                    handler = self.argtypes['GdkEvent*']
-                else:
-                    raise ArgTypeNotFoundError("No ArgType for %s" % (ptype,))
-            if isinstance(handler, ObjectArg):
-                return registry['GObject*'], props
-            elif isinstance(handler, EnumArg):
-                props['typecode'] = handler.typecode
-                props['enumname'] = handler.enumname
-                return registry['GEnum'], props
-            elif isinstance(handler, FlagsArg):
-                props['typecode'] = handler.typecode
-                props['flagname'] = handler.flagname
-                return registry['GFlags'], props
-            elif isinstance(handler, BoxedArg):
-                props['typecode'] = handler.typecode
-                props['typename'] = handler.typename
-                return registry['GBoxed'], props
-            else:
-                raise ArgTypeNotFoundError("No ArgType for %s" % (ptype,))
-
-    def get_reverse(self, ptype):
-        return self._get_reverse_common(ptype, self.reverse_argtypes)
-
-    def get_reverse_ret(self, ptype):
-        ret, props = self._get_reverse_common(ptype, self.reverse_rettypes)
-        if hasattr(ptype, 'optional') and ptype.optional:
-            if ret.supports_optional:
-                props['optional'] = True
-            else:
-                raise ArgTypeNotFoundError("Unsupported 'optional' for %s"
-                                           % (ptype,))
-        return ret, props
 
     def object_is_a(self, otype, parent):
         if otype == None: return 0
@@ -1038,11 +640,8 @@ matcher.register('kurl', arg)
 
 arg = StringArg()
 matcher.register('char*', arg)
-matcher.register('gchar*', arg)
-matcher.register('const-char*', arg)
-matcher.register('char-const*', arg)
-matcher.register('const-gchar*', arg)
-matcher.register('gchar-const*', arg)
+matcher.register('const char*', arg)
+matcher.register('char const*', arg)
 matcher.register('string', arg)
 matcher.register('static_string', arg)
 
@@ -1050,99 +649,51 @@ arg = SerializedStringArg()
 matcher.register('SerializedScriptValue', arg)
 
 arg = UCharArg()
-matcher.register('unsigned-char*', arg)
-matcher.register('const-guchar*', arg)
-matcher.register('const-guint8*', arg)
-matcher.register('guchar*', arg)
+matcher.register('unsigned char*', arg)
 
 arg = CharArg()
 matcher.register('char', arg)
-matcher.register('gchar', arg)
-matcher.register('guchar', arg)
 
 arg = GUniCharArg()
-matcher.register('gunichar', arg)
 matcher.register('DOMString', arg)
 matcher.register('wchar_t*', arg)
 
 arg = IntArg()
 matcher.register('int', arg)
-matcher.register('gint', arg)
 matcher.register('short', arg)
-matcher.register('gshort', arg)
-matcher.register('gushort', arg)
 matcher.register('unsigned short', arg)
-matcher.register('gsize', SizeArg())
-matcher.register('gssize', SSizeArg())
-matcher.register('guint8', arg)
-matcher.register('gint8', arg)
-matcher.register('guint16', arg)
-matcher.register('gint16', arg)
-matcher.register('gint32', arg)
-matcher.register('GTime', arg)
-matcher.register('GSeekType', arg) # Hack, but we have no python wrapper
 
 arg = CompareHowArg()
 matcher.register('CompareHow', arg)
 
 arg = LongArg()
 matcher.register('long', arg)
-matcher.register('glong', arg)
-
-arg = UIntArg()
-matcher.register('guint', arg)
 
 arg = BoolArg()
-matcher.register('gboolean', arg)
 matcher.register('bool', arg)
 
 arg = TimeTArg()
 matcher.register('time_t', arg)
 
-matcher.register('guint32', UInt32Arg())
-
 arg = ULongArg()
-matcher.register('gulong', arg)
 matcher.register('unsigned long', arg)
 
 arg = Int64Arg()
-matcher.register('gint64', arg)
-matcher.register('long-long', arg)
-matcher.register('goffset', arg)
+matcher.register('long long', arg)
 
 arg = UInt64Arg()
-matcher.register('guint64', arg)
-matcher.register('unsigned-long-long', arg)
+matcher.register('unsigned long long', arg)
 
 arg = DoubleArg()
 matcher.register('double', arg)
-matcher.register('gdouble', arg)
 matcher.register('float', arg)
-matcher.register('gfloat', arg)
 
 arg = FileArg()
 matcher.register('FILE*', arg)
 
-# enums, flags, objects
-
-matcher.register('GdkAtom', AtomArg())
-
-matcher.register('GType', GTypeArg())
-matcher.register('GtkType', GTypeArg())
-
-matcher.register('GError**', GErrorArg())
-matcher.register('GtkTreePath*', GtkTreePathArg())
-matcher.register('GdkRectangle*', GdkRectanglePtrArg())
-matcher.register('GtkAllocation*', GdkRectanglePtrArg())
-matcher.register('GdkRectangle', GdkRectangleArg())
-matcher.register('PyObject*', PyObjectArg())
-
-matcher.register('GdkNativeWindow', ULongArg())
-
-matcher.register_object('GObject', None, 'G_TYPE_OBJECT')
-
 del arg
 
-matcher.register('cairo_t*', CairoArg())
-matcher.register_boxed("GClosure", "G_TYPE_CLOSURE")
+# enums, flags, objects
+
+matcher.register('PyObject*', PyObjectArg())
 matcher.register('ScheduledActionBase*', ObjectArg("ScheduledActionBase", "DOMObject", "coreScheduledActionBase"))

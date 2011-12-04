@@ -31,13 +31,14 @@ endif # HTML_FLAGS
 pycodegen = $(WebCore)/bindings/scripts/python
 
 DerivedSources/WebCore/python/PyWebkit.cpp: \
+				$(pycodegen)/main.py \
 				$(pycodegen)/codegen.py \
 				$(pycodegen)/xpidl.py \
 				$(pycodegen)/argtypes.py  \
 				$(WebCore)/bindings/python/pywebkit.override \
 				$(WebCore)/bindings/python/idl_files.txt 
 	mkdir -p DerivedSources/WebCore/python
-	$(PYTHON) $(pycodegen)/xpidl.py \
+	$(PYTHON) $(pycodegen)/main.py \
 				$(WebCore)/bindings/python/pywebkit.override \
 				DerivedSources/WebCore/python/PyWebkit.cpp \
 				$(WebCore)/bindings/python/idl_files.txt \
