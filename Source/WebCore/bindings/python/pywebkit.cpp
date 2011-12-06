@@ -74,7 +74,7 @@ static PyObject* pywebkit_get_dom_window(PyObject* self, PyObject* args)
 	void* frame = webkit_web_view_get_main_frame(webview);
 	gpointer ptr = webkit_web_frame_get_dom_window(frame);
 	
-	return pywebkit_api_fns.doc(ptr);
+	return pywebkit_api_fns.win(ptr);
 }
 
 static PyMethodDef pywebkit_methods[] = 

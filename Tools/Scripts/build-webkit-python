@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+
+import os
+
+
+if __name__ == '__main__':
+    directory = os.path.abspath(os.path.dirname(__file__))
+    script = os.path.join(directory, 'build-webkit')
+    cmd = [script]
+    cmd.append('--gtk')
+    cmd.append('--no-webkit2')
+    cmd.append('--with-gtk=2.0')
+    cmd.append('--enable-introspection')
+    cmd.append('--with-python-config=python3-config')
+
+    print(' '.join(cmd))
+    os.system(' '.join(cmd))
