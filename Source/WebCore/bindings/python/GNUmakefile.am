@@ -35,11 +35,9 @@ DerivedSources/WebCore/python/PyWebkit.cpp: \
 				$(pycodegen)/codegen.py \
 				$(pycodegen)/xpidl.py \
 				$(pycodegen)/argtypes.py  \
-				$(WebCore)/bindings/python/pywebkit.override \
 				$(WebCore)/bindings/python/idl_files.txt 
 	mkdir -p DerivedSources/WebCore/python
 	$(PYTHON) $(pycodegen)/main.py \
-				$(WebCore)/bindings/python/pywebkit.override \
 				DerivedSources/WebCore/python/PyWebkit.cpp \
 				$(WebCore)/bindings/python/idl_files.txt \
                 $(srcdir)/Source
@@ -47,6 +45,9 @@ DerivedSources/WebCore/python/PyWebkit.cpp: \
 webcore_sources += \
 	Source/WebCore/bindings/python/pywebkit.cpp \
 	Source/WebCore/bindings/python/PythonBinding.cpp \
+	Source/WebCore/bindings/python/PyDOMObject.cpp \
+	Source/WebCore/bindings/python/PythonEventListener.cpp \
+	Source/WebCore/bindings/python/PyScheduledAction.cpp \
 	Source/WebCore/bindings/python/PyXMLHttpRequestCustom.cpp \
 	Source/WebCore/bindings/python/PyDOMFormDataCustom.cpp \
 	Source/WebCore/bindings/python/PyWorkerContextCustom.cpp \

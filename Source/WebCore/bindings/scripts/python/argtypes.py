@@ -696,4 +696,4 @@ del arg
 # enums, flags, objects
 
 matcher.register('PyObject*', PyObjectArg())
-matcher.register('ScheduledActionBase*', ObjectArg("ScheduledActionBase", "DOMObject", "coreScheduledActionBase"))
+matcher.register('ScheduledActionBase*', ObjectArg("ScheduledActionBase", "DOMObject", "corePyScheduledAction"))

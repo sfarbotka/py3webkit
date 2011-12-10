@@ -5,7 +5,6 @@ import subprocess
 
 from xpidl import IDLParser, Attribute, CDATA, Method, Interface
 import codegen
-import override
 
 
 tmap = {
@@ -145,7 +144,6 @@ class ObjectDef(Definition):
         self.typecode = typecode
         self.fields = fields
         self.implements = []
-        self.class_init_func = None
         self.has_new_constructor_api = False
 
     def write_defs(self, fp=sys.stdout):
@@ -171,7 +169,6 @@ class MethodDef(Definition):
         self.name = name
         self.ret = rettype
         self.caller_owns_return = None
-        self.unblock_threads = None
         self.c_name = c_name
         self.typecode = None
         self.of_object = of_object
@@ -304,11 +301,10 @@ class IDLDefsParser:
 if __name__ == '__main__':
     modname = "pywebkit"
     p = IDLDefsParser()
-    o = override.Overrides(sys.argv[1])
-    output_fname = sys.argv[2]
+    output_fname = sys.argv[1]
     cwd = os.path.abspath(os.getcwd())
-    files = open(sys.argv[3])
-    files_prefix = sys.argv[4]
+    files = open(sys.argv[2])
+    files_prefix = sys.argv[3]
     for fname in files.readlines():
         f = fname.strip()
         if len(f) == 0:
@@ -332,6 +328,7 @@ if __name__ == '__main__':
         p.startParsing(stdout_value, modname, filename=f)
         codegen.register_types(p)
     fo = codegen.FileOutput(open(output_fname, "w"))
-    sw = codegen.SourceWriter(p, o, modname, fo)
+    sw = codegen.SourceWriter(p, modname, fo)
     sw.write()
     fo.close()
+

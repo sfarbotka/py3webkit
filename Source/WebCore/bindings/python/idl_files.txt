@@ -105,6 +105,7 @@ WebCore/html/HTMLParagraphElement.idl
 WebCore/html/HTMLParamElement.idl
 WebCore/html/HTMLPreElement.idl
 WebCore/html/HTMLProgressElement.idl
+WebCore/html/HTMLPropertiesCollection.idl
 WebCore/html/HTMLQuoteElement.idl
 WebCore/html/HTMLScriptElement.idl
 WebCore/html/HTMLSelectElement.idl

@@ -11,7 +11,6 @@ import sys
 import traceback
 
 import argtypes
-import override
 import warnings
 
 def startreplace(fieldname, opts):
@@ -95,14 +94,6 @@ class FileOutput:
         self.fp.close()
     def flush(self):
         self.fp.flush()
-
-    def setline(self, linenum, filename):
-        '''writes out a #line statement, for use by the C
-        preprocessor.''' # "
-        self.write('#line %d "%s"\n' % (linenum, filename))
-    def resetline(self):
-        '''resets line numbering to the original file'''
-        self.setline(self.lineno + 1, self.filename)
 
 class Wrapper:
     type_tmpl = (
@@ -233,10 +224,9 @@ class Wrapper:
     # template for method calls
     method_tmpl = None
 
-    def __init__(self, parser, objinfo, overrides, fp=FileOutput(sys.stdout)):
+    def __init__(self, parser, objinfo, fp=FileOutput(sys.stdout)):
         self.parser = parser
         self.objinfo = objinfo
-        self.overrides = overrides
         self.fp = fp
 
     def get_lower_name(self):
@@ -251,18 +241,9 @@ class Wrapper:
 
     def get_initial_method_substdict(self, method):
         substdict = { 'name': '%s.%s' % (self.objinfo.py_name, method.name) }
-        if method.unblock_threads:
-            substdict['begin_allow_threads'] = 'pyg_begin_allow_threads;'
-            substdict['end_allow_threads'] = 'pyg_end_allow_threads;'
-        else:
-            substdict['begin_allow_threads'] = ''
-            substdict['end_allow_threads'] = ''
         return substdict
 
     def write_class(self):
-        if self.overrides.is_type_ignored(self.objinfo.c_name):
-            return
-
         cond = get_conditional_substitutions(self.objinfo.orig_obj.attributes)
 
         self.fp.write(cond['conditional_if'])
@@ -275,18 +256,9 @@ class Wrapper:
         if not substdict.has_key('tp_flags'):
             substdict['tp_flags'] = self.write_flags()
         substdict['typename'] = self.objinfo.c_name
-        if self.overrides.modulename:
-            substdict['classname'] = '%s.%s' % (self.overrides.modulename,
-                                           self.objinfo.name)
-        else:
-            substdict['classname'] = '%s.%s' % (self.prefix, self.objinfo.name)
+        substdict['classname'] = '%s.%s' % (self.prefix, self.objinfo.name)
         substdict['tp_doc'] = self.objinfo.docstring
-
-        # Maybe this could be done in a nicer way, but I'll leave it as it is
-        # for now: -- Johan
-        if not self.overrides.slot_is_overriden('%s.tp_init' %
-                                                self.objinfo.c_name):
-            substdict['tp_init'] = self.write_constructor()
+        substdict['tp_init'] = self.write_constructor()
         substdict['tp_methods'] = self.write_methods()
         substdict['tp_getset'] = self.write_getsets()
         substdict['tp_dealloc'] = self.write_dealloc()
@@ -303,13 +275,8 @@ class Wrapper:
             slotfunc = '_wrap_%s_%s' % (self.get_lower_name(), slot)
             if slot[:6] == 'tp_as_':
                 slotfunc = '&' + slotfunc
-            if self.overrides.slot_is_overriden(slotname):
-                data = self.overrides.slot_override(slotname)
-                self.write_function(slotname, data)
-                substdict[slot] = slotfunc
-            else:
-                if not substdict.has_key(slot):
-                    substdict[slot] = '0'
+            if not substdict.has_key(slot):
+                substdict[slot] = '0'
 
         self.fp.write('} // namespace WebKit\n')
 
@@ -328,7 +295,6 @@ class Wrapper:
         if handle_return:
             includes.add(function_obj.ret)
         return includes
-
 
     def write_flags(self):
         return 'Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE'
@@ -403,13 +369,6 @@ class Wrapper:
         # if name isn't set, set it to function_obj.name
         substdict.setdefault('name', function_obj.name)
 
-        if function_obj.unblock_threads:
-            substdict['begin_allow_threads'] = 'pyg_begin_allow_threads;'
-            substdict['end_allow_threads'] = 'pyg_end_allow_threads;'
-        else:
-            substdict['begin_allow_threads'] = ''
-            substdict['end_allow_threads'] = ''
-
         if self.objinfo:
             substdict['typename'] = self.objinfo.c_name
         substdict.setdefault('cname',  function_obj.c_name)
@@ -462,25 +421,10 @@ static int
         return "WebKit::" + classname + "_init"
 
     def get_methflags(self, funcname):
-        if self.overrides.wants_kwargs(funcname):
-            flags = 'METH_VARARGS|METH_KEYWORDS'
-        elif self.overrides.wants_noargs(funcname):
-            flags = 'METH_NOARGS'
-        elif self.overrides.wants_onearg(funcname):
-            flags = 'METH_O'
-        else:
-            flags = 'METH_VARARGS'
-        if self.overrides.is_staticmethod(funcname):
-            flags += '|METH_STATIC'
-        elif self.overrides.is_classmethod(funcname):
-            flags += '|METH_CLASS'
-        return flags
+        return 'METH_VARARGS|METH_CLASS'
 
     def write_function(self, funcname, data):
-        lineno, filename = self.overrides.getstartline(funcname)
-        self.fp.setline(lineno, filename)
         self.fp.write(data)
-        self.fp.resetline()
         self.fp.write('\n\n')
 
     def find_include_ptypes(self):
@@ -489,10 +433,6 @@ static int
         # First, get methods from the defs files
         for meth in self.parser.find_methods(self.objinfo):
             method_name = meth.c_name
-            if self.overrides.is_ignored(method_name):
-                continue
-            if self.overrides.is_overriden(method_name):
-                continue
             includes.update(self.find_function_ptypes(meth, handle_return=1))
         return includes
 
@@ -533,18 +473,10 @@ static int
         # First, get methods from the defs files
         for meth in self.parser.find_methods(self.objinfo):
             method_name = meth.c_name
-            if self.overrides.is_ignored(method_name):
-                continue
             if self.custom_method_alredy_implemented(meth):
                 continue
             try:
-                if self.overrides.is_overriden(method_name):
-                    if not self.overrides.is_already_included(method_name):
-                        data = self.overrides.override(method_name)
-                        self.write_function(method_name, data)
-
-                    methflags = self.get_methflags(method_name)
-                elif not self.custom_method_implementation(meth):
+                if not self.custom_method_implementation(meth):
                     # write constructor from template ...
                     code, methflags = self.write_function_wrapper(meth,
                         self.method_tmpl, handle_return=1, is_method=1,
@@ -568,26 +500,6 @@ static int
                 traceback.print_exc()
                 sys.stderr.write('declaration of type needed %s.%s: %s\n'
                                 % (klass, meth.name, ex))
-
-        # Now try to see if there are any defined in the override
-        for method_name in self.overrides.get_defines_for(klass):
-            c_name = override.class2cname(klass, method_name)
-            if self.overrides.is_already_included(method_name):
-                continue
-
-            try:
-                data = self.overrides.define(klass, method_name)
-                self.write_function(method_name, data)
-                methflags = self.get_methflags(method_name)
-
-                methods.append(self.methdef_tmpl %
-                               { 'name':  method_name,
-                                 'cname': '_wrap_' + c_name,
-                                 'flags': methflags,
-                                 'docstring': 'NULL' })
-            except argtypes.ArgTypeError, ex:
-                sys.stderr.write('Could not write method %s.%s: %s\n'
-                                % (klass, method_name, str(ex)))
 
         if methods:
             self.fp.write('} // namespace WebKit\n\n')
@@ -638,14 +550,6 @@ static int
             settername = '0'
             
             attrname = self.objinfo.c_name + '.' + fname
-            if self.overrides.attr_is_overriden(attrname):
-                code = self.overrides.attr_override(attrname)
-                self.write_function(attrname, code)
-                if string.find(code, getterprefix + fname) >= 0:
-                    gettername = getterprefix + fname
-                if string.find(code, setterprefix + fname) >= 0:
-                    settername = setterprefix + fname
-            
             
             attribs = self.objinfo.attributes[fname]
             conditional = get_conditional_substitutions(attribs) 
@@ -768,16 +672,14 @@ class ObjectWrapper(Wrapper):
         '%(varlist)s'
         '%(parseargs)s'
         '%(codebefore)s'
-        '    %(begin_allow_threads)s\n'
         '    %(setreturn)s%(cast)s(self)->%(cname)s(%(arglist)s);\n'
-        '    %(end_allow_threads)s\n'
         '%(codeafter)s\n'
         '}\n'
         '%(conditional_endif)s\n'
         )
 
-    def __init__(self, parser, objinfo, overrides, fp=FileOutput(sys.stdout)):
-        Wrapper.__init__(self, parser, objinfo, overrides, fp)
+    def __init__(self, parser, objinfo, fp=FileOutput(sys.stdout)):
+        Wrapper.__init__(self, parser, objinfo, fp)
         if self.objinfo:
             self.castmacro = string.replace(self.objinfo.typecode,
                                             '_TYPE_', '_', 1)
@@ -1145,9 +1047,8 @@ PyObject* toPython(WebCore::%(classname)s* obj)
         'PyObject* toPython(WebCore::%(classname)s*);\n'
         )
 
-    def __init__(self, parser, overrides, prefix, fp=FileOutput(sys.stdout)):
+    def __init__(self, parser, prefix, fp=FileOutput(sys.stdout)):
         self.parser = parser
-        self.overrides = overrides
         self.prefix = prefix
         self.fp = fp
 
@@ -1156,7 +1057,6 @@ PyObject* toPython(WebCore::%(classname)s* obj)
 
         self.write_headers(py_ssize_t_clean)
         self.include_types = self.get_class_include_types()
-        self.write_imports()
         self.write_type_declarations()
         self.write_body()
         self.write_class_wrappers()
@@ -1209,15 +1109,18 @@ void webkit_init_pywebkit(PyObject *m, struct pyjoinapi *fns)
         
         if py_ssize_t_clean:
             self.fp.write('#define PY_SSIZE_T_CLEAN\n')
-        self.fp.write('#include <Python.h>\n')
-        self.fp.write('#include "config.h"\n\n\n')
-        self.fp.write('#include "HTMLNames.h"\n\n\n')
-        self.fp.write('#include "KURL.h"\n\n\n')
-        self.fp.write('#include "PlatformString.h"\n\n\n')
-        self.fp.write('#include "PythonBinding.h"\n\n\n')
-        self.fp.write('#include "pywebkit.h"\n\n\n')
-        self.fp.write('#include <wtf/text/CString.h>\n\n\n')
-        self.fp.write('#include <wtf/Forward.h>\n\n\n')
+        self.fp.write('#include <Python.h>\n\n')
+        self.fp.write('#include "config.h"\n\n')
+        self.fp.write('#include <wtf/text/CString.h>\n')
+        self.fp.write('#include <wtf/Forward.h>\n\n')
+        self.fp.write('#include "HTMLNames.h"\n')
+        self.fp.write('#include "KURL.h"\n')
+        self.fp.write('#include "PlatformString.h"\n\n')
+        self.fp.write('#include "PythonBinding.h"\n')
+        self.fp.write('#include "pywebkit.h"\n')
+        self.fp.write('#include "PyDOMObject.h"\n')
+        self.fp.write('#include "PyScheduledAction.h"\n')
+        self.fp.write('#include "PythonEventListener.h"\n\n\n')
         self.fp.write("""\
 char* cpUTF8(WTF::String const& s) { return strdup((s.utf8().data())); }
 char* cpUTF8(WebCore::KURL const& s) { return strdup((s.string().utf8().data())); }
@@ -1236,16 +1139,6 @@ typedef intobjargproc ssizeobjargproc;
 #endif
 
 ''')
-        self.fp.write(self.overrides.get_headers())
-        self.fp.resetline()
-        self.fp.write('\n\n')
-
-    def write_imports(self):
-        self.fp.write('/* ---------- types from other modules ---------- */\n')
-        for module, pyname, cname, importing_for in self.overrides.get_imports():
-            if importing_for is None or is_registered_object(importing_for):
-                self.fp.write('static PyTypeObject *_%s;\n' % cname)
-                self.fp.write('#define %s (*_%s)\n' % (cname, cname))
         self.fp.write('\n\n')
 
     def write_class_wrappers(self):
@@ -1260,18 +1153,16 @@ typedef intobjargproc ssizeobjargproc;
             
             self.fp.write(cond['conditional_if'])
             
-            if not self.overrides.is_type_ignored(obj.c_name):
-                txt = self.wrapnode_tmpl % {'classname': obj.c_name}
-                self.fp.write(txt)
-                if obj.c_name == 'ScheduledActionBase':
-                    tmpl = self.wrapcore_scheduledaction_tmpl 
-                elif obj.c_name == 'EventListener':
-                    tmpl = self.wrapcore_eventlistener_tmpl 
-                else:
-                    tmpl = self.wrapcore_tmpl
+            txt = self.wrapnode_tmpl % {'classname': obj.c_name}
+            self.fp.write(txt)
+            if obj.c_name == 'ScheduledActionBase':
+                tmpl = self.wrapcore_scheduledaction_tmpl
+            elif obj.c_name == 'EventListener':
+                tmpl = self.wrapcore_eventlistener_tmpl
+            else:
+                tmpl = self.wrapcore_tmpl
 
-                
-                self.fp.write(tmpl % substdict)
+            self.fp.write(tmpl % substdict)
             
             if obj.c_name not in \
                     ["Node", "Document", "HTMLCollection", "SVGPathSeg",
@@ -1294,27 +1185,28 @@ typedef intobjargproc ssizeobjargproc;
         #todo use 'static' if used only in one file
         self.fp.write('/* ---------- includes ---------- */\n')
         for obj in self.parser.objects:
-            if not self.overrides.is_type_ignored(obj.c_name):
-                self.fp.write('#include "%s.h"\n' % obj.c_name)
+            self.fp.write('#include "%s.h"\n' % obj.c_name)
         self.fp.write('\n')
 
         self.fp.write('/* ---------- forward type declarations ---------- */\n')
         self.fp.write('extern "C" {\n\n')
 
         for obj in self.parser.objects:
-            if not self.overrides.is_type_ignored(obj.c_name):
-                cond = get_conditional_substitutions(obj.orig_obj.attributes)
-                self.fp.write(cond['conditional_if'])
-                self.fp.write('PyTypeObject *PtrPyDOM' + obj.c_name + '_Type;\n')
-                self.fp.write(cond['conditional_endif'])
+            cond = get_conditional_substitutions(obj.orig_obj.attributes)
+            self.fp.write(cond['conditional_if'])
+            self.fp.write('PyTypeObject *PtrPyDOM' + obj.c_name + '_Type;\n')
+            self.fp.write(cond['conditional_endif'])
         
         self.fp.write('\n')
         self.fp.write('}; // extern "C"\n')
 
     def write_body(self):
-        self.fp.write(self.overrides.get_body())
-        self.fp.resetline()
-        self.fp.write('\n\n')
+        self.fp.write('\n')
+        self.fp.write('void py_wk_exc(WebCore::ExceptionCode &ec)\n')
+        self.fp.write('{\n')
+        self.fp.write('    WebCore::ExceptionCodeDescription ecdesc(ec);\n')
+        self.fp.write('    PyErr_SetString(PyExc_Exception, ecdesc.name);\n')
+        self.fp.write('}\n\n')
 
     def _sort_parent_children(self, objects):
         objects = list(objects)
@@ -1348,7 +1240,7 @@ typedef intobjargproc ssizeobjargproc;
         include_types = set()
 
         for obj in objects:
-            instance = ObjectWrapper(self.parser, obj, self.overrides, self.fp)
+            instance = ObjectWrapper(self.parser, obj, self.fp)
             include_types.update(instance.find_include_ptypes())
         return include_types
 
@@ -1359,47 +1251,11 @@ typedef intobjargproc ssizeobjargproc;
         include_types = set()
 
         for obj in objects:
-            instance = ObjectWrapper(self.parser, obj, self.overrides, self.fp)
+            instance = ObjectWrapper(self.parser, obj, self.fp)
             include_types.update(instance.find_include_ptypes())
             instance.prefix = self.prefix
             instance.write_class()
             self.fp.write('\n')
-
-    def write_object_imports(self, retval=''):
-        imports = self.overrides.get_imports()[:]
-        if not imports:
-            return
-
-        bymod = {}
-        for module, pyname, cname, importing_for in imports:
-            if importing_for is None or is_registered_object(importing_for):
-                bymod.setdefault(module, []).append((pyname, cname))
-        self.fp.write('    PyObject *module;\n\n')
-        for module in bymod:
-            self.fp.write(
-                '    if ((module = PyImport_ImportModule("%s")) != NULL) {\n'
-                % module)
-            #self.fp.write(
-            #    '        PyObject *moddict = PyModule_GetDict(module);\n\n')
-            for pyname, cname in bymod[module]:
-                #self.fp.write(
-                #    '        _%s = (PyTypeObject *)PyDict_GetItemString('
-                #    'moddict, "%s");\n' % (cname, pyname))
-                self.fp.write(
-                    '        _%s = (PyTypeObject *)PyObject_GetAttrString('
-                    'module, "%s");\n' % (cname, pyname))
-                self.fp.write('        if (_%s == NULL) {\n' % cname)
-                self.fp.write('            PyErr_SetString(PyExc_ImportError,\n')
-                self.fp.write('                "cannot import name %s from %s");\n'
-                         % (pyname, module))
-                self.fp.write('            return %s;\n' % retval)
-                self.fp.write('        }\n')
-            self.fp.write('    } else {\n')
-            self.fp.write('        PyErr_SetString(PyExc_ImportError,\n')
-            self.fp.write('            "could not import %s");\n' % module)
-            self.fp.write('        return %s;\n' % retval)
-            self.fp.write('    }\n')
-        self.fp.write('\n')
 
     def write_extension_init(self):
         self.fp.write('/* initialise stuff extension classes */\n')
@@ -1407,7 +1263,6 @@ typedef intobjargproc ssizeobjargproc;
         self.fp.write('{\n')
         self.fp.write('    if (PyType_Ready(&PyDOMObject_Type) < 0) return;\n')
         self.fp.write('\n')
-        self.write_object_imports()
         for obj, bases in self.get_classes():
             cond = get_conditional_substitutions(obj.orig_obj.attributes)
             self.fp.write(cond['conditional_if'])
@@ -1416,8 +1271,17 @@ typedef intobjargproc ssizeobjargproc;
         self.fp.write('}\n\n')
         self.fp.write('void register%s(PyObject *m)\n' % self.prefix)
         self.fp.write('{\n')
-        self.fp.write(self.overrides.get_init() + '\n')
-        self.fp.resetline()
+        self.fp.write('    Py_INCREF(&PyDOMObject_Type);\n')
+        self.fp.write('    PyModule_AddObject(m, "DOMObject", (PyObject *) &PyDOMObject_Type);\n')
+        self.fp.write('\n')
+        self.fp.write('    PtrPyPyScheduledAction_Type = &PyPyScheduledAction_Type;\n')
+        self.fp.write('    PyPyScheduledAction_Type.tp_base = &PyDOMObject_Type;\n')
+        self.fp.write('    if (PyType_Ready(&PyPyScheduledAction_Type) < 0)\n')
+        self.fp.write('        return;\n')
+        self.fp.write('\n')
+        self.fp.write('    Py_INCREF(&PyPyScheduledAction_Type);\n')
+        self.fp.write('    PyModule_AddObject(m, "ScheduledAction", (PyObject*) &PyPyScheduledAction_Type);\n')
+        self.fp.write('\n')
 
     def get_classes(self):
         objects = self.parser.objects[:]
@@ -1434,8 +1298,6 @@ typedef intobjargproc ssizeobjargproc;
 
         retval = []
         for obj in objects:
-            if self.overrides.is_type_ignored(obj.c_name):
-                continue
             bases = []
             if obj.parent != None:
                 bases.append(obj.parent)
@@ -1445,27 +1307,9 @@ typedef intobjargproc ssizeobjargproc;
         return retval
 
     def write_registers(self):
-        if not self.overrides.dynamicnamespace:
-            for obj, bases in self.get_classes():
-                self.write_class(obj, bases)
-        else:
-            for obj, bases in self.get_classes():
-                self.fp.write(
-                    '    pyg_type_register_custom_callback("%s", '
-                    '(PyGTypeRegistrationFunction)%s_register_type, d);\n' %
-                    (obj.c_name, obj.c_name))
-
+        for obj, bases in self.get_classes():
+            self.write_class(obj, bases)
         self.fp.write('}\n')
-
-    def _can_direct_ref(self, base):
-        if not self.overrides.dynamicnamespace:
-            return True
-        if base == 'GObject':
-            return True
-        obj = get_object_by_name(base)
-        if obj.module.lower() != self.overrides.modulename:
-            return True
-        return False
 
     def write_class_base_link(self, obj, bases, indent=1):
         indent_str = ' ' * (indent * 4)
@@ -1489,11 +1333,7 @@ typedef intobjargproc ssizeobjargproc;
             bases_str = 'Py_BuildValue("(%s)"' % (len(bases) * 'O')
 
             for base in bases:
-                if self._can_direct_ref(base):
-                    bases_str += ', &PyDOM%s_Type' % base
-                else:
-                    baseobj = get_object_by_name(base)
-                    bases_str += ', PyObject_GetAttrString(m, "%s")' % baseobj.name
+                bases_str += ', &PyDOM%s_Type' % base
             bases_str += ')'
         else:
             bases_str = 'NULL'
@@ -1508,9 +1348,5 @@ typedef intobjargproc ssizeobjargproc;
                        py_name=self.prefix))
         self.fp.write(cond['conditional_endif'])
 
-        if obj.class_init_func is not None:
-            self.fp.write(
-                indent_str + 'pyg_register_class_init(%s, %s);\n' %
-                (obj.typecode, obj.class_init_func))
 
 
