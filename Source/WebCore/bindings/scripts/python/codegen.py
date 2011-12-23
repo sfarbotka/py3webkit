@@ -221,6 +221,16 @@ class Wrapper:
         '      %(docstring)s },\n'
         )
 
+    method_not_implemented_tmpl = (
+        'static PyObject*\n'
+        '%(funcname)s(PyDOMObject *self, PyObject *args, PyObject *kwargs)\n'
+        '{\n'
+        '    // TODO Implement method\n'
+        '    PyErr_SetString(PyExc_NotImplementedError, \n'
+        '            "Custom method %(klass)s.%(method)s is not implemented yet");\n'
+        '    return NULL;\n'
+        '}\n\n'
+        )
     # template for method calls
     method_tmpl = None
 
@@ -228,6 +238,7 @@ class Wrapper:
         self.parser = parser
         self.objinfo = objinfo
         self.fp = fp
+        self._implemented_custom_methods = []
 
     def get_lower_name(self):
         return string.lower(string.replace(self.objinfo.typecode,
@@ -436,70 +447,55 @@ static int
             includes.update(self.find_function_ptypes(meth, handle_return=1))
         return includes
 
-    _custom_methods_implemented = []
-    def _custom_method_implementation(self, mname):
-        """ Return True if custom method is implemented """
-        if self.objinfo.name == 'XMLHttpRequest':
-            return mname == 'send'
-        if self.objinfo.name == 'DOMFormData':
-            return mname == 'append'
-        if self.objinfo.name == 'WorkerContext':
-            return mname == 'importScripts'
-        if self.objinfo.name == 'DedicatedWorkerContext':
-            return mname == 'postMessage'
-        return False
-
-    def custom_method_implementation(self, meth):
-        """ Return True if method has 'Custom' attribute and has custom implementation, else return False.
-            If True, save methon name in list to prevent method redefinition in MethodsDef struct
-        """
-
-        if 'Custom' not in meth.orig_method.attributes:
-            return False
-        mname = meth.name
-
-        ret = self._custom_method_implementation(mname)
-        if ret:
-            Wrapper._custom_methods_implemented.append(mname)
-
-        return ret
-
-    def custom_method_alredy_implemented(self, meth):
-        return meth.name in Wrapper._custom_methods_implemented
-
     def write_methods(self):
         methods = []
         klass = self.objinfo.c_name
         # First, get methods from the defs files
         for meth in self.parser.find_methods(self.objinfo):
             method_name = meth.c_name
-            if self.custom_method_alredy_implemented(meth):
+
+            if method_name in self._implemented_custom_methods:
                 continue
-            try:
-                if not self.custom_method_implementation(meth):
+
+            if meth.requires_custom_implementation:
+                self._implemented_custom_methods.append(method_name)
+
+                methflags = 'METH_VARARGS|METH_KEYWORDS'
+
+                if meth.implemented:
+                    funcname = '_wrap_%s_%s' % (klass, method_name)
+                    code = 'PyObject* _wrap_%s_%s(PyDOMObject *self, PyObject *args, PyObject *kwargs);\n\n' % (
+                            klass, method_name)
+                    self.fp.write(code)
+
+                else:
+                    substdict = {}
+                    substdict['funcname'] = '_wrap_%s_%s' % (klass, method_name)
+                    substdict['klass'] = klass
+                    substdict['method'] = method_name
+
+                    self.fp.write(self.method_not_implemented_tmpl % substdict)
+            else:
+                try:
                     # write constructor from template ...
                     code, methflags = self.write_function_wrapper(meth,
                         self.method_tmpl, handle_return=1, is_method=1,
                         substdict=self.get_initial_method_substdict(meth),
                         exception_needed=meth.raises)
                     self.fp.write(code)
-                else:
-                    funcname = '_wrap_%s_%s' % (klass, method_name)
-                    code = 'PyObject* _wrap_%s_%s(PyDOMObject *self, PyObject *args, PyObject *kwargs);\n\n' % (
-                            klass, method_name)
-                    self.fp.write(code)
 
-                    methflags = 'METH_VARARGS|METH_KEYWORDS'
+                except argtypes.ArgTypeError, ex:
+                    traceback.print_exc()
+                    sys.stderr.write('declaration of type needed %s.%s: %s\n'
+                                    % (klass, meth.name, ex))
+                    continue
 
-                methods.append(self.methdef_tmpl %
-                               { 'name':  fixname(meth.name),
-                                 'cname': 'WebKit::_wrap_%s_%s' % (klass, method_name),
-                                 'flags': methflags,
-                                 'docstring': meth.docstring })
-            except argtypes.ArgTypeError, ex:
-                traceback.print_exc()
-                sys.stderr.write('declaration of type needed %s.%s: %s\n'
-                                % (klass, meth.name, ex))
+            methods.append(self.methdef_tmpl %
+                           { 'name':  fixname(meth.name),
+                             'cname': 'WebKit::_wrap_%s_%s' % (klass, method_name),
+                             'flags': methflags,
+                             'docstring': meth.docstring })
+
 
         if methods:
             self.fp.write('} // namespace WebKit\n\n')
