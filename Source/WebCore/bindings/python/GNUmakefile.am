@@ -52,13 +52,13 @@ webcore_sources += \
 	Source/WebCore/bindings/python/PyDOMFormDataCustom.cpp \
 	Source/WebCore/bindings/python/PyWorkerContextCustom.cpp \
 	Source/WebCore/bindings/python/PyDedicatedWorkerContextCustom.cpp \
-	Source/WebCore/bindings/python/WebkitCSSRuleCustom.cpp \
-	Source/WebCore/bindings/python/WebkitCSSValueCustom.cpp \
-	Source/WebCore/bindings/python/WebkitDocumentCustom.cpp \
-	Source/WebCore/bindings/python/WebkitElementCustom.cpp \
-	Source/WebCore/bindings/python/WebkitEventCustom.cpp \
-	Source/WebCore/bindings/python/WebkitEventTargetCustom.cpp \
-	Source/WebCore/bindings/python/WebkitHTMLCollectionCustom.cpp \
-	Source/WebCore/bindings/python/WebkitStyleSheetCustom.cpp \
-	Source/WebCore/bindings/python/WebkitTextCustom.cpp
+	Source/WebCore/bindings/python/PyCSSRuleCustom.cpp \
+	Source/WebCore/bindings/python/PyCSSValueCustom.cpp \
+	Source/WebCore/bindings/python/PyDocumentCustom.cpp \
+	Source/WebCore/bindings/python/PyElementCustom.cpp \
+	Source/WebCore/bindings/python/PyEventCustom.cpp \
+	Source/WebCore/bindings/python/PyEventTargetCustom.cpp \
+	Source/WebCore/bindings/python/PyHTMLCollectionCustom.cpp \
+	Source/WebCore/bindings/python/PyStyleSheetCustom.cpp \
+	Source/WebCore/bindings/python/PyTextCustom.cpp
 

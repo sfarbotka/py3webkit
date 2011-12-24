@@ -21,7 +21,7 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSEventCustom.cpp.  any additions to JSEventCustom.cpp will also
+ * with JSCustomEvent.cpp.  any additions to JSCustomEvent.cpp will also
  * require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
@@ -34,47 +34,40 @@
 
 #include "config.h"
 
-#include "PythonBinding.h"
-
-#include "Event.h"
-#include "EventHeaders.h"
-#include "EventInterfaces.h"
-#include "EventNames.h"
-
+#include "EventTargetHeaders.h"
+#include "EventTargetInterfaces.h"
 #include "CString.h"
-
+#include "PythonBinding.h"
 
 namespace WebKit {
 
 using namespace WebCore;
 
-
 #define PYTHON_WRAPPER_DECLARE(interfaceName) \
     PyObject* pywrap##interfaceName(interfaceName*);
-DOM_EVENT_INTERFACES_FOR_EACH(PYTHON_WRAPPER_DECLARE)
+DOM_EVENT_TARGET_INTERFACES_FOR_EACH(PYTHON_WRAPPER_DECLARE)
 #undef PYTHON_WRAPPER_DECLARE
 
 
 #define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
     if (eventNames().interfaceFor##interfaceName == desiredInterface) \
-        return PythonObjectCache::putDOMObject(event, \
-                pywrap##interfaceName(static_cast<interfaceName*>(event)));
+        return PythonObjectCache::putDOMObject(target, \
+                pywrap##interfaceName(static_cast<interfaceName*>(target)));
 
-PyObject* toPython(Event* event)
+/* derived sources auto-generated */
+PyObject* toPython(XMLHttpRequestUpload* obj);
+
+PyObject* toPython(EventTarget* target)
 {
-    if (!event)
+    if (!target)
         Py_RETURN_NONE;
 
-    PyObject* pobj = PythonObjectCache::getDOMObject(event);
-    if (pobj)
-        return pobj;
+    AtomicString desiredInterface = target->interfaceName();
 
-    String desiredInterface = event->interfaceName();
-    DOM_EVENT_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
+    DOM_EVENT_TARGET_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
-    return PythonObjectCache::putDOMObject(event, pywrapEvent(event));
-
+    ASSERT_NOT_REACHED();
+    Py_RETURN_NONE;
 }
 
 } // namespace WebKit
-

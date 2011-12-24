@@ -90,6 +90,38 @@ def should_exclude_method(iname, mname):
     return False
 
 
+def method_requires_custom_implementation(iname, m):
+    # FIXME add custom implementation
+    if iname == 'DOMWindow' and m.name in ['setTimeout', 'setInterval']:
+        print('WARNING: {}.{} requires custom implemetation'.format(iname, m.name))
+        return False
+
+    return m.attributes.has_key('Custom')
+
+
+def method_has_custom_implementation(iname, mname):
+    if iname == 'XMLHttpRequest' and mname == 'send':
+        return True
+    if iname == 'DOMFormData' and mname == 'append':
+        return True
+    if iname == 'WorkerContext' and mname == 'importScripts':
+        return True
+    if iname == 'DedicatedWorkerContext' and mname == 'postMessage':
+        return True
+
+    print('WARNING: {}.{} requires custom implemetation'.format(iname, mname))
+    return False
+
+
+def constructor_requires_custom_implementation(iface):
+    return iface.attributes.attributes.has_key('CustomConstructor')
+
+
+def constructor_has_custom_implementation(iname):
+    print('WARNING: {0}.{0} requires custom implemetation'.format(iname))
+    return False
+
+
 class Parameter(object):
     def __init__(self, ptype, pname, pdflt, pnull, pdir=None):
         self.ptype = ptype
@@ -145,6 +177,7 @@ class ObjectDef(Definition):
         self.fields = fields
         self.implements = []
         self.has_new_constructor_api = False
+        self.custom_cunstructor = False
 
     def write_defs(self, fp=sys.stdout):
         fp.write('(define-object ' + self.name + '\n')
@@ -175,6 +208,8 @@ class MethodDef(Definition):
         self.params = params if isinstance(params, list) else []
         self.varargs = 0
         self.deprecated = None
+        self.requires_custom_implementation = False
+        self.implemented = False
 
         if self.ret is not None:
             self.guess_return_value_ownership()
@@ -198,6 +233,8 @@ class IDLDefsParser:
         self.c_name = {}     # hash of c names of functions
         self.methods = {}    # hash of methods of particular objects
         self.parser = IDLParser()
+        self.custom_methods = []
+        self.custom_interfaces = []
 
     def add_object(self, odef):
         self.objects.append(odef)
@@ -247,18 +284,27 @@ class IDLDefsParser:
                     fields.append((typeMap(m.type), m.name))
                     attsd[m.name] = m
 
+                custom_constructor = False
+
+                if constructor_requires_custom_implementation(obj):
+                    custom_constructor = True
+                    if not constructor_has_custom_implementation(obj.name):
+                        self.custom_methods.append((obj, obj))
+
+
                 typecode = 'core' + obj.name
                 parent = obj.base[0] if obj.base else 'DOMObject'
 
                 odef = ObjectDef(obj.name, modulename, parent, obj.nativename, typecode, fields)
                 odef.attributes = attsd
                 odef.orig_obj = obj
+                odef.custom_constructor = custom_constructor
+
                 self.add_object(odef)
 
             for m in obj.members:
-                if isinstance(m, CDATA):
-                    continue
                 if isinstance(m, Method):
+                    custom = False
 
                     if should_exclude_method(obj.name, m.name):
                         continue
@@ -267,6 +313,10 @@ class IDLDefsParser:
                         # XXX HACK! custom exception
                         m.raises = 'DOMException'
 
+                    custom = method_requires_custom_implementation(obj.name, m)
+                    implemented = custom and method_has_custom_implementation(obj.name, m.name)
+                    if custom and not implemented:
+                        self.custom_methods.append((obj, m))
 
                     params = []
                     return_param = None
@@ -291,6 +341,9 @@ class IDLDefsParser:
                     mdef.raises = m.raises
                     mdef.return_param = return_param
                     mdef.orig_method = m
+                    mdef.requires_custom_implementation = custom
+                    mdef.implemented = implemented
+
                     self.add_method(mdef)
 
         # debug output
@@ -331,4 +384,9 @@ if __name__ == '__main__':
     sw = codegen.SourceWriter(p, modname, fo)
     sw.write()
     fo.close()
+
+    if p.custom_methods:
+        print "Methods that need custom implementation:"
+        for o, m in p.custom_methods:
+            print "\t{}.{}".format(o.name, m.name)
 

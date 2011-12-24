@@ -21,8 +21,8 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSStyleSheetCustom.cpp.  any additions to JSStyleSheetCustom.cpp
- * will also require the EXACT same additions, here.
+ * with JSElementCustom.cpp.  any additions to JSElementCustom.cpp will also
+ * require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
  * JSDOMBinding.cpp and call it PythonBinding.cpp in the first place, and
@@ -35,33 +35,52 @@
 #include "config.h"
 
 #include "CString.h"
-#include "CSSStyleSheet.h"
+#include "Event.h"
 #include "PythonBinding.h"
+#include "Element.h"
+#include "PythonHTMLElementWrapperFactory.h"
+#include "HTMLElement.h"
+
+#if ENABLE(SVG)
+#ifdef __TODO_BUG_20586__ /* TODO - see #20586 */
+#include "PythonSVGElementWrapperFactory.h"
+#include "SVGElement.h"
+#endif
+#endif
 
 namespace WebKit {
 
 using namespace WebCore;
 
-PyObject* pywrapCSSStyleSheet(CSSStyleSheet*);
-PyObject* pywrapStyleSheet(StyleSheet*);
+PyObject* pywrapElement(Element*);
 
-PyObject* toPython(StyleSheet* styleSheet)
+PyObject* toPython(Element* element)
 {
-    if (!styleSheet)
+    if (!element)
         Py_RETURN_NONE;
 
-    PyObject* pobj = PythonObjectCache::getDOMObject(styleSheet);
+    // shouldn't be one? ASSERT(!ScriptInterpreter::getDOMObject(element));
+    PyObject* pobj = PythonObjectCache::getDOMObject(element);
     if (pobj)
         return pobj;
 
     PyObject* ret;
-    if (styleSheet->isCSSStyleSheet())
-        ret = pywrapCSSStyleSheet(static_cast<CSSStyleSheet*>(styleSheet));
-    else
-        ret = pywrapStyleSheet(styleSheet);
 
-    return PythonObjectCache::putDOMObject(styleSheet, ret);
+    if (element->isHTMLElement())
+        ret = createPythonHTMLElementWrapper(static_cast<HTMLElement*>(element));
+#if ENABLE(SVG)
+    else if (element->isSVGElement())
+    {
+        return NULL; /* TODO - see #20586 */
+#ifdef __TODO_BUG_20586__ /* TODO - see #20586 */
+        return createPythonSVGElementWrapper(static_cast<SVGElement*>(element));
+#endif
+    }
+#endif
+    else
+        ret = pywrapElement(element);
+
+    return PythonObjectCache::putDOMObject(element, ret);
 }
 
 } // namespace WebKit
-

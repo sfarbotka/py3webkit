@@ -21,8 +21,8 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSHTMLCollectionCustom.cpp.  any additions to
- * JSHTMLCollectionCustom.cpp will also require the EXACT same additions, here.
+ * with JSTextCustom.cpp.  any additions to JSTextCustom.cpp will also
+ * require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
  * JSDOMBinding.cpp and call it PythonBinding.cpp in the first place, and
@@ -36,53 +36,26 @@
 
 #include "CString.h"
 #include "PythonBinding.h"
-#include "HTMLCollection.h"
-#include "HTMLOptionsCollection.h"
+#include "Text.h"
 
 namespace WebKit {
 
 using namespace WebCore;
 
-PyObject* pywrapHTMLCollection(HTMLCollection*);
-PyObject* pywrapHTMLOptionsCollection(HTMLOptionsCollection*);
+PyObject* pywrapText(Text*);
 
-PyObject* toPython(HTMLCollection* collection)
+PyObject* toPython(Text* text)
 {
-    if (!collection)
+    if (!text)
         Py_RETURN_NONE;
 
-    PyObject* pobj = PythonObjectCache::getDOMObject(collection);
-
+    PyObject* pobj = PythonObjectCache::getDOMObject(text);
     if (pobj)
         return pobj;
 
-    PyObject* ret;
-    switch (collection->type()) {
-        case SelectOptions:
-            ret = pywrapHTMLOptionsCollection(static_cast<HTMLOptionsCollection*>(collection));
-            break;
-        /* FIXME: rather than delete this code and make it awkward for
-         * whomever has to add it back in to work out what is going on,
-         * in order to comply with WebKit style coding standards, #if 0
-         * is not used here, but a long-winded #ifdef which will never
-         * exist is deployed instead.
-         * 
-         * see JSHTMLCollectionCustom::toJS, that is the code from which
-         * this entire function has been verbatim cut/paste.
-         */
-#ifdef __FIXME_ADD_IN_HTMLCOLLECTION_DOC_ALL_SUPPORT_LATER__
-        case HTMLCollection::DocAll:
-            ret = pywrapHTMLCollection(static_cast<HTMLCollection*>(collection));
-            break;
-#endif
-        default:
-            ret = pywrapHTMLCollection(static_cast<HTMLCollection*>(collection));
-            break;
-    }
-
-    return PythonObjectCache::putDOMObject(collection, ret);
+    PyObject* ret = pywrapText(text);
+    return PythonObjectCache::putDOMObject(text, ret);
 }
 
 
 } // namespace WebKit
-

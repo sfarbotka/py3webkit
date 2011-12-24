@@ -21,8 +21,8 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSCustomEvent.cpp.  any additions to JSCustomEvent.cpp will also
- * require the EXACT same additions, here.
+ * with JSHTMLCollectionCustom.cpp.  any additions to
+ * JSHTMLCollectionCustom.cpp will also require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
  * JSDOMBinding.cpp and call it PythonBinding.cpp in the first place, and
@@ -34,41 +34,61 @@
 
 #include "config.h"
 
-#include "EventTargetHeaders.h"
-#include "EventTargetInterfaces.h"
 #include "CString.h"
 #include "PythonBinding.h"
+
+#include "HTMLCollection.h"
+#include "HTMLOptionsCollection.h"
+#include "HTMLAllCollection.h"
+
+#if ENABLE(MICRODATA)
+#include "HTMLPropertiesCollection.h"
+#endif
+
+
+
 
 namespace WebKit {
 
 using namespace WebCore;
 
-#define PYTHON_WRAPPER_DECLARE(interfaceName) \
-    PyObject* pywrap##interfaceName(interfaceName*);
-DOM_EVENT_TARGET_INTERFACES_FOR_EACH(PYTHON_WRAPPER_DECLARE)
-#undef PYTHON_WRAPPER_DECLARE
+PyObject* pywrapHTMLCollection(HTMLCollection*);
+PyObject* pywrapHTMLOptionsCollection(HTMLOptionsCollection*);
+PyObject* pywrapHTMLAllCollection(HTMLAllCollection*);
+#if ENABLE(MICRODATA)
+PyObject* pywrapHTMLPropertiesCollection(HTMLPropertiesCollection*);
+#endif
 
-
-#define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
-    if (eventNames().interfaceFor##interfaceName == desiredInterface) \
-        return PythonObjectCache::putDOMObject(target, \
-                pywrap##interfaceName(static_cast<interfaceName*>(target)));
-
-/* derived sources auto-generated */
-PyObject* toPython(XMLHttpRequestUpload* obj);
-
-PyObject* toPython(EventTarget* target)
+PyObject* toPython(HTMLCollection* collection)
 {
-    if (!target)
+    if (!collection)
         Py_RETURN_NONE;
 
-    AtomicString desiredInterface = target->interfaceName();
+    PyObject* pobj = PythonObjectCache::getDOMObject(collection);
 
-    DOM_EVENT_TARGET_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
+    if (pobj)
+        return pobj;
 
-    ASSERT_NOT_REACHED();
-    Py_RETURN_NONE;
+    PyObject* ret;
+    switch (collection->type()) {
+        case SelectOptions:
+            ret = pywrapHTMLOptionsCollection(static_cast<HTMLOptionsCollection*>(collection));
+            break;
+        case DocAll:
+            ret = pywrapHTMLAllCollection(static_cast<HTMLAllCollection*>(collection));
+            break;
+#if ENABLE(MICRODATA)
+        case ItemProperties:
+            ret = pywrapHTMLPropertiesCollection(static_cast<HTMLPropertiesCollection*>(collection));
+            break;
+#endif
+        default:
+            ret = pywrapHTMLCollection(static_cast<HTMLCollection*>(collection));
+            break;
+    }
+
+    return PythonObjectCache::putDOMObject(collection, ret);
 }
 
-} // namespace WebKit
 
+} // namespace WebKit

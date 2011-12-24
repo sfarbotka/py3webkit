@@ -21,8 +21,8 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSDocumentCustom.cpp.  any additions to JSDocumentCustom.cpp
- * will also require the EXACT same additions, here.
+ * with JSEventCustom.cpp.  any additions to JSEventCustom.cpp will also
+ * require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
  * JSDOMBinding.cpp and call it PythonBinding.cpp in the first place, and
@@ -34,58 +34,46 @@
 
 #include "config.h"
 
-#include "CString.h"
 #include "PythonBinding.h"
-#include "Document.h"
-#include "HTMLDocument.h"
 
-#if ENABLE(SVG)
-#ifdef __TODO_BUG_20586__ /* XXX TODO - see #20586 */
-#include "SVGDocument.h"
-#endif
-#endif
+#include "Event.h"
+#include "EventHeaders.h"
+#include "EventInterfaces.h"
+#include "EventNames.h"
+
+#include "CString.h"
+
 
 namespace WebKit {
 
 using namespace WebCore;
 
-PyObject* pywrapHTMLDocument(HTMLDocument*);
-PyObject* pywrapDocument(Document*);
 
-#if ENABLE(SVG)
-#ifdef __TODO_BUG_20586__ /* XXX TODO - see #20586 */
-PyObject* pywrapSVGDocument(SVGDocument*);
-#endif
-#endif
+#define PYTHON_WRAPPER_DECLARE(interfaceName) \
+    PyObject* pywrap##interfaceName(interfaceName*);
+DOM_EVENT_INTERFACES_FOR_EACH(PYTHON_WRAPPER_DECLARE)
+#undef PYTHON_WRAPPER_DECLARE
 
-PyObject* toPython(Document* doc)
+
+#define TRY_TO_WRAP_WITH_INTERFACE(interfaceName) \
+    if (eventNames().interfaceFor##interfaceName == desiredInterface) \
+        return PythonObjectCache::putDOMObject(event, \
+                pywrap##interfaceName(static_cast<interfaceName*>(event)));
+
+PyObject* toPython(Event* event)
 {
-    if (!doc)
+    if (!event)
         Py_RETURN_NONE;
 
-    PyObject* pobj = PythonObjectCache::getDOMObject(doc);
+    PyObject* pobj = PythonObjectCache::getDOMObject(event);
     if (pobj)
         return pobj;
 
-    PyObject* ret;
+    String desiredInterface = event->interfaceName();
+    DOM_EVENT_INTERFACES_FOR_EACH(TRY_TO_WRAP_WITH_INTERFACE)
 
-    if (doc->isHTMLDocument())
-        ret = pywrapHTMLDocument(static_cast<HTMLDocument*>(doc));
-#if ENABLE(SVG)
-    else if (doc->isSVGDocument())
-    {
-        return NULL; /* XXX TODO - see #20586 */
-#ifdef __TODO_BUG_20586__ /* XXX TODO - see #20586 */
-        ret = pywrapSVGDocument(static_cast<SVGDocument*>(doc));
-#endif
-    }
-#endif
-    else
-        ret = pywrapDocument(doc);
+    return PythonObjectCache::putDOMObject(event, pywrapEvent(event));
 
-    return PythonObjectCache::putDOMObject(doc, ret);
 }
 
-
 } // namespace WebKit
-

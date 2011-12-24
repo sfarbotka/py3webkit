@@ -21,7 +21,7 @@
  */
 
 /* PLEASE NOTE: this file needs to be kept up-to-date in EXACT accordance
- * with JSElementCustom.cpp.  any additions to JSElementCustom.cpp will also
+ * with JSCSSRuleCustom.cpp.  any additions to JSCSSRuleCustom.cpp will also
  * require the EXACT same additions, here.
  *
  * FIXME: there should have been no need to duplicate the functionality behind
@@ -35,53 +35,63 @@
 #include "config.h"
 
 #include "CString.h"
-#include "Event.h"
+#include "CSSRule.h"
+#include "CSSCharsetRule.h"
+#include "CSSFontFaceRule.h"
+#include "CSSImportRule.h"
+#include "CSSMediaRule.h"
+#include "CSSPageRule.h"
+#include "CSSStyleRule.h"
 #include "PythonBinding.h"
-#include "Element.h"
-#include "PythonHTMLElementWrapperFactory.h"
-#include "HTMLElement.h"
-
-#if ENABLE(SVG)
-#ifdef __TODO_BUG_20586__ /* TODO - see #20586 */
-#include "PythonSVGElementWrapperFactory.h"
-#include "SVGElement.h"
-#endif
-#endif
 
 namespace WebKit {
 
 using namespace WebCore;
 
-PyObject* pywrapElement(Element*);
+extern PyObject* pywrapCSSStyleRule(CSSStyleRule*);
+extern PyObject* pywrapCSSMediaRule(CSSMediaRule*);
+extern PyObject* pywrapCSSFontFaceRule(CSSFontFaceRule*);
+extern PyObject* pywrapCSSPageRule(CSSPageRule*);
+extern PyObject* pywrapCSSImportRule(CSSImportRule*);
+extern PyObject* pywrapCSSCharsetRule(CSSCharsetRule*);
+extern PyObject* pywrapCSSRule(CSSRule*);
 
-PyObject* toPython(Element* element)
+PyObject* toPython(CSSRule* rule)
 {
-    if (!element)
+    if (!rule)
         Py_RETURN_NONE;
 
-    // shouldn't be one? ASSERT(!ScriptInterpreter::getDOMObject(element));
-    PyObject* pobj = PythonObjectCache::getDOMObject(element);
+    PyObject* pobj = PythonObjectCache::getDOMObject(rule);
+
     if (pobj)
         return pobj;
 
     PyObject* ret;
-
-    if (element->isHTMLElement())
-        ret = createPythonHTMLElementWrapper(static_cast<HTMLElement*>(element));
-#if ENABLE(SVG)
-    else if (element->isSVGElement())
-    {
-        return NULL; /* TODO - see #20586 */
-#ifdef __TODO_BUG_20586__ /* TODO - see #20586 */
-        return createPythonSVGElementWrapper(static_cast<SVGElement*>(element));
-#endif
+    switch (rule->type()) {
+        case CSSRule::STYLE_RULE:
+            ret = pywrapCSSStyleRule(static_cast<CSSStyleRule*>(rule));
+            break;
+        case CSSRule::MEDIA_RULE:
+            ret = pywrapCSSMediaRule(static_cast<CSSMediaRule*>(rule));
+            break;
+        case CSSRule::FONT_FACE_RULE:
+            ret = pywrapCSSFontFaceRule(static_cast<CSSFontFaceRule*>(rule));
+            break;
+        case CSSRule::PAGE_RULE:
+            ret = pywrapCSSPageRule(static_cast<CSSPageRule*>(rule));
+            break;
+        case CSSRule::IMPORT_RULE:
+            ret = pywrapCSSImportRule(static_cast<CSSImportRule*>(rule));
+            break;
+        case CSSRule::CHARSET_RULE:
+            ret = pywrapCSSCharsetRule(static_cast<CSSCharsetRule*>(rule));
+            break;
+        default:
+            ret = pywrapCSSRule(rule);
+            break;
     }
-#endif
-    else
-        ret = pywrapElement(element);
 
-    return PythonObjectCache::putDOMObject(element, ret);
+    return PythonObjectCache::putDOMObject(rule, ret);
 }
 
 } // namespace WebKit
-
