@@ -59,6 +59,7 @@ webcore_sources += \
 	Source/WebCore/bindings/python/PyEventCustom.cpp \
 	Source/WebCore/bindings/python/PyEventTargetCustom.cpp \
 	Source/WebCore/bindings/python/PyHTMLCollectionCustom.cpp \
+	Source/WebCore/bindings/python/PyHTMLAllCollectionCustom.cpp \
 	Source/WebCore/bindings/python/PyStyleSheetCustom.cpp \
 	Source/WebCore/bindings/python/PyTextCustom.cpp
 

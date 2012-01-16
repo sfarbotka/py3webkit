@@ -31,11 +31,13 @@
  */
 
 #include <Python.h>
-
 #include "config.h"
 
 #include "CString.h"
 #include "PythonBinding.h"
+
+#include "Node.h"
+#include "StaticNodeList.h"
 
 #include "HTMLCollection.h"
 #include "HTMLOptionsCollection.h"
@@ -45,6 +47,10 @@
 #include "HTMLPropertiesCollection.h"
 #endif
 
+#include <wtf/Vector.h>
+#include <wtf/text/CString.h>
+
+#include "PyDOMObject.h"
 
 
 
@@ -52,12 +58,78 @@ namespace WebKit {
 
 using namespace WebCore;
 
+HTMLCollection *coreHTMLCollection(PyDOMObject*);
+PyObject* toPython(WebCore::Node* obj);
+PyObject* toPython(WebCore::NodeList* obj);
+
 PyObject* pywrapHTMLCollection(HTMLCollection*);
 PyObject* pywrapHTMLOptionsCollection(HTMLOptionsCollection*);
 PyObject* pywrapHTMLAllCollection(HTMLAllCollection*);
 #if ENABLE(MICRODATA)
 PyObject* pywrapHTMLPropertiesCollection(HTMLPropertiesCollection*);
 #endif
+
+static PyObject* getNamedItems(PyDOMObject* self, PyObject* obj)
+{
+    Vector<RefPtr<Node> > namedItems;
+    PyObject* uobj;
+    PyObject* sobj;
+    char* name;
+
+    uobj = PyObject_Str(obj);
+    if (!uobj)
+        return NULL;
+
+    sobj = PyUnicode_AsUTF8String(uobj);
+    Py_DECREF(uobj);
+    if (!sobj)
+        return NULL;
+
+    name = PyBytes_AsString(sobj);
+    Py_DECREF(sobj);
+    if (!name)
+        return NULL;
+
+
+    WTF::String cvt_name = WTF::String::fromUTF8((const char*)name);
+    coreHTMLCollection(self)->namedItems(cvt_name, namedItems);
+
+    if (namedItems.isEmpty())
+    {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+
+    if (namedItems.size() == 1)
+        return toPython(namedItems[0].get());
+
+    return toPython(StaticNodeList::adopt(namedItems).get());
+}
+
+PyObject * _wrap_HTMLCollection_item(PyDOMObject *self, PyObject *args, PyObject *kwargs)
+{
+    static char *kwlist[] = { (char*)"index", NULL };
+    PyObject* oindex;
+    unsigned long index;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,"k:pywebkit.HTMLCollection.item", kwlist, &index))
+        return NULL;
+
+    WebCore::Node* ret = coreHTMLCollection(self)->item(index);
+    return toPython(ret);
+}
+
+
+PyObject* _wrap_HTMLCollection_namedItem(PyDOMObject *self, PyObject *args, PyObject *kwargs)
+{
+    static char *kwlist[] = { (char*)"name", NULL };
+    PyObject* name;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,"O:pywebkit.HTMLAllCollection.namedItem", kwlist, &name))
+        return NULL;
+
+    return getNamedItems(self, name);
+}
 
 PyObject* toPython(HTMLCollection* collection)
 {
@@ -92,3 +164,4 @@ PyObject* toPython(HTMLCollection* collection)
 
 
 } // namespace WebKit
+

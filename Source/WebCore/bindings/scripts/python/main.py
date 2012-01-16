@@ -108,6 +108,10 @@ def method_has_custom_implementation(iname, mname):
         return True
     if iname == 'DedicatedWorkerContext' and mname == 'postMessage':
         return True
+    if iname == 'HTMLAllCollection' and mname in ['item', 'namedItem']:
+        return True
+    if iname == 'HTMLCollection' and mname in ['item', 'namedItem']:
+        return True
 
     print('WARNING: {}.{} requires custom implemetation'.format(iname, mname))
     return False
