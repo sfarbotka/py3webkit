@@ -4813,14 +4813,14 @@ GdkPixbuf* webkit_web_view_get_icon_pixbuf(WebKitWebView* webView)
  * 
  * Returns: (transfer none): the #WebKitDOMDocument currently loaded in the @web_view
  *
- * Since: 1.3.1
+ * Since: 1.5.2
  **/
 WebKitDOMDocument*
-webkit_web_view_get_dom_document(WebKitWebView* webView)
+webkit_web_view_get_dom_document(WebKitWebView* web_view)
 {
-    g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(webView), 0);
+    g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(web_view), 0);
 
-    Frame* coreFrame = core(webView)->mainFrame();
+    Frame* coreFrame = core(web_view)->mainFrame();
     if (!coreFrame)
         return 0;
 
@@ -4831,10 +4831,18 @@ webkit_web_view_get_dom_document(WebKitWebView* webView)
     return kit(doc);
 }
 
+/**
+ * webkit_web_view_get_native_ptr:
+ * @web_view: a #WebKitWebView object
+ *
+ * Returns: native pointer of @web_view object
+ *
+ * Since: 1.5.2
+ **/
 gulong
-webkit_web_view_get_native_ptr(WebKitWebView* webview)
+webkit_web_view_get_native_ptr(WebKitWebView* web_view)
 {
-	return (gulong)webview;
+	return (gulong)web_view;
 }
 
 

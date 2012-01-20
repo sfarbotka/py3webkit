@@ -440,7 +440,7 @@ WEBKIT_API WebKitViewportAttributes*
 webkit_web_view_get_viewport_attributes         (WebKitWebView        *web_view);
 
 WEBKIT_API gulong
-webkit_web_view_get_native_ptr                  (WebKitWebView        *webview);
+webkit_web_view_get_native_ptr                  (WebKitWebView        *web_view);
 
 G_END_DECLS
 

@@ -344,7 +344,14 @@ void webkitInit()
     atexit(webkitExit);
 }
 
-void webkit_init_python(void)
+/**
+ * webkit_init_python:
+ *
+ * Intialize python module
+ *
+ * Since: 1.5.2
+ **/
+void webkit_init_python()
 {
 	pywebkit_init();
 }

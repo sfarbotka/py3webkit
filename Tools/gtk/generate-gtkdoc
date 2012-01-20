@@ -81,7 +81,7 @@ def get_webkit1_options():
                    ' -I' + common.top_level_path('Source', 'JavaScriptCore', 'ForwardingHeaders'),
         'ignored_files': glob.glob(src_path('webkit', '*private.*'))
     })
-    return (common.build_path('Source', 'WebKit', 'gtk', 'webkitgtk-3.0.pc'), options)
+    return (common.build_path('Source', 'WebKit', 'gtk', 'webkit-1.0.pc'), options)
 
 configure_logging()
 
