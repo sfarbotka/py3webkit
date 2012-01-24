@@ -61,5 +61,6 @@ webcore_sources += \
 	Source/WebCore/bindings/python/PyHTMLCollectionCustom.cpp \
 	Source/WebCore/bindings/python/PyHTMLAllCollectionCustom.cpp \
 	Source/WebCore/bindings/python/PyStyleSheetCustom.cpp \
+	Source/WebCore/bindings/python/PyNodeCustom.cpp \
 	Source/WebCore/bindings/python/PyTextCustom.cpp
 

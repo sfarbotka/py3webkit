@@ -104,6 +104,8 @@ def method_has_custom_implementation(iname, mname):
         return True
     if iname == 'DOMFormData' and mname == 'append':
         return True
+    if iname == 'Node' and mname in ['appendChild', 'removeChild', 'replaceChild', 'insertBefore']:
+        return True
     if iname == 'WorkerContext' and mname == 'importScripts':
         return True
     if iname == 'DedicatedWorkerContext' and mname == 'postMessage':

@@ -30,7 +30,7 @@ PyObject *WebKit::toPython(WebCore::Event *);
 WebCore::EventListener*
 webkit_create_python_event_listener(PyObject *callback)
 {
-    printf("create PythonEventListener\n");
+    //printf("create PythonEventListener\n");
     RefPtr<PythonEventListener> listener;
     listener = PythonEventListener::create(callback);
     listener->ref();
@@ -39,7 +39,7 @@ webkit_create_python_event_listener(PyObject *callback)
 
 void webkit_delete_python_event_listener(WebCore::EventListener *l)
 {
-    printf("deref PythonEventListener\n");
+    //printf("deref PythonEventListener\n");
     l->deref();
 }
 
@@ -53,14 +53,14 @@ PythonEventListener::PythonEventListener(PyObject *callback)
   : WebCore::EventListener(WebCore::EventListener::PythonEventListenerType)
   , m_callback(callback)
 {
-    printf("PythonEventListener(%p) = %p\n", callback, this);
+    //printf("PythonEventListener(%p) = %p\n", callback, this);
     if (callback)
         Py_INCREF(callback);
 }
 
 PythonEventListener::~PythonEventListener()
 {
-    printf("~PythonEventListener() = %p\n", this);
+    //printf("~PythonEventListener() = %p\n", this);
     if (m_callback)
         Py_DECREF(m_callback);
 }
@@ -77,7 +77,7 @@ const PythonEventListener* PythonEventListener::cast(const EventListener* listen
 void PythonEventListener::handleEvent(WebCore::ScriptExecutionContext*,
                                       WebCore::Event* event)
 {
-    printf("PythonEventListener::handleEvent() = %p\n", this);
+    //printf("PythonEventListener::handleEvent() = %p\n", this);
     PyObject* pev = WebKit::toPython(event);
     PyObject* arglist = Py_BuildValue((char*)"(O)", pev);
     PyGILState_STATE __py_state;
