@@ -12,6 +12,9 @@ import pywebkit
 def on_destroy(wnd):
     Gtk.main_quit()
 
+def on_click(event):
+    print('button click ', event)
+
 def on_load_finished(webview, webframe):
     print('Load finished ({})'.format(webview.get_uri()))
     
@@ -20,6 +23,12 @@ def on_load_finished(webview, webframe):
     print('Links count: {}'.format(len(links)))
     for i, a in enumerate(links):
         print('\t{}) {}'.format(i+1, a.getAttribute('href')))
+
+    button = doc.createElement('button')
+    button.innerText = 'Click Me'
+    button.onclick = on_click
+    body = doc.getElementsByTagName('body')[0]
+    body.appendChild(button)
 
 def main():
     webview = WebKit.WebView()
