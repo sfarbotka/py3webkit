@@ -860,6 +860,13 @@ class ObjectWrapper(Wrapper):
             for att, val, loc in pp[0].attlist:
                 if att == 'IsIndex':
                     return meth
+
+        for meth in self.parser.find_methods(self.objinfo):
+            if meth.name != 'item':
+                continue
+
+            if meth.requires_custom_implementation:
+                return meth
         
         return None
 
